@@ -102,7 +102,36 @@ Matriz de refeição do motorista (sobre o cartão corrigido): `<4h` nada ·
 5. Ligar a **execução** (disparo do workflow do robô + leitura do resultado).
 6. **Lockdown**: revogar `anon` na base de importação e manter só o gateway.
 
-## 7. Pendências de segurança já detectadas
+## 7. Pendências conhecidas das telas portadas (fase 3/4)
+
+Levantadas pelos próprios agentes durante o porte. Nenhuma bloqueia o uso em
+leitura, mas as duas primeiras precisam sair antes de destravar gravação.
+
+1. **GPS na Revisão pode dar falso "bateu fora".** A régua real (`_regua_local`,
+   `main.py:191`) trata dois casos que a versão portada não cobre:
+   - âncora do veículo **sem coordenada** → o original marca "não medido", e isso
+     nunca pode contar como "junto";
+   - **dia de reserva** → nesse dia a pessoa não tem carro; batida em local
+     conhecido vale por si.
+   Sem isso, um motorista de reserva aparece como "fora" sem ter batido fora.
+2. **Gordura sem a reserva lançada pelo gestor.** `_aplica_reserva`
+   (`main.py:4844`) depende de `reservas_motoristas`, que fica no **projeto do
+   INOVE** e não na base de importação — por isso não está na allowlist do
+   gateway. Solução: ler direto pelo cliente `supabase` normal (mesma sessão),
+   sem passar pela `dp360-api`. A reserva por GPS e o nível RESERVA já funcionam.
+3. **Ocorrências: o simulador não foi portado.** `ferramenta/simulador.py` /
+   `_simula` (âncora de meia-noite, batida fantasma, projeção do cartão) ficou de
+   fora; o "depois" exibido é o `ponto_depois` congelado no lake. **Conferir
+   linha a linha contra `get_conferencia` antes de liberar a gravação.**
+4. **Gravação desligada de propósito** em Revisão e Ocorrências (botões
+   `disabled` + banner). São as telas que produzem advertência; liberar só depois
+   de validar o veredito contra o app atual.
+5. **Mapa (Leaflet) não portado** — a lista de GPS com distância está lá; falta o
+   mapa com as cercas e a linha pessoa↔ônibus.
+6. **Gateway sem `distinct`** — listar as datas de uma aba pagina milhares de
+   linhas. Vale uma ação `datas` que deduplica no servidor.
+
+## 8. Pendências de segurança já detectadas
 
 - A base de importação hoje deixa a **anon ler as 40 tabelas** (inclui folha,
   férias, cartão, GPS) e **gravar/apagar** boa parte delas. Não dá para fechar

@@ -92,15 +92,22 @@ function colunasValidas(select: unknown): string | null {
   return partes.join(",");
 }
 
+// Aceita { coluna: "eq.valor" } e tambem { coluna: ["gte.x", "lte.y"] } — sem o
+// array nao da para pedir um INTERVALO de datas (a mesma coluna com dois
+// operadores), e a tela teria de filtrar o resto em memoria.
 function montarFiltros(filtros: unknown): { qs: string; qtd: number } | null {
   if (filtros == null) return { qs: "", qtd: 0 };
   if (typeof filtros !== "object" || Array.isArray(filtros)) return null;
   const partes: string[] = [];
   for (const [col, val] of Object.entries(filtros as Record<string, unknown>)) {
     if (!IDENT.test(col)) return null;
-    const v = String(val ?? "");
-    if (!FILTRO_VALOR.test(v)) return null;
-    partes.push(`${col}=${encodeURIComponent(v)}`);
+    const valores = Array.isArray(val) ? val : [val];
+    if (!valores.length || valores.length > 4) return null;
+    for (const item of valores) {
+      const v = String(item ?? "");
+      if (!FILTRO_VALOR.test(v)) return null;
+      partes.push(`${col}=${encodeURIComponent(v)}`);
+    }
   }
   return { qs: partes.join("&"), qtd: partes.length };
 }

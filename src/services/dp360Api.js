@@ -17,7 +17,13 @@ export async function carregarResumoDP360() {
   return chamar({ action: "overview" });
 }
 
-/** Uma página de uma tabela liberada. `filtros`: { coluna: "eq.valor" } no padrão PostgREST. */
+/**
+ * Uma página de uma tabela liberada.
+ * `filtros` no padrão PostgREST, por coluna:
+ *   { cracha: "eq.30061089" }
+ *   { date_ref: ["gte.2026-08-01", "lte.2026-08-31"] }  // intervalo
+ *   { cracha: "in.(1,2,3)", latitude: "not.is.null" }
+ */
 export async function lerDP360(tabela, { colunas, filtros, ordem, limite, offset } = {}) {
   const dados = await chamar({
     action: "read",

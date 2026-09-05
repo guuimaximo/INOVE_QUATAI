@@ -1,14 +1,1072 @@
-import { Gauge } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Bus, Gauge, Info, PauseCircle, Search, X } from "lucide-react";
 import AbaShell from "./AbaShell";
+import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
 
-// TODO(port DP360): tela ainda nao portada do app antigo (Sistemas/PONTO).
-// A especificacao desta aba esta em docs/dp360/.
-export default function Gordura() {
+// ---------------------------------------------------------------------------
+// PASSO 4 — GORDURA DE PONTO (só MOTORISTA).
+//
+// Gordura = tempo que a pessoa BATEU PONTO A MAIS do que operou, medido só nas
+// PONTAS (entrada e saída), nunca na jornada inteira. Interno/aprendiz não têm
+// operação (GPS/SST/bilhetagem), então não há gordura a calcular — o tratamento
+// deles é o aviso da Revisão (Passo 2).
+//
+// Porte de `viewP4Motorista` (Sistemas/PONTO — app/ui/app.js) + das camadas que
+// o app antigo aplica na LEITURA (app/main.py `_gord`).
+//
+// NESTA FASE A ABA É SOMENTE LEITURA: nada é gravado e o envio de comunicado
+// ainda não existe aqui (ver TODO em `Gordura`).
+// ---------------------------------------------------------------------------
+
+// RÉGUA FIXA DO DP (main.py TOL_ENTRADA_MIN / TOL_SAIDA_MIN, decisão de 24/08/2026:
+// "10 e 8 em tudo"). NÃO é configuração de tela: ele bate o ponto e ainda anda até o
+// carro (entrada −10 min) e, no fim, estaciona/confere e volta ao relógio (saída +8).
+// Estes números também vivem no SQL da Revisão — mexeu aqui, mexe lá.
+const TOL_ENTRADA = 10;
+const TOL_SAIDA = 8;
+
+// Assinatura da reserva sem lançamento (main.py `_aplica_reserva_gps`).
+const RES_GPS_ESCALA = 15; // GPS × escala: até isso é a mesma hora
+const RES_GPS_BILH = 30; // bilhetagem depois disso do GPS = ele estava esperando, não rodando
+
+const PISOS = [
+  { valor: 0, rotulo: "tudo" },
+  { valor: 15, rotulo: "15 min" },
+  { valor: 30, rotulo: "30 min" },
+  { valor: 60, rotulo: "1 hora" },
+  { valor: 120, rotulo: "2 horas" },
+];
+
+/* ------------------------- conversões (campos são TEXTO) ------------------- */
+// ATENÇÃO: em `ponto_gordura` TODAS as colunas são text — inclusive minutos e
+// booleanos ("true"/"false"). Nada aqui pode assumir number/boolean nativo.
+const txt = (v) => (v == null ? "" : String(v).trim());
+const ehVerdade = (v) => ["true", "t", "1", "sim", "yes", "y"].includes(txt(v).toLowerCase());
+const num = (v) => {
+  const n = Number.parseFloat(txt(v).replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+};
+const modulo = (v) => Math.abs(num(v) || 0);
+// Crachá com menos de 8 dígitos vira 8 com zeros à esquerda (main.py `_cracha8`).
+const cracha8 = (c) => {
+  const s = txt(c);
+  return /^\d+$/.test(s) && s.length > 0 && s.length < 8 ? s.padStart(8, "0") : s;
+};
+const dia10 = (d) => txt(d).slice(0, 10);
+const chaveDe = (cra, dia) => `${cracha8(cra)}|${dia10(dia)}`;
+
+// "0130" -> "01:30" (a escala vem sem os dois pontos na gordura). Texto que não
+// vira horário volta vazio — melhor a célula ficar "—" do que exibir lixo.
+function fmtHora(valor) {
+  const s = txt(valor);
+  if (!s) return "";
+  if (s.includes(":")) return s.slice(0, 5);
+  const d = s.replace(/\D/g, "");
+  if (d.length === 3) return `0${d[0]}:${d.slice(1)}`;
+  if (d.length === 4) return `${d.slice(0, 2)}:${d.slice(2)}`;
+  return "";
+}
+function hm2m(valor) {
+  const t = fmtHora(valor);
+  const m = /^(\d{1,3}):(\d{2})$/.exec(t);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+function m2hm(minutos) {
+  const v = Math.round(minutos);
+  const h = Math.floor(v / 60);
+  const m = ((v % 60) + 60) % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+// Variante de t (t−24h, t, t+24h) mais perto de ref — é o que faz 02:08 casar com a
+// batida 26:08 do cartão em vez de virar 02:08 da madrugada errada (simulador.var).
+const variante = (t, ref) =>
+  [t - 1440, t, t + 1440].reduce((a, b) => (Math.abs(b - ref) < Math.abs(a - ref) ? b : a));
+// Minutos entre dois horários no relógio, sempre 0..720 (main.py `_dif_relogio`).
+const difRelogio = (a, b) => {
+  const d = Math.abs(a - b) % 1440;
+  return Math.min(d, 1440 - d);
+};
+function durHM(ini, fim, almoco = 0) {
+  const a = hm2m(ini);
+  const b = hm2m(fim);
+  if (a == null || b == null) return "—";
+  let d = b - a;
+  if (d < 0) d += 1440;
+  d -= almoco;
+  if (d < 0) d = 0;
+  return `${Math.floor(d / 60)}h${String(d % 60).padStart(2, "0")}`;
+}
+const fmtData = (d) => {
+  const iso = dia10(d);
+  if (iso.length !== 10) return iso || "—";
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+};
+const H = (v) => fmtHora(v) || "—";
+const semAcento = (s) =>
+  txt(s)
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+
+/* --------------------------------- níveis ---------------------------------- */
+const NIVEL_LBL = {
+  P1: "P1",
+  P2: "P2",
+  P3: "P3",
+  P3_SEM_CONFIRMACAO: "P3⁻",
+  P4: "P4",
+  RESERVA: "Reserva",
+  OPERACAO_FORA_PONTO: "fora do ponto",
+  NAO_CALCULAR: "n/calc",
+  ANOMALIA_TEMPORAL: "anomalia",
+};
+const NIVEL_CHIP = {
+  P1: "bg-rose-100 text-rose-800 ring-rose-300",
+  P2: "bg-amber-100 text-amber-900 ring-amber-300",
+  P3: "bg-blue-100 text-blue-800 ring-blue-300",
+  P3_SEM_CONFIRMACAO: "bg-blue-100 text-blue-800 ring-blue-300",
+  P4: "bg-slate-200 text-slate-700 ring-slate-300",
+  RESERVA: "bg-purple-100 text-purple-800 ring-purple-300",
+  OPERACAO_FORA_PONTO: "bg-red-900 text-white ring-red-950",
+  NAO_CALCULAR: "bg-slate-100 text-slate-500 ring-slate-200",
+  ANOMALIA_TEMPORAL: "bg-slate-100 text-slate-500 ring-slate-200",
+};
+// Tolerância / sem dado / ponto incompleto não são gordura: a célula fica "—".
+const NIVEIS_MUDOS = new Set(["", "TOLERANCIA_OPERACIONAL", "SEM_DADO", "PONTO_INCOMPLETO"]);
+// P3 e P3⁻ contam como o mesmo nível nos chips e na pintura da linha.
+const nivKey = (n) => {
+  const k = txt(n).toUpperCase();
+  return k === "P3_SEM_CONFIRMACAO" ? "P3" : k;
+};
+// A linha inteira é pintada pelo PIOR nível presente, nesta precedência.
+const PRECEDENCIA = ["P1", "P2", "P3", "P4", "RESERVA", "OPERACAO_FORA_PONTO"];
+const LINHA_CLS = {
+  P1: "border-l-4 border-l-rose-500 bg-rose-50/60",
+  P2: "border-l-4 border-l-amber-500 bg-amber-50/60",
+  P3: "border-l-4 border-l-blue-500 bg-blue-50/50",
+  P4: "border-l-4 border-l-slate-400 bg-slate-50",
+  RESERVA: "border-l-4 border-l-purple-500 bg-purple-50/60",
+  OPERACAO_FORA_PONTO: "border-l-4 border-l-red-900 bg-red-50",
+};
+function classeLinha(r) {
+  const ks = [nivKey(r.nivel_entrada), nivKey(r.nivel_saida)];
+  const pior = PRECEDENCIA.find((n) => ks.includes(n));
+  return pior ? LINHA_CLS[pior] : "border-l-4 border-l-transparent";
+}
+const CHIPS = [
+  ["TODOS", "Todas"],
+  ["P1", "P1"],
+  ["P2", "P2"],
+  ["P3", "P3"],
+  ["P4", "P4"],
+  ["RESERVA", "Reserva"],
+  ["OPERACAO_FORA_PONTO", "Fora"],
+];
+
+/* ------------------------------ régua da lista ----------------------------- */
+// 1º corte: só quem tem gordura acima da régua fixa em ALGUMA ponta. As pontas são
+// independentes — uma saída fora da régua entra mesmo com a entrada dentro dela.
+const passaRegua = (o) => modulo(o.gordura_entrada) > TOL_ENTRADA || modulo(o.gordura_saida) > TOL_SAIDA;
+// Piso de exibição: NÃO é régua, é filtro de tela ("hoje só quero olhar acima de
+// 30 min"). Olha a ponta MAIOR do dia.
+const maiorPonta = (o) => Math.max(modulo(o.gordura_entrada), modulo(o.gordura_saida));
+
+/* --------------------------- cartão de ponto e alvo ------------------------ */
+function cartaoValido(horas) {
+  const h = (horas || []).map((v) => fmtHora(v) || "");
+  if (!h[0] || !h[3] || !!h[1] !== !!h[2]) return false;
+  // Dia sem intervalo é um cartão válido de duas batidas. Com almoço, os quatro
+  // horários precisam estar em ordem, inclusive em turno que cruza a meia-noite.
+  const usados = h[1] && h[2] ? h : [h[0], h[3]];
+  let anterior = hm2m(usados[0]);
+  if (anterior == null) return false;
+  const inicio = anterior;
+  for (let i = 1; i < usados.length; i += 1) {
+    let atual = hm2m(usados[i]);
+    if (atual == null) return false;
+    while (atual < anterior) atual += 1440;
+    anterior = atual;
+  }
+  return anterior - inicio <= 1440;
+}
+
+// Motorista normalmente não bate almoço. Quando o DP já lançou a refeição no cartão,
+// o Transnet desenha S almoço → E almoço → S artificial (poucos minutos depois). Esse
+// último S não é a saída real.
+function refeicaoLancadaNoCartao(bruto, entrada) {
+  const marcas = [...txt(bruto).matchAll(/([ES])?\s*(\d{1,2}:\d{2})/gi)].map((m) => ({
+    tipo: (m[1] || "").toUpperCase(),
+    hora: fmtHora(m[2]),
+  }));
+  const mins = marcas.map((m) => hm2m(m.hora));
+  for (let i = 1; i < mins.length; i += 1) {
+    while (mins[i] != null && mins[i - 1] != null && mins[i] < mins[i - 1]) mins[i] += 1440;
+  }
+  for (let i = 0; i + 2 < marcas.length; i += 1) {
+    if (marcas[i].tipo !== "S" || marcas[i + 1].tipo !== "E" || marcas[i + 2].tipo !== "S") continue;
+    const [ini, fim, fecha] = [mins[i], mins[i + 1], mins[i + 2]];
+    if (ini == null || fim == null || fecha == null) continue;
+    let ent = hm2m(entrada);
+    while (ent != null && ent > ini) ent -= 1440;
+    if (ini >= (ent == null ? -Infinity : ent) && fim - ini >= 5 && fim - ini <= 240 && fecha - fim <= 10) {
+      return [marcas[i].hora, marcas[i + 1].hora];
+    }
+  }
+  return null;
+}
+
+// Cartões da Gordura: a régua só altera as PONTAS, mas o alvo é sempre o cartão
+// inteiro (entrada · saída almoço · volta almoço · saída).
+function cartoesGordura(g, pd, rm, caso) {
+  const bruto = txt(pd.todas_batidas);
+  const marcacoes = [...bruto.matchAll(/([ES])?\s*(\d{1,2}:\d{2})/gi)].map((m) => ({
+    tipo: (m[1] || "").toUpperCase(),
+    hora: fmtHora(m[2]),
+  }));
+  const campos = [pd.entrada, pd.saida_almoco, pd.volta_almoco, pd.saida].map(fmtHora);
+
+  // Com duas marcações E/S, elas são entrada e saída — nunca saída/volta do almoço.
+  // Com quatro, a sequência do cartão é a fonte mais fiel dos quatro slots.
+  let atual;
+  if (marcacoes.length === 2 && marcacoes[0].tipo === "E" && marcacoes[1].tipo === "S") {
+    atual = [marcacoes[0].hora, "", "", marcacoes[1].hora];
+  } else if (marcacoes.length >= 4) {
+    atual = marcacoes.slice(0, 4).map((m) => m.hora);
+  } else if (campos.some(Boolean)) {
+    atual = campos;
+  } else {
+    // Fallback: conserva as pontas da gordura, sem inventar almoço.
+    atual = [fmtHora(g.tn_entrada), "", "", fmtHora(g.tn_saida)];
+  }
+
+  const base = atual.map(fmtHora);
+  const par = (a, b) => {
+    const x = fmtHora(a);
+    const y = fmtHora(b);
+    return x && y ? [x, y] : null;
+  };
+  // A ponta de referência vem da Revisão (`alvo_*_ref` do ponto_diario); o alvo já
+  // resolvido em `camadaAlvo` entra logo depois. O cartão não substitui essa régua.
+  const ent = fmtHora(pd.alvo_entrada_ref || g.alvo_entrada || rm.entrada || pd.entrada_sug) || base[0];
+  const sai = fmtHora(pd.alvo_saida_ref || g.alvo_saida || rm.saida || pd.saida_sug) || base[3];
+  const candidatos = [
+    par(caso.alvo_alm_saida, caso.alvo_alm_volta), // almoço congelado no aviso
+    par(rm.alm_saida, rm.alm_volta), // real manual do DP
+    refeicaoLancadaNoCartao(bruto, ent),
+    par(pd.almoco_saida_sug, pd.almoco_volta_sug),
+    [base[1], base[2]],
+  ].filter(Boolean);
+  // Não mistura uma refeição anterior com a entrada-alvo: usa o primeiro par que
+  // forma um cartão cronológico inteiro.
+  const meio = candidatos.find((p) => cartaoValido([ent, p[0], p[1], sai])) || candidatos[0] || ["", ""];
+  const alvo = [ent, meio[0] || "", meio[1] || "", sai];
+
+  return {
+    atual: base,
+    alvo,
+    alvoValido: cartaoValido(alvo),
+    mudou: alvo.map((v, i) => !!v && v !== base[i]),
+  };
+}
+
+/* ----------------- camadas aplicadas na leitura (main.py `_gord`) ---------- */
+
+// `_aplica_prioridade_citatti_linha99` — na linha 99 o Citatti é a fonte principal das
+// duas pontas. A 99 costuma ser a primeira viagem, antes da tabela regular: bilhetagem
+// e SST podem começar depois dela.
+function camadaLinha99(g, com99) {
+  if (!com99.has(chaveDe(g.cracha, g.data_ref))) return g;
+  const out = { ...g };
+  const oi = hm2m(g.op_inicio);
+  const of = hm2m(g.op_fim);
+  if (oi != null) {
+    out.real_inicio_sem_linha99 = txt(g.real_inicio);
+    out.real_inicio = m2hm(oi);
+  }
+  if (of != null) {
+    out.real_fim_sem_linha99 = txt(g.real_fim);
+    out.real_fim = m2hm(of);
+  }
+  out.prioridade_citatti_linha99 = true;
+  out.fonte_operacao = "Citatti · linha 99";
+  return out;
+}
+
+// `_aplica_reserva_gps` — reserva SEM lançamento, detectada pelo próprio dado. Na
+// reserva o motorista está à disposição mas não vende passagem: a bilhetagem só começa
+// quando ele assume uma tabela, e o tempo de espera sumia da jornada. A assinatura é
+// GPS concordando com a ESCALA e a bilhetagem aparecendo bem depois.
+function camadaReservaGps(g) {
+  if (ehVerdade(g.tem_reserva_inove)) return g; // o lançamento do gestor já mandou
+  const e = hm2m(g.esc_inicio);
+  const o = hm2m(g.op_inicio);
+  const v = hm2m(g.val_inicio);
+  const r = hm2m(g.real_inicio);
+  if ([e, o, v, r].some((x) => x == null)) return g;
+  const assinatura =
+    Math.abs(o - e) <= RES_GPS_ESCALA && v - o >= RES_GPS_BILH && Math.abs(r - v) <= 2;
+  if (!assinatura) return g; // sem a assinatura, ou o real já não é a bilhetagem
+  const out = { ...g };
+  out.real_inicio_sem_reserva = txt(g.real_inicio);
+  out.gordura_entrada_sem_reserva = txt(g.gordura_entrada);
+  out.nivel_entrada_sem_reserva = txt(g.nivel_entrada);
+  out.reserva_por_gps = true;
+  out.real_inicio = m2hm(o);
+  const pe = hm2m(g.tn_entrada);
+  if (pe != null) {
+    const ge = Math.round((o - pe) * 10) / 10;
+    out.gordura_entrada = String(ge);
+    out.nivel_entrada = Math.abs(ge) <= 10 ? "TOLERANCIA_OPERACIONAL" : txt(g.nivel_entrada);
+  }
+  return out;
+}
+
+// `_aplica_alvo` — ALVO DA CORREÇÃO = real ∓ tolerância, e QUEM APURA A OPERAÇÃO É A
+// REVISÃO (decisão do DP, 03-04/09/2026): o alvo publicado em `ponto_diario` manda.
+// A gordura exibida e filtrada é a diferença PONTO × ALVO, não PONTO × operação bruta —
+// senão o motorista é COBRADO contra um horário e AVISADO com outro. A conta local
+// abaixo só alcança o dia que a Revisão não apurou.
+function camadaAlvo(g, pd) {
+  const out = { ...g };
+  const revE = fmtHora(pd.alvo_entrada || pd.alvo_entrada_ref);
+  const revS = fmtHora(pd.alvo_saida || pd.alvo_saida_ref);
+  const ri = hm2m(g.real_inicio);
+  const rf = hm2m(g.real_fim);
+  const pe = hm2m(g.tn_entrada);
+  const ps = hm2m(g.tn_saida);
+
+  if (hm2m(revE) != null) {
+    out.alvo_entrada = revE;
+    out.fonte_alvo_gordura = "revisao";
+  } else if (ri != null) {
+    let alvoEntrada = Math.max(0, ri - TOL_ENTRADA);
+    // Encaixe na escala com a MESMA régua da Revisão: ela olha a BATIDA, com janela
+    // de 30 min — bateu perto da escala, vale o maior entre os dois (a escala já vem
+    // com tolerância; não se aplica tolerância sobre tolerância).
+    const esc = hm2m(g.esc_inicio || g.esc_entrada);
+    if (esc != null && pe != null && difRelogio(pe, esc) <= 30) alvoEntrada = Math.max(pe, esc);
+    out.alvo_entrada = m2hm(alvoEntrada);
+    out.fonte_alvo_gordura = "gordura";
+  }
+  if (hm2m(revS) != null) {
+    out.alvo_saida = revS;
+    out.fonte_alvo_gordura = "revisao";
+  } else if (rf != null) {
+    out.alvo_saida = m2hm(rf + TOL_SAIDA);
+    if (!out.fonte_alvo_gordura) out.fonte_alvo_gordura = "gordura";
+  }
+
+  const ae = hm2m(out.alvo_entrada);
+  const af = hm2m(out.alvo_saida);
+  if (pe != null && ae != null) {
+    // `00:42` depois de uma saída `24:53` é 24:42, não 00:42 do início do dia:
+    // alinha a ponta do alvo à mesma volta do relógio do cartão antes de subtrair.
+    const ge = Math.round((variante(ae, pe) - pe) * 10) / 10;
+    out.gordura_entrada = String(ge);
+    if (Math.abs(ge) <= TOL_ENTRADA) out.nivel_entrada = "TOLERANCIA_OPERACIONAL";
+    else if (ge < 0) out.nivel_entrada = "OPERACAO_FORA_PONTO";
+  }
+  if (ps != null && af != null) {
+    const gs = Math.round((ps - variante(af, ps)) * 10) / 10;
+    out.gordura_saida = String(gs);
+    if (Math.abs(gs) <= TOL_SAIDA) out.nivel_saida = "TOLERANCIA_OPERACIONAL";
+    else if (gs < 0) out.nivel_saida = "OPERACAO_FORA_PONTO";
+  }
+  return out;
+}
+
+/* --------------------------------- pedaços --------------------------------- */
+function ChipNivel({ minutos, nivel }) {
+  const n = txt(nivel).toUpperCase();
+  if (NIVEIS_MUDOS.has(n)) return <span className="text-slate-300">—</span>;
+  const v = num(minutos);
+  const cls = NIVEL_CHIP[n] || NIVEL_CHIP.NAO_CALCULAR;
   return (
-    <AbaShell icone={Gauge} titulo="Gordura" resumo="Diferença entre o alvo e a jornada registrada.">
-      <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">
-        Em construcao — porte da tela do DP360 em andamento.
+    <span className={`inline-flex items-center rounded-lg px-2 py-0.5 text-xs font-bold ring-1 ring-inset ${cls}`}>
+      {v == null ? "" : `${Math.round(v)}min · `}
+      {NIVEL_LBL[n] || n.toLowerCase().replace(/_/g, " ")}
+    </span>
+  );
+}
+
+// Os quatro slots do cartão: entrada · saída almoço · volta almoço · saída.
+function LinhaCartao({ horas, mudou }) {
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap font-mono text-[13px]">
+      {horas.map((h, i) => (
+        <span key={`slot-${i}`} className="inline-flex items-center gap-1">
+          {i > 0 && <span className="text-slate-300">·</span>}
+          <span
+            className={
+              mudou && mudou[i]
+                ? "rounded bg-amber-100 px-1 font-bold text-amber-900"
+                : h
+                  ? "text-slate-700"
+                  : "text-slate-300"
+            }
+          >
+            {h || "—"}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function ModalNiveis({ aoFechar }) {
+  const nivel = (chave, nome, texto) => (
+    <div key={chave} className="flex gap-3 border-b border-slate-100 py-2.5 last:border-0">
+      <span
+        className={`mt-0.5 h-fit shrink-0 rounded-lg px-2 py-0.5 text-xs font-bold ring-1 ring-inset ${NIVEL_CHIP[chave]}`}
+      >
+        {NIVEL_LBL[chave]}
+      </span>
+      <span className="text-sm leading-6 text-slate-700">{texto}</span>
+    </div>
+  );
+  return (
+    <Overlay aoFechar={aoFechar} titulo="Gordura de ponto — os níveis" largura="max-w-2xl">
+      <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
+        <b>Gordura</b> = tempo que o motorista <b>bateu ponto a mais do que operou</b>, só nas pontas
+        (entrada e saída), nunca a jornada inteira. A régua da operação real é a{" "}
+        <b>média SST + Validador</b> por ponta; o Citatti confirma.
       </p>
+      <div className="mt-3">
+        {nivel("P1", "P1", <><b>Tripla confirmação</b> — SST + Validador + Citatti concordam. Máxima confiança: <b>gordura oficial, corrige primeiro</b>.</>)}
+        {nivel("P2", "P2", <><b>Dupla forte</b> — SST e Validador batem entre si, Citatti diverge ou está ausente. Alta confiança: <b>capturável, valide antes de corrigir</b>.</>)}
+        {nivel("P3", "P3", <><b>Fonte forte única</b> (só SST ou só Validador) com apoio do Citatti. Confiança média: <b>radar, fora do oficial</b> (P3⁻ = sem apoio do Citatti).</>)}
+        {nivel("P4", "P4", <><b>Só Citatti</b>, nenhuma fonte forte. Potencial baixo: <b>conferência manual</b>.</>)}
+        {nivel("RESERVA", "Reserva", <>Gordura acima de <b>120 min</b> — provável <b>standby de reserva/prontidão</b>. Tempo legítimo: <b>não corrige, só valida</b>.</>)}
+        {nivel("OPERACAO_FORA_PONTO", "fora do ponto", <>Gordura <b>negativa</b> — operou <b>sem cobrir com o ponto</b> (bateu menos do que operou). <b>Risco trabalhista</b>; reportado à parte, não é gordura financeira.</>)}
+        {nivel("NAO_CALCULAR", "n/calc", <>SST e Validador <b>divergem mais de 20 min</b> — sem régua confiável, a ponta não entra. Tolerância e sem dado aparecem como “—”.</>)}
+      </div>
+      <p className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+        <b>Só P1 é o número oficial.</b> P2 é captura validável; P3/P4/Reserva/fora do ponto ficam no
+        radar, rotulados. As pontas são <b>independentes</b>: uma saída P1 conta mesmo se a entrada
+        estiver na tolerância — uma ponta nunca anula a outra.
+      </p>
+      <p className="mt-2 text-xs leading-5 text-slate-500">
+        Nesta fase a aba é somente leitura. A reserva <b>lançada pelo gestor no INOVE</b> ainda não é
+        aplicada aqui (ela mora em outra base); a reserva detectada pelo GPS, sim.
+      </p>
+    </Overlay>
+  );
+}
+
+function Overlay({ titulo, largura = "max-w-3xl", aoFechar, children }) {
+  useEffect(() => {
+    const aoTeclar = (e) => {
+      if (e.key === "Escape") aoFechar();
+    };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [aoFechar]);
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm sm:p-8"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) aoFechar();
+      }}
+      role="presentation"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={titulo}
+        className={`w-full ${largura} rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6`}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <h3 className="text-lg font-black text-slate-900">{titulo}</h3>
+          <button
+            type="button"
+            onClick={aoFechar}
+            className="rounded-xl p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+            aria-label="Fechar"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// Detalhe do dia: horários e jornada POR FONTE + o cálculo da gordura por ponta.
+// Ato disciplinar merece o DP enxergar GPS/SST/bilhetagem antes de confirmar,
+// não só o número final.
+function PainelDetalhe({ linha, aoFechar }) {
+  const r = linha;
+  const opIni = hm2m(r.op_inicio) != null ? hm2m(r.op_inicio) : hm2m(r.sst_vinculo);
+  const valIni = hm2m(r.val_inicio);
+  let dif = opIni != null && valIni != null ? Math.abs(valIni - opIni) : null;
+  if (dif != null && dif > 720) dif = 1440 - dif;
+  const foraDaCurva = dif != null && dif > 20; // régua de concordância entre fontes
+
+  const Fonte = ({ rotulo, cor, ini, fim, aviso, destaque }) => {
+    if (hm2m(ini) == null && hm2m(fim) == null) return null;
+    return (
+      <tr className={destaque ? "bg-slate-50" : ""}>
+        <td className="py-1.5 pr-3">
+          <span className="flex items-center gap-2 font-semibold text-slate-700">
+            <i className={`h-2.5 w-2.5 shrink-0 rounded-full ${cor}`} />
+            {rotulo}
+            {aviso && (
+              <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[11px] font-bold text-rose-700">
+                {aviso}
+              </span>
+            )}
+          </span>
+        </td>
+        <td className="py-1.5 pr-3 font-mono text-slate-800">{H(ini)}</td>
+        <td className="py-1.5 pr-3 font-mono text-slate-800">{H(fim)}</td>
+        <td className="py-1.5 font-mono text-slate-500">{durHM(ini, fim)}</td>
+      </tr>
+    );
+  };
+
+  const Conta = ({ lado, bateu, real, minutos, nivel }) => {
+    const n = num(minutos);
+    const nv = txt(nivel).toUpperCase();
+    const conta = !NIVEIS_MUDOS.has(nv) && n != null;
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2">
+        <span className="text-sm font-bold text-slate-700">{lado}</span>
+        <span className="text-sm text-slate-600">
+          bateu <b className="font-mono">{H(bateu)}</b> · real <b className="font-mono">{H(real)}</b>
+        </span>
+        <span className="flex items-center gap-2">
+          {conta ? (
+            <b className={n > 0 ? "text-rose-700" : "text-emerald-700"}>
+              {n > 0 ? "+" : ""}
+              {Math.round(n)} min
+            </b>
+          ) : (
+            <span className="text-sm text-slate-400">— ({nv ? nv.toLowerCase().replace(/_/g, " ") : "sem dado"})</span>
+          )}
+          <ChipNivel nivel={nivel} />
+        </span>
+      </div>
+    );
+  };
+
+  const temRealManual = [r.rm_entrada, r.rm_alm_saida, r.rm_alm_volta, r.rm_saida].some((v) => fmtHora(v));
+
+  return (
+    <Overlay
+      titulo={`${txt(r.nm_funcionario) || "Colaborador"} · ${fmtData(r.data_ref)}`}
+      aoFechar={aoFechar}
+    >
+      <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+        <span className="rounded-lg bg-slate-100 px-2 py-1 text-slate-600">Crachá {txt(r.cracha) || "—"}</span>
+        {txt(r.veiculo) && (
+          <span className="rounded-lg bg-slate-100 px-2 py-1 text-slate-600">Carro {txt(r.veiculo)}</span>
+        )}
+        {r.__linha99 && (
+          <span className="flex items-center gap-1 rounded-lg bg-indigo-100 px-2 py-1 text-indigo-800">
+            <Bus size={13} /> Linha 99 · Citatti é a fonte
+          </span>
+        )}
+        {r.__reserva && (
+          <span className="flex items-center gap-1 rounded-lg bg-purple-100 px-2 py-1 text-purple-800">
+            <PauseCircle size={13} /> {r.reserva_por_gps ? "Reserva detectada pelo GPS" : "Reserva"}
+          </span>
+        )}
+        {txt(r.__casoStatus) && (
+          <span className="rounded-lg bg-blue-100 px-2 py-1 text-blue-800">{r.__casoStatus}</span>
+        )}
+      </div>
+
+      <div className="mt-4">
+        <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+          Horários e jornada por fonte
+        </div>
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[440px] text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+                <th className="pb-1.5 pr-3">Fonte</th>
+                <th className="pb-1.5 pr-3">Entrada</th>
+                <th className="pb-1.5 pr-3">Saída</th>
+                <th className="pb-1.5">Jornada</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              <Fonte rotulo="Escala" cor="bg-slate-400" ini={r.esc_inicio} fim={r.esc_fim} />
+              <Fonte rotulo="GPS (Citatti)" cor="bg-emerald-500" ini={r.op_inicio} fim={r.op_fim} />
+              <Fonte rotulo="SS (SST)" cor="bg-emerald-500" ini={r.sst_vinculo} fim={r.sst_desvinculo} />
+              <Fonte
+                rotulo="Bilhetagem"
+                cor="bg-blue-500"
+                ini={r.val_inicio}
+                fim={r.val_fim}
+                aviso={foraDaCurva ? "fora da curva" : ""}
+              />
+              <Fonte rotulo="Operação real" cor="bg-blue-600" ini={r.real_inicio} fim={r.real_fim} destaque />
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+          <span className="text-xs font-black uppercase tracking-wide text-amber-800">
+            Alvo (real com tolerância)
+          </span>
+          {r.__cartao.alvoValido ? (
+            <LinhaCartao horas={r.__cartao.alvo} mudou={r.__cartao.mudou} />
+          ) : (
+            <span className="text-sm font-bold text-rose-700">revisar alvo e refeição antes de corrigir</span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-2">
+          <span className="text-xs font-black uppercase tracking-wide text-slate-500">Ponto (bateu)</span>
+          <LinhaCartao horas={r.__cartao.atual} />
+        </div>
+        {txt(r.fonte_alvo_gordura) && (
+          <p className="text-xs text-slate-500">
+            Fonte do alvo:{" "}
+            <b>{r.fonte_alvo_gordura === "revisao" ? "alvo publicado pela Revisão" : "calculado na Gordura"}</b>
+            {txt(r.fonte_operacao) ? ` · operação: ${txt(r.fonte_operacao)}` : ""}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-4">
+        <div className="text-xs font-black uppercase tracking-wide text-slate-500">Cálculo da gordura</div>
+        <div className="mt-2 grid gap-2">
+          <Conta
+            lado="Entrada"
+            bateu={r.tn_entrada}
+            real={r.real_inicio}
+            minutos={r.gordura_entrada}
+            nivel={r.nivel_entrada}
+          />
+          <Conta
+            lado="Saída"
+            bateu={r.tn_saida}
+            real={r.real_fim}
+            minutos={r.gordura_saida}
+            nivel={r.nivel_saida}
+          />
+        </div>
+        {txt(r.justificativa) && (
+          <p className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600">
+            {txt(r.justificativa)}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-4">
+        <div className="text-xs font-black uppercase tracking-wide text-slate-500">Real manual do DP</div>
+        {temRealManual ? (
+          <>
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                ["Entrada", r.rm_entrada],
+                ["Saída almoço", r.rm_alm_saida],
+                ["Volta almoço", r.rm_alm_volta],
+                ["Saída", r.rm_saida],
+              ].map(([rot, val]) => (
+                <div key={rot} className="rounded-xl border border-slate-200 px-3 py-2">
+                  <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{rot}</div>
+                  <div className="mt-0.5 font-mono text-sm font-bold text-slate-800">{H(val)}</div>
+                </div>
+              ))}
+            </div>
+            {(txt(r.rm_por) || txt(r.rm_em)) && (
+              <p className="mt-1.5 text-xs text-slate-500">
+                Cravado por <b>{txt(r.rm_por) || "—"}</b>
+                {txt(r.rm_em) ? ` em ${fmtData(r.rm_em)}` : ""}
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="mt-2 text-sm text-slate-500">
+            Nenhum horário cravado pelo DP neste dia — vale a régua automática acima.
+          </p>
+        )}
+      </div>
+    </Overlay>
+  );
+}
+
+/* --------------------------------- a aba ----------------------------------- */
+export default function Gordura() {
+  const [datas, setDatas] = useState([]);
+  const [data, setData] = useState("");
+  const [linhas, setLinhas] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [carregandoDia, setCarregandoDia] = useState(false);
+  const [erro, setErro] = useState("");
+  const [termo, setTermo] = useState("");
+  const [piso, setPiso] = useState(0);
+  const [filtro, setFiltro] = useState("TODOS");
+  const [verNiveis, setVerNiveis] = useState(false);
+  const [detalhe, setDetalhe] = useState(null);
+
+  // Lista de dias com gordura calculada — `data_ref` distintas, mais recente primeiro.
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      try {
+        const vistas = new Set();
+        for (let pagina = 0; pagina < 8; pagina += 1) {
+          // eslint-disable-next-line no-await-in-loop
+          const bloco = await lerDP360("ponto_gordura", {
+            colunas: "data_ref",
+            ordem: "data_ref.desc",
+            limite: 5000,
+            offset: pagina * 5000,
+          });
+          bloco.forEach((r) => {
+            const d = dia10(r.data_ref);
+            if (d) vistas.add(d);
+          });
+          if (bloco.length < 5000) break;
+        }
+        if (!ativo) return;
+        const ordenadas = [...vistas].sort().reverse();
+        setDatas(ordenadas);
+        setData(ordenadas[0] || "");
+      } catch (falha) {
+        if (ativo) setErro(falha?.message || "Falha ao listar os dias com gordura calculada.");
+      } finally {
+        if (ativo) setCarregando(false);
+      }
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  const carregarDia = useCallback(async (dia) => {
+    // Gordura é a base; as demais tabelas só enriquecem. Se uma delas falhar, a
+    // lista continua de pé (sem cartão/alvo) em vez de a aba inteira cair.
+    const vazio = () => [];
+    const [gordura, diario, linha99, realManual, casos] = await Promise.all([
+      lerTudoDP360("ponto_gordura", { filtros: { data_ref: `eq.${dia}` }, ordem: "cracha.asc" }),
+      lerTudoDP360("ponto_diario", { filtros: { date_ref: `eq.${dia}` } }).catch(vazio),
+      lerTudoDP360("ponto_linha99", { filtros: { data_ref: `eq.${dia}` } }).catch(vazio),
+      lerTudoDP360("ponto_real_manual", { filtros: { date_ref: `eq.${dia}` } }).catch(vazio),
+      lerTudoDP360("ponto_caso", { filtros: { date_ref: `eq.${dia}` } }).catch(vazio),
+    ]);
+
+    const indexar = (arr, colDia) => {
+      const mapa = new Map();
+      arr.forEach((x) => mapa.set(chaveDe(x.cracha, x[colDia]), x));
+      return mapa;
+    };
+    const pdMapa = indexar(diario, "date_ref");
+    const rmMapa = indexar(realManual, "date_ref");
+    const casoMapa = indexar(casos, "date_ref");
+    const com99 = new Set(linha99.map((x) => chaveDe(x.cracha, x.data_ref)));
+
+    return gordura.map((bruta) => {
+      const chave = chaveDe(bruta.cracha, bruta.data_ref);
+      const pd = pdMapa.get(chave) || {};
+      const rm = rmMapa.get(chave) || {};
+      const caso = casoMapa.get(chave) || {};
+
+      // Mesma ordem do app antigo (main.py `_gord`):
+      // linha 99 -> reserva do INOVE -> reserva por GPS -> alvo.
+      // TODO(porte): `_aplica_reserva` depende de `reservas_motoristas`, que vive na
+      // base do INOVE e não está na allowlist do gateway DP360. Enquanto não entrar,
+      // um dia com reserva LANÇADA pelo gestor pode aparecer com gordura na entrada
+      // que o app antigo neutralizaria. A reserva detectada pelo GPS já é aplicada.
+      const g = camadaAlvo(camadaReservaGps(camadaLinha99(bruta, com99)), pd);
+
+      const cartao = cartoesGordura(g, pd, rm, caso);
+      const nivies = [txt(g.nivel_entrada).toUpperCase(), txt(g.nivel_saida).toUpperCase()];
+      return {
+        ...g,
+        __chave: chave,
+        __cartao: cartao,
+        __linha99: !!g.prioridade_citatti_linha99 || com99.has(chave),
+        __reserva:
+          !!g.reserva_por_gps || ehVerdade(g.tem_reserva_inove) || nivies.includes("RESERVA"),
+        __casoStatus: txt(caso.correcao_status) || txt(caso.aceite) || "",
+        __busca: semAcento(`${txt(g.nm_funcionario)} ${txt(g.cracha)} ${cracha8(g.cracha)}`),
+        rm_entrada: txt(rm.entrada),
+        rm_alm_saida: txt(rm.alm_saida),
+        rm_alm_volta: txt(rm.alm_volta),
+        rm_saida: txt(rm.saida),
+        rm_por: txt(rm.definido_por),
+        rm_em: txt(rm.definido_em),
+      };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!data) return undefined;
+    let ativo = true;
+    setCarregandoDia(true);
+    setErro("");
+    carregarDia(data)
+      .then((prontas) => {
+        if (ativo) setLinhas(prontas);
+      })
+      .catch((falha) => {
+        if (!ativo) return;
+        setLinhas([]);
+        setErro(falha?.message || "Falha ao consultar a gordura deste dia.");
+      })
+      .finally(() => {
+        if (ativo) setCarregandoDia(false);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [data, carregarDia]);
+
+  // Recorte base: quem passou da régua fixa (e do piso de exibição). Os chips de
+  // nível e o resumo contam SOBRE esse recorte.
+  const base = useMemo(
+    () => linhas.filter((o) => passaRegua(o) && (!piso || maiorPonta(o) >= piso)),
+    [linhas, piso],
+  );
+
+  const contagem = useMemo(() => {
+    const c = { TODOS: base.length, P1: 0, P2: 0, P3: 0, P4: 0, RESERVA: 0, OPERACAO_FORA_PONTO: 0 };
+    base.forEach((o) => {
+      const ks = [nivKey(o.nivel_entrada), nivKey(o.nivel_saida)];
+      PRECEDENCIA.forEach((k) => {
+        if (ks.includes(k)) c[k] += 1;
+      });
+    });
+    return c;
+  }, [base]);
+
+  const visiveis = useMemo(() => {
+    const q = semAcento(termo);
+    const termos = q.split(/\s+/).filter(Boolean);
+    return base
+      .filter((o) => !termos.length || termos.every((t) => o.__busca.includes(t)))
+      .filter((o) =>
+        filtro === "TODOS" ? true : nivKey(o.nivel_entrada) === filtro || nivKey(o.nivel_saida) === filtro,
+      );
+  }, [base, termo, filtro]);
+
+  // A soma oficial conta APENAS pontas cujo nível é exatamente P1.
+  const somaP1 = useMemo(
+    () =>
+      base.reduce(
+        (a, o) =>
+          a +
+          (txt(o.nivel_entrada).toUpperCase() === "P1" ? num(o.gordura_entrada) || 0 : 0) +
+          (txt(o.nivel_saida).toUpperCase() === "P1" ? num(o.gordura_saida) || 0 : 0),
+        0,
+      ),
+    [base],
+  );
+
+  const acoes = (
+    <button
+      type="button"
+      onClick={() => setVerNiveis(true)}
+      className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+    >
+      <Info size={16} /> Níveis
+    </button>
+  );
+
+  // TODO(porte): o envio de comunicado (📣 Enviar Ocorrência) do Passo 4 grava em
+  // `ponto_caso` e dispara o robô do Transnet — fica para a fase de execução.
+
+  const semDatas = !carregando && !datas.length;
+
+  return (
+    <AbaShell
+      icone={Gauge}
+      titulo="Gordura"
+      resumo="Tempo batido a mais do que operado, medido só nas pontas (entrada e saída). Somente motorista."
+      carregando={carregando}
+      erro={erro}
+      acoes={acoes}
+    >
+      {semDatas ? (
+        <p className="rounded-xl bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-500">
+          Ainda não há gordura calculada. Rode o pipeline da gordura (Athena → agente → base DP360)
+          para popular <code className="font-mono">ponto_gordura</code>.
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
+                Dia
+                <select
+                  value={data}
+                  onChange={(e) => setData(e.target.value)}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none"
+                >
+                  {datas.map((d) => (
+                    <option key={d} value={d}>
+                      {fmtData(d)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
+                Mostrar acima de
+                <select
+                  value={piso}
+                  onChange={(e) => setPiso(Number(e.target.value) || 0)}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none"
+                >
+                  {PISOS.map((p) => (
+                    <option key={p.valor} value={p.valor}>
+                      {p.rotulo}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="relative w-full lg:w-72">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={termo}
+                onChange={(e) => setTermo(e.target.value)}
+                placeholder="Buscar por nome ou crachá"
+                className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm font-semibold text-slate-800 placeholder:font-normal placeholder:text-slate-400 focus:border-blue-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap gap-1.5">
+              {CHIPS.map(([chave, rotulo]) => (
+                <button
+                  key={chave}
+                  type="button"
+                  onClick={() => setFiltro(chave)}
+                  className={`rounded-xl px-3 py-1.5 text-sm font-bold transition ${
+                    filtro === chave
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {rotulo}{" "}
+                  <span className={filtro === chave ? "text-blue-100" : "text-slate-400"}>
+                    {contagem[chave] ?? 0}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="text-right text-xs font-bold text-slate-500">
+              <div>Régua fixa: entrada &gt; 10 min antes · saída &gt; 8 min depois</div>
+              <div className="mt-0.5 text-sm text-slate-700">
+                {base.length} fora da régua
+                {piso ? ` e acima de ${piso} min` : ""} · Gordura P1 do dia:{" "}
+                {Math.round(somaP1)} min ({(somaP1 / 60).toFixed(1)}h)
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs font-semibold text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <Bus size={14} className="text-indigo-600" /> linha 99 (Citatti é a fonte das pontas)
+            </span>
+            <span className="flex items-center gap-1.5">
+              <PauseCircle size={14} className="text-purple-600" /> reserva / prontidão (não corrige, valida)
+            </span>
+            <span className="text-slate-400">Clique na linha para ver as fontes do dia.</span>
+          </div>
+
+          {carregandoDia ? (
+            <p className="mt-6 text-sm font-semibold text-slate-500">Carregando a gordura do dia…</p>
+          ) : (
+            <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
+              <table className="w-full min-w-[1180px] border-collapse text-sm">
+                <thead>
+                  <tr className="bg-slate-50 text-left text-[11px] font-black uppercase tracking-wide text-slate-500">
+                    <th className="px-3 py-2.5">Colaborador</th>
+                    <th className="px-3 py-2.5">Crachá</th>
+                    <th className="px-3 py-2.5">Data</th>
+                    <th className="px-3 py-2.5">Ponto (bateu)</th>
+                    <th className="px-3 py-2.5">Alvo (c/ tolerância)</th>
+                    <th className="px-3 py-2.5">Jornada</th>
+                    <th className="px-3 py-2.5">Gordura entrada</th>
+                    <th className="px-3 py-2.5">Gordura saída</th>
+                    <th className="px-3 py-2.5">Esc. início</th>
+                    <th className="px-3 py-2.5">Esc. fim</th>
+                    <th className="px-3 py-2.5">Justificativa</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {visiveis.map((r) => (
+                    <tr
+                      key={r.__chave}
+                      tabIndex={0}
+                      onClick={() => setDetalhe(r)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setDetalhe(r);
+                        }
+                      }}
+                      className={`cursor-pointer align-top transition hover:bg-blue-50/60 focus:bg-blue-50 focus:outline-none ${classeLinha(r)}`}
+                    >
+                      <td className="px-3 py-2.5">
+                        <span className="flex items-center gap-1.5 font-bold text-slate-800">
+                          {txt(r.nm_funcionario) || "—"}
+                          {r.__linha99 && (
+                            <span title="Linha 99 — Citatti é a fonte das pontas" className="shrink-0 text-indigo-600">
+                              <Bus size={14} aria-label="linha 99" />
+                            </span>
+                          )}
+                          {r.__reserva && (
+                            <span title="Reserva / prontidão — não corrige, só valida" className="shrink-0 text-purple-600">
+                              <PauseCircle size={14} aria-label="reserva" />
+                            </span>
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-slate-600">{txt(r.cracha) || "—"}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-600">{fmtData(r.data_ref)}</td>
+                      <td className="px-3 py-2.5">
+                        <LinhaCartao horas={r.__cartao.atual} />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {r.__cartao.alvoValido ? (
+                          <LinhaCartao horas={r.__cartao.alvo} mudou={r.__cartao.mudou} />
+                        ) : (
+                          <span className="text-xs font-bold text-rose-700">revisar alvo e refeição</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-slate-600">
+                        {durHM(r.real_inicio, r.real_fim)}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <ChipNivel minutos={r.gordura_entrada} nivel={r.nivel_entrada} />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <ChipNivel minutos={r.gordura_saida} nivel={r.nivel_saida} />
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-slate-500">{H(r.esc_inicio)}</td>
+                      <td className="px-3 py-2.5 font-mono text-slate-500">{H(r.esc_fim)}</td>
+                      <td className="max-w-[220px] px-3 py-2.5 text-xs leading-5 text-slate-500">
+                        {txt(r.justificativa) || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!visiveis.length && (
+                <p className="flex items-center justify-center gap-2 px-4 py-8 text-sm font-semibold text-slate-500">
+                  <AlertTriangle size={16} className="text-slate-400" />
+                  {base.length
+                    ? "Nada nesse nível ou nessa busca."
+                    : "Nenhuma ponta fora da régua fixa de aviso neste dia."}
+                </p>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {verNiveis && <ModalNiveis aoFechar={() => setVerNiveis(false)} />}
+      {detalhe && <PainelDetalhe linha={detalhe} aoFechar={() => setDetalhe(null)} />}
     </AbaShell>
   );
 }

@@ -17,12 +17,26 @@
 //                     NENHUM veredito é calculado à mão neste arquivo.
 //   docs/dp360/PORTE.md (constantes e as regras que não podem ser reinventadas)
 //
-// ⚠ ESCOPO DESTA FASE — GRAVA A DECISÃO, NÃO EXECUTA.
+// ⚠ ESCOPO DESTA FASE — DECIDE, E EXECUTA SÓ O QUE JÁ FOI DECIDIDO.
 // Aceitar / rejeitar / marcar por ocorrência / desfazer GRAVAM em `ponto_caso`
-// (e o contrato antes/depois em `ponto_ajustes_app`). O que mexe no Transnet —
-// rodar o bot, advertir, corrigir, cancelar a ocorrência — continua DESLIGADO:
-// decidir e executar são dois passos, e o disparo exige escopo explícito (um
-// clique sem escopo já processou 34 casos indevidos).
+// (e o contrato antes/depois em `ponto_ajustes_app`). DEPOIS de gravado, o caso
+// pode ser mandado ao robô — e só então alguma coisa muda no Transnet.
+//
+// DECIDIR ≠ EXECUTAR continua valendo, e agora é a trava do disparo: o botão do
+// robô não decide nada. Ele só empurra para o Transnet uma decisão que JÁ está
+// gravada (`aceite` ∈ aceito/rejeitado e `conferido_em` vazio) — exatamente o
+// mesmo filtro que o bot aplica lá dentro (bot_ajustes_app.executar_decisoes).
+// Caso sem decisão gravada não tem botão de robô.
+//
+// O ESCOPO VIAJA SEMPRE. O workflow `ajustes.yml` roda a FILA INTEIRA quando o
+// input `casos` chega vazio ou "[]" (main.py `_nuvem_traduz`: "sem ele, um clique
+// em quatro casos conferia a fila inteira"). Aqui o escopo é sempre UM crachá+dia
+// — o do caso aberto — e o disparo é recusado se ele não puder ser montado. Foi
+// um clique sem escopo que processou 34 casos indevidos em 24/08.
+//
+// O QUE CONTINUA FORA (e por quê, em MOTIVO_ADVERTIR / MOTIVO_CANCELAR): a carta
+// de advertência é o robô `comunicado`, a correção do cartão é o robô `ponto`, e
+// cancelar a ocorrência enviada é um modo que `ajustes.yml` nem expõe.
 //
 // A REGRA QUE MANDA NA TELA (PORTE.md §5): recusar ≠ advertir. Advertência só
 // existe depois de aviso registrado. É por isso que a navegação é em DOIS
@@ -34,7 +48,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowRight, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import TabelaDP from "../TabelaDP";
-import { lerTudoDP360, upsertDP360 } from "../../../services/dp360Api";
+import { dispararRoboDP360, lerTudoDP360, upsertDP360 } from "../../../services/dp360Api";
 import {
   CONSTANTES,
   batidasDoCartao,
@@ -63,9 +77,58 @@ const TOLERANCIA_MIN = CONSTANTES.TOL_AJUSTE_MIN;
 // PORTE.md §4 / main.py PRAZO_HORAS = 48.
 const PRAZO_HORAS = 48;
 
-// O que continua desligado nesta fase (só o que MEXE no Transnet).
+/* ─────────────────────── o que o robô faz e o que não faz ──────────────────
+ * O robô que esta tela dispara é UM só: `ajustes` (workflow ajustes.yml →
+ * bot/bot_ajustes_app.py), e ele tem exatamente TRÊS modos, nem um a mais —
+ * dp360-api ROBOS.ajustes recusa qualquer outro valor:
+ *   "conferir (so leitura)" · "capturar a grade" · "executar decisoes"
+ * É por isso que só o passo de EXECUTAR A DECISÃO ligou aqui: os outros três
+ * botões desta tela pedem robôs/modos que não existem no caminho da nuvem.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+// dp360-api ROBOS.ajustes.inputs.modo — string exata, não montar por concatenação.
+const MODO_EXECUTAR = "executar decisoes";
+
+// O que o disparo desta tela faz, em uma frase (rodapé e selo do cabeçalho).
 const AVISO_EXEC =
-  "Execução desligada: decidir e executar são dois passos. Gravar aqui não roda o bot.";
+  "O robô executa só o que JÁ FOI DECIDIDO e gravado, um crachá+dia por vez. " +
+  "Advertência, correção do cartão e cancelamento continuam fora desta tela.";
+
+// ── POR QUE "Advertir e corrigir" CONTINUA DESLIGADO ──────────────────────
+// No DP360 esse botão é uma CORRENTE DE TRÊS ELOS (app.js:1719 rejeitarCompleto):
+//   1) recusar no Transnet   → robô `ajustes`  (este é o elo que ligou aqui)
+//   2) enviar a advertência  → robô `comunicado`, motivo "103 (ADVERTENCIA)"
+//   3) corrigir o cartão     → robô `ponto`, com o alvo da correção
+// Os elos 2 e 3 não são o robô `ajustes`, e nenhum dos dois carimba sozinho:
+// `advertencia_enviada_em` e `correcao_final_em` são gravados por QUEM LÊ O
+// RESULTADO do run (main.py:8283 e 8332) — e esta tela não lê run nenhum. Ligar
+// o botão hoje mandaria carta na ficha de alguém sem registrar que ela saiu, e
+// tentaria corrigir o cartão sem o alvo (que esta tela ainda não digita).
+const MOTIVO_ADVERTIR =
+  "Ainda não: advertir é o robô `comunicado` (motivo 103) e corrigir o cartão é o robô `ponto` — " +
+  "nenhum dos dois é o robô `ajustes`, e quem carimba advertencia_enviada_em/correcao_final_em é " +
+  "quem lê o resultado do run, coisa que esta tela não faz. Sairia carta sem registro e correção sem alvo.";
+
+// ── POR QUE "Cancelar no Transnet" CONTINUA DESLIGADO ─────────────────────
+// Cancelar a ocorrência que NÓS enviamos é `bot_ajustes_app.py --cancelar-enviadas`
+// (precedido de `--listar-enviadas`). main.py `_nuvem_traduz` traduz para a nuvem
+// só --conferir / --capturar / --executar; os outros modos ficam locais de
+// propósito. O workflow ajustes.yml não tem opção para isso, então não existe
+// caminho de nuvem — e forçar um modo fora da lista o gateway recusa (403).
+const MOTIVO_CANCELAR =
+  "Ainda não: cancelar a ocorrência enviada é `--cancelar-enviadas`, que o workflow ajustes.yml não expõe " +
+  "(só conferir, capturar e executar). Não há caminho de nuvem para isso hoje — continua no robô local.";
+
+// ── POR QUE O "VENCIDO" CONTINUA DESLIGADO ────────────────────────────────
+// Duas razões independentes, e cada uma sozinha já bastaria:
+//  · o vencido NÃO TEM DECISÃO GRAVADA (ele não mexeu no ponto — não há pedido
+//    para aceitar nem recusar), e o robô `ajustes` só age sobre `aceite` gravado:
+//    não haveria o que executar mesmo que o botão existisse;
+//  · a saída dele é advertência → correção, que são os robôs `comunicado` e
+//    `ponto` (main.py:2932 advertir_vencida / 3060 corrigir_vencida).
+const MOTIVO_VENCIDO =
+  "Ainda não: o vencido não tem decisão gravada para o robô `ajustes` executar (ele não mexeu no ponto), " +
+  "e a saída dele é advertência → correção — robôs `comunicado` e `ponto`, que esta tela ainda não dispara.";
 
 // app.js:133 — as duas portas + comunicados. A porta define a CONSEQUÊNCIA.
 const PORTAS = [
@@ -1115,6 +1178,101 @@ function motivoForaDoLote(reg, acao) {
   return "";
 }
 
+/* ═════════════════ EXECUÇÃO — só o que JÁ FOI DECIDIDO E GRAVADO ══════════════
+ * O botão do robô NÃO decide. Ele empurra para o Transnet uma decisão que já está
+ * em `ponto_caso`, e nada mais. Quem quiser executar um caso sem decisão tem de
+ * decidir primeiro, na mesma tela, com a confirmação que nomeia a pessoa.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+// Por que ESTE dia não pode ir para o robô. Espelho do filtro que o próprio bot
+// aplica (bot_ajustes_app.executar_decisoes: `aceite` ∈ (aceito, rejeitado) e
+// `conferido_em` vazio) — se a tela oferecesse o que o bot descarta, o disparo
+// gastaria um run para não fazer nada e o DP acharia que o robô falhou.
+function motivoSemExecucao(reg) {
+  if (!reg) return "sem caso";
+  const bruto = reg.caso || {};
+  const ciclo = reg.ciclo || {};
+  // CICLO REABERTO: o `aceite` guardado é do ciclo VELHO e o bot lê a linha crua —
+  // ele executaria a decisão anterior contra um pedido novo. A tela não manda.
+  if (reg.reaberto)
+    return "ciclo reaberto — chegou aviso novo depois da decisão: decida de novo antes de mandar o robô";
+  if (!["aceito", "rejeitado"].includes(txt(ciclo.aceite)))
+    return "nenhuma decisão gravada — decidir e executar são dois passos: aceite ou recuse primeiro";
+  if (txt(bruto.conferido_em)) return "o robô já executou este dia no Transnet — não se repete";
+  // main.py/bot: dia já provado FECHADO no Transnet só gera escrita recusada
+  // (o ALLAN 30060284 levou nove antes de alguém perceber).
+  if (txt(bruto.correcao_status) === "ponto_fechado")
+    return "competência fechada no Transnet — o robô não consegue lançar este dia";
+  const p = planoDaExecucao(reg);
+  if (!p.aceitar.length && !p.rejeitar.length && !p.jaResolvidos.length)
+    return "nenhuma ocorrência do Transnet ligada a este dia — o robô não teria o que clicar";
+  return "";
+}
+
+/**
+ * O que o robô vai clicar, contado ANTES do disparo (espelho de
+ * bot_ajustes_app.executar_decisoes e de main.py:contar_execucao).
+ *
+ * O QUE A DECISÃO CONGELOU MANDA: `ajuste_ids` com prefixo A:/R: aponta as
+ * ocorrências exatas que o DP viu — é o que permite o dia MISTO (aceitou umas,
+ * recusou outras). Sem prefixo, o `aceite` do caso vale para todas as ocorrências
+ * do dia. O que o Transnet já resolveu (EFETUADO/RECUSADO) saiu da grade: não é
+ * clique, é só conferência.
+ */
+function planoDaExecucao(reg) {
+  const ciclo = reg?.ciclo || {};
+  const padrao = txt(ciclo.aceite) === "aceito" ? "aceitar" : "rejeitar";
+  const porId = new Map();
+  txt(ciclo.ajuste_ids)
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .forEach((b) => {
+      if (b.slice(0, 2) === "A:") porId.set(b.slice(2), "aceitar");
+      else if (b.slice(0, 2) === "R:") porId.set(b.slice(2), "rejeitar");
+      else porId.set(b, padrao);
+    });
+  if (!porId.size) idsDoDia(reg).forEach((id) => porId.set(id, padrao));
+  const resolvidos = new Set(
+    (reg?.ajustes || [])
+      .filter((o) => ["EFETUADO", "RECUSADO"].includes(txt(o.situacao_ajuste).toUpperCase()))
+      .map((o) => txt(o.id_ocorrencia)),
+  );
+  const plano = { aceitar: [], rejeitar: [], jaResolvidos: [] };
+  porId.forEach((acao, id) => {
+    if (!id) return;
+    if (resolvidos.has(id)) plano.jaResolvidos.push(id);
+    else plano[acao].push(id);
+  });
+  return plano;
+}
+
+/**
+ * O ESCOPO DO DISPARO — o input `casos` do workflow.
+ *
+ * `ajustes.yml` compara o input com "[]" e, se for vazio, roda `--executar` SEM
+ * `--casos`: a FILA INTEIRA. Por isso esta função devolve "" (e o disparo é
+ * recusado) em vez de devolver "[]" quando não dá para montar a chave — mandar
+ * escopo vazio não é "não filtrar", é executar tudo.
+ */
+function casosDoRegistro(reg) {
+  const { cracha, date_ref } = chaveDoCaso(reg);
+  const c = txt(cracha);
+  const d = normData(date_ref) || txt(date_ref).slice(0, 10);
+  if (!c || !d) return "";
+  return JSON.stringify([{ cracha: c, date_ref: d }]);
+}
+
+// O rótulo honesto do que o robô vai fazer com ESTA decisão — nunca promete a
+// carta de advertência nem a correção do cartão, que são outros dois robôs.
+function rotuloDaExecucao(reg) {
+  const ciclo = reg?.ciclo || {};
+  if (txt(ciclo.aceite) === "aceito") return "Aceitar no Transnet";
+  const dispensada = txt(ciclo.correcao_status) === "dispensada";
+  if (reg?.temAviso && !dispensada) return "Recusar no Transnet (abre advertência e correção)";
+  return "Recusar no Transnet (encerra)";
+}
+
 /* ─────────────────────────── peças visuais reusáveis ─────────────────────── */
 
 // cor lógica do domínio → pílula da ferramenta (styles.css .pill / dp360.css .dp-pill).
@@ -1191,13 +1349,107 @@ function BotaoAcao({ children, tom = "neutro", titulo, onClick, disabled }) {
   );
 }
 
-// O que MEXE NO TRANSNET continua travado nesta fase.
-function BotaoExecucao({ children, tom = "neutro" }) {
+// O passo de execução que AINDA NÃO EXISTE. `motivo` é obrigatório na prática: um
+// botão morto sem motivo faz o DP achar que a tela quebrou e clicar dez vezes —
+// aqui ele diz qual robô falta e por quê, na própria dica.
+function BotaoExecucao({ children, tom = "neutro", motivo = AVISO_EXEC }) {
   const cor = { ok: "var(--dp-ok-ink)", erro: "var(--dp-danger-ink)" }[tom];
   return (
-    <button type="button" disabled title={AVISO_EXEC} className="dp-btn" style={cor ? { color: cor } : undefined}>
+    <button type="button" disabled title={motivo} className="dp-btn" style={cor ? { color: cor } : undefined}>
       {children}
     </button>
+  );
+}
+
+// Rodapé de execução do caso aberto: ENSAIO e VALENDO são botões SEPARADOS, como
+// em Folgas. Um checkbox "confirmar" marcado por engano vira decisão de verdade na
+// ficha de um trabalhador; dois botões obrigam a escolher, e cada confirmação diz
+// qual dos dois é. O escopo (1 crachá+dia) fica escrito na cara, não implícito.
+function RodapeRobo({ reg, disparando, aoExecutar, resultado }) {
+  const trava = motivoSemExecucao(reg);
+  const plano = trava ? null : planoDaExecucao(reg);
+  return (
+    <div className="dp-det-bot">
+      <div className="dp-det-bot-linha">
+        <b>Execução no Transnet — robô `ajustes`, modo “{MODO_EXECUTAR}”</b>
+        <span className="dp-faint">
+          {" "}
+          · escopo: só {reg.nome} · {reg.dataBR} (1 crachá+dia — o input `casos` nunca vai vazio,
+          senão o workflow roda a fila inteira)
+        </span>
+      </div>
+      {trava ? (
+        <div className="dp-det-bot-linha">
+          <Selo cor="alerta" quebra titulo="O robô só executa decisão já gravada — decidir e executar são dois passos.">
+            robô indisponível para este caso: {trava}
+          </Selo>
+        </div>
+      ) : (
+        <>
+          <div className="dp-det-bot-linha">
+            O robô vai <b>{plano.aceitar.length}</b> aceitar e <b>{plano.rejeitar.length}</b> rejeitar
+            no Transnet
+            {plano.jaResolvidos.length ? (
+              <span className="dp-faint">
+                {" "}
+                · {plano.jaResolvidos.length} já resolvida(s) lá (não clica, só confere)
+              </span>
+            ) : null}
+            . Ele carimba <span className="dp-mono">conferido_em</span> em{" "}
+            <span className="dp-mono">ponto_caso</span> — é esse carimbo que trava o dia.
+          </div>
+          <div className="dp-det-bot-acoes">
+            <button
+              type="button"
+              className="dp-btn"
+              disabled={disparando}
+              onClick={() => aoExecutar(reg, false)}
+              title="O robô navega, marca e NÃO clica — serve para conferir o lote antes de valer"
+            >
+              🤖 Ensaio
+            </button>
+            <button
+              type="button"
+              className="dp-btn"
+              style={{ color: "var(--dp-danger-ink)" }}
+              disabled={disparando}
+              onClick={() => aoExecutar(reg, true)}
+              title={`Vale de verdade no Transnet: ${rotuloDaExecucao(reg)}`}
+            >
+              ⚠ {rotuloDaExecucao(reg)} — de verdade
+            </button>
+          </div>
+        </>
+      )}
+      {/* SÓ NA PORTA DO AVISO. Advertir e cancelar o aviso pressupõem que existe aviso
+          registrado neste crachá+dia; num pedido do colaborador nem desligados eles
+          deveriam aparecer — botão morto ainda ensina que aquilo seria possível, e
+          aqui não é: recusar não é advertir. */}
+      {reg.temAviso ? (
+        <div className="dp-det-bot-acoes">
+          <BotaoExecucao tom="erro" motivo={MOTIVO_ADVERTIR}>
+            Advertir e corrigir (robô)
+          </BotaoExecucao>
+          <BotaoExecucao motivo={MOTIVO_CANCELAR}>Cancelar aviso no Transnet</BotaoExecucao>
+        </div>
+      ) : null}
+      {disparando ? <span className="dp-pill accent">disparando…</span> : null}
+      {resultado ? (
+        <div className="dp-det-bot-linha">
+          <Selo cor={resultado.tipo === "ok" ? "ok" : "erro"} quebra>
+            {resultado.texto}
+          </Selo>
+          {resultado.painel ? (
+            <>
+              {" "}
+              <a className="dp-btn" href={resultado.painel} target="_blank" rel="noreferrer">
+                ver o robô rodando
+              </a>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1336,19 +1588,32 @@ function CelulaDecisao({ reg, gravando, aoAceitar, aoRejeitar, aoDesfazer, aoAbr
           </Selo>
         ) : (
           <>
-            <Selo titulo={`Marcado em ${reg.decJa.quando}. Ainda não subiu: falta rodar o bot.`}>
+            <Selo titulo={`Marcado em ${reg.decJa.quando}. Ainda não subiu: falta rodar o robô.`}>
               ✓ decidido · {reg.decJa.aceito ? "aceito" : "recusado"} — aguardando bot
             </Selo>
-            <BotaoAcao
-              titulo="Desfaz a decisão e devolve o caso para a fila (main.py:desfazer_decisao). Só vale enquanto o bot não executou."
-              onClick={(e) => {
-                e.stopPropagation();
-                aoDesfazer(reg);
-              }}
-              disabled={gravando}
-            >
-              ↩ Desfazer decisão
-            </BotaoAcao>
+            <div style={FILA}>
+              {/* O disparo mora no CASO ABERTO, nunca na grade: é lá que a pessoa, o dia e
+                  o que o robô vai clicar aparecem por extenso antes de qualquer clique. */}
+              <BotaoAcao
+                titulo="Abre o caso: a execução no Transnet (ensaio ou valendo) fica no rodapé do detalhe, com o escopo de um crachá+dia."
+                onClick={(e) => {
+                  e.stopPropagation();
+                  aoAbrir(reg);
+                }}
+              >
+                🤖 Executar…
+              </BotaoAcao>
+              <BotaoAcao
+                titulo="Desfaz a decisão e devolve o caso para a fila (main.py:desfazer_decisao). Só vale enquanto o bot não executou."
+                onClick={(e) => {
+                  e.stopPropagation();
+                  aoDesfazer(reg);
+                }}
+                disabled={gravando}
+              >
+                ↩ Desfazer decisão
+              </BotaoAcao>
+            </div>
           </>
         )}
       </div>
@@ -1361,7 +1626,7 @@ function CelulaDecisao({ reg, gravando, aoAceitar, aoRejeitar, aoDesfazer, aoAbr
       <div style={FILA}>
         <BotaoAcao
           tom="ok"
-          titulo={trava || "Grava aceite=aceito no caso (não roda o bot)"}
+          titulo={trava || "Grava aceite=aceito no caso (não roda o robô — abra o caso para executar)"}
           disabled={Boolean(trava) || gravando}
           onClick={(e) => {
             e.stopPropagation();
@@ -1594,7 +1859,22 @@ function ItemAcao({ item, marca, aoMarcar, travado }) {
   );
 }
 
-function Detalhe({ reg, aoFechar, gravando, aoAceitar, aoRejeitar, aoDesfazer, aoMarcar }) {
+function Detalhe({
+  reg,
+  aoFechar,
+  gravando: gravandoProp,
+  aoAceitar,
+  aoRejeitar,
+  aoDesfazer,
+  aoMarcar,
+  disparando,
+  aoExecutar,
+  resultadoRobo,
+}) {
+  // ENQUANTO O DISPARO ESTÁ NO AR, A DECISÃO NÃO MUDA. O robô já levou a decisão que
+  // estava gravada; trocá-la agora deixaria o banco e o Transnet contando histórias
+  // diferentes sobre o mesmo dia da mesma pessoa.
+  const gravando = gravandoProp || disparando;
   // marcação por ocorrência: começa com o que o MOTOR julgou (julgaAcoes.ok)
   const inicial = useMemo(() => {
     const m = {};
@@ -1840,7 +2120,7 @@ function Detalhe({ reg, aoFechar, gravando, aoAceitar, aoRejeitar, aoDesfazer, a
         style={{ marginTop: 12, background: "var(--dp-surface-2)" }}
       >
         <div className="dp-muted" style={ROTULO_CARD}>
-          Decisão do DP — grava em ponto_caso, não roda o bot
+          Decisão do DP — grava em ponto_caso · a execução no Transnet é o passo seguinte
         </div>
         <div style={{ ...FILA, marginTop: 8 }}>
           {reg.decJa ? (
@@ -1911,16 +2191,23 @@ function Detalhe({ reg, aoFechar, gravando, aoAceitar, aoRejeitar, aoDesfazer, a
               )}
             </>
           )}
-          <span style={{ flex: 1 }} />
-          <BotaoExecucao tom="erro">Advertir e corrigir (robô)</BotaoExecucao>
-          <BotaoExecucao>Cancelar aviso no Transnet</BotaoExecucao>
         </div>
         <p className="dp-faint" style={{ ...MINI, margin: "8px 0 0" }}>
           {reg.temAviso
             ? "Existe aviso registrado neste crachá+dia (ponto_caso.aviso_enviado_em ou ponto_ocorrencias.lancado_em): a recusa PODE virar advertência — por isso o desfecho é escolhido à mão."
             : "Não há aviso registrado neste crachá+dia em nenhuma das duas fontes: a recusa encerra o caso e nunca vira advertência."}{" "}
-          {AVISO_EXEC}
+          Gravar aqui não roda o robô — a execução é o passo de baixo, e ela só existe depois
+          desta decisão estar gravada.
         </p>
+
+        {/* EXECUÇÃO — bloco SEPARADO do bloco de decisão, de propósito: são dois atos
+            diferentes, e o de baixo depende do de cima já ter acontecido. */}
+        <RodapeRobo
+          reg={reg}
+          disparando={disparando}
+          aoExecutar={aoExecutar}
+          resultado={resultadoRobo}
+        />
       </div>
     </div>
   );
@@ -1941,6 +2228,8 @@ export default function Ocorrencias() {
   const [recado, setRecado] = useState("");
   const [selIds, setSelIds] = useState([]);
   const [versao, setVersao] = useState(0);
+  const [disparando, setDisparando] = useState(false);
+  const [resultadoRobo, setResultadoRobo] = useState(null);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -2001,7 +2290,12 @@ export default function Ocorrencias() {
     setSelIds([]);
   };
 
-  const abrir = (reg) => setAberto((atual) => (atual?.k === reg.k ? null : reg));
+  // O recado do robô é DAQUELE caso: trocar de caso sem limpar faria o resultado de
+  // um disparo aparecer no rodapé de outra pessoa.
+  const abrir = (reg) => {
+    setResultadoRobo(null);
+    setAberto((atual) => (atual?.k === reg.k ? null : reg));
+  };
 
   const regAberto = aberto ? registros.find((r) => r.k === aberto.k) || aberto : null;
 
@@ -2038,7 +2332,8 @@ export default function Ocorrencias() {
         `ACEITAR o dia ${reg.dataBR} de ${reg.nome} (${reg.cracha}).\n\n` +
           `Grava em ponto_caso: aceite=aceito, ajuste=certo, aceito_em, ajuste_ids (${reg.nAjustes} ocorrência(s)).\n` +
           `Contrato antes/depois: ${reg.antesTexto || "—"} → ${reg.depoisTexto || "—"} (só onde ainda não estiver congelado).\n\n` +
-          `NÃO roda o bot: a execução no Transnet continua desligada.`,
+          `NÃO roda o robô: gravar é um passo, executar é outro. Para mandar ao Transnet, ` +
+          `abra o caso e use a execução do rodapé.`,
       );
       if (!ok) return;
       executarGravacao(`Aceite gravado (${reg.nome} · ${reg.dataBR})`, () => gravarAceite(reg));
@@ -2124,6 +2419,84 @@ export default function Ocorrencias() {
     [executarGravacao],
   );
 
+  /* ── EXECUÇÃO: manda ao robô uma decisão JÁ GRAVADA, um crachá+dia por vez ──
+   *
+   * As quatro coisas que este caminho garante, e nenhuma é conveniência de tela:
+   *  1. só executa o que já foi DECIDIDO (motivoSemExecucao é o mesmo filtro do bot);
+   *  2. o ESCOPO viaja sempre — `casos` com um par crachá+dia; escopo vazio faria o
+   *     workflow rodar a fila inteira, então sem escopo o disparo é recusado aqui;
+   *  3. ENSAIO e VALENDO são chamadas diferentes, cada uma com a sua confirmação —
+   *     o servidor ainda força ensaio se `confirmar` não vier "true";
+   *  4. o erro que aparece é o do gateway (dp360Api já desembrulha o motivo do 4xx),
+   *     e a tela recarrega depois para ninguém decidir em cima de dado velho.
+   */
+  const aoExecutarRobo = useCallback(
+    async (reg, valendo) => {
+      const trava = motivoSemExecucao(reg);
+      if (trava) {
+        setResultadoRobo({ tipo: "erro", texto: `Não dá para executar: ${trava}.` });
+        return;
+      }
+      const casos = casosDoRegistro(reg);
+      if (!casos) {
+        // NUNCA cair para "[]": ajustes.yml trata escopo vazio como fila inteira.
+        setResultadoRobo({
+          tipo: "erro",
+          texto:
+            "Sem crachá+dia para escopar o robô — disparo cancelado. Escopo vazio faria o workflow rodar a fila inteira.",
+        });
+        return;
+      }
+      const plano = planoDaExecucao(reg);
+      const rotulo = rotuloDaExecucao(reg);
+      const cabeca = valendo
+        ? `EXECUTAR DE VERDADE no Transnet — ${rotulo}.`
+        : `ENSAIO (o robô navega, marca e NÃO clica) — ${rotulo}.`;
+      const ok = confirmar(
+        `${cabeca}\n\n` +
+          `Pessoa: ${reg.nome} (${reg.cracha}) · dia ${reg.dataBR}.\n` +
+          `Decisão já gravada: aceite=${txt(reg.ciclo.aceite)}` +
+          `${txt(reg.ciclo.correcao_status) ? `, correcao_status=${txt(reg.ciclo.correcao_status)}` : ""}.\n\n` +
+          `O robô vai aceitar ${plano.aceitar.length} e rejeitar ${plano.rejeitar.length} ocorrência(s)` +
+          `${plano.jaResolvidos.length ? ` (${plano.jaResolvidos.length} o Transnet já resolveu — só confere)` : ""}.\n` +
+          `Robô: ajustes · modo "${MODO_EXECUTAR}" · casos = 1 crachá+dia (só este).\n` +
+          `${valendo ? "Ele carimba conferido_em em ponto_caso — é esse carimbo que trava o dia." : "Nada é clicado e nada é carimbado."}\n\n` +
+          `${
+            reg.temAviso && txt(reg.ciclo.aceite) === "rejeitado" && txt(reg.ciclo.correcao_status) !== "dispensada"
+              ? "Esta recusa MANTÉM o caso na cadeia de advertência e correção — mas o robô NÃO envia a advertência nem corrige o cartão: isso continua fora desta tela."
+              : "A advertência e a correção do cartão continuam fora desta tela."
+          }\n` +
+          `Quem executa é o robô, no GitHub Actions, e o disparo fica registrado com o seu nome.`,
+      );
+      if (!ok) return;
+
+      setDisparando(true);
+      setResultadoRobo(null);
+      setRecado("");
+      try {
+        const r = await dispararRoboDP360("ajustes", {
+          modo: MODO_EXECUTAR,
+          casos,
+          confirmar: valendo ? "true" : "false",
+        });
+        const texto =
+          `${valendo ? "Execução" : "Ensaio"} disparado — ${reg.nome} · ${reg.dataBR}` +
+          ` (${plano.aceitar.length} aceitar / ${plano.rejeitar.length} rejeitar).` +
+          ` O resultado não volta sozinho: a prova fica no run.`;
+        setResultadoRobo({ tipo: "ok", texto, painel: r?.painel || "" });
+        setRecado(texto);
+        await carregar();
+      } catch (e) {
+        const motivo = e?.message || "Não foi possível disparar o robô.";
+        setResultadoRobo({ tipo: "erro", texto: `Falhou: ${motivo}` });
+        setRecado(`Falhou: ${motivo}`);
+      } finally {
+        setDisparando(false);
+      }
+    },
+    [carregar],
+  );
+
   /* ── decisão em LOTE — com as travas do trabalhador ── */
 
   const emLote = useCallback(
@@ -2161,7 +2534,7 @@ export default function Ocorrencias() {
               acao === "aceitar"
                 ? "Grava aceite=aceito em cada caso."
                 : 'Grava aceite=rejeitado + correcao_status="dispensada" — nenhum destes dias tem aviso, então nenhum vira advertência.'
-            }\nNÃO roda o bot.`,
+            }\nNÃO roda o robô: o disparo é sempre de UM caso, no caso aberto — não existe execução em lote.`,
         )
       )
         return;
@@ -2310,9 +2683,11 @@ export default function Ocorrencias() {
       render: (r) =>
         r.situacaoAviso === "vencido" ? (
           <div style={PILHA}>
-            <BotaoExecucao tom="erro">⚠ Vencido — advertir e corrigir (robô)</BotaoExecucao>
+            <BotaoExecucao tom="erro" motivo={MOTIVO_VENCIDO}>
+              ⚠ Vencido — advertir e corrigir (robô)
+            </BotaoExecucao>
             <span style={{ ...MINI, color: "var(--dp-danger-ink)" }}>
-              não entra em lote — só a cadeia advertência → correção
+              não entra em lote — só a cadeia advertência → correção, que ainda é robô de fora
             </span>
           </div>
         ) : (
@@ -2406,7 +2781,9 @@ export default function Ocorrencias() {
       largura: 220,
       ordenavel: false,
       valor: () => "",
-      render: () => <BotaoExecucao>🗑 Cancelar no Transnet (robô)</BotaoExecucao>,
+      render: () => (
+        <BotaoExecucao motivo={MOTIVO_CANCELAR}>🗑 Cancelar no Transnet (robô)</BotaoExecucao>
+      ),
     },
   ];
 
@@ -2424,7 +2801,7 @@ export default function Ocorrencias() {
   const VAZIOS = {
     conf: "Nenhum pedido aguardando decisão. Aguarde a captura do Transnet.",
     aguard: "Nenhum aviso esperando você — quem recebeu o aviso já foi tratado.",
-    exec: "Nenhuma decisão aguardando execução do robô.",
+    exec: "Nenhuma decisão aguardando execução do robô. (É aqui que mora a fila do robô: abra o caso e dispare no rodapé.)",
     ok: "Nenhum dia fechado como OK nesta porta.",
     recusados: "Nenhuma recusa nesta porta.",
     disc: "Nenhuma advertência ou correção — e isso pode estar certo: só adverte quem recebeu aviso.",
@@ -2503,11 +2880,23 @@ export default function Ocorrencias() {
           ) : null}
           <span style={{ flex: 1 }} />
           <span className="dp-faint dp-num">lido em {fmtDataHora(base?.lidoEm)}</span>
-          <button type="button" className="dp-btn" onClick={carregar} disabled={gravando}>
+          <button
+            type="button"
+            className="dp-btn"
+            onClick={carregar}
+            disabled={gravando || disparando}
+          >
             ↻ Recarregar
           </button>
-          <Selo cor={gravando ? "alerta" : "accent"} titulo={AVISO_EXEC}>
-            {gravando ? "gravando…" : "grava decisão · não executa"}
+          <Selo
+            cor={gravando || disparando ? "alerta" : "accent"}
+            titulo={AVISO_EXEC}
+          >
+            {gravando
+              ? "gravando…"
+              : disparando
+                ? "disparando o robô…"
+                : "decide · executa só o já decidido"}
           </Selo>
         </>
       }
@@ -2520,8 +2909,14 @@ export default function Ocorrencias() {
           <strong>O que esta tela GRAVA</strong> (em <span className="dp-mono">ponto_caso</span>, e o
           contrato antes/depois em <span className="dp-mono">ponto_ajustes_app</span>): aceite,
           recusa, marcação por ocorrência e desfazer.{" "}
-          <strong>O que ela NÃO faz:</strong> rodar o robô, advertir, corrigir ou cancelar a
-          ocorrência no Transnet — decidir e executar são dois passos. Recusa sem aviso encerra o
+          <strong>O que ela EXECUTA</strong> (robô <span className="dp-mono">ajustes</span>, no caso
+          aberto, um crachá+dia por disparo): leva ao Transnet uma decisão que <em>já</em> está
+          gravada — decidir e executar continuam sendo dois passos, e o botão do robô não decide
+          nada.{" "}
+          <strong>O que ela NÃO faz:</strong> enviar a advertência, corrigir o cartão ou cancelar a
+          ocorrência — esses são os robôs <span className="dp-mono">comunicado</span> e{" "}
+          <span className="dp-mono">ponto</span>, e um modo que o workflow nem expõe; os botões
+          estão desligados e dizem por quê. Recusa sem aviso encerra o
           caso (<span className="dp-mono">dispensada</span>) e nunca vira advertência. Entrada e
           saída são julgadas separadamente: uma nunca anula a outra; dia misto e aviso vencido não
           entram em decisão em lote. Veredito, régua e simulação vêm do motor validado
@@ -2645,22 +3040,32 @@ export default function Ocorrencias() {
         aoRejeitar={aoRejeitar}
         aoDesfazer={aoDesfazer}
         aoMarcar={aoMarcar}
+        disparando={disparando}
+        aoExecutar={aoExecutarRobo}
+        resultadoRobo={resultadoRobo}
       />
     </AbaShell>
   );
 }
 
 /* ============================================================================
- * O QUE CONTINUA FORA DESTA TELA (de propósito)
+ * O QUE ESTA TELA EXECUTA — e o que continua fora (de propósito)
  *
- * · EXECUÇÃO. Aceitar/rejeitar aqui NÃO aceita nem rejeita no Transnet: quem faz
- *   isso é o robô, e o disparo (Edge Function `dispatch-bot`) exige escopo
- *   explícito [{cracha, date_ref}]. Um clique sem escopo já processou 34 casos
- *   indevidos. O robô é quem grava advertencia_enviada_em / correcao_final_em.
- * · ADVERTIR e CORRIGIR. A decisão gravada aqui (recusa com aviso, correcao_status
- *   vazio) apenas MANTÉM o caso na fila da cadeia; nada é enviado a ninguém.
- * · CANCELAR AVISO (aviso_cancelado_em) e cancelar a ocorrência no Transnet:
- *   dependem do robô (sincronizar_cancelamentos_ocorrencias).
+ * · EXECUÇÃO (LIGADA). Só no caso aberto, só uma decisão JÁ GRAVADA, e sempre com
+ *   escopo explícito: `dispararRoboDP360("ajustes", { modo: "executar decisoes",
+ *   casos: '[{"cracha":…,"date_ref":…}]', confirmar })`. O escopo não é enfeite —
+ *   `ajustes.yml` roda a FILA INTEIRA quando `casos` chega vazio, e um clique sem
+ *   escopo já processou 34 casos indevidos (24/08). Não existe execução em lote
+ *   nesta tela, e o `confirmar` nasce falso no gateway: sem "true", é ensaio.
+ *   Quem carimba `conferido_em` é o robô, não o navegador.
+ * · ADVERTIR e CORRIGIR (FORA — ver MOTIVO_ADVERTIR). São outros dois robôs
+ *   (`comunicado` motivo 103 e `ponto`) e outros dois carimbos
+ *   (advertencia_enviada_em / correcao_final_em), gravados por quem LÊ o resultado
+ *   do run — coisa que esta tela não faz. A recusa executada aqui apenas MANTÉM o
+ *   caso na fila da cadeia; nenhuma carta é enviada a ninguém.
+ * · CANCELAR AVISO (aviso_cancelado_em) e cancelar a ocorrência no Transnet
+ *   (FORA — ver MOTIVO_CANCELAR): é `--cancelar-enviadas`, modo que o workflow
+ *   `ajustes.yml` não expõe; o gateway recusa qualquer modo fora dos três.
  * · ALVO MANUAL da correção (confirmar_errados(alvo=…) → ponto_ajustes_app
  *   .alvo_etapa2): é a régua de interno, e exige um campo de digitação com
  *   validação própria. Enquanto não existir, a recusa vai sem alvo — que é o

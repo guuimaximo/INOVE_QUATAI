@@ -9,15 +9,27 @@
 // só desenha o que a view decidiu — mudar régua é no SQL, não aqui.
 //
 // FASE ATUAL: SOMENTE LEITURA. Não grava nada.
-// TODO(bot): "Lançar ocorrência" (DSR/Compensação/Curso no Transnet) depende do
-// robô Selenium `bot_ocorrencia.py`, que roda no GitHub Actions — o navegador não
-// consegue dirigir o Transnet. Quando a fase 5 do porte chegar, a tela grava a
-// decisão e dispara o workflow; o robô lê a fila e devolve o resultado em
-// `ponto_ocorrencias`. Até lá, esta aba apenas evidencia o que já foi lançado.
+// LANÇAR OCORRÊNCIA (DSR / Compensação / Curso) — ligado.
+//
+// O navegador não dirige o Transnet: isso é o Selenium `bot_ocorrencia.py`, que
+// roda no GitHub Actions do repo DP360, onde a credencial do Transnet vive como
+// secret. Esta tela monta o lote e DISPARA; quem executa é o robô.
+//
+// O CSV é o mesmo que a ferramenta escreve (main.py `lancar_ocorrencias`, ~4451):
+// colunas `cracha,data,tipo`, crachá com 8 dígitos (zeros à esquerda, senão o bot
+// quebra), data dd/mm/aaaa, tipo 05=DSR · 40=Compensação · 29=Curso. O tipo não é
+// escolha da tela: vem do `folgasALancar`, a mesma regra do original (duas
+// seguidas → 1ª Compensação e 2ª DSR; isolada → DSR; dia de curso → 29).
+//
+// O QUE ESTA TELA NÃO FAZ: ler o resultado de volta. O workflow guarda a
+// evidência como artefato e não escreve no Supabase — quem preenche
+// `ponto_ocorrencias` hoje é o pós-processo da ferramenta desktop
+// (`_ingest_ocorr`). Então, depois de disparar daqui, a coluna 🤖 só muda quando
+// alguém ingerir o resultado. Está dito na tela, para ninguém achar que sumiu.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Palette, RefreshCw, Search, X } from "lucide-react";
 import AbaShell from "./AbaShell";
-import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
+import { dispararRoboDP360, lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
 
 /* ───────────────────────── constantes do domínio ───────────────────────── */
 
@@ -224,6 +236,20 @@ function celulaDoDia(linha, cracha, ctx) {
     : { cls: "sem", txt: "—", full: "Sem escala / sem informação para o dia" };
 }
 
+// main.py `_ddmm` — o bot preenche a tela do Transnet, que é dd/mm/aaaa.
+// (o `ddmm` desta tela é só o rótulo curto dd/mm, não serve para o CSV)
+const ddmmaaaa = (iso) => {
+  const v = texto(iso);
+  return v.length >= 10 ? `${v.slice(8, 10)}/${v.slice(5, 7)}/${v.slice(0, 4)}` : v;
+};
+
+// O CSV que o bot lê (csv.DictReader com fieldnames cracha,data,tipo). Sem aspas
+// e sem ponto-e-vírgula: nenhum dos três campos tem vírgula — crachá é dígito,
+// data é dd/mm/aaaa e tipo é código de dois dígitos.
+function csvDoLote(linhas) {
+  return ["cracha,data,tipo", ...linhas.map((l) => `${l.cracha},${l.data},${l.tipo}`)].join("\n");
+}
+
 // Folgas ainda NÃO lançadas, com o tipo automático (folgasP, app.js ~3582):
 // duas seguidas → 1ª Compensação (40) e 2ª DSR (05); isolada → DSR (05); curso → 29.
 function folgasALancar(pessoa, diasCurso) {
@@ -376,6 +402,54 @@ function PainelDetalhe({ pessoa, semana, ctx, aoFechar }) {
   const folgas = folgasALancar(pessoa, ctx.diasCurso);
   const tipoPorData = new Map(folgas.map((f) => [f.data, f.tipo]));
   const situacaoRuim = pessoa.situacao && !/^OK/i.test(pessoa.situacao);
+  const [disparando, setDisparando] = useState(false);
+  const [recado, setRecado] = useState(null);
+
+  // ENSAIO x VALENDO são dois botões, não um checkbox. Checkbox marcado por
+  // engano lança de verdade na ficha de alguém; dois botões obrigam a escolher,
+  // e a confirmação de cada um diz qual dos dois é.
+  const lancar = async (confirmar) => {
+    const lote = folgas.map((f) => ({
+      cracha: cra8(pessoa.cracha),
+      data: ddmmaaaa(f.data),
+      tipo: f.tipo,
+    }));
+    if (!lote.length) return;
+    const resumo = lote
+      .map((l) => `· ${l.data} — ${l.tipo}-${ROTULO_TIPO[l.tipo] || l.tipo}`)
+      .join("\n");
+    const texto1 = confirmar
+      ? `LANÇAR DE VERDADE no Transnet, na ficha de ${pessoa.nome || pessoa.cracha}:`
+      : `ENSAIO (o robô navega e NÃO confirma) para ${pessoa.nome || pessoa.cracha}:`;
+    if (
+      !window.confirm(
+        `${texto1}\n\n${resumo}\n\n` +
+          `Quem executa é o robô, no GitHub Actions. O disparo fica registrado ` +
+          `com o seu nome.\n\n` +
+          `O resultado por dia NÃO volta sozinho para esta tela: a evidência ` +
+          `fica no run do GitHub.`,
+      )
+    )
+      return;
+
+    setDisparando(true);
+    setRecado(null);
+    try {
+      const r = await dispararRoboDP360("ocorrencias", {
+        csv: csvDoLote(lote),
+        confirmar: confirmar ? "true" : "false",
+      });
+      setRecado({
+        tipo: "ok",
+        texto: `${confirmar ? "Lançamento" : "Ensaio"} disparado — ${lote.length} dia(s).`,
+        painel: r?.painel || "",
+      });
+    } catch (falha) {
+      setRecado({ tipo: "erro", texto: falha?.message || "Não foi possível disparar o robô." });
+    } finally {
+      setDisparando(false);
+    }
+  };
 
   return (
     <aside className="dp-detail">
@@ -406,6 +480,57 @@ function PainelDetalhe({ pessoa, semana, ctx, aoFechar }) {
           <X size={16} />
         </button>
       </div>
+
+      {folgas.length > 0 && (
+        <div className="dp-det-bot">
+          <div className="dp-det-bot-linha">
+            <b>
+              {folgas.length} folga(s) a lançar
+            </b>
+            <span className="dp-faint">
+              {" "}
+              · {folgas.map((f) => `${ddmm(f.data)} ${f.tipo}`).join(" · ")}
+            </span>
+          </div>
+          <div className="dp-det-bot-acoes">
+            <button
+              type="button"
+              className="dp-btn"
+              disabled={disparando}
+              onClick={() => lancar(false)}
+              title="O robô navega até o botão e NÃO clica — serve para conferir o lote"
+            >
+              🤖 Ensaio
+            </button>
+            <button
+              type="button"
+              className="dp-btn"
+              style={{ color: "var(--dp-danger-ink)" }}
+              disabled={disparando}
+              onClick={() => lancar(true)}
+              title="Lança de verdade na ficha do colaborador, no Transnet"
+            >
+              ⚠ Lançar de verdade
+            </button>
+          </div>
+          {disparando && <span className="dp-pill accent">disparando…</span>}
+          {recado && (
+            <div className="dp-det-bot-linha">
+              <span className={`dp-pill ${recado.tipo === "ok" ? "ok" : "danger"}`}>
+                {recado.texto}
+              </span>
+              {recado.painel && (
+                <>
+                  {" "}
+                  <a className="dp-btn" href={recado.painel} target="_blank" rel="noreferrer">
+                    ver o robô rodando
+                  </a>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div>
         {[1, 2, 3, 4, 5, 6, 7].map((d) => {

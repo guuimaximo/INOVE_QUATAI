@@ -186,7 +186,7 @@ serve(async (req: Request) => {
   });
   const { data: perfil, error: perfilError } = await inoveAdmin
     .from("usuarios_aprovadores")
-    .select("id, nivel, ativo, status_cadastro")
+    .select("id, nome, nivel, ativo, status_cadastro")
     .eq("auth_user_id", authData.user.id)
     .maybeSingle();
 
@@ -399,6 +399,164 @@ serve(async (req: Request) => {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return json({ ok: true, tabela, op, gravadas: linhas.length });
     } catch (error) {
+      return json({ ok: false, error: mensagemSegura(error) }, 502);
+    }
+  }
+
+  /* ── robo: dispara o workflow que dirige o Transnet ──────────────────────
+     O navegador NAO dirige o Transnet: isso e Selenium, e roda no GitHub
+     Actions do repo do DP360 (guuimaximo/DP360), onde as credenciais do
+     Transnet ja vivem como secret. O INOVE DECIDE; o robo EXECUTA.
+
+     Tres travas, e nenhuma e burocracia:
+
+     1. ALLOWLIST DE WORKFLOW E DE INPUT. O que chega da tela nao vira nome de
+        arquivo nem input solto: so os quatro workflows abaixo existem, e cada
+        um so aceita as chaves que declara. Um `inputs` livre daria a quem
+        chamasse esta funcao o direito de rodar qualquer workflow do repo.
+
+     2. `confirmar` NASCE FALSO. Nos quatro bots, sem --confirmar e ENSAIO: o
+        robo navega, acha o botao e NAO clica. Quem quer valendo manda "true"
+        explicito, e a trilha guarda qual dos dois foi. Default invertido aqui
+        seria a diferenca entre um teste e uma advertencia de verdade na ficha
+        de alguem.
+
+     3. TRILHA ANTES DO DISPARO. A linha em dp360_auditoria e gravada ANTES de
+        chamar o GitHub, e se ela falhar o disparo NAO acontece. Disparo sem
+        registro e o unico resultado que nao pode existir: alcanca pessoa de
+        verdade e ninguem sabe quem mandou. O contrario (linha de um disparo
+        que falhou depois) e barulho, e o proprio erro entra como segunda linha.
+
+     O token e um secret desta funcao, nunca do bundle. `DP360_GITHUB_TOKEN`
+     e o certo; na falta dele cai no `GITHUB_TOKEN` que ja existe aqui (mesmo
+     dono dos dois repos) — sem token, 503 dizendo o que configurar. */
+  if (acao === "robo") {
+    const ROBOS: Record<string, { arquivo: string; inputs: Record<string, string[] | null> }> = {
+      // null = texto livre (o CSV / o JSON dos casos); array = valores aceitos
+      ocorrencias: { arquivo: "ocorrencias.yml", inputs: { csv: null, confirmar: ["true", "false"] } },
+      ponto: { arquivo: "ponto.yml", inputs: { csv: null, data: null, confirmar: ["true", "false"] } },
+      comunicado: {
+        arquivo: "comunicado.yml",
+        inputs: {
+          csv: null,
+          data: null,
+          motivo: ["102 (aviso)", "103 (ADVERTENCIA)"],
+          confirmar: ["true", "false"],
+        },
+      },
+      ajustes: {
+        arquivo: "ajustes.yml",
+        inputs: {
+          modo: ["conferir (so leitura)", "capturar a grade", "executar decisoes"],
+          casos: null,
+          confirmar: ["true", "false"],
+        },
+      },
+    };
+
+    const nome = String(corpo.robo ?? "");
+    const cfgRobo = ROBOS[nome];
+    if (!cfgRobo) return json({ ok: false, error: "robô não permitido" }, 403);
+
+    const token = Deno.env.get("DP360_GITHUB_TOKEN") || Deno.env.get("GITHUB_TOKEN") || "";
+    if (!token) {
+      return json(
+        { ok: false, error: "robô não configurado: falta o secret DP360_GITHUB_TOKEN nesta função" },
+        503,
+      );
+    }
+    const dono = Deno.env.get("DP360_GITHUB_OWNER") ?? "guuimaximo";
+    const repo = Deno.env.get("DP360_GITHUB_REPO") ?? "DP360";
+    const ref = Deno.env.get("DP360_GITHUB_REF") ?? "main";
+
+    const recebidos = corpo.inputs;
+    if (typeof recebidos !== "object" || recebidos === null || Array.isArray(recebidos)) {
+      return json({ ok: false, error: "inputs ausentes" }, 400);
+    }
+
+    const inputs: Record<string, string> = {};
+    let tamanho = 0;
+    for (const [chave, valor] of Object.entries(recebidos as Record<string, unknown>)) {
+      if (!(chave in cfgRobo.inputs)) return json({ ok: false, error: `input não permitido: ${chave}` }, 403);
+      const v = String(valor ?? "");
+      const aceitos = cfgRobo.inputs[chave];
+      if (aceitos && !aceitos.includes(v)) {
+        return json({ ok: false, error: `valor não permitido em ${chave}` }, 400);
+      }
+      tamanho += v.length;
+      inputs[chave] = v;
+    }
+    // O `workflow_dispatch` do GitHub recusa payload grande (limite de 64 KB no
+    // conjunto dos inputs). Cortar aqui devolve um erro que se entende, em vez
+    // do 422 cru do GitHub depois de a pessoa ja ter confirmado.
+    if (tamanho > 60000) {
+      return json({ ok: false, error: "lote grande demais para uma execução — divida em partes" }, 400);
+    }
+    // ENSAIO por omissao.
+    inputs.confirmar = inputs.confirmar === "true" ? "true" : "false";
+
+    const linhasCsv = inputs.csv ? inputs.csv.trim().split(/\r?\n/).length - 1 : null;
+    const trilha = {
+      acao: "robo_disparo",
+      alvo: nome,
+      detalhe: {
+        workflow: cfgRobo.arquivo,
+        repo: `${dono}/${repo}`,
+        ref,
+        confirmar: inputs.confirmar === "true",
+        // o CSV tem cracha e nome: guardamos o TAMANHO, nunca o conteudo
+        linhas: linhasCsv,
+        bytes: tamanho,
+        modo: inputs.modo ?? null,
+        motivo: inputs.motivo ?? null,
+        data: inputs.data ?? null,
+      },
+      autor_id: authData.user.id,
+      autor_nome: perfil?.nome ?? null,
+    };
+
+    const { error: erroTrilha } = await inoveAdmin.from("dp360_auditoria").insert(trilha);
+    if (erroTrilha) {
+      return json({ ok: false, error: "não foi possível registrar o disparo — nada foi executado" }, 500);
+    }
+
+    try {
+      const r = await fetch(
+        `https://api.github.com/repos/${dono}/${repo}/actions/workflows/${cfgRobo.arquivo}/dispatches`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ ref, inputs }),
+        },
+      );
+      if (!r.ok) {
+        const texto = (await r.text()).slice(0, 300);
+        await inoveAdmin.from("dp360_auditoria").insert({
+          ...trilha,
+          acao: "robo_disparo_falhou",
+          detalhe: { ...trilha.detalhe, http: r.status, resposta: texto },
+        });
+        return json({ ok: false, error: `o GitHub recusou o disparo (HTTP ${r.status})` }, 502);
+      }
+      return json({
+        ok: true,
+        robo: nome,
+        workflow: cfgRobo.arquivo,
+        confirmar: inputs.confirmar === "true",
+        linhas: linhasCsv,
+        painel: `https://github.com/${dono}/${repo}/actions/workflows/${cfgRobo.arquivo}`,
+      });
+    } catch (error) {
+      await inoveAdmin.from("dp360_auditoria").insert({
+        ...trilha,
+        acao: "robo_disparo_falhou",
+        detalhe: { ...trilha.detalhe, erro: mensagemSegura(error) },
+      });
       return json({ ok: false, error: mensagemSegura(error) }, 502);
     }
   }

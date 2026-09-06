@@ -8,8 +8,12 @@
 //      (supabase/functions/dp360-api/index.ts) — nao ha, e nao deve haver, gravacao.
 //   2. NENHUM `console.log`/`console.error` com linha, nome, valor ou cracha. Log de
 //      navegador vaza em screenshot, sessao compartilhada e ferramenta de suporte.
-//   3. Sem exportacao (CSV/download) nesta fase — a decisao foi conscientemente
-//      adiada. TODO: se um dia liberar, exigir registro de quem exportou.
+//   3. EXPORTACAO CSV liberada em 2026-09-06, sob a condicao que estava escrita aqui:
+//      "se um dia liberar, exigir registro de quem exportou". O registro nao e um
+//      enfeite ao lado do download — e a CONDICAO dele: a linha em `dp360_auditoria`
+//      (banco do INOVE) e gravada ANTES, e se a gravacao falhar o arquivo NAO desce.
+//      Um CSV de folha que sai da tela vira anexo de e-mail, pendrive e WhatsApp; a
+//      unica coisa que sobra depois e quem clicou, quando, e sobre qual recorte.
 //   4. Acesso e exclusivo de Administrador em DOIS pontos: `canUserAccessPageKey`
 //      barra qualquer chave `dp360_*` para nao-admin, e o gateway confere de novo no
 //      servidor. O gate da tela nao substitui o do servidor.
@@ -27,14 +31,22 @@
 // separa os dois com folga. Aqui isso vira um aviso em cima da tabela.
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, RefreshCw, Search, X } from "lucide-react";
+import { AlertTriangle, Download, RefreshCw, Search, X } from "lucide-react";
 import { AuthContext } from "../../context/AuthContext";
 import { useAccessGovernance } from "../../context/AccessContext";
 import { canUserAccessPath } from "../../utils/access";
 import { lerDP360, lerTudoDP360 } from "../../services/dp360Api";
+import { supabase } from "../../supabase";
+import { baixarCsv } from "./TabelaDP";
 import "./dp360.css";
 
 const TABELA = "banco_horas";
+
+// Trilha, no projeto do INOVE (migration 202609061400_dp360_auditoria). Vai pelo
+// cliente `supabase` do INOVE e NAO pelo gateway `dp360-api`: o gateway fala com o
+// projeto de importacao, que nem tem esta tabela. APPEND-ONLY (so select+insert
+// para `authenticated`; sem update e sem delete para ninguem).
+const TABELA_AUDITORIA = "dp360_auditoria";
 
 // Colunas EXATAS que existem na tabela. Pedir uma coluna inexistente devolve HTTP 400
 // no gateway e derruba a tela inteira — nao acrescente nada sem conferir no banco.
@@ -181,6 +193,87 @@ function filtroDaCompetencia(comp, formatoLongo) {
   return { competencia: `eq.${comp}` };
 }
 
+/* ── trilha de quem exportou ──────────────────────────────────────────────────
+   Mesma checagem de autor que o resto do INOVE faz (molde:
+   EstruturaFisicaSolicitacao.jsx): o `user.id` pode ser o id LEGADO (inteiro da
+   `usuarios_aprovadores`) de quem ainda nao tem conta no `auth.users`, e mandar
+   isso num campo `uuid` derruba o insert inteiro com erro de tipo — o que, aqui,
+   significaria bloquear a exportacao de quem tinha direito a ela.               */
+function ehUUID(valor) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(valor ?? "").trim(),
+  );
+}
+
+function uuidDoUsuario(user) {
+  if (ehUUID(user?.auth_user_id)) return String(user.auth_user_id).trim();
+  if (ehUUID(user?.id)) return String(user.id).trim();
+  return null; // usuario legado: fica so o nome, que e melhor que nada
+}
+
+// `criado_em` fica com o `default now()` do banco de proposito: carimbo de instante
+// e do servidor, nao do relogio (nem do fuso) do navegador.
+async function registrarAuditoria({ acao, alvo, detalhe, user }) {
+  const { error } = await supabase.from(TABELA_AUDITORIA).insert({
+    acao,
+    alvo: String(alvo ?? "").trim() || null,
+    detalhe: detalhe || {},
+    autor_id: uuidDoUsuario(user),
+    autor_nome: String(user?.nome || user?.login || "").trim() || null,
+  });
+  // Erro REAL do servidor, sem maquiar: "new row violates row-level security" ou
+  // "relation ... does not exist" (migration ainda nao aplicada) tem de aparecer na
+  // tela — senao a exportacao "some" sem ninguem entender por que.
+  if (error) throw new Error(error.message || "Não foi possível registrar a auditoria.");
+}
+
+/* Colunas do CSV, no formato que o `baixarCsv` da TabelaDP espera ({id, titulo,
+   valor}). Sao as MESMAS colunas da tela, na mesma ordem — e nada alem delas: nem
+   `celular`, nem admissao/desligamento, que nem sao lidos na listagem.
+
+   Numeros saem CRUS (34.5), nao formatados ("34:30"): o `celulaCsv` troca o ponto
+   pela virgula e o Excel pt-BR le como numero. "34:30" viraria texto e ninguem
+   consegue somar uma coluna de texto.                                            */
+function colunasDoCsv(comp, abertas) {
+  const daLinha = (l) => (comp === "todas" ? l.ultima : l.competencia);
+  return [
+    { id: "colaborador", titulo: "Colaborador", valor: (l) => l.nome },
+    { id: "cracha", titulo: "Crachá", valor: (l) => l.cracha },
+    { id: "funcao", titulo: "Função", valor: (l) => l.funcao },
+    { id: "situacao", titulo: "Situação", valor: (l) => l.situacao },
+    { id: "competencia", titulo: "Competência", valor: daLinha },
+    ...(comp === "todas"
+      ? [{ id: "meses", titulo: "Meses somados", valor: (l) => l.meses || 1 }]
+      : []),
+    // Sem esta coluna, um mes sem folha paga sai do sistema com o saldo inflado e
+    // nada no arquivo dizendo isso — na tela o aviso existe, na planilha sumiria.
+    { id: "sem_folha", titulo: "Sem folha paga", valor: (l) => (abertas.has(daLinha(l)) ? "sim" : "não") },
+    { id: "he_apurada_h", titulo: "HE apurada (h)", valor: (l) => l.apurada },
+    { id: "he_paga_h", titulo: "HE paga (h)", valor: (l) => l.paga },
+    { id: "debito_h", titulo: "Débito (h)", valor: (l) => l.debito },
+    { id: "banco_pago_h", titulo: "Banco pago (h)", valor: (l) => l.bancoH },
+    { id: "pago_rs", titulo: "Pago (R$)", valor: (l) => l.reais },
+    { id: "movimento_h", titulo: "Movimento (h)", valor: (l) => l.movimento },
+    { id: "saldo_acumulado_h", titulo: "Saldo acumulado (h)", valor: (l) => l.acumulado },
+  ];
+}
+
+function confirmar(texto) {
+  if (typeof window === "undefined" || typeof window.confirm !== "function") return false;
+  return window.confirm(texto);
+}
+
+// NUNCA `new Date().toISOString()` para uma data LOCAL (CLAUDE.md): ele devolve UTC
+// e, das 21h BRT em diante, o arquivo sairia carimbado com o dia SEGUINTE.
+function isoHojeLocal() {
+  const d = new Date();
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, "0"),
+    String(d.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 export default function DP360BancoHoras() {
   const { user } = useContext(AuthContext);
   const { profileMap } = useAccessGovernance();
@@ -199,6 +292,9 @@ export default function DP360BancoHoras() {
 
   const [pessoaSel, setPessoaSel] = useState(null);
   const [extrato, setExtrato] = useState({ carregando: false, erro: "", linhas: [], pessoa: null });
+
+  const [exportando, setExportando] = useState(false);
+  const [avisoExport, setAvisoExport] = useState(null); // { tom: "ok"|"danger", texto }
 
   /* ── passo 1: descobrir a faixa de competencias (2 leituras de 1 linha) ── */
   useEffect(() => {
@@ -384,6 +480,68 @@ export default function DP360BancoHoras() {
     return alvo.sort().map(rotuloComp).join(", ");
   }, [abertas, comp]);
 
+  /* ── exportar: a TRILHA PRIMEIRO, e ela manda ─────────────────────────────
+     Ordem deliberada: grava `dp360_auditoria`, e so entao gera o arquivo. Se o
+     insert falhar (RLS, sessao caida, migration nao aplicada), a funcao PARA e
+     mostra o erro do servidor — nao existe download sem registro. O inverso
+     (baixar e depois tentar registrar) deixaria o CSV de folha na rua com a
+     trilha vazia, que e exatamente o que a condicao no topo do arquivo proibia. */
+  const exportar = useCallback(async () => {
+    if (exportando || !visiveis.length) return;
+
+    const colunas = colunasDoCsv(comp, abertas);
+    const nome = `banco_horas_${comp || "sem-competencia"}_${situacao}_${isoHojeLocal()}`;
+    const termo = busca.trim();
+
+    const ok = confirmar(
+      [
+        `Exportar ${visiveis.length} linha(s) do banco de horas em CSV?`,
+        "",
+        `Competência: ${comp === "todas" ? "todas" : rotuloComp(comp)} · situação: ${
+          SITUACOES.find((s) => s.id === situacao)?.label || situacao
+        }${termo ? ` · busca: “${termo}”` : ""}`,
+        "",
+        "O arquivo tem hora extra e valor em R$ por colaborador. A exportação fica",
+        `registrada em ${TABELA_AUDITORIA} com o seu nome, o recorte e a data.`,
+      ].join("\n"),
+    );
+    if (!ok) return;
+
+    setExportando(true);
+    setAvisoExport(null);
+    try {
+      await registrarAuditoria({
+        acao: "banco_horas_export",
+        alvo: comp || null, // a competencia: o "sobre o que" desta acao
+        detalhe: {
+          linhas: visiveis.length,
+          colunas: colunas.map((c) => c.id),
+          filtro: { competencia: comp, situacao, busca: termo || null },
+          arquivo: `${nome}.csv`,
+        },
+        user,
+      });
+    } catch (falha) {
+      setAvisoExport({
+        tom: "danger",
+        texto: `Exportação cancelada: a trilha de auditoria não pôde ser registrada — ${
+          falha?.message || "erro desconhecido"
+        }`,
+      });
+      setExportando(false);
+      return; // sem trilha, sem arquivo.
+    }
+
+    // So aqui o arquivo desce. `baixarCsv` e o mesmo escritor das outras abas
+    // (`;` + BOM UTF-8, para o Excel pt-BR abrir com acento e coluna certa).
+    baixarCsv(nome, colunas, visiveis);
+    setAvisoExport({
+      tom: "ok",
+      texto: `✓ ${visiveis.length} linha(s) exportadas · registrado em ${TABELA_AUDITORIA}`,
+    });
+    setExportando(false);
+  }, [exportando, visiveis, comp, abertas, situacao, busca, user]);
+
   if (!podeAcessar) {
     return (
       <div className="mx-auto max-w-3xl rounded-3xl border border-amber-200 bg-amber-50 p-8 text-center shadow-sm">
@@ -461,7 +619,24 @@ export default function DP360BancoHoras() {
           <RefreshCw size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
           Recarregar
         </button>
+
+        <button
+          type="button"
+          className="dp-btn"
+          onClick={exportar}
+          disabled={carregando || exportando || !visiveis.length}
+          title="Baixa as linhas em tela (hora extra e R$). Fica registrado quem exportou."
+        >
+          <Download size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
+          {exportando ? "Registrando…" : "Exportar CSV"}
+        </button>
       </div>
+
+      {avisoExport && (
+        <div className="dp-resumo">
+          <span className={`dp-pill ${avisoExport.tom}`}>{avisoExport.texto}</span>
+        </div>
+      )}
 
       {erro ? (
         <div className="dp-resumo"><span className="dp-pill danger">{erro}</span></div>

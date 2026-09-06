@@ -27,19 +27,26 @@
 // entra na conta quando >= 30% de quem tem linha naquele dia já bateu ponto —
 // é a "massa de ponto na garagem" que prova que o dia fechou.
 //
-// ⚠ ESCOPO DESTA FASE — SOMENTE LEITURA.
-// O botão "🚫 não bate ponto" nasce DESABILITADO. Motivo: essa marcação decide
-// se uma pessoa entra ou não numa lista de abandono, e abandono de emprego é
-// justa causa (CLT art. 482 "e"/"i"). Marcar errado esconde de quem precisa ver;
-// desmarcar errado joga alguém para dentro da lista. A chamada de gravação está
-// pronta, em TODO, no fim do arquivo.
+// ⚠ A TELA GRAVA — e por isso só grava com TRILHA (liberado em 2026-09-06).
+// Os dois botões da última coluna ("🚫 não bate ponto" e "👁 acompanhar") nasceram
+// desabilitados porque a marcação decide se uma pessoa entra ou não numa lista de
+// abandono, e abandono de emprego é justa causa (CLT art. 482 "e"/"i"): marcar
+// errado esconde de quem precisa ver; desmarcar errado joga alguém para dentro da
+// lista. O que faltava não era código, era REGISTRO DE QUEM FEZ — o `app_config`
+// guarda só a lista, sem autor e sem data. Agora cada clique grava DOIS lugares:
+//   1) a lista JSON no `app_config` do projeto de IMPORTAÇÃO, via gateway
+//      `dp360-api` (é de onde a ferramenta desktop lê — mudar de lugar cega ela);
+//   2) UMA linha em `public.dp360_auditoria` no projeto do INOVE, pelo cliente
+//      `supabase` normal (a trilha é do INOVE, não da base de importação).
+// Ver o bloco no fim do arquivo para o porquê da releitura antes do upsert.
 // ============================================================================
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, Search } from "lucide-react";
 import { AuthContext } from "../../context/AuthContext";
 import { useAccessGovernance } from "../../context/AccessContext";
 import { canUserAccessPath } from "../../utils/access";
-import { lerDP360, lerTudoDP360 } from "../../services/dp360Api";
+import { lerDP360, lerTudoDP360, upsertDP360 } from "../../services/dp360Api";
+import { supabase } from "../../supabase";
 import AbaShell from "./abas/AbaShell";
 import "./dp360.css";
 
@@ -66,7 +73,10 @@ const JANELA_DIAS = 70;
 const TETO_PAGINAS = 60;
 const LINHAS_POR_PAGINA = 1000;
 
-const AVISO_FASE = "Gravação liberada na próxima fase (validação pendente)";
+// Tabela de trilha, no projeto do INOVE (migration 202609061400_dp360_auditoria).
+// APPEND-ONLY: a policy dá `select` e `insert` a `authenticated` e mais nada —
+// não há update nem delete, nem para quem foi marcado.
+const TABELA_AUDITORIA = "dp360_auditoria";
 
 // main.py:7455 — `_DASH_CATS`. Quem está fora destas três é ignorado por
 // `_bucket` (devolve None): não conta para consolidar o dia nem vira linha.
@@ -152,6 +162,63 @@ function listaDeConfig(valor) {
   } catch {
     return []; // config corrompida não pode derrubar a tela
   }
+}
+
+// As duas listas a partir das linhas cruas do `app_config`. Fica separado da
+// leitura porque é usado nas DUAS: a carga inicial (junto com a base) e a
+// releitura depois de gravar.
+function marcasDeConfig(config) {
+  const porChave = new Map((config || []).map((c) => [txt(c.chave), c.valor]));
+  return {
+    naoBate: new Set(listaDeConfig(porChave.get(CHAVE_NAO_BATE))),
+    monitorados: new Set(listaDeConfig(porChave.get(CHAVE_MONITOR))),
+  };
+}
+
+const CONSULTA_MARCAS = {
+  colunas: "chave,valor",
+  filtros: { chave: `in.(${CHAVE_NAO_BATE},${CHAVE_MONITOR})` },
+  limite: 10,
+};
+
+/* ─────────────────────── autoria e trilha (lado INOVE) ───────────────────── */
+
+function confirmar(texto) {
+  if (typeof window === "undefined" || typeof window.confirm !== "function") return false;
+  return window.confirm(texto);
+}
+
+// Mesma checagem que o resto do INOVE faz antes de gravar autor (molde:
+// EstruturaFisicaSolicitacao.jsx). O `user.id` pode ser o id LEGADO (inteiro da
+// `usuarios_aprovadores`) de quem ainda não tem conta no `auth.users`; mandar
+// isso num campo `uuid` derruba o insert inteiro com erro de tipo.
+function ehUUID(valor) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    txt(valor),
+  );
+}
+
+function uuidDoUsuario(user) {
+  if (ehUUID(user?.auth_user_id)) return txt(user.auth_user_id);
+  if (ehUUID(user?.id)) return txt(user.id);
+  return null; // usuário legado: fica só o nome, que é melhor que nada
+}
+
+// A trilha é do INOVE, então vai pelo cliente `supabase` do INOVE — NÃO pelo
+// gateway `dp360-api`, que fala com o projeto de importação e nem enxerga esta
+// tabela. `criado_em` fica com o `default now()` do banco de propósito: carimbo
+// de instante é do servidor, não do relógio (nem do fuso) do navegador.
+async function registrarAuditoria({ acao, alvo, detalhe, user }) {
+  const { error } = await supabase.from(TABELA_AUDITORIA).insert({
+    acao,
+    alvo: txt(alvo) || null,
+    detalhe: detalhe || {},
+    autor_id: uuidDoUsuario(user),
+    autor_nome: txt(user?.nome) || txt(user?.login) || null,
+  });
+  // Erro REAL do servidor, sem maquiar: "new row violates row-level security",
+  // "relation does not exist" (migration não aplicada) e afins têm de aparecer.
+  if (error) throw new Error(error.message || "Não foi possível registrar a auditoria.");
 }
 
 /* ──────────────────────────────── a regra ────────────────────────────────── */
@@ -317,6 +384,18 @@ export default function DP360Abandonos() {
   const [mostraNaoBate, setMostraNaoBate] = useState(false);
   const [recarga, setRecarga] = useState(0);
 
+  // `${chave}|${cracha}` enquanto grava — trava os dois botões da linha (e só
+  // deles) para o duplo-clique não virar dois upserts.
+  const [gravando, setGravando] = useState("");
+  const [aviso, setAviso] = useState(null); // { tom: "ok"|"warn"|"danger", texto }
+
+  // As linhas CRUAS da `ponto_diario` da última carga. Depois de marcar alguém, o
+  // que mudou foi a lista do `app_config` — não o cartão de ponto de ninguém. Reler
+  // só as marcações e recalcular sobre estas linhas evita rebaixar 70 dias × a
+  // garagem inteira (até 60 páginas de 1000) a cada clique, e continua vindo do
+  // banco: nada de estado otimista.
+  const linhasRef = useRef([]);
+
   useEffect(() => {
     if (!podeAcessar) return undefined;
     let vivo = true;
@@ -329,11 +408,7 @@ export default function DP360Abandonos() {
         const [config, linhas] = await Promise.all([
           // As duas marcações vivem no `app_config` (chave/valor), como no
           // original. Falhar aqui não pode derrubar a lista — por isso o catch.
-          lerDP360("app_config", {
-            colunas: "chave,valor",
-            filtros: { chave: `in.(${CHAVE_NAO_BATE},${CHAVE_MONITOR})` },
-            limite: 10,
-          }).catch(() => []),
+          lerDP360("app_config", CONSULTA_MARCAS).catch(() => []),
           lerTudoDP360(
             "ponto_diario",
             {
@@ -346,10 +421,9 @@ export default function DP360Abandonos() {
         ]);
         if (!vivo) return;
 
-        const porChave = new Map((config || []).map((c) => [txt(c.chave), c.valor]));
-        const naoBate = new Set(listaDeConfig(porChave.get(CHAVE_NAO_BATE)));
-        const monitorados = new Set(listaDeConfig(porChave.get(CHAVE_MONITOR)));
+        const { naoBate, monitorados } = marcasDeConfig(config);
 
+        linhasRef.current = linhas;
         setTruncado(linhas.length >= TETO_PAGINAS * LINHAS_POR_PAGINA);
         setResultado(calcularAbandonos(linhas, naoBate, monitorados));
       } catch (falha) {
@@ -364,7 +438,113 @@ export default function DP360Abandonos() {
     };
   }, [podeAcessar, recarga]);
 
-  const recarregar = useCallback(() => setRecarga((n) => n + 1), []);
+  const recarregar = useCallback(() => {
+    setAviso(null);
+    setRecarga((n) => n + 1);
+  }, []);
+
+  /* ─────────────────────────── a gravação (porte) ───────────────────────────
+     main.py:7547 `set_abandono_nao_bate` e main.py:7529 `set_abandono_monitor`
+     — a MESMA função nos dois, mudando só a chave. Sequência de um clique:
+
+       1. RELÊ o `valor` da chave (não usa o que a tela carregou na abertura);
+       2. UPSERT da lista INTEIRA no `app_config` (não existe update parcial);
+       3. INSERT na trilha `dp360_auditoria`, no banco do INOVE;
+       4. RELÊ as marcações do banco e recalcula — nada de pintar otimista.
+
+     Passo 3 depois do 2 de propósito: trilha que registra o que não aconteceu é
+     pior que trilha nenhuma. Se o passo 3 falhar, a marcação JÁ VALE e a tela
+     diz isso na cara, em amarelo, com o erro do servidor.                     */
+
+  const recarregarMarcas = useCallback(async () => {
+    const config = await lerDP360("app_config", CONSULTA_MARCAS);
+    const { naoBate, monitorados } = marcasDeConfig(config);
+    setResultado(calcularAbandonos(linhasRef.current, naoBate, monitorados));
+  }, []);
+
+  const alternarMarca = useCallback(
+    async (linha, chave, ligar) => {
+      const cracha = txt(linha.cracha);
+      if (!cracha || gravando) return;
+
+      const rotulo = chave === CHAVE_NAO_BATE ? "não bate ponto" : "acompanhamento";
+      const quem = `${linha.nome || "sem nome"} · crachá ${cracha} · ${linha.diasSemPonto} dias sem ponto`;
+      const ok = confirmar(
+        [
+          ligar ? `Marcar “${rotulo}”:` : `Tirar a marcação “${rotulo}” de:`,
+          quem,
+          "",
+          `Grava a lista ${chave} no app_config da base de ponto (é de lá que a`,
+          "ferramenta do DP lê) e registra a ação, com o seu nome, em dp360_auditoria.",
+          chave === CHAVE_NAO_BATE && ligar
+            ? "\nMarcado assim, some da lista de possíveis abandonos."
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
+      if (!ok) return;
+
+      setGravando(`${chave}|${cracha}`);
+      setAviso(null);
+      try {
+        // 1) RELEITURA IMEDIATAMENTE ANTES DO UPSERT. Sem isto, duas abas abertas
+        // (ou dois computadores) gravam cada uma a lista que leram na abertura e a
+        // última apaga a marcação da outra — em silêncio, porque o upsert dá 200.
+        const atual = await lerDP360("app_config", {
+          colunas: "chave,valor",
+          filtros: { chave: `eq.${chave}` },
+          limite: 1,
+        });
+        const lista = new Set(listaDeConfig(atual?.[0]?.valor));
+        if (ligar) lista.add(cracha);
+        else lista.delete(cracha);
+
+        // 2) `json.dumps(sorted(cur))` do original → STRING JSON, ordenada. Tem de
+        // ser string mesmo: a ferramenta desktop faz `json.loads(valor)` e, se
+        // gravássemos um array de verdade num `valor` jsonb, ela receberia uma
+        // lista, o `json.loads` estouraria, o `except` devolveria set() e a
+        // ferramenta passaria a NÃO ENXERGAR marcação nenhuma.
+        await upsertDP360("app_config", { chave, valor: JSON.stringify([...lista].sort()) });
+
+        // 3) trilha — o que faltava para liberar o botão.
+        let falhaTrilha = "";
+        try {
+          await registrarAuditoria({
+            acao: chave, // 'abandono_nao_bate' | 'abandono_monitor'
+            alvo: cracha,
+            detalhe: { ligar, nome: linha.nome || null, dias: linha.diasSemPonto },
+            user,
+          });
+        } catch (falha) {
+          falhaTrilha = falha?.message || "erro desconhecido";
+        }
+
+        // 4) relê do banco (marcações) e recalcula sobre as linhas já carregadas.
+        await recarregarMarcas();
+
+        setAviso(
+          falhaTrilha
+            ? {
+                tom: "warn",
+                texto: `Marcação gravada, mas a trilha de auditoria NÃO foi registrada: ${falhaTrilha}`,
+              }
+            : {
+                tom: "ok",
+                texto: `✓ ${ligar ? "marcado" : "desmarcado"} “${rotulo}” · ${cracha} · registrado em ${TABELA_AUDITORIA}`,
+              },
+        );
+      } catch (falha) {
+        setAviso({
+          tom: "danger",
+          texto: falha?.message || `Não foi possível gravar ${chave}.`,
+        });
+      } finally {
+        setGravando("");
+      }
+    },
+    [gravando, user, recarregarMarcas],
+  );
 
   // app.js:6644-6650 — busca, depois a separação entre lista e marcados.
   const { visiveis, marcados, nPessoas } = useMemo(() => {
@@ -458,8 +638,8 @@ export default function DP360Abandonos() {
             <span className="dp-faint">
               · atestado/férias/DSR não contam · desligado não entra ·{" "}
               <span className="dp-num">{resultado.nDias}</span> dia(s) consolidado(s) nos últimos{" "}
-              <span className="dp-num">{JANELA_DIAS}</span> · somente leitura — esta tela não grava
-              nada.
+              <span className="dp-num">{JANELA_DIAS}</span> · marcar/desmarcar fica registrado em{" "}
+              <span className="dp-mono">{TABELA_AUDITORIA}</span> com o seu nome.
             </span>
             {truncado && (
               <>
@@ -467,6 +647,12 @@ export default function DP360Abandonos() {
                 <span className="dp-pill danger" title="A janela foi cortada no teto de paginação">
                   leitura truncada — recarregue
                 </span>
+              </>
+            )}
+            {aviso && (
+              <>
+                {" "}
+                <span className={`dp-pill ${aviso.tom}`}>{aviso.texto}</span>
               </>
             )}
           </>
@@ -533,10 +719,48 @@ export default function DP360Abandonos() {
                         )}
                       </td>
                       <td>
-                        {/* Nasce DESABILITADO nesta fase: ver o cabeçalho do arquivo. */}
-                        <button type="button" className="dp-btn" disabled title={AVISO_FASE}>
-                          {linha.naoBate ? "↩ voltar" : "🚫 não bate ponto"}
-                        </button>
+                        {/* Os dois botões gravam: lista no `app_config` + linha na
+                            trilha. `gravando` trava a linha inteira enquanto isso. */}
+                        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                          <button
+                            type="button"
+                            className="dp-btn"
+                            disabled={!!gravando}
+                            title={
+                              linha.monitorado
+                                ? "Tirar do acompanhamento (abandono_monitor)"
+                                : "Acompanhar este caso (abandono_monitor) — não some da lista"
+                            }
+                            onClick={() =>
+                              alternarMarca(linha, CHAVE_MONITOR, !linha.monitorado)
+                            }
+                          >
+                            {gravando === `${CHAVE_MONITOR}|${linha.cracha}`
+                              ? "gravando…"
+                              : linha.monitorado
+                                ? "👁 parar"
+                                : "👁 acompanhar"}
+                          </button>
+                          <button
+                            type="button"
+                            className="dp-btn"
+                            disabled={!!gravando}
+                            title={
+                              linha.naoBate
+                                ? "Devolver para a lista de possíveis abandonos"
+                                : "Quem cronicamente não bate ponto — sai da lista de abandonos"
+                            }
+                            onClick={() =>
+                              alternarMarca(linha, CHAVE_NAO_BATE, !linha.naoBate)
+                            }
+                          >
+                            {gravando === `${CHAVE_NAO_BATE}|${linha.cracha}`
+                              ? "gravando…"
+                              : linha.naoBate
+                                ? "↩ voltar"
+                                : "🚫 não bate ponto"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -551,46 +775,36 @@ export default function DP360Abandonos() {
 }
 
 // ============================================================================
-// TODO(fase de gravação) — porte de main.py:7547 `set_abandono_nao_bate`.
+// ONDE A MARCAÇÃO MORA, E POR QUE A GRAVAÇÃO É DESSE JEITO
 //
 // A marcação NÃO é uma coluna: é uma LISTA JSON de crachás guardada no
-// `app_config` (colunas `chave` / `valor`), sob a chave:
+// `app_config` da base de PONTO (colunas `chave` / `valor`), sob duas chaves:
 //
-//     chave = "abandono_nao_bate"   →  valor = JSON de crachás, ordenado
-//                                      ex.: ["30061089","30074512"]
+//     chave = "abandono_nao_bate"  →  valor = "[\"30061089\",\"30074512\"]"
+//     chave = "abandono_monitor"   →  valor = idem (acompanhamento)
 //
-// A chave irmã, para o botão de acompanhamento (main.py:7529
-// `set_abandono_monitor`, ainda sem botão nesta tela), é "abandono_monitor",
-// no mesmo formato.
+// É o mesmo lugar de onde a ferramenta desktop lê (main.py:7540 / 7522). Mudar
+// de lugar — inclusive "melhorar" para uma tabela nova — CEGA a ferramenta: ela
+// continuaria lendo o `app_config` e mostrando a lista antiga.
 //
-// A gravação é LEITURA-MODIFICAÇÃO-ESCRITA da lista inteira — não há UPDATE
-// parcial. Duas abas abertas se sobrescrevem: reler o `valor` imediatamente
-// antes do upsert é obrigatório.
+// ⚠ LEITURA-MODIFICAÇÃO-ESCRITA: não existe UPDATE parcial numa lista JSON — o
+// upsert regrava a lista INTEIRA. Se a tela usasse a lista que carregou na
+// abertura, duas abas (ou dois computadores) fariam cada uma o seu upsert e a
+// última apagaria a marcação da outra, com 200 e sem nenhum aviso. Por isso
+// `alternarMarca` RELÊ o `valor` no clique, imediatamente antes de gravar.
+// Isso encurta a janela de corrida para o tempo de uma ida ao gateway, mas não
+// a fecha: PostgREST não faz compare-and-set. Fechar de verdade pediria uma
+// coluna de versão no `app_config` (e a ferramenta desktop teria de respeitá-la)
+// — decisão que não cabe a esta tela. O que a tela garante é que uma perda
+// dessas fica RASTREÁVEL: cada clique deixa a sua linha em `dp360_auditoria`,
+// então dá para reconstruir quem marcou o quê e quando, mesmo que a lista
+// tenha sido sobrescrita.
 //
-// async function marcarNaoBate(cracha, ligar) {
-//   const atual = await lerDP360("app_config", {
-//     colunas: "chave,valor",
-//     filtros: { chave: `eq.${CHAVE_NAO_BATE}` },
-//     limite: 1,
-//   });
-//   const lista = new Set(listaDeConfig(atual?.[0]?.valor));
-//   if (ligar) lista.add(txt(cracha));
-//   else lista.delete(txt(cracha));
-//   // O gateway já tem `app_config` liberado para upsert com conflito em `chave`
-//   // (supabase/functions/dp360-api/index.ts). `json.dumps(sorted(...))` no
-//   // original → aqui, string JSON com a lista ordenada.
-//   await upsertDP360("app_config", {
-//     chave: CHAVE_NAO_BATE,
-//     valor: JSON.stringify([...lista].sort()),
-//   });
-// }
-//
-// ANTES DE LIGAR ISTO, VALIDAR (é o que segura a gravação hoje):
+// AINDA VALE VALIDAR (não é código, é processo):
 //  1. Conferir a lista contra o RH: nenhum desligado e nenhum afastado longo
 //     pode estar sendo listado como abandono (a regra depende de o Transnet ter
 //     o lançamento; lançamento atrasado = falso positivo).
 //  2. Definir QUEM pode marcar. Hoje a tela é admin-only pelo `access.js`, mas
-//     esconder alguém da lista de abandono é decisão de DP, não de TI.
-//  3. Registrar autoria e data. O `app_config` guarda só a lista — quem marcou
-//     e quando se perde. Sem trilha, não há como auditar uma justa causa.
+//     esconder alguém da lista de abandono é decisão de DP, não de TI. Com a
+//     trilha, ao menos dá para responder "quem escondeu".
 // ============================================================================

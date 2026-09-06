@@ -149,6 +149,25 @@ export function atualizarDP360(tabela, filtros, campos) {
   return gravar(tabela, "update", { filtros, campos });
 }
 
+/**
+ * Dispara o robô que dirige o Transnet (Selenium no GitHub Actions do repo
+ * DP360). O navegador não dirige o Transnet, e a credencial não passa por aqui:
+ * ela é secret do workflow. O INOVE decide, o robô executa.
+ *
+ * `confirmar` NASCE FALSO no servidor: sem ele os quatro bots fazem ENSAIO —
+ * navegam, acham o botão e não clicam. Quem quer valendo manda "true", e a
+ * trilha (dp360_auditoria) guarda qual dos dois foi, com quem clicou.
+ *
+ * Robôs e seus inputs (o servidor recusa qualquer outro):
+ *   ocorrencias  csv (cracha,data,tipo)                    · confirmar
+ *   ponto        csv (cracha,entrada,alm_saida,...) · data · confirmar
+ *   comunicado   csv (Empresa;Crachá;Comunicado)    · data · motivo · confirmar
+ *   ajustes      modo · casos (JSON)                       · confirmar
+ */
+export function dispararRoboDP360(robo, inputs) {
+  return chamar({ action: "robo", robo, inputs });
+}
+
 /** DELETE — o servidor recusa sem filtro, de propósito. */
 export function apagarDP360(tabela, filtros) {
   return gravar(tabela, "delete", { filtros });

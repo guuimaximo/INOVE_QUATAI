@@ -722,3 +722,19 @@
   color: var(--dp-muted);
   white-space: normal;
 }
+
+/* Rodapé de ação do painel de detalhe (Folgas): o lote a lançar e os dois
+   botões. Ensaio e valendo são botões SEPARADOS de propósito — um checkbox
+   "confirmar" marcado por engano lança de verdade na ficha de alguém. */
+.dp360 .dp-det-bot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  background: var(--dp-surface-2);
+  border: 1px solid var(--dp-border);
+  border-radius: 12px;
+}
+.dp360 .dp-det-bot-linha { font-size: 12px; line-height: 1.5; }
+.dp360 .dp-det-bot-acoes { display: flex; gap: 8px; flex-wrap: wrap; }

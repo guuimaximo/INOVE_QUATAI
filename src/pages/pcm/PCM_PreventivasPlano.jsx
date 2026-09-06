@@ -68,7 +68,7 @@ export default function PCM_PreventivasPlano() {
   const [aba, setAba] = useState("gerencial");
   const [busca, setBusca] = useState("");
 
-  // Programacao manual (tabela preventivas_programacao) + realizadas (tabela preventivas).
+  // Programacao manual (tabela preventivas_programacao). O "feito" vem do ultimo_plano.
   // A semana e navegavel (setinhas): historico p/ tras, planejamento p/ frente.
   const [semana, setSemana] = useState(() => semanaSegunda());
   const shiftSemana = (delta) =>
@@ -78,7 +78,6 @@ export default function PCM_PreventivasPlano() {
       return toISODateLocal(d);
     });
   const [progItems, setProgItems] = useState([]);
-  const [realizadas, setRealizadas] = useState([]);
   const [modal, setModal] = useState(null); // { prefixo }
   const [salvando, setSalvando] = useState(false);
 
@@ -101,23 +100,16 @@ export default function PCM_PreventivasPlano() {
     }
   }, []);
 
-  // Programação + realizadas — dependem da semana; troca leve, sem spinner.
+  // Programação da semana. O "feito" (verde) NÃO vem daqui — é calculado direto do
+  // ultimo_plano (Transnet) em progComStatus. Troca leve, sem spinner.
   const carregarSemana = useCallback(async () => {
     try {
-      const [prog, real] = await Promise.all([
-        supabase
-          .from("preventivas_programacao")
-          .select("*")
-          .eq("semana", semana)
-          .order("data_planejada", { ascending: true }),
-        // realizadas p/ casar o "feito": desde ~3 dias antes da semana vista.
-        supabase
-          .from("preventivas")
-          .select("prefixo,tipo,data_realizacao")
-          .gte("data_realizacao", toISODateLocal(new Date(new Date(semana + "T00:00:00").getTime() - 3 * 86400000))),
-      ]);
+      const prog = await supabase
+        .from("preventivas_programacao")
+        .select("*")
+        .eq("semana", semana)
+        .order("data_planejada", { ascending: true });
       if (!prog.error) setProgItems(prog.data || []);
-      if (!real.error) setRealizadas(real.data || []);
     } catch (e) {
       console.error("Falha ao carregar a semana:", e);
     }
@@ -131,20 +123,36 @@ export default function PCM_PreventivasPlano() {
   const garantia = useMemo(() => (cars.size ? montarGarantia(montarCarros(rows)) : null), [cars, rows]);
   const atualizado = useMemo(() => (rows.length ? ultimaAtualizacao(rows) : null), [rows]);
 
-  // "Feito" automatico: para cada item programado, existe uma preventiva realizada
-  // do mesmo prefixo (comparando so digitos) com data_realizacao >= data_planejada.
+  // "Feito" automatico direto do ULTIMO_PLANO (Transnet): a OS do plano ancora foi
+  // ABERTA (contador zerou) a partir da semana. Abertura = servico feito (o fechamento
+  // pode demorar dias). Revisao->2306, Inspecao->2305, Garantia->2646/2645 (concessionaria).
   const progComStatus = useMemo(() => {
+    const ANC = { "Revisão": ["2306"], "Inspeção": ["2305"], "Garantia": ["2646", "2645"] };
+    const corte = toISODateLocal(new Date(new Date(semana + "T00:00:00").getTime() - 3 * 86400000));
+    const porDig = new Map();
+    for (const c of cars.values()) porDig.set(soDigitos(c.veic), c);
+    const achaCarro = (dig) => {
+      if (porDig.has(dig)) return porDig.get(dig);
+      for (const c of cars.values()) {
+        const d = soDigitos(c.veic);
+        if (d && (d === dig || d.endsWith(dig) || dig.endsWith(d))) return c;
+      }
+      return null;
+    };
     return progItems.map((it) => {
-      const dig = soDigitos(it.prefixo);
-      const feito = realizadas.some(
-        (r) =>
-          soDigitos(r.prefixo) &&
-          (soDigitos(r.prefixo) === dig || soDigitos(r.prefixo).endsWith(dig) || dig.endsWith(soDigitos(r.prefixo))) &&
-          (!it.data_planejada || String(r.data_realizacao || "") >= String(it.data_planejada))
-      );
+      const car = achaCarro(soDigitos(it.prefixo));
+      let feito = false;
+      if (car) {
+        for (const cod of (ANC[it.categoria] || [])) {
+          const r = car.byplan[cod];
+          if (!r) continue;
+          const serv = String(r.dt_abertura_os || r.dt_fechamento_os || "").slice(0, 10);
+          if (serv && serv >= corte) { feito = true; break; }
+        }
+      }
       return { ...it, feito };
     });
-  }, [progItems, realizadas]);
+  }, [progItems, cars, semana]);
 
   // Programado por carro (chave = prefixo/veic, igual ao l.veic do Gerencial),
   // para mostrar a data programada como etiqueta e pintar a linha no Gerencial.

@@ -5,9 +5,32 @@ import { supabase } from "../supabase";
 
 const LIMITE_PAGINA = 1000;
 
+// O supabase-js ENGOLE o corpo da resposta quando o status nao e 2xx: `error.message`
+// vira sempre "Edge Function returned a non-2xx status code", que nao diz nada. O motivo
+// de verdade ("acesso DP360 exclusivo para Administrador", "tabela nao liberada",
+// "coluna invalida"...) vem no JSON, acessivel por `error.context`. Sem isto, qualquer
+// falha na tela vira a mesma frase inutil e a gente fica adivinhando.
+async function motivoReal(error) {
+  const resposta = error?.context;
+  if (resposta && typeof resposta.json === "function") {
+    try {
+      const corpo = await resposta.clone().json();
+      if (corpo?.error) return `${corpo.error}${resposta.status ? ` (HTTP ${resposta.status})` : ""}`;
+    } catch {
+      try {
+        const texto = await resposta.clone().text();
+        if (texto) return texto.slice(0, 200);
+      } catch { /* sem corpo legivel */ }
+    }
+  }
+  if (resposta?.status === 401) return "sessão do INOVE expirada — saia e entre de novo";
+  if (resposta?.status === 403) return "acesso à DP360 é exclusivo de Administrador";
+  return error?.message || "Não foi possível consultar a base DP360.";
+}
+
 async function chamar(body) {
   const { data, error } = await supabase.functions.invoke("dp360-api", { body });
-  if (error) throw new Error(error.message || "Não foi possível consultar a base DP360.");
+  if (error) throw new Error(await motivoReal(error));
   if (!data?.ok) throw new Error(data?.error || "Não foi possível consultar a base DP360.");
   return data;
 }

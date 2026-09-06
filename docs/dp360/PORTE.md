@@ -99,8 +99,8 @@ Matriz de refeição do motorista (sobre o cartão corrigido): `<4h` nada ·
 4. ~~Fluxo de decisão (Revisão, Ocorrências): pop-up do cartão, congelamento da
    prova, decisão por ponta~~ **feito** — grava em `ponto_real_manual`,
    `ponto_caso` e `ponto_ajustes_app`.
-5. Ligar a **execução** (disparo do workflow do robô + leitura do resultado).
-   **É o que falta.** Hoje todo botão de robô é `disabled` dizendo por quê.
+5. ~~Ligar a **execução** (disparo do workflow do robô)~~ **feito**, com as
+   exceções da seção 7c. Falta a **leitura do resultado** — ver 7c.
 6. **Lockdown**: revogar `anon` na base de importação e manter só o gateway.
 
 ## 7. O que já saiu da lista (fases 3/4)
@@ -128,15 +128,67 @@ Ficam registradas porque explicam decisões do código — não são mais pendê
    navegador (isolate de Edge Function não guarda estado entre chamadas: medido,
    dois misses seguidos).
 
-## 7b. Pendências que sobraram
+## 7b. Fase 5 — como o robô ficou
 
-- **Robô do Transnet** (fase 5) — precisa de decisão sobre credencial, disparo e
-  escopo por execução.
-- **Camadas da gordura** ainda vivem dentro de `Gordura.jsx`; o Resumo repete o
-  cálculo. Extrair para módulo compartilhado.
+O navegador não dirige o Transnet: isso é Selenium, no GitHub Actions do repo
+**guuimaximo/DP360**, onde a credencial do Transnet já é secret. O INOVE decide,
+o robô executa.
+
+Ação `robo` no `dp360-api`, com três travas que não são burocracia:
+
+1. **Allowlist de workflow E de input.** O que vem da tela não vira nome de
+   arquivo nem input solto; são quatro workflows e cada um só aceita as chaves
+   que declara. Sem isso, quem chamasse a função rodaria qualquer workflow do
+   repo.
+2. **`confirmar` nasce falso.** Nos quatro bots, sem `--confirmar` é ENSAIO:
+   navega, acha o botão, não clica. Default invertido aqui é a diferença entre um
+   teste e uma advertência de verdade na ficha de alguém. Na tela, ensaio e
+   valendo são **dois botões**, nunca um checkbox.
+3. **Trilha antes do disparo.** A linha em `dp360_auditoria` é gravada ANTES de
+   chamar o GitHub, e se ela falhar o disparo não acontece. Disparo sem registro
+   é o único resultado que não pode existir. O CSV nunca entra na trilha (tem
+   crachá e nome) — só o tamanho.
+
+Telas ligadas: **Folgas** (`ocorrencias.yml`), **Refeição** (`ponto.yml`),
+**Revisão** e **Gordura** (`comunicado.yml`, pelo módulo
+`src/pages/dp360/comunicadoTransnet.js`) e **Ocorrências** (`ajustes.yml`, modo
+"executar decisoes", escopo de um crachá+dia).
+
+Token: secret `DP360_GITHUB_TOKEN` da função; na falta dele cai no `GITHUB_TOKEN`
+que já existe (mesmo dono dos dois repos).
+
+## 7c. O que a fase 5 NÃO cobre (e por quê)
+
+- **O resultado não volta.** Os workflows guardam a evidência como artefato e não
+  escrevem no Supabase; quem preenche `ponto_ocorrencias` e carimba
+  `advertencia_enviada_em` / `correcao_final_em` é o pós-processo da ferramenta
+  desktop, que ESPERA o run. Conserto certo: um passo no workflow do repo DP360
+  que grave o resultado — outro repositório, não mexido.
+- **"Advertir e corrigir" continua desligado.** Não é um robô: é uma corrente de
+  três elos (`app.js:347`, comentário do próprio original) — `executar_decisoes`
+  → `comunicado` motivo 103 → `ponto`. Ligar só o primeiro mandaria carta sem
+  registro de que saiu e corrigiria cartão sem alvo.
+- **"Cancelar no Transnet" continua desligado.** É `--cancelar-enviadas`, modo que
+  o `ajustes.yml` não expõe: o `_nuvem_traduz` traduz só
+  `conferir`/`capturar`/`executar`.
+- **`alvo_etapa2`** (alvo manual do interno) ainda não tem campo na tela.
+
+## 7d. Pendências que sobraram
+
+- **Série por competência** no Resumo — no Python ela soma a gordura inteira antes
+  do filtro; no navegador seriam ~10 mil linhas por competência, doze vezes. Fazer
+  só a metade barata deixaria cada barra antiga MENOR que a da ferramenta. Caminho:
+  ação de agregação no gateway.
 - **`viagens_qh`** no pop-up da Revisão.
-- Marcação de "não bate ponto" nos Abandonos é lista JSON em `app_config`, **sem
-  autor nem carimbo** — se virar prova de alguma coisa, precisa de tabela.
+- **Corrida no `app_config`**: a marcação de "não bate ponto" é lista JSON lida e
+  reescrita inteira; a tela relê imediatamente antes do upsert, o que encurta a
+  janela mas não fecha (PostgREST não tem compare-and-set). Fechar exigiria coluna
+  de versão que a ferramenta desktop também respeitasse. Hoje o que salva é a
+  trilha: dá para reconstruir quem marcou o quê.
+- **Bug no Python, não no porte:** `main.py:3777/3780` chama
+  `self._ponta_conta(niv, gor, ponta)` com `ponta` indefinido no escopo →
+  `NameError` → a caixa "ainda sem aviso" não aparece na ferramenta. O INOVE
+  mostra; a ferramenta não.
 
 ## 8. Pendências de segurança já detectadas
 

@@ -1025,7 +1025,7 @@ export default function DP360Resumo() {
     let ls = gerencial.pessoas;
     if (categoria) ls = ls.filter((p) => p.categoria === categoria);
     if (termo) {
-      const q = termo.toLowerCase();
+      const q = termo.trim().toLowerCase(); // apara na COMPARACAO, nao no onChange
       ls = ls.filter((p) => p.nome.toLowerCase().includes(q) || p.cracha.includes(q));
     }
     if (filtro === "grave") ls = ls.filter((p) => p.muitoGrave);
@@ -1514,7 +1514,10 @@ export default function DP360Resumo() {
                 <input
                   type="text"
                   value={termo}
-                  onChange={(e) => setTermo(e.target.value.trim())}
+                  // SEM .trim() AQUI: o input e controlado, entao o React devolve o valor do
+                  // estado — com trim no onChange o espaco nunca entra e "JOAO SILVA" nao
+                  // acha ninguem. Quem apara e quem compara, la embaixo.
+                  onChange={(e) => setTermo(e.target.value)}
                   placeholder="Buscar por nome ou chapa…"
                   autoComplete="off"
                 />

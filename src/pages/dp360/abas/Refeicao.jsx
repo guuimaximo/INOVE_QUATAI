@@ -520,9 +520,11 @@ function pedeImportacao(linha) {
 /**
  * Divide os candidatos do dia entre o que vai para o robô e o que fica de fora.
  * `cartoes` é um Map por crachá de 8 dígitos, vindo da `ponto_diario`.
+ * `casos` é um Map por crachá de 8 dígitos, vindo da `ponto_caso` do mesmo dia —
+ * serve só para saber se o cartão daquele dia JÁ FOI MEXIDO depois do import.
  * Devolve { dentro, fora } — a tela mostra os DOIS, sempre.
  */
-function montarLote(linhas, cartoes, data) {
+function montarLote(linhas, cartoes, casos, data) {
   const dentro = [];
   const fora = [];
 
@@ -552,6 +554,34 @@ function montarLote(linhas, cartoes, data) {
     }
     if (ehVerdadeiro(cartao.almoco_travado)) {
       deixaFora("almoço travado pela Revisão — o alvo do miolo já foi decidido lá");
+      continue;
+    }
+
+    // CARTÃO JÁ MEXIDO NO TRANSNET DEPOIS DO NOSSO RETRATO.
+    //
+    // O `bot_ponto` insere um Cartão de Ponto com os QUATRO campos ou nada — não
+    // existe "acrescentar só o almoço" (o Passo 1 da ferramenta usa outro
+    // caminho: um .txt de batidas PIS, que só soma duas marcas). Então as pontas
+    // que mandamos são as do `ponto_diario`, e a própria ferramenta registra o
+    // que ele é: "o ponto_diario só atualiza no import diário, não pelo bot na
+    // hora" (main.py:2856).
+    //
+    // Ou seja: entre um import e outro o nosso retrato envelhece. Se o cartão
+    // foi corrigido no Transnet nesse meio-tempo — pelo robô de ajustes, pela
+    // correção, ou à mão —, lançar a refeição por cima DESFAZ a correção e
+    // devolve as pontas velhas, sem ninguém ver.
+    //
+    // Não dá para saber isso sem ler o Transnet. Dá para saber quando ALGUÉM
+    // MEXEU: o dia com `conferido_em` (o robô executou a decisão) ou
+    // `correcao_final_em` (a correção rodou) é dia cujo cartão mudou depois do
+    // import. Esse fica de fora, e o motivo aparece na tela.
+    const caso = casos?.get(cracha);
+    const mexido = cru(caso?.conferido_em) || cru(caso?.correcao_final_em);
+    if (mexido) {
+      deixaFora(
+        "o cartão deste dia já foi mexido no Transnet depois do último import — " +
+          "lançar por cima devolveria as pontas antigas e desfaria a correção",
+      );
       continue;
     }
 
@@ -629,6 +659,7 @@ function LinhaLote({ item }) {
 
 function PainelImportacao({ data, linhas, aoFechar }) {
   const [cartoes, setCartoes] = useState(null);
+  const [casos, setCasos] = useState(null);
   const [erro, setErro] = useState("");
   const [disparando, setDisparando] = useState(false);
   const [recado, setRecado] = useState(null);
@@ -638,13 +669,26 @@ function PainelImportacao({ data, linhas, aoFechar }) {
   useEffect(() => {
     let ativo = true;
     setCartoes(null);
+    setCasos(null);
     setErro("");
-    buscarCartoes(data)
-      .then((lista) => {
+    Promise.all([
+      buscarCartoes(data),
+      // Os casos do dia: só para saber quem já teve o cartão mexido no Transnet
+      // depois do import (ver a trava dentro do `montarLote`).
+      lerTudoDP360("ponto_caso", {
+        colunas: "cracha,date_ref,conferido_em,correcao_final_em",
+        filtros: { date_ref: `eq.${data}` },
+        ordem: "cracha.asc",
+      }),
+    ])
+      .then(([lista, listaCasos]) => {
         if (!ativo) return;
         const mapa = new Map();
         for (const c of lista) mapa.set(cra8(c.cracha), c);
         setCartoes(mapa);
+        const mapaCasos = new Map();
+        for (const c of listaCasos) mapaCasos.set(cra8(c.cracha), c);
+        setCasos(mapaCasos);
       })
       .catch((falha) => {
         if (ativo) setErro(falha.message || "Falha ao ler o cartão de ponto do dia.");
@@ -655,8 +699,8 @@ function PainelImportacao({ data, linhas, aoFechar }) {
   }, [data]);
 
   const lote = useMemo(
-    () => (cartoes ? montarLote(linhas, cartoes, data) : null),
-    [linhas, cartoes, data],
+    () => (cartoes ? montarLote(linhas, cartoes, casos, data) : null),
+    [linhas, cartoes, casos, data],
   );
 
   // ENSAIO x VALENDO são dois BOTÕES, não um checkbox: checkbox marcado por

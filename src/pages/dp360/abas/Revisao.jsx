@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Lock, MapPin, RefreshCw, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
+import { supabase } from "../../../supabase";
 import { RAIO_LOCAL, RAIO_VEIC, reguaLocal, resumoGps } from "../regrasGps";
 
 /* =============================================================================
@@ -1085,7 +1086,9 @@ const COLUNAS_PONTO_DIARIO = [
   "volta_almoco",
   "saida",
   "jornada_liquida_min",
-  "jornada_total_min",
+  // `jornada_total_min` NAO existe em ponto_diario — e coluna da ponto_intervalo.
+  // Pedir aqui devolvia HTTP 400 e derrubava a aba. A jornada do cartao e
+  // `jornada_liquida_min` (ha tambem jornada_bruta_min e jornada_corrigida_min).
   "esc_entrada",
   "esc_saida",
   "programado_entrada",
@@ -1115,6 +1118,29 @@ const COLUNAS_PONTO_DIARIO = [
 
 // Só o que a régua de GPS precisa da `ponto_gordura`: a janela da operação
 // (escada real > citatti > bilhetagem > SST) e a marca de dia de reserva.
+// Crachas com RESERVA lancada pelo gestor no dia. A tabela vive no projeto do INOVE
+// (nao na base de importacao), entao vai pelo cliente normal — o gateway dp360-api so
+// cobre as tabelas de ponto. Porte de ferramenta/supabase_client.py:695.
+// DEGRADA sem quebrar: sem a tabela / sem permissao / sem rede, devolve vazio e a tela
+// segue com a regua do veiculo, igual ao try/except do original (main.py:4851).
+async function lerReservasInove(dia) {
+  try {
+    const { data, error } = await supabase
+      .from("reservas_motoristas")
+      .select("funcionario_cracha,data_referencia")
+      .eq("data_referencia", dia);
+    if (error) throw error;
+    const set = new Set();
+    for (const r of data || []) {
+      const cr = cra8(r.funcionario_cracha);
+      if (cr) set.add(cr);
+    }
+    return set;
+  } catch {
+    return new Set();
+  }
+}
+
 const COLUNAS_GORDURA_GPS = [
   "cracha",
   "data_ref",
@@ -1126,7 +1152,11 @@ const COLUNAS_GORDURA_GPS = [
   "val_fim",
   "sst_vinculo",
   "sst_desvinculo",
-  "tem_reserva_inove",
+  // NAO peca `tem_reserva_inove` aqui: ela NAO e coluna da tabela. O Python cria esse
+  // campo em memoria, na camada _aplica_reserva (main.py:4844), a partir da tabela
+  // `reservas_motoristas` — que vive no projeto do INOVE, nao na base de importacao.
+  // Pedir no select devolvia HTTP 400 e derrubava a aba inteira ("Edge Function
+  // returned a non-2xx status code"). O dia de reserva vem de lerReservasInove().
 ].join(",");
 
 /* =============================================================================
@@ -1239,8 +1269,9 @@ export default function Revisao() {
         filtros: { data_ref: `eq.${data}` },
         ordem: "cracha.asc",
       }),
+      lerReservasInove(data),
     ])
-      .then(([batidas, carros, gordura]) => {
+      .then(([batidas, carros, gordura, reservas]) => {
         if (!ativo) return;
         const porCracha = {};
         const balde = (cracha) => {
@@ -1257,8 +1288,15 @@ export default function Revisao() {
           contexto[cra8(g.cracha)] = {
             opIni: g.real_inicio || g.op_inicio || g.val_inicio || g.sst_vinculo || "",
             opFim: g.real_fim || g.op_fim || g.val_fim || g.sst_desvinculo || "",
-            ehReserva: ehVerdadeiro(g.tem_reserva_inove),
+            // Dia de reserva vem da tabela do INOVE, nao da gordura (ver COLUNAS_GORDURA_GPS).
+            ehReserva: reservas.has(cra8(g.cracha)),
           };
+        }
+        // Quem tem reserva lancada mas nao tem linha de gordura no dia tambem precisa
+        // entrar no contexto — senao a batida dele cai na regua do veiculo e vira
+        // falso "bateu fora", que e exatamente o bug que esta camada existe para evitar.
+        for (const cr of reservas) {
+          if (!contexto[cr]) contexto[cr] = { opIni: "", opFim: "", ehReserva: true };
         }
 
         const resumo = {};

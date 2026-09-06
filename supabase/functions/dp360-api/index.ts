@@ -46,12 +46,18 @@ const FONTES: Fonte[] = [
 
 /* ── ALLOWLIST ──────────────────────────────────────────────────────────────
    `ler`      : pode ser consultada.
-   `escrever` : operacoes permitidas ("upsert" | "insert" | "delete").
+   `escrever` : operacoes permitidas ("upsert" | "insert" | "delete" | "update").
    `conflito` : chave do on_conflict do upsert (espelha o supabase_client do DP).
+   `colunasUpdate` : QUAIS colunas o `update` pode tocar. Sem esta lista o update
+                     e recusado. Existe porque o gateway fala com a base usando a
+                     service key, que ignora grant por coluna — a trava por coluna
+                     do banco (grant update (a,b,c)) precisa existir tambem AQUI,
+                     senao a tela poderia reescrever a propria prova da deteccao.
    Espelha exatamente o contrato do DP360 (ferramenta/supabase_client.py).      */
 type Acesso = {
   ler: boolean;
-  escrever?: Array<"upsert" | "insert" | "delete">;
+  escrever?: Array<"upsert" | "insert" | "delete" | "update">;
+  colunasUpdate?: string[];
   conflito?: string;
 };
 
@@ -95,7 +101,16 @@ const TABELAS: Record<string, Acesso> = {
   // registros, mas mostrar cartao completo numa tela e vazamento gratuito.
   fraude_cartao_bloqueado: { ler: true },
   fraude_cartao_giros: { ler: true },
-  fraude_cartao_sequencial: { ler: true },
+  // TRIAGEM da fraude: o mesmo contrato do painel que ja existe
+  // (PROGRAMA_FRAUDES/sql/03_supabase_triagem_rls.sql, que concede a anon
+  // `update (status, analisado_em, analisado_por, observacao)` e mais nada).
+  // Quem analisa muda o STATUS da ocorrencia; ninguem mexe em cartao, local,
+  // valor ou horario — isso e prova da deteccao e so entra pelo bot.
+  fraude_cartao_sequencial: {
+    ler: true,
+    escrever: ["update"],
+    colunasUpdate: ["status", "analisado_em", "analisado_por", "observacao"],
+  },
 };
 
 const LIMITE_MAX = 5000;
@@ -305,8 +320,42 @@ serve(async (req: Request) => {
     const tabela = String(corpo.tabela ?? "");
     const op = String(corpo.op ?? "");
     const cfg = TABELAS[tabela];
-    if (!cfg?.escrever?.includes(op as "upsert" | "insert" | "delete")) {
+    if (!cfg?.escrever?.includes(op as "upsert" | "insert" | "delete" | "update")) {
       return json({ ok: false, error: "operação não liberada para esta tabela" }, 403);
+    }
+
+    // UPDATE (PATCH): muda colunas de linhas que JA EXISTEM. Diferente do upsert
+    // de proposito — um upsert com a chave errada CRIA linha, e nesta tabela
+    // linha nova e ocorrencia detectada, que so o bot pode inserir.
+    if (op === "update") {
+      const permitidas = new Set(cfg.colunasUpdate ?? []);
+      if (!permitidas.size) return json({ ok: false, error: "update sem colunas liberadas" }, 403);
+
+      const filtros = montarFiltros(corpo.filtros);
+      if (filtros === null) return json({ ok: false, error: "filtros inválidos" }, 400);
+      // TRAVA (a mesma do delete): update sem filtro reescreveria a tabela inteira.
+      if (!filtros.qtd) return json({ ok: false, error: "update exige filtro" }, 400);
+
+      const campos = corpo.campos;
+      if (typeof campos !== "object" || campos === null || Array.isArray(campos)) {
+        return json({ ok: false, error: "campos ausentes" }, 400);
+      }
+      const chaves = Object.keys(campos as Record<string, unknown>);
+      if (!chaves.length) return json({ ok: false, error: "campos ausentes" }, 400);
+      const proibida = chaves.find((c) => !permitidas.has(c));
+      if (proibida) return json({ ok: false, error: `coluna não liberada: ${proibida}` }, 403);
+
+      try {
+        const r = await fetch(`${base}/rest/v1/${tabela}?${filtros.qs}`, {
+          method: "PATCH",
+          headers: { ...hDp, "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify(campos),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return json({ ok: true, tabela, op, campos: chaves });
+      } catch (error) {
+        return json({ ok: false, error: mensagemSegura(error) }, 502);
+      }
     }
 
     if (op === "delete") {

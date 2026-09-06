@@ -36,8 +36,11 @@
 //     `valor` da coluna também, e não só no `render`, senão o CSV vazaria o
 //     número completo.
 //   · nenhum `console.log` de dado.
-//   · NENHUMA GRAVAÇÃO nesta fase: os botões de ação nascem desabilitados e a
-//     chamada está em TODO no fim do arquivo.
+//   · A ÚNICA GRAVAÇÃO é a TRIAGEM (status, analisado_em, analisado_por,
+//     observacao). O gateway recusa qualquer outra coluna desta tabela: cartão,
+//     local, valor e horário são a prova da detecção e só entram pelo bot.
+//     Isso precisa ser trava do GATEWAY, e não só do banco — o gateway fala com
+//     a base pela service key, que ignora `grant update (coluna)`.
 // ============================================================================
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, Search, X } from "lucide-react";
@@ -46,14 +49,20 @@ import "leaflet/dist/leaflet.css";
 import { AuthContext } from "../../context/AuthContext";
 import { useAccessGovernance } from "../../context/AccessContext";
 import { canUserAccessPath } from "../../utils/access";
-import { lerDP360, lerTudoDP360 } from "../../services/dp360Api";
+import { atualizarDP360, lerDP360, lerTudoDP360 } from "../../services/dp360Api";
 import TabelaDP from "../dp360/TabelaDP";
 import "../dp360/dp360.css";
 import "./guard.css";
 
 /* ────────────────────────────── constantes da tela ───────────────────────── */
 
-const AVISO_FASE = "Gravação liberada na próxima fase";
+// TRIAGEM — o vocabulário NÃO é meu: é o do painel que já roda
+// (PROGRAMA_FRAUDES/painel/painel_fraude.template.html:975-976 e a coluna
+// `status default 'novo'` em sql/02_supabase_tabela.sql). Inventar um "analisado"
+// aqui faria a mesma ocorrência ter dois vocabulários e quebraria o painel.
+const ST_NOVO = "novo";
+const ST_BLOQUEIO = "bloqueio";
+const ST_SEM_FRAUDE = "sem_fraude";
 
 // Os mesmos cortes do relatório que o dono gerou.
 const OPCOES_PASSAGENS = [5, 6, 8, 10];
@@ -722,6 +731,13 @@ export default function GuardFraudes() {
   const [erroGiros, setErroGiros] = useState("");
   const [foco, setFoco] = useState(null);
   const [diaSel, setDiaSel] = useState("");
+  // Passagem que NÃO girou a catraca é ruído para quem analisa cartão: o débito
+  // sem giro tem causa própria (catraca travada, leitura dupla) e não é o que se
+  // manda bloquear. Fica de fora por padrão, com o contador dizendo quantas são.
+  const [soGiros, setSoGiros] = useState(true);
+  const [triando, setTriando] = useState("");
+  const [recadoTriagem, setRecadoTriagem] = useState(null);
+  const [recargaCartao, setRecargaCartao] = useState(0);
 
   /* ── casos ── */
   useEffect(() => {
@@ -863,12 +879,13 @@ export default function GuardFraudes() {
     return () => {
       vivo = false;
     };
-  }, [cartaoAberto]);
+  }, [cartaoAberto, recargaCartao]);
 
   // Abre no dia da linha clicada — e o dia que a pessoa estava olhando.
   useEffect(() => {
     setDiaSel(caso ? txt(caso.data_ref).slice(0, 10) : "");
     setFoco(null);
+    setRecadoTriagem(null);
   }, [caso]);
 
   // Esc fecha, como qualquer pop-up. Sem isto o unico jeito de sair e achar o X.
@@ -885,9 +902,14 @@ export default function GuardFraudes() {
 
   /* ── filtros ── */
 
-  // Um caso "já pedido" é um caso com `status` gravado (pedido de bloqueio,
-  // analisado, etc.). Sem status = ainda não passou por ninguém.
-  const jaPedido = useCallback((l) => txt(l.status) !== "", []);
+  // Um caso "já pedido" é um caso que alguém JÁ TRIOU. O default da tabela é
+  // `novo` (não é nulo, não é vazio): medido na base, os 15.307 casos têm status
+  // preenchido. Testar "status !== ''" marcava todo mundo como já pedido e o
+  // chip escondia a lista inteira.
+  const jaPedido = useCallback((l) => {
+    const st = txt(l.status).toLowerCase();
+    return st !== "" && st !== ST_NOVO;
+  }, []);
 
   // Base comum dos dois eixos de filtro (busca + status + repetição), para que
   // os contadores dos chips mostrem o efeito de MUDAR AQUELE eixo, não o total.
@@ -965,9 +987,13 @@ export default function GuardFraudes() {
 
   // O dia escolhido manda no mapa e na tabela de passagens. Sem dia (o cartao
   // aberto pelo botao "ver tudo"), mostra a vida inteira do cartao.
+  const girosBase = useMemo(() => (soGiros ? giros.filter(girou) : giros), [giros, soGiros]);
+  const semGiroOcultas = giros.length - girosBase.length;
+
   const girosDoDia = useMemo(
-    () => (diaSel ? giros.filter((g) => txt(g.data_ref).slice(0, 10) === diaSel) : giros),
-    [giros, diaSel],
+    () =>
+      diaSel ? girosBase.filter((g) => txt(g.data_ref).slice(0, 10) === diaSel) : girosBase,
+    [girosBase, diaSel],
   );
 
   // USOS DIARIOS. Cuidado com o que isto e: `fraude_cartao_giros` guarda as
@@ -989,7 +1015,7 @@ export default function GuardFraudes() {
         });
       return mapa.get(dia);
     };
-    for (const g of giros) {
+    for (const g of girosBase) {
       const dia = txt(g.data_ref).slice(0, 10);
       if (!dia) continue;
       const d = pega(dia);
@@ -1008,13 +1034,79 @@ export default function GuardFraudes() {
       if (txt(c.local_fraude)) d.locais.add(txt(c.local_fraude));
     }
     return [...mapa.values()].sort((a, b) => (a.dia < b.dia ? 1 : a.dia > b.dia ? -1 : 0));
-  }, [giros, historico]);
+  }, [girosBase, historico]);
 
   const resumoCartao = useMemo(() => {
     const debitado = historico.reduce((soma, c) => soma + (numero(c.valor_total_debitado) || 0), 0);
     const pior = historico.reduce((max, c) => Math.max(max, passagensDoCaso(c)), 0);
     return { casos: historico.length, dias: usosPorDia.length, debitado, pior };
   }, [historico, usosPorDia]);
+
+  /* ── TRIAGEM (grava) ───────────────────────────────────────────────────
+     Marca o CARTÃO, não o bloco clicado: quem bloqueia é a bilhetagem, e ela
+     bloqueia o cartão. É a mesma decisão do painel que já roda
+     (painel_fraude: "No escopo 'cartao' marca TODAS as ocorrências do cartão
+     no período"). Só as 4 colunas de triagem são tocadas — o gateway recusa
+     qualquer outra, porque cartão, local, valor e horário são a prova da
+     detecção e só entram pelo bot. */
+
+  // Os dias que este pop-up carregou — é o alcance do que vamos marcar, e é o
+  // que a confirmação promete. `data_ref` é TEXTO no formato ISO, então `gte.`
+  // compara certo (largura fixa: ordem de texto = ordem de data). Não vale para
+  // as colunas numéricas desta base, ver FILTRO_PISO_PASSAGENS.
+  const diasDoCartao = useMemo(() => {
+    const lista = historico.map((h) => txt(h.data_ref).slice(0, 10)).filter(Boolean).sort();
+    return { de: lista[0] || "", ate: lista[lista.length - 1] || "", n: historico.length };
+  }, [historico]);
+
+  const statusCartao = useMemo(() => {
+    const st = new Set(historico.map((h) => txt(h.status).toLowerCase()).filter(Boolean));
+    if (st.has(ST_BLOQUEIO)) return ST_BLOQUEIO;
+    if (st.size === 1 && st.has(ST_SEM_FRAUDE)) return ST_SEM_FRAUDE;
+    return st.has(ST_SEM_FRAUDE) ? "misto" : ST_NOVO;
+  }, [historico]);
+
+  const triar = useCallback(
+    async (novoStatus, rotulo) => {
+      if (!cartaoAberto || !diasDoCartao.de) return;
+      const quem = txt(user?.nome) || txt(user?.email) || "INOVE";
+      const aviso =
+        `${rotulo.toUpperCase()} o cartão ${cartaoAberto}.\n\n` +
+        `Marca as ${diasDoCartao.n} ocorrência(s) deste cartão, de ` +
+        `${paraBR(diasDoCartao.de)} a ${paraBR(diasDoCartao.ate)}.\n` +
+        `Grava status="${novoStatus}", analisado_por="${quem}" e a data de agora.\n\n` +
+        `Isto NÃO bloqueia o cartão: quem bloqueia é a bilhetagem. O que sai daqui ` +
+        `é o pedido, e é o mesmo campo que o painel de fraudes lê.`;
+      if (!window.confirm(aviso)) return;
+      const obs = window.prompt("Observação (opcional) — fica junto do pedido:", "");
+      if (obs === null) return; // Cancelar no prompt cancela a ação inteira
+
+      setTriando(novoStatus);
+      setRecadoTriagem(null);
+      try {
+        await atualizarDP360(
+          "fraude_cartao_sequencial",
+          { cru_id: `eq.${cartaoAberto}`, data_ref: `gte.${diasDoCartao.de}` },
+          {
+            status: novoStatus,
+            // instante, não data local: aqui o toISOString é o certo, e é o que
+            // o painel de fraudes grava nesta mesma coluna.
+            analisado_em: new Date().toISOString(),
+            analisado_por: quem,
+            observacao: obs.trim() || null,
+          },
+        );
+        setRecadoTriagem({ tipo: "ok", texto: `${rotulo} gravado em ${diasDoCartao.n} ocorrência(s).` });
+        setRecargaCartao((n) => n + 1); // relê o cartão
+        recarregar(); // e a lista de trás, para o chip "excluir já pedidos" bater
+      } catch (falha) {
+        setRecadoTriagem({ tipo: "erro", texto: falha?.message || "Não foi possível gravar a triagem." });
+      } finally {
+        setTriando("");
+      }
+    },
+    [cartaoAberto, diasDoCartao, user, recarregar],
+  );
 
   const pontos = useMemo(
     () =>
@@ -1274,7 +1366,26 @@ export default function GuardFraudes() {
                       <b className="dp-num">{resumoCartao.dias}</b> dia(s) · pior bloco com{" "}
                       <b className="dp-num">{resumoCartao.pior}</b> passagens · debitado{" "}
                       <b>{moeda(resumoCartao.debitado)}</b>
-                      {txt(caso.status) ? ` · status: ${txt(caso.status)}` : ""}
+                      {" · "}
+                      <span
+                        className={`dp-pill ${
+                          statusCartao === ST_BLOQUEIO
+                            ? "danger"
+                            : statusCartao === ST_SEM_FRAUDE
+                              ? "ok"
+                              : statusCartao === "misto"
+                                ? "warn"
+                                : "mute"
+                        }`}
+                      >
+                        {statusCartao === ST_BLOQUEIO
+                          ? "bloqueio pedido"
+                          : statusCartao === ST_SEM_FRAUDE
+                            ? "sem fraude"
+                            : statusCartao === "misto"
+                              ? "triagem parcial"
+                              : "sem triagem"}
+                      </span>
                       <br />
                       histórico do cartão inteiro — não só o dia que você clicou.
                     </div>
@@ -1292,12 +1403,35 @@ export default function GuardFraudes() {
                         Maps
                       </a>
                     )}
-                    {/* Nasce DESABILITADO: nesta fase a tela não grava nada. */}
-                    <button type="button" className="dp-btn" disabled title={AVISO_FASE}>
-                      Marcar analisado
+                    {statusCartao !== ST_NOVO && (
+                      <button
+                        type="button"
+                        className="dp-btn"
+                        disabled={!!triando || !diasDoCartao.de}
+                        onClick={() => triar(ST_NOVO, "Voltar para novo")}
+                        title="Desfaz a triagem: o cartão volta para a fila de análise"
+                      >
+                        ↩ Voltar para novo
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="dp-btn"
+                      disabled={!!triando || !diasDoCartao.de}
+                      onClick={() => triar(ST_SEM_FRAUDE, "Sem fraude")}
+                      title="Analisado e descartado: não é fraude"
+                    >
+                      ✓ Sem fraude
                     </button>
-                    <button type="button" className="dp-btn" disabled title={AVISO_FASE}>
-                      Pedir bloqueio
+                    <button
+                      type="button"
+                      className="dp-btn"
+                      style={{ color: "var(--dp-danger-ink)" }}
+                      disabled={!!triando || !diasDoCartao.de}
+                      onClick={() => triar(ST_BLOQUEIO, "Pedir bloqueio")}
+                      title="Marca o cartão para a bilhetagem bloquear — não bloqueia sozinho"
+                    >
+                      🚫 Pedir bloqueio
                     </button>
                     <button
                       type="button"
@@ -1311,9 +1445,15 @@ export default function GuardFraudes() {
                   </div>
                 </div>
 
-                {erroGiros && (
+                {(erroGiros || recadoTriagem || triando) && (
                   <div className="gd-modal-erro">
-                    <span className="dp-pill danger">{erroGiros}</span>
+                    {erroGiros && <span className="dp-pill danger">{erroGiros}</span>}
+                    {triando && <span className="dp-pill accent">gravando…</span>}
+                    {recadoTriagem && (
+                      <span className={`dp-pill ${recadoTriagem.tipo === "ok" ? "ok" : "danger"}`}>
+                        {recadoTriagem.texto}
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -1323,8 +1463,21 @@ export default function GuardFraudes() {
                       Usos por dia
                       <span className="dp-faint" style={{ textTransform: "none", fontWeight: 400 }}>
                         {" "}
-                        · passagens dentro de bloco detectado
+                        · {soGiros ? "só quem girou a catraca" : "todas as passagens"}
                       </span>
+                      {(semGiroOcultas > 0 || !soGiros) && (
+                        <>
+                          {" "}
+                          <button
+                            type="button"
+                            className="dp-pill mute gd-pill-btn"
+                            onClick={() => setSoGiros((v) => !v)}
+                            title="Passagem sem giro é débito que não girou a catraca — causa própria, não é o que se manda bloquear"
+                          >
+                            {soGiros ? `+${semGiroOcultas} sem giro` : "esconder sem giro"}
+                          </button>
+                        </>
+                      )}
                       {giros.length >= LIMITE_GIROS && (
                         <>
                           {" "}
@@ -1349,7 +1502,7 @@ export default function GuardFraudes() {
                         >
                           <span className="d">todos os dias</span>
                           <span className="n">
-                            <b className="dp-num">{giros.length}</b> passagem(ns)
+                            <b className="dp-num">{girosBase.length}</b> passagem(ns)
                           </span>
                         </button>
 
@@ -1395,7 +1548,7 @@ export default function GuardFraudes() {
                       </span>
                     </div>
 
-                    <MapaPassagens pontos={pontos} foco={foco} altura={240} />
+                    <MapaPassagens pontos={pontos} foco={foco} altura={360} />
 
                     <div className="gd-secao">Passagens — clique numa linha para focar no mapa</div>
                     <TabelaDP
@@ -1537,37 +1690,3 @@ export default function GuardFraudes() {
     </div>
   );
 }
-
-// ============================================================================
-// TODO(fase de gravação) — as duas ações do painel do caso.
-//
-// Hoje os botões "Marcar analisado" e "Pedir bloqueio" nascem DESABILITADOS: a
-// tabela `fraude_cartao_sequencial` está no gateway com `{ ler: true }` e nada
-// mais, então nenhuma gravação passa — nem por engano.
-//
-// Quando liberar, o alvo são as colunas que a própria tabela já tem:
-//     status, analisado_em, analisado_por, observacao
-//
-// A chamada ficaria assim (o gateway precisa ganhar `escrever: ["upsert"]` e
-// `conflito: "id_evento_final"` em supabase/functions/dp360-api/index.ts):
-//
-// async function marcarAnalisado(caso, novoStatus, observacao) {
-//   await upsertDP360("fraude_cartao_sequencial", {
-//     id_evento_final: caso.id_evento_final,
-//     status: novoStatus,                 // ex.: "analisado" | "bloqueio pedido"
-//     analisado_em: new Date().toISOString(),   // timestamp COM fuso: aqui é instante,
-//                                              // não data local — o toISOString é correto
-//     analisado_por: user?.nome || user?.login,
-//     observacao,
-//   });
-// }
-//
-// ANTES DE LIGAR ISTO, DEFINIR:
-//  1. O VOCABULÁRIO de `status`. Hoje a tela só sabe "tem status = já passou por
-//     alguém"; o filtro "excluir já pedidos" depende disso. Com valores livres,
-//     um "OK" digitado à mão esconde o caso da lista sem querer.
-//  2. QUEM pode pedir bloqueio. Bloquear cartão é ação sobre um passageiro: erro
-//     tira o transporte de alguém que não fez nada.
-//  3. Se "pedir bloqueio" apenas MARCA aqui ou também dispara algo na origem.
-//     Enquanto for só marcação, deixar isso explícito no botão.
-// ============================================================================

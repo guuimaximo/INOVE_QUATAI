@@ -188,7 +188,13 @@
   margin-top: 3px;
   line-height: 1.5;
 }
-.dp360 .gd-modal-erro { padding: 8px 16px 0; }
+.dp360 .gd-modal-erro {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 16px 0;
+}
 
 .dp360 .gd-modal-corpo {
   display: grid;

@@ -138,6 +138,17 @@ export function inserirDP360(tabela, linhas) {
   return gravar(tabela, "insert", { linhas: Array.isArray(linhas) ? linhas : [linhas] });
 }
 
+/**
+ * UPDATE (PATCH) — muda colunas de linhas que JA EXISTEM.
+ *
+ * Nao e upsert: upsert com a chave errada CRIA linha, e em tabela de deteccao
+ * (fraude) linha nova e ocorrencia, que so o bot insere. O servidor recusa
+ * update sem filtro e recusa coluna fora da lista liberada para a tabela.
+ */
+export function atualizarDP360(tabela, filtros, campos) {
+  return gravar(tabela, "update", { filtros, campos });
+}
+
 /** DELETE — o servidor recusa sem filtro, de propósito. */
 export function apagarDP360(tabela, filtros) {
   return gravar(tabela, "delete", { filtros });

@@ -3007,9 +3007,19 @@ export default function Ocorrencias() {
   /* ── CAPTURA DA GRADE: sem escopo, e sem o pós-processo do original ────────
    *
    * Porte de main.py:1540 (capturar_ocorrencias). Varre a grade inteira do Transnet
-   * e grava as ocorrências no Supabase (bot_ajustes_app.py:543 e :827). Hoje uma
-   * ocorrência nova só entra na base quando alguém abre a ferramenta desktop — é o
-   * buraco que este botão fecha.
+   * e grava as ocorrências no Supabase (bot_ajustes_app.py:543 e :827).
+   *
+   * ATENÇÃO AO QUE ELE **NÃO** É. Este botão não é o caminho normal de entrada da
+   * ocorrência, e eu escrevi o contrário aqui antes. A `ponto_ajustes_app` é
+   * alimentada pelo IMPORTADOR DIÁRIO, da view `7_vw_ponto_ajustes_app_046`, e o
+   * comentário dela é literal: "SUBSTITUI A CAPTURA AO VIVO … antes um bot lia a
+   * grade viva a cada 10 min (a ocorrência não estava no lake, evaporava no
+   * aceite); agora `app_ocorrencia` está no datalake e PERSISTE".
+   * (`importador_supabase.py:234-241` faz o upsert por `id_ocorrencia`.)
+   *
+   * Ou seja: ocorrência nova entra sozinha, com latência de D-1, sem ninguém abrir
+   * nada. O que este botão dá é o DIA DE HOJE — a grade viva, antes de o importador
+   * passar. Use quando o caso é de hoje; para o resto, esperar sai mais barato.
    *
    * UM BOTÃO SÓ, E É DE PROPÓSITO. `ajustes.yml:66-68` roda a captura SEM `$CONF`:
    *   "capturar a grade") python bot_ajustes_app.py --capturar --headless ;;
@@ -3693,8 +3703,9 @@ export default function Ocorrencias() {
           <span className="dp-muted" style={MINI}>
             Robô <span className="dp-mono">ajustes</span> · modo “{MODO_CAPTURAR}” · sem escopo (a
             grade inteira). Só LÊ a grade e grava as ocorrências novas na base — não aceita, não
-            rejeita, não decide. Hoje, sem isto, ocorrência nova só entra quando alguém abre a
-            ferramenta desktop.
+            rejeita, não decide. <b>Não é o caminho normal:</b> a ocorrência entra sozinha pelo
+            importador diário (latência de um dia). Isto aqui serve para trazer <b>o dia de
+            hoje</b>, antes de o importador passar.
           </span>
         </div>
         <div style={{ ...FILA, gap: 10, marginTop: 6 }}>

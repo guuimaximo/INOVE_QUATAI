@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Lock, MapPin, RefreshCw, X } from "lucide-react";
 import AbaShell from "./AbaShell";
+import MapaBatidas from "../MapaBatidas";
 import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
 import { supabase } from "../../../supabase";
 import { RAIO_LOCAL, RAIO_VEIC, reguaLocal, resumoGps } from "../regrasGps";
@@ -113,6 +114,10 @@ const numero = (v) => {
  * Roda a régua completa de um crachá/dia e devolve o pacote que a grade e o
  * pop-up consomem: o resumo (total/fora/naoMedido/maiorDistancia) + a lista
  * batida a batida.
+ *
+ * `batidas` e `ancoras` viajam junto SEM SEREM ALTERADAS: o mapa do pop-up
+ * (`MapaBatidas`) precisa da COORDENADA do veículo, que a régua usa por dentro
+ * mas não devolve em `detalhes`. Nenhum cálculo muda por causa disso.
  */
 function calcularGps({ batidas, ancoras, ehReserva, opIni, opFim }) {
   const detalhes = reguaLocal({
@@ -122,7 +127,7 @@ function calcularGps({ batidas, ancoras, ehReserva, opIni, opFim }) {
     opIni,
     opFim,
   });
-  return { ...resumoGps(detalhes), detalhes };
+  return { ...resumoGps(detalhes), detalhes, batidas, ancoras };
 }
 
 /** Texto da referência que decidiu a batida (usado no pop-up). */
@@ -757,8 +762,9 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
                   Sem operação apurada neste dia (interno/aprendiz não tem Citatti, SST nem bilhetagem).
                 </p>
               )}
-              {/* TODO(port DP360): mapa das batidas (Leaflet) e detalhamento de
-                  viagens_qh (linha/tabela/veículo) entram junto com a fase do mapa. */}
+              {/* O mapa das batidas já entrou — fica na coluna 2, junto do bloco
+                  "📍 Local da batida". TODO(port DP360): falta o detalhamento de
+                  viagens_qh (linha/tabela/veículo). */}
             </section>
 
             <section>
@@ -959,8 +965,20 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
                   nome do terminal, sem coordenada. Não vira "junto" nem "fora".
                 </p>
               )}
-              {/* TODO(port DP360): mapa Leaflet com as cercas (garagem 100 m,
-                  terminal 100 m, veículo 500 m) — fica para a fase do mapa. */}
+              {/* O MAPA vem DEPOIS da lista de propósito: a lista dá o veredito
+                  ("fora · 2,1 km"), o mapa mostra ONDE. As cercas desenhadas são
+                  a mesma régua de `regrasGps` — nada é recalculado aqui. */}
+              {!!gps?.total && (
+                <div style={{ marginTop: 8 }}>
+                  <MapaBatidas
+                    batidas={gps.batidas}
+                    ancoras={gps.ancoras}
+                    resultadoRegua={gps.detalhes}
+                    nome={linha.nm_funcionario || ""}
+                    altura={300}
+                  />
+                </div>
+              )}
             </section>
 
             <section>

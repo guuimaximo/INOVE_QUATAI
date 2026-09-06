@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MapPin, RefreshCw, UserRound, X } from "lucide-react";
 import AbaShell from "./AbaShell";
+import MapaBatidas from "../MapaBatidas";
 import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
 import { GARAGEM, dentroDoLocal, distanciaM, localConhecido } from "../regrasGps";
 
@@ -113,6 +114,10 @@ function analisarBatidaGps(linha) {
     distLocal: perto?.distancia ?? null,
     dentro: !!perto && dentroDoLocal(perto.nome, perto.distancia),
     distGaragem: distanciaM(lat, lon, GARAGEM.lat, GARAGEM.lon),
+    // lat/lon seguem cru para o mapa do painel do dia (`MapaBatidas`).
+    // Campos NOVOS: nenhum cálculo ou agregação abaixo usa ou muda por isso.
+    lat,
+    lon,
   };
 }
 
@@ -513,8 +518,6 @@ function PainelDia({ dia, pessoa, batidasGps, caso, aoFechar }) {
           >
             <MapPin size={13} /> Batidas com GPS
           </div>
-          {/* TODO(mapa): o app antigo desenha as cercas de 100 m num Leaflet. Aqui só a
-              lista com a distância — o mapa entra num passo posterior do porte. */}
           {batidasGps.length === 0 ? (
             <p className="dp-muted" style={{ margin: "8px 0 0" }}>
               Nenhuma batida com GPS neste dia.
@@ -547,6 +550,16 @@ function PainelDia({ dia, pessoa, batidasGps, caso, aoFechar }) {
                 </li>
               ))}
             </ul>
+          )}
+          {/* O MAPA com as cercas de 100 m desenhadas (porte do `initPdMap`).
+              Esta aba não lê `gps_carro`, então aqui não há ônibus nem régua
+              pessoa↔carro — só onde a pessoa bateu e se caiu dentro da cerca.
+              A régua completa (veículo 500 m, reserva, não medido) é a da
+              Revisão, e o mapa de lá desenha as três camadas. */}
+          {batidasGps.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <MapaBatidas batidas={batidasGps} altura={300} />
+            </div>
           )}
         </div>
 

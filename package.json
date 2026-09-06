@@ -35,6 +35,7 @@
     "jsbarcode": "^3.12.3",
     "jspdf": "^2.5.2",
     "jszip": "^3.10.1",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.511.0",
     "react": "^18.2.0",
     "react-chartjs-2": "^5.2.0",

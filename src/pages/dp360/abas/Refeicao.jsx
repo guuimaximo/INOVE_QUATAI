@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Coffee, Download, Info, RefreshCw, Search, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
 
@@ -9,6 +8,10 @@ import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
    Fonte única desta aba: a tabela `ponto_intervalo` — snapshot da view
    `vw_ponto_intervalo_motorista_diario` (Athena). A REGRA de negócio é da view;
    a tela só a exibe. Nada é gravado nesta fase.
+
+   Aparência: a da FERRAMENTA (Sistemas/PONTO/app/ui, `viewP1`) — barra de
+   filtros enxuta, tabela densa de 13px com cabeçalho grudado e a LINHA pintada
+   pelo status. Quem usa passa o dia lendo linha: a cor da linha é informação.
 
    Régua (constantes espelhadas da view e de ferramenta/simulador.py — mexeu
    aqui, confira lá):
@@ -116,34 +119,25 @@ function chaveStatus(status) {
   return { SUGESTAO: "SUG", ABAIXO_27MIN: "AB", OK: "OK" }[texto] || "OUT";
 }
 
+// [rótulo curto, variante da pílula, classe da LINHA]
 const ESTILO_STATUS = {
-  OK: ["OK", "border-emerald-200 bg-emerald-50 text-emerald-700"],
-  SUG: ["Sugestão", "border-amber-200 bg-amber-50 text-amber-800"],
-  DIV: ["Divergente", "border-amber-200 bg-amber-50 text-amber-800"],
-  AB: ["Abaixo 27min", "border-rose-200 bg-rose-50 text-rose-700"],
-  OUT: ["", "border-slate-200 bg-slate-100 text-slate-600"],
+  OK: ["OK", "ok", "row-ok"],
+  SUG: ["Sugestão", "warn", "row-sug"],
+  DIV: ["Divergente", "warn", "row-sug"],
+  AB: ["Abaixo 27min", "danger", "row-sem"],
+  OUT: ["", "mute", ""],
 };
 
 function PilulaStatus({ status }) {
-  const chave = chaveStatus(status);
-  const [rotulo, classe] = ESTILO_STATUS[chave];
+  const [rotulo, variante] = ESTILO_STATUS[chaveStatus(status)];
   return (
-    <span
-      title={String(status ?? "") || "sem status"}
-      className={`inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-bold ${classe}`}
-    >
+    <span className={`dp-pill ${variante}`} title={String(status ?? "") || "sem status"}>
       {rotulo || String(status ?? "") || "—"}
     </span>
   );
 }
 
-function classeLinha(linha) {
-  const chave = chaveStatus(linha.status_almoco);
-  if (chave === "OK") return "bg-emerald-50/50 hover:bg-emerald-50";
-  if (chave === "AB") return "bg-rose-50/50 hover:bg-rose-50";
-  if (chave === "SUG" || chave === "DIV") return "bg-amber-50/50 hover:bg-amber-50";
-  return "bg-white hover:bg-slate-50";
-}
+const classeLinha = (linha) => ESTILO_STATUS[chaveStatus(linha.status_almoco)][2];
 
 /* ─────────────────────────── jornada ───────────────────────────
    A jornada do Passo 1 é a do CITATTI (operação), não a do ponto: o ponto é
@@ -151,11 +145,11 @@ function classeLinha(linha) {
    há Citatti no dia — e aí aparece em cinza, para não ser lido como régua. */
 function CelulaJornada({ linha }) {
   const citatti = num(linha.jornada_citatti_min);
-  if (citatti != null) return <span>{fmtMin(citatti)}</span>;
+  if (citatti != null) return <span className="dp-num">{fmtMin(citatti)}</span>;
   const ponto = num(linha.jornada_total_min);
-  if (ponto == null) return <span className="text-slate-400">—</span>;
+  if (ponto == null) return <span className="dp-faint">—</span>;
   return (
-    <span className="text-slate-400" title="Sem Citatti nesse dia — jornada pelo ponto">
+    <span className="dp-faint dp-num" title="Sem Citatti nesse dia — jornada pelo ponto">
       {fmtMin(ponto)}
     </span>
   );
@@ -163,17 +157,21 @@ function CelulaJornada({ linha }) {
 
 /* ─────────────────────────── colunas ─────────────────────────── */
 
-const COL_CRACHA = { chave: "cracha", rotulo: "Crachá", render: (r) => r.cracha || "—" };
+const COL_CRACHA = {
+  chave: "cracha",
+  rotulo: "Crachá",
+  numerica: true,
+  render: (r) => r.cracha || "—",
+};
 const COL_NOME = {
   chave: "nm_funcionario",
   rotulo: "Nome",
-  render: (r) => <span className="font-semibold text-slate-900">{r.nm_funcionario || "—"}</span>,
+  render: (r) => <span style={{ fontWeight: 600 }}>{r.nm_funcionario || "—"}</span>,
 };
-const COL_DATA = { chave: "data_ref", rotulo: "Data", render: (r) => fmtData(r.data_ref) };
+const COL_DATA = { chave: "data_ref", rotulo: "Data", numerica: true, render: (r) => fmtData(r.data_ref) };
 const COL_JORNADA = {
   chave: "jornada",
   rotulo: "Jornada",
-  numerica: true,
   render: (r) => <CelulaJornada linha={r} />,
 };
 const COL_STATUS = {
@@ -270,20 +268,38 @@ const buscarLinhas = (data) =>
 
 /* ─────────────────────── painel de detalhe ─────────────────────── */
 
+const ESTILO_ROTULO = {
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: "0.05em",
+  textTransform: "uppercase",
+};
+
 function BlocoIntervalo({ titulo, inicio, fim, duracao, nota, destaque }) {
   const temJanela = String(inicio ?? "").trim() || String(fim ?? "").trim();
   return (
     <div
-      className={`rounded-2xl border p-4 ${
-        destaque ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-slate-50"
-      }`}
+      className="dp-card"
+      style={
+        destaque
+          ? { borderColor: "var(--dp-accent)", background: "var(--dp-accent-soft)" }
+          : { background: "var(--dp-surface-2)" }
+      }
     >
-      <div className="text-xs font-black uppercase tracking-wide text-slate-500">{titulo}</div>
-      <div className="mt-2 text-sm font-bold tabular-nums text-slate-900">
+      <div className="dp-muted" style={ESTILO_ROTULO}>
+        {titulo}
+      </div>
+      <div className="dp-mono dp-num" style={{ marginTop: 6, fontSize: 14, fontWeight: 600 }}>
         {temJanela ? `${fmtHora(inicio)} – ${fmtHora(fim)}` : "—"}
       </div>
-      <div className="mt-0.5 text-xs font-semibold tabular-nums text-slate-600">{fmtDur(duracao)}</div>
-      {nota && <div className="mt-2 text-xs leading-5 text-slate-500">{nota}</div>}
+      <div className="dp-muted dp-num" style={{ marginTop: 2, fontSize: 12 }}>
+        {fmtDur(duracao)}
+      </div>
+      {nota && (
+        <div className="dp-faint" style={{ marginTop: 8, fontSize: 11.5, lineHeight: 1.5 }}>
+          {nota}
+        </div>
+      )}
     </div>
   );
 }
@@ -294,39 +310,52 @@ function PainelDetalhe({ linha, aoFechar }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 sm:p-8"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 100,
+        background: "rgba(15, 20, 32, 0.5)",
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        overflowY: "auto",
+        padding: 20,
+      }}
       onClick={aoFechar}
       role="presentation"
     >
       <div
-        className="w-full max-w-4xl rounded-3xl border border-slate-200 bg-white p-6 shadow-xl sm:p-8"
+        className="dp-card"
+        style={{ width: 880, maxWidth: "95vw", padding: 20 }}
         onClick={(evento) => evento.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Detalhe da refeição"
       >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-lg font-black text-slate-900">{linha.nm_funcionario || "—"}</div>
-            <div className="mt-1 text-sm font-semibold text-slate-600">
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 650 }}>{linha.nm_funcionario || "—"}</div>
+            <div className="dp-muted" style={{ marginTop: 3, fontSize: 12.5 }}>
               Crachá {linha.cracha || "—"} · {fmtData(linha.data_ref)} · Jornada{" "}
               <CelulaJornada linha={linha} />
             </div>
-            <div className="mt-2">
+            <div style={{ marginTop: 8 }}>
               <PilulaStatus status={linha.status_almoco} />
             </div>
           </div>
-          <button
-            type="button"
-            onClick={aoFechar}
-            className="rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-            aria-label="Fechar detalhe"
-          >
-            <X size={17} />
+          <button type="button" className="dp-btn" onClick={aoFechar} aria-label="Fechar detalhe">
+            ✕
           </button>
         </div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+          style={{
+            marginTop: 16,
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+          }}
+        >
           {/* O batido no ponto é o que gera o "Divergente" — e no app antigo ele
               não aparecia em tela nenhuma. Mostrar aqui é melhoria proposital. */}
           <BlocoIntervalo
@@ -377,22 +406,31 @@ function PainelDetalhe({ linha, aoFechar }) {
           />
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+        <div
+          style={{
+            marginTop: 10,
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+          }}
+        >
+          <div className="dp-card">
+            <div className="dp-muted" style={ESTILO_ROTULO}>
               Diferença cartão × sugestão
             </div>
-            <div className="mt-2 text-sm font-bold tabular-nums text-slate-900">
+            <div className="dp-mono dp-num" style={{ marginTop: 6, fontSize: 14, fontWeight: 600 }}>
               {diferenca == null ? "—" : `${Math.round(diferenca)} min`}
             </div>
-            <div className="mt-1 text-xs leading-5 text-slate-500">
+            <div className="dp-faint" style={{ marginTop: 6, fontSize: 11.5, lineHeight: 1.5 }}>
               Compara só o INÍCIO. Acima de {TOLERANCIA_TRANSNET_MIN} min vira Divergente.
             </div>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="text-xs font-black uppercase tracking-wide text-slate-500">Fonte</div>
-            <div className="mt-2 text-sm font-bold text-slate-900">{linha.fonte || "—"}</div>
-            <div className="mt-1 text-xs leading-5 text-slate-500">
+          <div className="dp-card">
+            <div className="dp-muted" style={ESTILO_ROTULO}>
+              Fonte
+            </div>
+            <div style={{ marginTop: 6, fontSize: 14, fontWeight: 600 }}>{linha.fonte || "—"}</div>
+            <div className="dp-faint" style={{ marginTop: 6, fontSize: 11.5, lineHeight: 1.5 }}>
               Quem decidiu o veredito do dia, conforme a view do ponto.
             </div>
           </div>
@@ -406,17 +444,26 @@ function PainelDetalhe({ linha, aoFechar }) {
 
 function Legenda() {
   const item = (titulo, texto) => (
-    <li key={titulo} className="leading-6">
-      <span className="font-bold text-slate-800">{titulo}</span>{" "}
-      <span className="text-slate-600">{texto}</span>
+    <li key={titulo} style={{ lineHeight: 1.6 }}>
+      <span style={{ fontWeight: 650 }}>{titulo}</span> <span className="dp-muted">{texto}</span>
     </li>
   );
   return (
-    <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-500">
-        <Info size={14} /> Como a régua funciona
+    <div className="dp-card" style={{ margin: "0 20px 20px", background: "var(--dp-surface-2)" }}>
+      <div className="dp-muted" style={ESTILO_ROTULO}>
+        Como a régua funciona
       </div>
-      <ul className="mt-3 grid gap-1.5 text-sm sm:grid-cols-2">
+      <ul
+        style={{
+          margin: "10px 0 0",
+          padding: 0,
+          listStyle: "none",
+          display: "grid",
+          gap: 6,
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          fontSize: 12.5,
+        }}
+      >
         {item(
           `Refeição mínima: ${MIN_ALMOCO} min.`,
           "Abaixo disso o Citatti pegou uma parada, não o almoço — cai para o SST; se o SST também não alcança, vale o que a pessoa fez.",
@@ -434,7 +481,7 @@ function Legenda() {
           "O arquivo grava sempre 30 min a partir do início sugerido, não a duração realizada.",
         )}
       </ul>
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
         <PilulaStatus status="OK" />
         <PilulaStatus status="SUGESTAO" />
         <PilulaStatus status="DIVERGENTE (transnet x sugestao)" />
@@ -547,101 +594,65 @@ export default function Refeicao() {
 
   return (
     <AbaShell
-      icone={Coffee}
-      titulo="Refeição"
       resumo="Confere o intervalo de cada motorista contra a operação e prepara o que precisa ser importado. Somente leitura — nada é gravado nesta tela."
       carregando={carregandoDatas}
       erro={erro}
-      acoes={
-        <button
-          type="button"
-          onClick={recarregar}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-        >
-          <RefreshCw size={16} /> Recarregar
-        </button>
+      filtros={
+        !datas.length ? null : (
+        <>
+          <select
+            value={data}
+            onChange={(evento) => {
+              setData(evento.target.value);
+              setDetalhe(null);
+            }}
+            aria-label="Data do intervalo"
+          >
+            {datas.map((dia) => (
+              <option key={dia} value={dia}>
+                {fmtData(dia)}
+              </option>
+            ))}
+          </select>
+
+          <input
+            type="search"
+            value={busca}
+            onChange={(evento) => setBusca(evento.target.value)}
+            placeholder="Buscar por nome ou crachá"
+            style={{ width: 250 }}
+          />
+
+          <button type="button" className="dp-btn" onClick={recarregar}>
+            ↻ Recarregar
+          </button>
+
+          <span className="dp-muted dp-num" style={{ marginLeft: "auto", fontSize: 12 }}>
+            {visiveis.length} de {linhas.length} linha{linhas.length === 1 ? "" : "s"} do dia
+          </span>
+        </>
+        )
       }
     >
       {!datas.length ? (
-        <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">
+        <div className="dp-resumo">
           Nenhuma data disponível em <code>ponto_intervalo</code>.
-        </p>
+        </div>
       ) : (
         <>
-          {/* filtros */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
-              <span className="text-xs font-black uppercase tracking-wide text-slate-500">Data</span>
-              <select
-                value={data}
-                onChange={(evento) => {
-                  setData(evento.target.value);
-                  setDetalhe(null);
-                }}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-blue-400"
+          {/* chips de filtro + o que sobrou para importar */}
+          <div className="dp-viewbar" style={{ paddingTop: 4 }}>
+            {FILTROS.map(([chave, rotulo]) => (
+              <button
+                key={chave}
+                type="button"
+                className={`dp-chip-f${filtro === chave ? " on" : ""}`}
+                onClick={() => setFiltro(chave)}
               >
-                {datas.map((dia) => (
-                  <option key={dia} value={dia}>
-                    {fmtData(dia)}
-                  </option>
-                ))}
-              </select>
-            </label>
+                {rotulo} <span className="n">{contagens[chave] ?? 0}</span>
+              </button>
+            ))}
 
-            <div className="relative w-full sm:max-w-xs">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="search"
-                value={busca}
-                onChange={(evento) => setBusca(evento.target.value)}
-                placeholder="Buscar por nome ou crachá"
-                className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm font-semibold text-slate-800 outline-none placeholder:font-normal placeholder:text-slate-400 focus:border-blue-400"
-              />
-            </div>
-          </div>
-
-          {/* chips + indicador */}
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap gap-2">
-              {FILTROS.map(([chave, rotulo]) => {
-                const ativo = filtro === chave;
-                return (
-                  <button
-                    key={chave}
-                    type="button"
-                    onClick={() => setFiltro(chave)}
-                    className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-bold transition ${
-                      ativo
-                        ? "border-blue-600 bg-blue-600 text-white shadow-sm"
-                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                    }`}
-                  >
-                    {rotulo}
-                    <span
-                      className={`rounded-full px-1.5 text-xs font-black tabular-nums ${
-                        ativo ? "bg-white/20" : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      {contagens[chave] ?? 0}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="text-sm font-bold text-slate-700">
-              {contagens.SUG ? (
-                <span className="rounded-xl bg-amber-50 px-3 py-1.5 text-amber-800">
-                  {contagens.SUG} para importar
-                </span>
-              ) : (
-                <span className="text-slate-400">Nada para importar nesse dia</span>
-              )}
-            </div>
-          </div>
-
-          {/* ação */}
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             {/* TODO(DP360 fase 5): "Gerar importação" monta o arquivo de batidas
                 (`ponto2_sugerido`/`ponto3_sugerido`) e quem sobe isso no Transnet é o
                 robô — não existe nesta fase, que é só de leitura. Quando entrar:
@@ -649,78 +660,68 @@ export default function Refeicao() {
                 explícito; nunca gravar direto no cartão a partir da tela. */}
             <button
               type="button"
+              className="dp-btn primary"
               disabled
               title="Depende do robô que sobe as batidas no Transnet — ainda não portado para o INOVE."
-              className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-3.5 py-2 text-sm font-bold text-slate-400"
+              style={{ marginLeft: "auto" }}
             >
-              <Download size={16} /> Gerar importação
+              ⬇ Gerar importação
             </button>
-            <span className="text-xs font-semibold text-slate-500">
-              {visiveis.length} de {linhas.length} linha{linhas.length === 1 ? "" : "s"} do dia
-            </span>
+
+            {contagens.SUG ? (
+              <span className="dp-pill warn">{contagens.SUG} para importar</span>
+            ) : (
+              <span className="dp-faint" style={{ fontSize: 12 }}>
+                Nada para importar nesse dia
+              </span>
+            )}
           </div>
 
           {/* grade */}
-          <div className="mt-4">
-            {carregandoLinhas ? (
-              <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">
-                Carregando o intervalo de {fmtData(data)}…
-              </p>
-            ) : !visiveis.length ? (
-              <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">
-                Nada nesse dia com esse filtro.
-              </p>
-            ) : (
-              <div className="max-h-[68vh] overflow-auto rounded-2xl border border-slate-200">
-                <table className="min-w-full border-collapse text-sm">
-                  <thead className="sticky top-0 z-10 bg-slate-100">
-                    <tr>
+          {carregandoLinhas ? (
+            <div className="dp-resumo">Carregando o intervalo de {fmtData(data)}…</div>
+          ) : !visiveis.length ? (
+            <div className="dp-resumo">Nada nesse dia com esse filtro.</div>
+          ) : (
+            <div className="dp-tabela-wrap">
+              <table className="dp-tabela">
+                <thead>
+                  <tr>
+                    {colunas.map((coluna) => (
+                      <th key={coluna.chave} scope="col">
+                        {coluna.rotulo}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visiveis.map((linha) => (
+                    <tr
+                      key={`${linha.cracha}|${linha.data_ref}`}
+                      className={classeLinha(linha)}
+                      onClick={() => setDetalhe(linha)}
+                      onKeyDown={(evento) => {
+                        if (evento.key === "Enter" || evento.key === " ") {
+                          evento.preventDefault();
+                          setDetalhe(linha);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      title="Abrir o detalhe do dia"
+                      style={{ cursor: "pointer" }}
+                    >
                       {colunas.map((coluna) => (
-                        <th
-                          key={coluna.chave}
-                          scope="col"
-                          className={`whitespace-nowrap px-3 py-2.5 text-xs font-black uppercase tracking-wide text-slate-500 ${
-                            coluna.numerica ? "text-right" : "text-left"
-                          }`}
-                        >
-                          {coluna.rotulo}
-                        </th>
+                        <td key={coluna.chave} className={coluna.numerica ? "dp-mono dp-num" : undefined}>
+                          {coluna.render(linha)}
+                        </td>
                       ))}
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {visiveis.map((linha) => (
-                      <tr
-                        key={`${linha.cracha}|${linha.data_ref}`}
-                        onClick={() => setDetalhe(linha)}
-                        onKeyDown={(evento) => {
-                          if (evento.key === "Enter" || evento.key === " ") {
-                            evento.preventDefault();
-                            setDetalhe(linha);
-                          }
-                        }}
-                        tabIndex={0}
-                        role="button"
-                        title="Abrir o detalhe do dia"
-                        className={`cursor-pointer outline-none transition focus:ring-2 focus:ring-inset focus:ring-blue-400 ${classeLinha(linha)}`}
-                      >
-                        {colunas.map((coluna) => (
-                          <td
-                            key={coluna.chave}
-                            className={`whitespace-nowrap px-3 py-2 text-slate-700 ${
-                              coluna.numerica ? "text-right tabular-nums" : "text-left"
-                            }`}
-                          >
-                            {coluna.render(linha)}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <Legenda />
         </>

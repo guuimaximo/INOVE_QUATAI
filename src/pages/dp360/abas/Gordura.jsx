@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Bus, CalendarClock, Gauge, Info, PauseCircle, Search, X } from "lucide-react";
+import { Bus, CalendarClock, Info, PauseCircle, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import { lerDatasDP360, lerTudoDP360 } from "../../../services/dp360Api";
 // A reserva LANÇADA pelo gestor mora na base do PRÓPRIO INOVE (tabela
@@ -135,16 +135,18 @@ const NIVEL_LBL = {
   NAO_CALCULAR: "n/calc",
   ANOMALIA_TEMPORAL: "anomalia",
 };
-const NIVEL_CHIP = {
-  P1: "bg-rose-100 text-rose-800 ring-rose-300",
-  P2: "bg-amber-100 text-amber-900 ring-amber-300",
-  P3: "bg-blue-100 text-blue-800 ring-blue-300",
-  P3_SEM_CONFIRMACAO: "bg-blue-100 text-blue-800 ring-blue-300",
-  P4: "bg-slate-200 text-slate-700 ring-slate-300",
-  RESERVA: "bg-purple-100 text-purple-800 ring-purple-300",
-  OPERACAO_FORA_PONTO: "bg-red-900 text-white ring-red-950",
-  NAO_CALCULAR: "bg-slate-100 text-slate-500 ring-slate-200",
-  ANOMALIA_TEMPORAL: "bg-slate-100 text-slate-500 ring-slate-200",
+// Variantes de `.dp-gmark` (dp360.css) — as MESMAS cores de nível da ferramenta
+// (app/ui/styles.css `.gmark.g-p1..g-neu`), não a paleta do INOVE.
+const NIVEL_GCLS = {
+  P1: "g-p1",
+  P2: "g-p2",
+  P3: "g-p3",
+  P3_SEM_CONFIRMACAO: "g-p3",
+  P4: "g-p4",
+  RESERVA: "g-res",
+  OPERACAO_FORA_PONTO: "g-fora",
+  NAO_CALCULAR: "g-neu",
+  ANOMALIA_TEMPORAL: "g-neu",
 };
 // Tolerância / sem dado / ponto incompleto não são gordura: a célula fica "—".
 const NIVEIS_MUDOS = new Set(["", "TOLERANCIA_OPERACIONAL", "SEM_DADO", "PONTO_INCOMPLETO"]);
@@ -155,18 +157,20 @@ const nivKey = (n) => {
 };
 // A linha inteira é pintada pelo PIOR nível presente, nesta precedência.
 const PRECEDENCIA = ["P1", "P2", "P3", "P4", "RESERVA", "OPERACAO_FORA_PONTO"];
+// A LINHA INTEIRA pintada (não uma borda lateral): é assim que a ferramenta mostra o
+// nível — `.dp-tabela tbody tr.row-p1 td` e irmãs, porte de app/ui/styles.css.
 const LINHA_CLS = {
-  P1: "border-l-4 border-l-rose-500 bg-rose-50/60",
-  P2: "border-l-4 border-l-amber-500 bg-amber-50/60",
-  P3: "border-l-4 border-l-blue-500 bg-blue-50/50",
-  P4: "border-l-4 border-l-slate-400 bg-slate-50",
-  RESERVA: "border-l-4 border-l-purple-500 bg-purple-50/60",
-  OPERACAO_FORA_PONTO: "border-l-4 border-l-red-900 bg-red-50",
+  P1: "row-p1",
+  P2: "row-p2",
+  P3: "row-p3",
+  P4: "row-p4",
+  RESERVA: "row-res",
+  OPERACAO_FORA_PONTO: "row-fora",
 };
 function classeLinha(r) {
   const ks = [nivKey(r.nivel_entrada), nivKey(r.nivel_saida)];
   const pior = PRECEDENCIA.find((n) => ks.includes(n));
-  return pior ? LINHA_CLS[pior] : "border-l-4 border-l-transparent";
+  return pior ? LINHA_CLS[pior] : "";
 }
 const CHIPS = [
   ["TODOS", "Todas"],
@@ -484,13 +488,69 @@ function camadaAlvo(g, pd) {
 }
 
 /* --------------------------------- pedaços --------------------------------- */
+// Overlay/detalhe não têm classe própria no dp360.css (e o arquivo de estilo não é
+// desta mudança). Os poucos retoques ficam aqui, sempre lendo as VARIÁVEIS do tema
+// DP — nada de paleta do INOVE nem de Tailwind visual.
+const ESTILO = {
+  fundo: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 50,
+    overflowY: "auto",
+    background: "rgba(20, 30, 55, 0.42)",
+    padding: 20,
+  },
+  painel: { width: "100%", margin: "0 auto", padding: "16px 18px" },
+  titulo: { fontSize: 15, fontWeight: 650 },
+  rotulo: {
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+    color: "var(--dp-muted)",
+  },
+  blocoSuave: { background: "var(--dp-surface-2)", borderRadius: 10, padding: "10px 12px" },
+  blocoAviso: {
+    background: "var(--dp-warn-bg)",
+    color: "var(--dp-warn-ink)",
+    borderRadius: 10,
+    padding: "10px 12px",
+  },
+  blocoAlvo: {
+    background: "var(--dp-warn-bg)",
+    border: "1px solid var(--dp-border)",
+    borderRadius: 10,
+    padding: "8px 12px",
+  },
+  blocoLinha: { border: "1px solid var(--dp-border)", borderRadius: 10, padding: "8px 12px" },
+  blocoReserva: {
+    background: "var(--dp-res-bg)",
+    color: "var(--dp-res-ink)",
+    borderRadius: 10,
+    padding: "10px 12px",
+  },
+  linhaNivel: { padding: "9px 0", borderBottom: "1px solid var(--dp-border)" },
+  marcaNivel: { flex: "none", marginTop: 2, minWidth: 88, textAlign: "center", height: "fit-content" },
+  textoLargo: { fontSize: 13, lineHeight: 1.65 },
+  ponto: { width: 9, height: 9, borderRadius: 999, display: "inline-block", flex: "none" },
+};
+// Cor dos marcadores — mesmas famílias do tema DP, nunca a paleta do INOVE.
+const COR = {
+  linha99: "var(--dp-accent)",
+  reservaInove: "var(--dp-res-ink)",
+  reserva: "var(--dp-muted)",
+  escala: "var(--dp-faint)",
+  operacao: "var(--dp-ok-ink)",
+  bilhetagem: "var(--dp-accent)",
+  real: "var(--dp-ink)",
+};
+
 function ChipNivel({ minutos, nivel }) {
   const n = txt(nivel).toUpperCase();
-  if (NIVEIS_MUDOS.has(n)) return <span className="text-slate-300">—</span>;
+  if (NIVEIS_MUDOS.has(n)) return <span className="dp-faint">—</span>;
   const v = num(minutos);
-  const cls = NIVEL_CHIP[n] || NIVEL_CHIP.NAO_CALCULAR;
   return (
-    <span className={`inline-flex items-center rounded-lg px-2 py-0.5 text-xs font-bold ring-1 ring-inset ${cls}`}>
+    <span className={`dp-gmark ${NIVEL_GCLS[n] || "g-neu"}`}>
       {v == null ? "" : `${Math.round(v)}min · `}
       {NIVEL_LBL[n] || n.toLowerCase().replace(/_/g, " ")}
     </span>
@@ -498,43 +558,40 @@ function ChipNivel({ minutos, nivel }) {
 }
 
 // Os quatro slots do cartão: entrada · saída almoço · volta almoço · saída.
+// Cada batida é um `.dp-chip` com a marca E/S, como no `batReais` da ferramenta; o
+// slot que o alvo mudou usa a variante `.new` (a mesma cor do `.ptseg.alterar`).
+const SLOT_ES = ["E", "S", "E", "S"];
 function LinhaCartao({ horas, mudou }) {
   return (
-    <span className="inline-flex items-center gap-1 whitespace-nowrap font-mono text-[13px]">
-      {horas.map((h, i) => (
-        <span key={`slot-${i}`} className="inline-flex items-center gap-1">
-          {i > 0 && <span className="text-slate-300">·</span>}
-          <span
-            className={
-              mudou && mudou[i]
-                ? "rounded bg-amber-100 px-1 font-bold text-amber-900"
-                : h
-                  ? "text-slate-700"
-                  : "text-slate-300"
-            }
-          >
-            {h || "—"}
+    <span className="inline-flex flex-wrap items-center gap-1">
+      {horas.map((h, i) =>
+        h ? (
+          <span key={`slot-${i}`} className={`dp-chip${mudou && mudou[i] ? " new" : ""}`}>
+            <span className="es">{SLOT_ES[i]}</span>
+            {h}
           </span>
-        </span>
-      ))}
+        ) : (
+          <span key={`slot-${i}`} className="dp-chip none">
+            —
+          </span>
+        ),
+      )}
     </span>
   );
 }
 
 function ModalNiveis({ aoFechar }) {
   const nivel = (chave, nome, texto) => (
-    <div key={chave} className="flex gap-3 border-b border-slate-100 py-2.5 last:border-0">
-      <span
-        className={`mt-0.5 h-fit shrink-0 rounded-lg px-2 py-0.5 text-xs font-bold ring-1 ring-inset ${NIVEL_CHIP[chave]}`}
-      >
+    <div key={chave} className="flex gap-3" style={ESTILO.linhaNivel}>
+      <span className={`dp-gmark ${NIVEL_GCLS[chave]}`} style={ESTILO.marcaNivel}>
         {NIVEL_LBL[chave]}
       </span>
-      <span className="text-sm leading-6 text-slate-700">{texto}</span>
+      <span style={ESTILO.textoLargo}>{texto}</span>
     </div>
   );
   return (
-    <Overlay aoFechar={aoFechar} titulo="Gordura de ponto — os níveis" largura="max-w-2xl">
-      <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
+    <Overlay aoFechar={aoFechar} titulo="Gordura de ponto — os níveis" largura={660}>
+      <p style={{ ...ESTILO.blocoSuave, ...ESTILO.textoLargo }}>
         <b>Gordura</b> = tempo que o motorista <b>bateu ponto a mais do que operou</b>, só nas pontas
         (entrada e saída), nunca a jornada inteira. A régua da operação real é a{" "}
         <b>média SST + Validador</b> por ponta; o Citatti confirma.
@@ -548,12 +605,12 @@ function ModalNiveis({ aoFechar }) {
         {nivel("OPERACAO_FORA_PONTO", "fora do ponto", <>Gordura <b>negativa</b> — operou <b>sem cobrir com o ponto</b> (bateu menos do que operou). <b>Risco trabalhista</b>; reportado à parte, não é gordura financeira.</>)}
         {nivel("NAO_CALCULAR", "n/calc", <>SST e Validador <b>divergem mais de 20 min</b> — sem régua confiável, a ponta não entra. Tolerância e sem dado aparecem como “—”.</>)}
       </div>
-      <p className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+      <p className="mt-3" style={{ ...ESTILO.blocoAviso, ...ESTILO.textoLargo }}>
         <b>Só P1 é o número oficial.</b> P2 é captura validável; P3/P4/Reserva/fora do ponto ficam no
         radar, rotulados. As pontas são <b>independentes</b>: uma saída P1 conta mesmo se a entrada
         estiver na tolerância — uma ponta nunca anula a outra.
       </p>
-      <p className="mt-2 text-xs leading-5 text-slate-500">
+      <p className="dp-muted mt-2" style={{ fontSize: 12, lineHeight: 1.6 }}>
         Nesta fase a aba é somente leitura. As <b>duas reservas</b> já entram na conta: a{" "}
         <b>lançada pelo gestor no INOVE</b> (ícone de agenda) — a operação real vira a união{" "}
         <b>reserva ∪ operação</b>, porque ele estava à disposição desde a hora lançada — e a{" "}
@@ -563,7 +620,7 @@ function ModalNiveis({ aoFechar }) {
   );
 }
 
-function Overlay({ titulo, largura = "max-w-3xl", aoFechar, children }) {
+function Overlay({ titulo, largura = 860, aoFechar, children }) {
   useEffect(() => {
     const aoTeclar = (e) => {
       if (e.key === "Escape") aoFechar();
@@ -573,7 +630,7 @@ function Overlay({ titulo, largura = "max-w-3xl", aoFechar, children }) {
   }, [aoFechar]);
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm sm:p-8"
+      style={ESTILO.fundo}
       onClick={(e) => {
         if (e.target === e.currentTarget) aoFechar();
       }}
@@ -583,17 +640,13 @@ function Overlay({ titulo, largura = "max-w-3xl", aoFechar, children }) {
         role="dialog"
         aria-modal="true"
         aria-label={titulo}
-        className={`w-full ${largura} rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6`}
+        className="dp-card"
+        style={{ ...ESTILO.painel, maxWidth: largura }}
       >
         <div className="flex items-start justify-between gap-4">
-          <h3 className="text-lg font-black text-slate-900">{titulo}</h3>
-          <button
-            type="button"
-            onClick={aoFechar}
-            className="rounded-xl p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-            aria-label="Fechar"
-          >
-            <X size={18} />
+          <h3 style={ESTILO.titulo}>{titulo}</h3>
+          <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar">
+            <X size={14} />
           </button>
         </div>
         <div className="mt-4">{children}</div>
@@ -616,21 +669,17 @@ function PainelDetalhe({ linha, aoFechar }) {
   const Fonte = ({ rotulo, cor, ini, fim, aviso, destaque }) => {
     if (hm2m(ini) == null && hm2m(fim) == null) return null;
     return (
-      <tr className={destaque ? "bg-slate-50" : ""}>
-        <td className="py-1.5 pr-3">
-          <span className="flex items-center gap-2 font-semibold text-slate-700">
-            <i className={`h-2.5 w-2.5 shrink-0 rounded-full ${cor}`} />
+      <tr className={destaque ? "row-p4" : ""}>
+        <td>
+          <span className="flex items-center gap-2" style={{ fontWeight: 600 }}>
+            <i style={{ ...ESTILO.ponto, background: cor }} />
             {rotulo}
-            {aviso && (
-              <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[11px] font-bold text-rose-700">
-                {aviso}
-              </span>
-            )}
+            {aviso && <span className="dp-pill danger">{aviso}</span>}
           </span>
         </td>
-        <td className="py-1.5 pr-3 font-mono text-slate-800">{H(ini)}</td>
-        <td className="py-1.5 pr-3 font-mono text-slate-800">{H(fim)}</td>
-        <td className="py-1.5 font-mono text-slate-500">{durHM(ini, fim)}</td>
+        <td className="dp-mono dp-num">{H(ini)}</td>
+        <td className="dp-mono dp-num">{H(fim)}</td>
+        <td className="dp-mono dp-num dp-muted">{durHM(ini, fim)}</td>
       </tr>
     );
   };
@@ -640,19 +689,23 @@ function PainelDetalhe({ linha, aoFechar }) {
     const nv = txt(nivel).toUpperCase();
     const conta = !NIVEIS_MUDOS.has(nv) && n != null;
     return (
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2">
-        <span className="text-sm font-bold text-slate-700">{lado}</span>
-        <span className="text-sm text-slate-600">
-          bateu <b className="font-mono">{H(bateu)}</b> · real <b className="font-mono">{H(real)}</b>
+      <div className="flex flex-wrap items-center justify-between gap-2" style={ESTILO.blocoSuave}>
+        <span style={{ fontWeight: 700 }}>{lado}</span>
+        <span className="dp-muted">
+          bateu <b className="dp-mono dp-num">{H(bateu)}</b> · real{" "}
+          <b className="dp-mono dp-num">{H(real)}</b>
         </span>
         <span className="flex items-center gap-2">
           {conta ? (
-            <b className={n > 0 ? "text-rose-700" : "text-emerald-700"}>
+            <b
+              className="dp-num"
+              style={{ color: n > 0 ? "var(--dp-danger-ink)" : "var(--dp-ok-ink)" }}
+            >
               {n > 0 ? "+" : ""}
               {Math.round(n)} min
             </b>
           ) : (
-            <span className="text-sm text-slate-400">— ({nv ? nv.toLowerCase().replace(/_/g, " ") : "sem dado"})</span>
+            <span className="dp-faint">— ({nv ? nv.toLowerCase().replace(/_/g, " ") : "sem dado"})</span>
           )}
           <ChipNivel nivel={nivel} />
         </span>
@@ -687,86 +740,91 @@ function PainelDetalhe({ linha, aoFechar }) {
       titulo={`${txt(r.nm_funcionario) || "Colaborador"} · ${fmtData(r.data_ref)}`}
       aoFechar={aoFechar}
     >
-      <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-        <span className="rounded-lg bg-slate-100 px-2 py-1 text-slate-600">Crachá {txt(r.cracha) || "—"}</span>
-        {txt(r.veiculo) && (
-          <span className="rounded-lg bg-slate-100 px-2 py-1 text-slate-600">Carro {txt(r.veiculo)}</span>
-        )}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="dp-pill mute">Crachá {txt(r.cracha) || "—"}</span>
+        {txt(r.veiculo) && <span className="dp-pill mute">Carro {txt(r.veiculo)}</span>}
         {r.__linha99 && (
-          <span className="flex items-center gap-1 rounded-lg bg-indigo-100 px-2 py-1 text-indigo-800">
-            <Bus size={13} /> Linha 99 · Citatti é a fonte
+          <span className="dp-pill accent">
+            <span className="flex items-center gap-1">
+              <Bus size={12} /> Linha 99 · Citatti é a fonte
+            </span>
           </span>
         )}
         {r.__reservaInove && (
-          <span className="flex items-center gap-1 rounded-lg bg-fuchsia-100 px-2 py-1 text-fuchsia-800">
-            <CalendarClock size={13} /> Reserva lançada pelo gestor
+          <span className="dp-pill res">
+            <span className="flex items-center gap-1">
+              <CalendarClock size={12} /> Reserva lançada pelo gestor
+            </span>
           </span>
         )}
         {r.__reserva && !r.__reservaInove && (
-          <span className="flex items-center gap-1 rounded-lg bg-purple-100 px-2 py-1 text-purple-800">
-            <PauseCircle size={13} /> {r.reserva_por_gps ? "Reserva detectada pelo GPS" : "Reserva"}
+          <span className="dp-pill res">
+            <span className="flex items-center gap-1">
+              <PauseCircle size={12} /> {r.reserva_por_gps ? "Reserva detectada pelo GPS" : "Reserva"}
+            </span>
           </span>
         )}
-        {txt(r.__casoStatus) && (
-          <span className="rounded-lg bg-blue-100 px-2 py-1 text-blue-800">{r.__casoStatus}</span>
-        )}
+        {txt(r.__casoStatus) && <span className="dp-pill accent">{r.__casoStatus}</span>}
       </div>
 
       <div className="mt-4">
-        <div className="text-xs font-black uppercase tracking-wide text-slate-500">
-          Horários e jornada por fonte
-        </div>
-        <div className="mt-2 overflow-x-auto">
-          <table className="w-full min-w-[440px] text-sm">
+        <div style={ESTILO.rotulo}>Horários e jornada por fonte</div>
+        {/* O contêiner precisa rolar por conta própria: o `th` da .dp-tabela é sticky, e
+            sem um ancestral de rolagem aqui ele grudaria no topo da JANELA, por cima do
+            cabeçalho do modal. */}
+        <div className="mt-2" style={{ overflow: "auto", maxHeight: 320 }}>
+          <table className="dp-tabela" style={{ minWidth: 440 }}>
             <thead>
-              <tr className="border-b border-slate-200 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
-                <th className="pb-1.5 pr-3">Fonte</th>
-                <th className="pb-1.5 pr-3">Entrada</th>
-                <th className="pb-1.5 pr-3">Saída</th>
-                <th className="pb-1.5">Jornada</th>
+              <tr>
+                <th>Fonte</th>
+                <th>Entrada</th>
+                <th>Saída</th>
+                <th>Jornada</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
-              <Fonte rotulo="Escala" cor="bg-slate-400" ini={r.esc_inicio} fim={r.esc_fim} />
+            <tbody>
+              <Fonte rotulo="Escala" cor={COR.escala} ini={r.esc_inicio} fim={r.esc_fim} />
               {/* Lançamento do gestor no INOVE — some sozinho quando não há reserva. */}
               <Fonte
                 rotulo="Reserva (INOVE)"
-                cor="bg-fuchsia-500"
+                cor={COR.reservaInove}
                 ini={r.reserva_inove_entrada}
                 fim={r.reserva_inove_saida}
               />
-              <Fonte rotulo="GPS (Citatti)" cor="bg-emerald-500" ini={r.op_inicio} fim={r.op_fim} />
-              <Fonte rotulo="SS (SST)" cor="bg-emerald-500" ini={r.sst_vinculo} fim={r.sst_desvinculo} />
+              <Fonte rotulo="GPS (Citatti)" cor={COR.operacao} ini={r.op_inicio} fim={r.op_fim} />
+              <Fonte rotulo="SS (SST)" cor={COR.operacao} ini={r.sst_vinculo} fim={r.sst_desvinculo} />
               <Fonte
                 rotulo="Bilhetagem"
-                cor="bg-blue-500"
+                cor={COR.bilhetagem}
                 ini={r.val_inicio}
                 fim={r.val_fim}
                 aviso={foraDaCurva ? "fora da curva" : ""}
               />
-              <Fonte rotulo="Operação real" cor="bg-blue-600" ini={r.real_inicio} fim={r.real_fim} destaque />
+              <Fonte rotulo="Operação real" cor={COR.real} ini={r.real_inicio} fim={r.real_fim} destaque />
             </tbody>
           </table>
         </div>
       </div>
 
       <div className="mt-4 grid gap-2">
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-          <span className="text-xs font-black uppercase tracking-wide text-amber-800">
+        <div className="flex flex-wrap items-center justify-between gap-2" style={ESTILO.blocoAlvo}>
+          <span style={{ ...ESTILO.rotulo, color: "var(--dp-warn-ink)" }}>
             Alvo (real com tolerância)
           </span>
           {r.__cartao.alvoValido ? (
             <LinhaCartao horas={r.__cartao.alvo} mudou={r.__cartao.mudou} />
           ) : (
-            <span className="text-sm font-bold text-rose-700">revisar alvo e refeição antes de corrigir</span>
+            <span style={{ fontWeight: 700, color: "var(--dp-danger-ink)" }}>
+              revisar alvo e refeição antes de corrigir
+            </span>
           )}
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-2">
-          <span className="text-xs font-black uppercase tracking-wide text-slate-500">Ponto (bateu)</span>
+        <div className="flex flex-wrap items-center justify-between gap-2" style={ESTILO.blocoLinha}>
+          <span style={ESTILO.rotulo}>Ponto (bateu)</span>
           <LinhaCartao horas={r.__cartao.atual} />
         </div>
         {txt(r.fonte_alvo_gordura) && (
-          <p className="text-xs text-slate-500">
+          <p className="dp-muted" style={{ fontSize: 12 }}>
             Fonte do alvo:{" "}
             <b>{r.fonte_alvo_gordura === "revisao" ? "alvo publicado pela Revisão" : "calculado na Gordura"}</b>
             {txt(r.fonte_operacao) ? ` · operação: ${txt(r.fonte_operacao)}` : ""}
@@ -775,7 +833,7 @@ function PainelDetalhe({ linha, aoFechar }) {
       </div>
 
       <div className="mt-4">
-        <div className="text-xs font-black uppercase tracking-wide text-slate-500">Cálculo da gordura</div>
+        <div style={ESTILO.rotulo}>Cálculo da gordura</div>
         <div className="mt-2 grid gap-2">
           <Conta
             lado="Entrada"
@@ -795,48 +853,48 @@ function PainelDetalhe({ linha, aoFechar }) {
         {/* O operador precisa ver O QUE MUDOU quando a reserva entrou na conta: senão o
             número da tela não bate com o cru da `ponto_gordura` e ninguém confia. */}
         {r.__reservaInove && (
-          <div className="mt-2 rounded-xl border border-fuchsia-200 bg-fuchsia-50 px-3 py-2.5">
-            <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-fuchsia-800">
-              <CalendarClock size={14} /> Reserva lançada pelo gestor
+          <div className="mt-2" style={ESTILO.blocoReserva}>
+            <div className="flex items-center gap-1.5" style={{ ...ESTILO.rotulo, color: "inherit" }}>
+              <CalendarClock size={13} /> Reserva lançada pelo gestor
             </div>
-            <p className="mt-1 text-sm leading-6 text-fuchsia-900">
-              Lançada das <b className="font-mono">{H(r.reserva_inove_entrada)}</b> às{" "}
-              <b className="font-mono">{H(r.reserva_inove_saida)}</b>
+            <p className="mt-1" style={ESTILO.textoLargo}>
+              Lançada das <b className="dp-mono dp-num">{H(r.reserva_inove_entrada)}</b> às{" "}
+              <b className="dp-mono dp-num">{H(r.reserva_inove_saida)}</b>
               {txt(r.reserva_inove_cobertura) ? ` · cobertura: ${txt(r.reserva_inove_cobertura)}` : ""}. Ele
               estava <b>à disposição</b> desde a hora lançada, então a operação real é a{" "}
               <b>união reserva ∪ operação</b> — a espera até assumir a tabela não é gordura.
             </p>
             {semReserva.length ? (
-              <ul className="mt-1.5 grid gap-1 text-xs font-semibold leading-5 text-fuchsia-900">
+              <ul className="mt-1.5 grid gap-1" style={{ fontSize: 12, lineHeight: 1.6, fontWeight: 600 }}>
                 {semReserva.map((s) => (
                   <li key={s.lado}>
                     <b>{s.lado}</b> — sem a reserva o real era{" "}
-                    <span className="font-mono">{H(s.antes)}</span>
+                    <span className="dp-mono dp-num">{H(s.antes)}</span>
                     {s.minutos == null
                       ? ""
                       : ` (${s.minutos > 0 ? "+" : ""}${Math.round(s.minutos)} min${
                           s.nivel ? `, ${s.nivel.toLowerCase().replace(/_/g, " ")}` : ""
                         })`}
-                    ; com a reserva passou a <span className="font-mono">{H(s.agora)}</span>.
+                    ; com a reserva passou a <span className="dp-mono dp-num">{H(s.agora)}</span>.
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="mt-1.5 text-xs font-semibold leading-5 text-fuchsia-900">
+              <p className="mt-1.5" style={{ fontSize: 12, lineHeight: 1.6, fontWeight: 600 }}>
                 Nenhuma ponta mudou: a operação já cobria todo o período lançado.
               </p>
             )}
           </div>
         )}
         {txt(r.justificativa) && (
-          <p className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600">
+          <p className="dp-muted mt-2" style={{ ...ESTILO.blocoSuave, ...ESTILO.textoLargo }}>
             {txt(r.justificativa)}
           </p>
         )}
       </div>
 
       <div className="mt-4">
-        <div className="text-xs font-black uppercase tracking-wide text-slate-500">Real manual do DP</div>
+        <div style={ESTILO.rotulo}>Real manual do DP</div>
         {temRealManual ? (
           <>
             <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -846,21 +904,23 @@ function PainelDetalhe({ linha, aoFechar }) {
                 ["Volta almoço", r.rm_alm_volta],
                 ["Saída", r.rm_saida],
               ].map(([rot, val]) => (
-                <div key={rot} className="rounded-xl border border-slate-200 px-3 py-2">
-                  <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{rot}</div>
-                  <div className="mt-0.5 font-mono text-sm font-bold text-slate-800">{H(val)}</div>
+                <div key={rot} style={ESTILO.blocoLinha}>
+                  <div style={ESTILO.rotulo}>{rot}</div>
+                  <div className="dp-mono dp-num mt-0.5" style={{ fontWeight: 700 }}>
+                    {H(val)}
+                  </div>
                 </div>
               ))}
             </div>
             {(txt(r.rm_por) || txt(r.rm_em)) && (
-              <p className="mt-1.5 text-xs text-slate-500">
+              <p className="dp-muted mt-1.5" style={{ fontSize: 12 }}>
                 Cravado por <b>{txt(r.rm_por) || "—"}</b>
                 {txt(r.rm_em) ? ` em ${fmtData(r.rm_em)}` : ""}
               </p>
             )}
           </>
         ) : (
-          <p className="mt-2 text-sm text-slate-500">
+          <p className="dp-muted mt-2">
             Nenhum horário cravado pelo DP neste dia — vale a régua automática acima.
           </p>
         )}
@@ -1036,234 +1096,227 @@ export default function Gordura() {
     [base],
   );
 
-  const acoes = (
-    <button
-      type="button"
-      onClick={() => setVerNiveis(true)}
-      className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-    >
-      <Info size={16} /> Níveis
-    </button>
+  // Barra de filtros da ferramenta: dia, piso, busca, chips de nível e a RÉGUA FIXA
+  // sempre à vista (no original ela mora na segunda `gbar`, como `hbsub`).
+  const filtros = (
+    <>
+      <label className="dp-muted flex items-center gap-2">
+        Dia
+        <select value={data} onChange={(e) => setData(e.target.value)}>
+          {datas.map((d) => (
+            <option key={d} value={d}>
+              {fmtData(d)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="dp-muted flex items-center gap-2">
+        Mostrar acima de
+        <select value={piso} onChange={(e) => setPiso(Number(e.target.value) || 0)}>
+          {PISOS.map((p) => (
+            <option key={p.valor} value={p.valor}>
+              {p.rotulo}
+            </option>
+          ))}
+        </select>
+      </label>
+      <input
+        value={termo}
+        onChange={(e) => setTermo(e.target.value)}
+        placeholder="Buscar nome ou crachá"
+        style={{ width: 200 }}
+      />
+      <span className="flex flex-wrap items-center gap-1.5">
+        {CHIPS.map(([chave, rotulo]) => (
+          <button
+            key={chave}
+            type="button"
+            onClick={() => setFiltro(chave)}
+            className={`dp-chip-f${filtro === chave ? " on" : ""}`}
+          >
+            {rotulo} <span className="n">{contagem[chave] ?? 0}</span>
+          </button>
+        ))}
+      </span>
+      <span className="flex items-center gap-3" style={{ marginLeft: "auto" }}>
+        <span className="dp-faint">
+          Régua fixa: entrada &gt; 10 min antes · saída &gt; 8 min depois
+        </span>
+        <button type="button" className="dp-btn" onClick={() => setVerNiveis(true)}>
+          <span className="flex items-center gap-1.5">
+            <Info size={13} /> Níveis
+          </span>
+        </button>
+      </span>
+    </>
+  );
+
+  // Linha de resumo (o `dtot` da ferramenta) + a legenda dos marcadores da lista.
+  const resumo = (
+    <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+      <span>
+        <b className="dp-num">{base.length}</b> fora da régua
+        {piso ? ` e acima de ${piso} min` : ""} · Gordura P1 do dia:{" "}
+        <b className="dp-num">{Math.round(somaP1)} min</b> ({(somaP1 / 60).toFixed(1)}h)
+      </span>
+      <span className="flex items-center gap-1.5" style={{ color: COR.linha99 }}>
+        <Bus size={13} /> linha 99 (Citatti é a fonte das pontas)
+      </span>
+      <span className="flex items-center gap-1.5" style={{ color: COR.reservaInove }}>
+        <CalendarClock size={13} /> reserva lançada pelo gestor (real = reserva ∪ operação)
+      </span>
+      <span className="flex items-center gap-1.5" style={{ color: COR.reserva }}>
+        <PauseCircle size={13} /> reserva por GPS / prontidão (não corrige, valida)
+      </span>
+      <span className="dp-faint">Clique na linha para ver as fontes do dia.</span>
+    </span>
   );
 
   // TODO(porte): o envio de comunicado (📣 Enviar Ocorrência) do Passo 4 grava em
   // `ponto_caso` e dispara o robô do Transnet — fica para a fase de execução.
 
   const semDatas = !carregando && !datas.length;
+  // Antes de o primeiro dia chegar, a barra ficaria com um <select> vazio — não desenha.
+  const mostraBarra = !semDatas && !carregando;
+
+  let corpo;
+  if (semDatas) {
+    corpo = (
+      <div className="dp-resumo">
+        Ainda não há gordura calculada. Rode o pipeline da gordura (Athena → agente → base DP360)
+        para popular <span className="dp-mono">ponto_gordura</span>.
+      </div>
+    );
+  } else if (carregandoDia) {
+    corpo = <div className="dp-resumo">Carregando a gordura do dia…</div>;
+  } else {
+    corpo = (
+      <div className="dp-tabela-wrap">
+        <table className="dp-tabela">
+          <thead>
+            <tr>
+              <th>Colaborador</th>
+              <th>Crachá</th>
+              <th>Data</th>
+              <th>Ponto (bateu)</th>
+              <th>Alvo (c/ tolerância)</th>
+              <th>Jornada</th>
+              <th>Gordura entrada</th>
+              <th>Gordura saída</th>
+              <th>Esc. início</th>
+              <th>Esc. fim</th>
+              <th>Justificativa</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visiveis.map((r) => (
+              <tr
+                key={r.__chave}
+                tabIndex={0}
+                onClick={() => setDetalhe(r)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setDetalhe(r);
+                  }
+                }}
+                // A linha inteira é pintada pelo PIOR nível — é a cor da linha que o
+                // operador lê primeiro, como na ferramenta.
+                className={classeLinha(r)}
+                style={{ cursor: "pointer" }}
+              >
+                <td>
+                  <span className="flex items-center gap-1.5" style={{ fontWeight: 600 }}>
+                    {txt(r.nm_funcionario) || "—"}
+                    {r.__linha99 && (
+                      <span
+                        title="Linha 99 — Citatti é a fonte das pontas"
+                        style={{ color: COR.linha99, flex: "none" }}
+                      >
+                        <Bus size={13} aria-label="linha 99" />
+                      </span>
+                    )}
+                    {/* Lançada pelo gestor x deduzida do dado são coisas distintas
+                        e o operador precisa distinguir de relance. */}
+                    {r.__reservaInove && (
+                      <span
+                        title={`Reserva lançada pelo gestor no INOVE${
+                          fmtHora(r.reserva_inove_entrada) || fmtHora(r.reserva_inove_saida)
+                            ? ` — ${H(r.reserva_inove_entrada)} às ${H(r.reserva_inove_saida)}`
+                            : ""
+                        } — real = união reserva ∪ operação`}
+                        style={{ color: COR.reservaInove, flex: "none" }}
+                      >
+                        <CalendarClock size={13} aria-label="reserva lançada pelo gestor" />
+                      </span>
+                    )}
+                    {r.__reserva && !r.__reservaInove && (
+                      <span
+                        title={
+                          r.reserva_por_gps
+                            ? "Reserva detectada pelo GPS (ninguém lançou) — não corrige, só valida"
+                            : "Reserva / prontidão — não corrige, só valida"
+                        }
+                        style={{ color: COR.reserva, flex: "none" }}
+                      >
+                        <PauseCircle size={13} aria-label="reserva" />
+                      </span>
+                    )}
+                  </span>
+                </td>
+                <td className="dp-mono dp-num dp-muted">{txt(r.cracha) || "—"}</td>
+                <td className="dp-num dp-muted">{fmtData(r.data_ref)}</td>
+                <td>
+                  <LinhaCartao horas={r.__cartao.atual} />
+                </td>
+                <td>
+                  {r.__cartao.alvoValido ? (
+                    <LinhaCartao horas={r.__cartao.alvo} mudou={r.__cartao.mudou} />
+                  ) : (
+                    <span style={{ fontWeight: 700, color: "var(--dp-danger-ink)" }}>
+                      revisar alvo e refeição
+                    </span>
+                  )}
+                </td>
+                <td className="dp-mono dp-num dp-muted">{durHM(r.real_inicio, r.real_fim)}</td>
+                <td>
+                  <ChipNivel minutos={r.gordura_entrada} nivel={r.nivel_entrada} />
+                </td>
+                <td>
+                  <ChipNivel minutos={r.gordura_saida} nivel={r.nivel_saida} />
+                </td>
+                <td className="dp-mono dp-num dp-faint">{H(r.esc_inicio)}</td>
+                <td className="dp-mono dp-num dp-faint">{H(r.esc_fim)}</td>
+                <td
+                  className="dp-muted"
+                  style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }}
+                  title={txt(r.justificativa)}
+                >
+                  {txt(r.justificativa) || "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!visiveis.length && (
+          <p className="dp-muted" style={{ padding: "28px 16px", textAlign: "center" }}>
+            {base.length
+              ? "Nada nesse nível ou nessa busca."
+              : "Nenhuma ponta fora da régua fixa de aviso neste dia."}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <AbaShell
-      icone={Gauge}
-      titulo="Gordura"
-      resumo="Tempo batido a mais do que operado, medido só nas pontas (entrada e saída). Somente motorista."
+      filtros={mostraBarra ? filtros : null}
+      resumo={mostraBarra ? resumo : null}
       carregando={carregando}
       erro={erro}
-      acoes={acoes}
     >
-      {semDatas ? (
-        <p className="rounded-xl bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-500">
-          Ainda não há gordura calculada. Rode o pipeline da gordura (Athena → agente → base DP360)
-          para popular <code className="font-mono">ponto_gordura</code>.
-        </p>
-      ) : (
-        <>
-          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
-                Dia
-                <select
-                  value={data}
-                  onChange={(e) => setData(e.target.value)}
-                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none"
-                >
-                  {datas.map((d) => (
-                    <option key={d} value={d}>
-                      {fmtData(d)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex items-center gap-2 text-sm font-bold text-slate-600">
-                Mostrar acima de
-                <select
-                  value={piso}
-                  onChange={(e) => setPiso(Number(e.target.value) || 0)}
-                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none"
-                >
-                  {PISOS.map((p) => (
-                    <option key={p.valor} value={p.valor}>
-                      {p.rotulo}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="relative w-full lg:w-72">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                value={termo}
-                onChange={(e) => setTermo(e.target.value)}
-                placeholder="Buscar por nome ou crachá"
-                className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm font-semibold text-slate-800 placeholder:font-normal placeholder:text-slate-400 focus:border-blue-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap gap-1.5">
-              {CHIPS.map(([chave, rotulo]) => (
-                <button
-                  key={chave}
-                  type="button"
-                  onClick={() => setFiltro(chave)}
-                  className={`rounded-xl px-3 py-1.5 text-sm font-bold transition ${
-                    filtro === chave
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  {rotulo}{" "}
-                  <span className={filtro === chave ? "text-blue-100" : "text-slate-400"}>
-                    {contagem[chave] ?? 0}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <div className="text-right text-xs font-bold text-slate-500">
-              <div>Régua fixa: entrada &gt; 10 min antes · saída &gt; 8 min depois</div>
-              <div className="mt-0.5 text-sm text-slate-700">
-                {base.length} fora da régua
-                {piso ? ` e acima de ${piso} min` : ""} · Gordura P1 do dia:{" "}
-                {Math.round(somaP1)} min ({(somaP1 / 60).toFixed(1)}h)
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs font-semibold text-slate-500">
-            <span className="flex items-center gap-1.5">
-              <Bus size={14} className="text-indigo-600" /> linha 99 (Citatti é a fonte das pontas)
-            </span>
-            <span className="flex items-center gap-1.5">
-              <CalendarClock size={14} className="text-fuchsia-600" /> reserva lançada pelo gestor (real = reserva ∪ operação)
-            </span>
-            <span className="flex items-center gap-1.5">
-              <PauseCircle size={14} className="text-purple-600" /> reserva por GPS / prontidão (não corrige, valida)
-            </span>
-            <span className="text-slate-400">Clique na linha para ver as fontes do dia.</span>
-          </div>
-
-          {carregandoDia ? (
-            <p className="mt-6 text-sm font-semibold text-slate-500">Carregando a gordura do dia…</p>
-          ) : (
-            <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
-              <table className="w-full min-w-[1180px] border-collapse text-sm">
-                <thead>
-                  <tr className="bg-slate-50 text-left text-[11px] font-black uppercase tracking-wide text-slate-500">
-                    <th className="px-3 py-2.5">Colaborador</th>
-                    <th className="px-3 py-2.5">Crachá</th>
-                    <th className="px-3 py-2.5">Data</th>
-                    <th className="px-3 py-2.5">Ponto (bateu)</th>
-                    <th className="px-3 py-2.5">Alvo (c/ tolerância)</th>
-                    <th className="px-3 py-2.5">Jornada</th>
-                    <th className="px-3 py-2.5">Gordura entrada</th>
-                    <th className="px-3 py-2.5">Gordura saída</th>
-                    <th className="px-3 py-2.5">Esc. início</th>
-                    <th className="px-3 py-2.5">Esc. fim</th>
-                    <th className="px-3 py-2.5">Justificativa</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {visiveis.map((r) => (
-                    <tr
-                      key={r.__chave}
-                      tabIndex={0}
-                      onClick={() => setDetalhe(r)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setDetalhe(r);
-                        }
-                      }}
-                      className={`cursor-pointer align-top transition hover:bg-blue-50/60 focus:bg-blue-50 focus:outline-none ${classeLinha(r)}`}
-                    >
-                      <td className="px-3 py-2.5">
-                        <span className="flex items-center gap-1.5 font-bold text-slate-800">
-                          {txt(r.nm_funcionario) || "—"}
-                          {r.__linha99 && (
-                            <span title="Linha 99 — Citatti é a fonte das pontas" className="shrink-0 text-indigo-600">
-                              <Bus size={14} aria-label="linha 99" />
-                            </span>
-                          )}
-                          {/* Lançada pelo gestor x deduzida do dado são coisas distintas
-                              e o operador precisa distinguir de relance. */}
-                          {r.__reservaInove && (
-                            <span
-                              title={`Reserva lançada pelo gestor no INOVE${
-                                fmtHora(r.reserva_inove_entrada) || fmtHora(r.reserva_inove_saida)
-                                  ? ` — ${H(r.reserva_inove_entrada)} às ${H(r.reserva_inove_saida)}`
-                                  : ""
-                              } — real = união reserva ∪ operação`}
-                              className="shrink-0 text-fuchsia-600"
-                            >
-                              <CalendarClock size={14} aria-label="reserva lançada pelo gestor" />
-                            </span>
-                          )}
-                          {r.__reserva && !r.__reservaInove && (
-                            <span
-                              title={
-                                r.reserva_por_gps
-                                  ? "Reserva detectada pelo GPS (ninguém lançou) — não corrige, só valida"
-                                  : "Reserva / prontidão — não corrige, só valida"
-                              }
-                              className="shrink-0 text-purple-600"
-                            >
-                              <PauseCircle size={14} aria-label="reserva" />
-                            </span>
-                          )}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-slate-600">{txt(r.cracha) || "—"}</td>
-                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-600">{fmtData(r.data_ref)}</td>
-                      <td className="px-3 py-2.5">
-                        <LinhaCartao horas={r.__cartao.atual} />
-                      </td>
-                      <td className="px-3 py-2.5">
-                        {r.__cartao.alvoValido ? (
-                          <LinhaCartao horas={r.__cartao.alvo} mudou={r.__cartao.mudou} />
-                        ) : (
-                          <span className="text-xs font-bold text-rose-700">revisar alvo e refeição</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-slate-600">
-                        {durHM(r.real_inicio, r.real_fim)}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <ChipNivel minutos={r.gordura_entrada} nivel={r.nivel_entrada} />
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <ChipNivel minutos={r.gordura_saida} nivel={r.nivel_saida} />
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-slate-500">{H(r.esc_inicio)}</td>
-                      <td className="px-3 py-2.5 font-mono text-slate-500">{H(r.esc_fim)}</td>
-                      <td className="max-w-[220px] px-3 py-2.5 text-xs leading-5 text-slate-500">
-                        {txt(r.justificativa) || "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {!visiveis.length && (
-                <p className="flex items-center justify-center gap-2 px-4 py-8 text-sm font-semibold text-slate-500">
-                  <AlertTriangle size={16} className="text-slate-400" />
-                  {base.length
-                    ? "Nada nesse nível ou nessa busca."
-                    : "Nenhuma ponta fora da régua fixa de aviso neste dia."}
-                </p>
-              )}
-            </div>
-          )}
-        </>
-      )}
+      {corpo}
 
       {verNiveis && <ModalNiveis aoFechar={() => setVerNiveis(false)} />}
       {detalhe && <PainelDetalhe linha={detalhe} aoFechar={() => setDetalhe(null)} />}

@@ -234,18 +234,27 @@ function situacaoDoDia(x) {
   return { tom: status === "OK" ? "ok" : "rev", texto: status };
 }
 
+// Cores da pílula por tom — as MESMAS da ferramenta (`.mot-tag` em app/ui/styles.css):
+// ok verde, revisar/afastamento âmbar, sem ponto/falta vermelho, folga/compensação azul,
+// feriado roxo, justificativa neutra.
 const TONS = {
-  ok: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  rev: "border-amber-200 bg-amber-50 text-amber-800",
-  falta: "border-rose-300 bg-rose-100 text-rose-800",
-  atest: "border-sky-200 bg-sky-50 text-sky-700",
-  afast: "border-violet-200 bg-violet-50 text-violet-700",
-  comp: "border-amber-200 bg-amber-50 text-amber-800",
-  folga: "border-blue-200 bg-blue-50 text-blue-700",
-  feriado: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  just: "border-slate-200 bg-slate-100 text-slate-700",
-  sem: "border-slate-300 bg-slate-200 text-slate-700",
+  ok: "ok",
+  rev: "warn",
+  falta: "danger",
+  atest: "warn",
+  afast: "warn",
+  comp: "accent",
+  folga: "accent",
+  feriado: "res",
+  just: "mute",
+  sem: "danger",
 };
+
+// A linha inteira só é pintada quando pede atenção; o resto fica branco como no original.
+// FIDELIDADE: a ferramenta original (renderMot) NAO pinta linha nesta tela — so o
+// hover. O estado do dia ja e dito pela pilula da coluna Situacao. Pintar aqui foi
+// uma "melhoria" que fazia a tela deixar de parecer a ferramenta.
+const LINHA = {};
 
 /* ────────────────────────── crachá: 7 ou 8 dígitos no lake ────────────────────── */
 
@@ -260,66 +269,34 @@ const filtroCracha = (cracha) => `in.(${variantesCracha(cracha).join(",")})`;
 
 /* ──────────────────────────── pedacinhos de interface ─────────────────────────── */
 
-function Chip({ tom = "slate", children }) {
-  const cores = {
-    slate: "border-slate-200 bg-slate-100 text-slate-700",
-    ok: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    folga: "border-blue-200 bg-blue-50 text-blue-700",
-    afast: "border-violet-200 bg-violet-50 text-violet-700",
-    sem: "border-rose-200 bg-rose-50 text-rose-700",
-  };
-  return (
-    <span className={`rounded-full border px-3 py-1 text-xs font-bold ${cores[tom] || cores.slate}`}>
-      {children}
-    </span>
-  );
-}
-
 function Vazio() {
-  return <span className="text-slate-300">—</span>;
+  return <span className="dp-faint">—</span>;
 }
 
 /** Cartão de 4 posições; `destaque[i]` marca a posição que a sugestão quer mudar. */
 function LinhaCartao({ horas, destaque }) {
   if (!horas.some(Boolean)) return <Vazio />;
   return (
-    <span className="inline-flex items-center gap-1 tabular-nums">
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
       {horas.map((h, i) => (
-        <span key={i} className="inline-flex items-center gap-1">
-          {i > 0 && <span className="text-slate-300">·</span>}
-          <span
-            className={
-              destaque?.[i]
-                ? "rounded bg-amber-100 px-1 font-bold text-amber-800"
-                : h
-                  ? "text-slate-700"
-                  : "text-slate-300"
-            }
-          >
-            {h || "—"}
-          </span>
+        <span key={i} className={`dp-chip${destaque?.[i] ? " new" : h ? "" : " none"}`}>
+          {h || "—"}
         </span>
       ))}
     </span>
   );
 }
 
-function BadgeSituacao({ situacao }) {
-  return (
-    <span
-      className={`inline-block rounded-full border px-2.5 py-1 text-xs font-bold ${TONS[situacao.tom] || TONS.just}`}
-    >
-      {situacao.texto}
-    </span>
-  );
+function PilulaSituacao({ situacao }) {
+  return <span className={`dp-pill ${TONS[situacao.tom] || TONS.just}`}>{situacao.texto}</span>;
 }
 
-function BadgeGps({ gps }) {
+function PilulaGps({ gps }) {
   if (!gps || !gps.total) return <Vazio />;
   if (!gps.fora) {
     return (
       <span
-        className="inline-block rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700"
+        className="dp-pill ok"
         title={`Todas as ${gps.total} batidas em local conhecido (garagem/terminal).`}
       >
         ✓ local
@@ -329,7 +306,7 @@ function BadgeGps({ gps }) {
   const txt = fmtDistancia(gps.dist);
   return (
     <span
-      className="inline-block rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700"
+      className="dp-pill danger dp-num"
       title={`${gps.fora} de ${gps.total} batida(s) FORA de local conhecido. Mais longe: ${txt} da garagem${gps.hora ? ` às ${gps.hora}` : ""}.`}
     >
       📍 {gps.fora}/{gps.total} · {txt}
@@ -337,11 +314,20 @@ function BadgeGps({ gps }) {
   );
 }
 
+const ROTULO = {
+  fontSize: 10.5,
+  fontWeight: 800,
+  letterSpacing: ".06em",
+  textTransform: "uppercase",
+};
+
 function Campo({ rotulo, children }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-      <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{rotulo}</div>
-      <div className="mt-1 text-sm font-semibold text-slate-800">{children}</div>
+    <div>
+      <div className="dp-faint" style={ROTULO}>
+        {rotulo}
+      </div>
+      <div style={{ marginTop: 3 }}>{children}</div>
     </div>
   );
 }
@@ -368,17 +354,26 @@ function TrilhaCaso({ caso }) {
           ? aceite
           : "";
 
+  const bolinha = (aceso) => ({
+    width: 7,
+    height: 7,
+    marginTop: 5,
+    flex: "none",
+    borderRadius: "50%",
+    background: aceso ? "var(--dp-accent)" : "var(--dp-border-strong)",
+  });
+
   return (
-    <div className="mt-5 rounded-2xl border border-slate-200 p-4">
-      <div className="text-xs font-black uppercase tracking-wide text-slate-500">
+    <div className="dp-card" style={{ marginTop: 14 }}>
+      <div className="dp-faint" style={ROTULO}>
         Trilha do caso
       </div>
-      <ol className="mt-3 space-y-3">
-        <li className="flex gap-3">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-slate-300" />
+      <ol style={{ margin: "10px 0 0", padding: 0, listStyle: "none" }}>
+        <li style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+          <span style={bolinha(false)} />
           <div>
-            <div className="text-sm font-bold text-slate-800">Decisão do DP</div>
-            <div className="text-xs font-semibold text-slate-500">
+            <div style={{ fontWeight: 600 }}>Decisão do DP</div>
+            <div className="dp-muted" style={{ fontSize: 12 }}>
               {decisao || "sem decisão registrada"}
               {ajuste && ajuste !== "nao_ajustou" ? ` · ajuste ${ajuste}` : ""}
             </div>
@@ -387,17 +382,13 @@ function TrilhaCaso({ caso }) {
         {ETAPAS_CASO.map((etapa) => {
           const quando = String(caso[etapa.chave] ?? "").trim();
           return (
-            <li key={etapa.chave} className="flex gap-3">
-              <span
-                className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${quando ? "bg-blue-600" : "bg-slate-200"}`}
-              />
+            <li key={etapa.chave} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+              <span style={bolinha(!!quando)} />
               <div>
-                <div
-                  className={`text-sm font-bold ${quando ? "text-slate-800" : "text-slate-400"}`}
-                >
+                <div className={quando ? "" : "dp-faint"} style={{ fontWeight: 600 }}>
                   {etapa.rotulo}
                 </div>
-                <div className="text-xs font-semibold text-slate-500">
+                <div className="dp-muted dp-num" style={{ fontSize: 12 }}>
                   {quando ? fmtQuando(quando) : "—"}
                 </div>
               </div>
@@ -430,44 +421,66 @@ function PainelDia({ dia, pessoa, batidasGps, caso, aoFechar }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex justify-end bg-slate-900/40"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 50,
+        display: "flex",
+        justifyContent: "flex-end",
+        background: "rgba(20, 30, 55, 0.38)",
+      }}
       role="presentation"
       onClick={aoFechar}
     >
       <aside
-        className="h-full w-full max-w-md overflow-y-auto bg-white p-6 shadow-2xl sm:max-w-lg"
+        style={{
+          height: "100%",
+          width: "min(560px, 100%)",
+          overflowY: "auto",
+          background: "var(--dp-surface)",
+          boxShadow: "0 0 40px rgba(20, 30, 55, 0.25)",
+          padding: "16px 20px 28px",
+        }}
         role="dialog"
         aria-modal="true"
         aria-label={`Detalhe do dia ${fmtData(data)}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-3">
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
           <div>
-            <div className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            <div className="dp-faint" style={ROTULO}>
               {pessoa?.nome || "Colaborador"} · {pessoa?.cracha || dia.cracha || ""}
             </div>
-            <h3 className="text-xl font-black text-slate-900">
-              {fmtData(data)} <span className="text-slate-400">· {diaSemana(data)}</span>
+            <h3 style={{ margin: "3px 0 0", fontSize: 16, fontWeight: 660, letterSpacing: "-.01em" }}>
+              <span className="dp-num">{fmtData(data)}</span>{" "}
+              <span className="dp-muted" style={{ fontWeight: 550 }}>
+                · {diaSemana(data)}
+              </span>
             </h3>
           </div>
-          <button
-            type="button"
-            onClick={aoFechar}
-            className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
-            aria-label="Fechar detalhe"
-          >
-            <X size={17} />
+          <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar detalhe">
+            <X size={15} />
           </button>
         </div>
 
-        <div className="mt-4">
-          <BadgeSituacao situacao={situacao} />
+        <div style={{ marginTop: 12 }}>
+          <PilulaSituacao situacao={situacao} />
           {dia.status_ponto === "REVISAR" && dia.motivo && (
-            <p className="mt-2 text-sm font-semibold text-slate-600">{String(dia.motivo)}</p>
+            <p className="dp-muted" style={{ margin: "7px 0 0" }}>
+              {String(dia.motivo)}
+            </p>
           )}
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <div
+          className="dp-card"
+          style={{
+            marginTop: 14,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: 12,
+          }}
+        >
           <Campo rotulo="Ponto batido">
             <LinhaCartao horas={atual} />
           </Campo>
@@ -478,44 +491,55 @@ function PainelDia({ dia, pessoa, batidasGps, caso, aoFechar }) {
             />
           </Campo>
           <Campo rotulo="Escala">
-            {escalaIni || escalaFim ? `${escalaIni || "—"} – ${escalaFim || "—"}` : <Vazio />}
+            <span className="dp-num">
+              {escalaIni || escalaFim ? `${escalaIni || "—"} – ${escalaFim || "—"}` : <Vazio />}
+            </span>
           </Campo>
           <Campo rotulo="Operação">
-            {opIni || opFim ? `${opIni || "—"} – ${opFim || "—"}` : <Vazio />}
+            <span className="dp-num">
+              {opIni || opFim ? `${opIni || "—"} – ${opFim || "—"}` : <Vazio />}
+            </span>
           </Campo>
-          <Campo rotulo="Jornada">{dia.jornada_horas || <Vazio />}</Campo>
+          <Campo rotulo="Jornada">
+            <span className="dp-num">{dia.jornada_horas || <Vazio />}</span>
+          </Campo>
           <Campo rotulo="Categoria">{dia.categoria || <Vazio />}</Campo>
         </div>
 
-        <div className="mt-5 rounded-2xl border border-slate-200 p-4">
-          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-500">
-            <MapPin size={14} /> Batidas com GPS
+        <div className="dp-card" style={{ marginTop: 14 }}>
+          <div
+            className="dp-faint"
+            style={{ ...ROTULO, display: "flex", alignItems: "center", gap: 6 }}
+          >
+            <MapPin size={13} /> Batidas com GPS
           </div>
           {/* TODO(mapa): o app antigo desenha as cercas de 100 m num Leaflet. Aqui só a
               lista com a distância — o mapa entra num passo posterior do porte. */}
           {batidasGps.length === 0 ? (
-            <p className="mt-2 text-sm font-semibold text-slate-500">
+            <p className="dp-muted" style={{ margin: "8px 0 0" }}>
               Nenhuma batida com GPS neste dia.
             </p>
           ) : (
-            <ul className="mt-3 space-y-2">
+            <ul style={{ margin: "10px 0 0", padding: 0, listStyle: "none" }}>
               {batidasGps.map((b, i) => (
                 <li
                   key={`${b.hora}-${i}`}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2"
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    padding: "7px 0",
+                    borderTop: i ? "1px solid var(--dp-border)" : "0",
+                  }}
                 >
-                  <span className="text-sm font-bold tabular-nums text-slate-800">
-                    {b.hora || "--:--"}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-600">
+                  <span className="dp-mono dp-num">{b.hora || "--:--"}</span>
+                  <span className="dp-muted" style={{ fontSize: 12 }}>
                     {b.local} · {fmtDistancia(b.distLocal)}
                   </span>
                   <span
-                    className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${
-                      b.dentro
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-rose-200 bg-rose-50 text-rose-700"
-                    }`}
+                    className={`dp-pill ${b.dentro ? "ok" : "danger"}`}
                     title={`${fmtDistancia(b.distGaragem)} da garagem`}
                   >
                     {b.dentro ? "local conhecido" : `fora · ${fmtDistancia(b.distGaragem)} da garagem`}
@@ -529,7 +553,7 @@ function PainelDia({ dia, pessoa, batidasGps, caso, aoFechar }) {
         {caso ? (
           <TrilhaCaso caso={caso} />
         ) : (
-          <p className="mt-5 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">
+          <p className="dp-muted" style={{ margin: "14px 0 0" }}>
             Nenhum caso aberto para este dia.
           </p>
         )}
@@ -750,203 +774,193 @@ export default function Motorista() {
     [dias, diaAberto],
   );
 
-  const acoes = (
-    <button
-      type="button"
-      onClick={() => setRecarga((n) => n + 1)}
-      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
-    >
-      <RefreshCw size={15} /> Recarregar
-    </button>
+  // Barra de filtros no formato da ferramenta: pessoa + "de … até …" + recarregar.
+  // Os campos herdam o estilo de `.dp-viewbar input` — nada de classe visual aqui.
+  const filtros = (
+    <>
+      <span className="dp-faint" aria-hidden="true" style={{ display: "inline-flex" }}>
+        <UserRound size={15} />
+      </span>
+      <input
+        id="dp360-mot-pessoa"
+        list="dp360-mot-lista"
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+        autoComplete="off"
+        placeholder="Nome ou crachá…"
+        aria-label="Colaborador"
+        style={{ flex: "1 1 240px", minWidth: 200, maxWidth: 420 }}
+      />
+      <datalist id="dp360-mot-lista">
+        {pessoas.map((p) => (
+          <option key={p.cracha} value={`${p.nome} · ${p.cracha}`} />
+        ))}
+      </datalist>
+
+      <label className="dp-muted" htmlFor="dp360-mot-ini">
+        De
+      </label>
+      <input
+        id="dp360-mot-ini"
+        type="date"
+        value={ini}
+        min={faixa.min || undefined}
+        max={faixa.max || undefined}
+        onChange={(e) => setIni(e.target.value)}
+      />
+      <label className="dp-muted" htmlFor="dp360-mot-fim">
+        Até
+      </label>
+      <input
+        id="dp360-mot-fim"
+        type="date"
+        value={fim}
+        min={faixa.min || undefined}
+        max={faixa.max || undefined}
+        onChange={(e) => setFim(e.target.value)}
+      />
+
+      <button
+        type="button"
+        className="dp-btn"
+        onClick={() => setRecarga((n) => n + 1)}
+        style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}
+      >
+        <RefreshCw size={14} /> Recarregar
+      </button>
+    </>
   );
 
-  return (
-    <AbaShell
-      icone={UserRound}
-      titulo="Motorista"
-      resumo="Histórico individual dia a dia: ponto batido, escala, operação, sugestão, GPS e a trilha do caso."
-      carregando={carregandoBase}
-      erro={erro}
-      acoes={acoes}
-    >
-      {/* filtros */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-end">
-        <div className="flex-1">
-          <label
-            htmlFor="dp360-mot-pessoa"
-            className="text-[11px] font-bold uppercase tracking-wide text-slate-500"
-          >
-            Colaborador
-          </label>
-          <input
-            id="dp360-mot-pessoa"
-            list="dp360-mot-lista"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            autoComplete="off"
-            placeholder="Nome ou crachá…"
-            className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500"
-          />
-          <datalist id="dp360-mot-lista">
-            {pessoas.map((p) => (
-              <option key={p.cracha} value={`${p.nome} · ${p.cracha}`} />
-            ))}
-          </datalist>
-        </div>
-
-        <div>
-          <label
-            htmlFor="dp360-mot-ini"
-            className="text-[11px] font-bold uppercase tracking-wide text-slate-500"
-          >
-            De
-          </label>
-          <input
-            id="dp360-mot-ini"
-            type="date"
-            value={ini}
-            min={faixa.min || undefined}
-            max={faixa.max || undefined}
-            onChange={(e) => setIni(e.target.value)}
-            className="mt-1 block rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500"
-          />
-        </div>
-        <div>
-          <label
-            htmlFor="dp360-mot-fim"
-            className="text-[11px] font-bold uppercase tracking-wide text-slate-500"
-          >
-            Até
-          </label>
-          <input
-            id="dp360-mot-fim"
-            type="date"
-            value={fim}
-            min={faixa.min || undefined}
-            max={faixa.max || undefined}
-            onChange={(e) => setFim(e.target.value)}
-            className="mt-1 block rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500"
-          />
-        </div>
+  const resumo = (
+    <>
+      <div>
+        Histórico individual dia a dia: ponto batido, escala, operação, sugestão, GPS e a trilha
+        do caso.
+        {pessoa ? (
+          <>
+            {" — "}
+            <b>{pessoa.nome}</b> · crachá <span className="dp-num">{pessoa.cracha}</span>
+            {pessoa.categoria ? ` · ${pessoa.categoria}` : ""}
+          </>
+        ) : null}
       </div>
-
-      {pessoa && (
-        <p className="mt-3 text-sm font-semibold text-slate-600">
-          {pessoa.nome} · crachá {pessoa.cracha}
-          {pessoa.categoria ? ` · ${pessoa.categoria}` : ""}
-        </p>
-      )}
-
-      {/* faixa-resumo */}
       {!!dias.length && (
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Chip>{contadores.total} dias</Chip>
-          <Chip tom="ok">{contadores.ponto} c/ ponto</Chip>
-          <Chip tom="folga">{contadores.folga} folga/feriado</Chip>
-          <Chip tom="afast">{contadores.afast} afast/atest</Chip>
-          <Chip tom="sem">{contadores.sem} sem ponto/falta</Chip>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "8px 0 2px" }}>
+          <span className="dp-pill mute dp-num">{contadores.total} dias</span>
+          <span className="dp-pill ok dp-num">{contadores.ponto} c/ ponto</span>
+          <span className="dp-pill accent dp-num">{contadores.folga} folga/feriado</span>
+          <span className="dp-pill warn dp-num">{contadores.afast} afast/atest</span>
+          <span className="dp-pill danger dp-num">{contadores.sem} sem ponto/falta</span>
         </div>
       )}
+    </>
+  );
 
-      {/* tabela */}
-      <div className="mt-5">
-        {!cracha ? (
-          <p className="rounded-xl bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-500">
-            Selecione um colaborador para ver os pontos do período.
-          </p>
-        ) : carregandoDias ? (
-          <p className="rounded-xl bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-500">
-            Carregando os dias do período…
-          </p>
-        ) : !dias.length ? (
-          <p className="rounded-xl bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-500">
-            Nenhum registro nesse período para esse colaborador.
-          </p>
-        ) : (
-          <div className="overflow-x-auto rounded-2xl border border-slate-200">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-3 py-3">Data</th>
-                  <th className="px-3 py-3">Dia</th>
-                  <th className="px-3 py-3">Ponto batido</th>
-                  <th className="px-3 py-3">Jornada</th>
-                  <th className="px-3 py-3">Operação</th>
-                  <th className="px-3 py-3">Escala</th>
-                  <th className="px-3 py-3">Sugestão</th>
-                  <th className="px-3 py-3">GPS</th>
-                  <th className="px-3 py-3">Situação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {dias.map((dia) => {
-                  const data = soData(dia.date_ref);
-                  const situacao = situacaoDoDia(dia);
-                  const atual = cartaoAtual(dia);
-                  const sugestao = cartaoSugestao(dia);
-                  const escalaIni = fmtHora(dia.programado_entrada || dia.esc_entrada);
-                  const escalaFim = fmtHora(dia.programado_saida || dia.esc_saida);
-                  const opIni = min2hm(dia.operacao_ini_min);
-                  const opFim = min2hm(dia.operacao_fim_min);
-                  const temSugestao = sugestao.some(Boolean);
-                  return (
-                    <tr
-                      key={data}
-                      onClick={() => setDiaAberto(data)}
-                      className="cursor-pointer hover:bg-blue-50/60"
-                    >
-                      <td className="px-3 py-2 font-bold tabular-nums text-slate-900">
-                        {fmtData(data)}
-                      </td>
-                      <td className="px-3 py-2 text-slate-500">{diaSemana(data)}</td>
-                      <td className="px-3 py-2">
-                        <LinhaCartao horas={atual} />
-                      </td>
-                      <td className="px-3 py-2 tabular-nums text-slate-700">
-                        {dia.jornada_horas || <Vazio />}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums text-slate-700">
-                        {opIni || opFim ? `${opIni || "—"} – ${opFim || "—"}` : <Vazio />}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums text-slate-700">
-                        {escalaIni || escalaFim ? (
-                          `${escalaIni || "—"} – ${escalaFim || "—"}`
-                        ) : (
-                          <Vazio />
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        {temSugestao ? (
-                          <LinhaCartao
-                            horas={sugestao}
-                            destaque={sugestao.map((v, i) => !!v && v !== atual[i])}
-                          />
-                        ) : (
-                          <Vazio />
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <BadgeGps gps={gpsPorDia[data]} />
-                      </td>
-                      <td className="px-3 py-2">
-                        <BadgeSituacao situacao={situacao} />
-                        {dia.status_ponto === "REVISAR" && dia.motivo && (
-                          <div
-                            className="mt-1 max-w-[16rem] truncate text-[11px] font-semibold text-slate-500"
-                            title={String(dia.motivo)}
-                          >
-                            {String(dia.motivo).split(" (")[0]}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+  const aviso = !cracha
+    ? "Selecione um colaborador para ver os pontos do período."
+    : carregandoDias
+      ? "Carregando os dias do período…"
+      : !dias.length
+        ? "Nenhum registro nesse período para esse colaborador."
+        : "";
+
+  return (
+    <AbaShell filtros={filtros} resumo={resumo} carregando={carregandoBase} erro={erro}>
+      {aviso ? (
+        <div className="dp-muted" style={{ textAlign: "center", padding: "56px 20px" }}>
+          {aviso}
+        </div>
+      ) : (
+        <div className="dp-tabela-wrap">
+          <table className="dp-tabela">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Dia</th>
+                <th>Ponto batido</th>
+                <th>Jornada</th>
+                <th>Operação</th>
+                <th>Escala</th>
+                <th>Sugestão</th>
+                <th>📍 GPS</th>
+                <th>Situação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dias.map((dia) => {
+                const data = soData(dia.date_ref);
+                const situacao = situacaoDoDia(dia);
+                const atual = cartaoAtual(dia);
+                const sugestao = cartaoSugestao(dia);
+                const escalaIni = fmtHora(dia.programado_entrada || dia.esc_entrada);
+                const escalaFim = fmtHora(dia.programado_saida || dia.esc_saida);
+                const opIni = min2hm(dia.operacao_ini_min);
+                const opFim = min2hm(dia.operacao_fim_min);
+                const temSugestao = sugestao.some(Boolean);
+                return (
+                  <tr
+                    key={data}
+                    onClick={() => setDiaAberto(data)}
+                    className={LINHA[situacao.tom] || ""}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <td className="dp-num">
+                      <b>{fmtData(data)}</b>
+                    </td>
+                    <td className="dp-muted">{diaSemana(data)}</td>
+                    <td>
+                      <LinhaCartao horas={atual} />
+                    </td>
+                    <td className="dp-num">{dia.jornada_horas || <Vazio />}</td>
+                    <td className="dp-num">
+                      {opIni || opFim ? `${opIni || "—"} – ${opFim || "—"}` : <Vazio />}
+                    </td>
+                    <td className="dp-num">
+                      {escalaIni || escalaFim ? (
+                        `${escalaIni || "—"} – ${escalaFim || "—"}`
+                      ) : (
+                        <Vazio />
+                      )}
+                    </td>
+                    <td>
+                      {temSugestao ? (
+                        <LinhaCartao
+                          horas={sugestao}
+                          destaque={sugestao.map((v, i) => !!v && v !== atual[i])}
+                        />
+                      ) : (
+                        <Vazio />
+                      )}
+                    </td>
+                    <td>
+                      <PilulaGps gps={gpsPorDia[data]} />
+                    </td>
+                    <td>
+                      <PilulaSituacao situacao={situacao} />
+                      {dia.status_ponto === "REVISAR" && dia.motivo && (
+                        <div
+                          className="dp-faint"
+                          style={{
+                            fontSize: 11,
+                            marginTop: 2,
+                            maxWidth: 220,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={String(dia.motivo)}
+                        >
+                          {String(dia.motivo).split(" (")[0]}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {diaSelecionado && (
         <PainelDia

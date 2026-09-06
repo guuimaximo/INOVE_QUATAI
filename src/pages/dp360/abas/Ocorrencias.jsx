@@ -22,15 +22,7 @@
 // NÍVEIS — primeiro a PORTA (de onde o dia veio), depois a aba.
 // ============================================================================
 import { useEffect, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  ArrowRight,
-  CalendarClock,
-  Lock,
-  Search,
-  ShieldAlert,
-  X,
-} from "lucide-react";
+import { ArrowRight, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import { lerTudoDP360 } from "../../../services/dp360Api";
 
@@ -825,46 +817,73 @@ function contagens(registros) {
 
 /* ─────────────────────────── peças visuais reusáveis ─────────────────────── */
 
-const CORES = {
-  ok: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  erro: "border-rose-200 bg-rose-50 text-rose-800",
-  alerta: "border-amber-200 bg-amber-50 text-amber-800",
-  neutro: "border-slate-200 bg-slate-100 text-slate-700",
+// cor lógica do domínio → pílula da ferramenta (styles.css .pill / dp360.css .dp-pill).
+const PILL = { ok: "ok", erro: "danger", alerta: "warn", neutro: "mute", accent: "accent" };
+
+// app.js:166 (SIT) — na ferramenta a situação pinta a LINHA INTEIRA: a cor da linha
+// É a informação, não enfeite. Puro visual: nada aqui decide nada.
+const LINHA_SIT = {
+  conf_certo: "row-ok",
+  conf_errado: "row-sem",
+  conf: "row-sug",
+  ok: "row-ok",
+  advertido: "row-sem",
+  corrigido: "row-ok",
+  exec_pendente: "row-sug",
+  recusa_exec_pendente: "row-sug",
+  ponto_fechado: "row-sem",
+  recusado: "row-sem",
+  aguardando: "row-sug",
+  comunicado: "",
+  posterior: "row-sug",
+  ajustou: "row-ok",
+  ajustou_certo: "row-ok",
+  ajustou_errado: "row-sem",
+  ajustou_julgar: "row-sug",
+  vencido: "row-sem",
+  cancelado: "",
 };
 
-function Selo({ cor = "neutro", titulo, children }) {
+// Ciclo reaberto pinta de azul: é aviso novo por cima, não desfecho.
+function classeDaLinha(reg, porta) {
+  if (reg.reaberto) return "row-msg";
+  const chave =
+    porta === "aviso" && reg.situacaoAviso in LINHA_SIT ? reg.situacaoAviso : reg.situacao;
+  return LINHA_SIT[chave] || "";
+}
+
+// pilhas/filas curtas — layout local, sem utilitário de framework
+const PILHA = { display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3 };
+const FILA = { display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" };
+const MINI = { fontSize: 11, fontWeight: 600 };
+
+function Selo({ cor = "neutro", titulo, quebra, children }) {
   return (
     <span
       title={titulo}
-      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-lg border px-2 py-0.5 text-[11px] font-bold ${CORES[cor] || CORES.neutro}`}
+      className={`dp-pill ${PILL[cor] || PILL.neutro}`}
+      style={quebra ? { whiteSpace: "normal" } : undefined}
     >
       {children}
     </span>
   );
 }
 
-function Contador({ n, tom = "vermelho" }) {
+function Contador({ n }) {
   if (!n) return null;
-  const cls =
-    tom === "vermelho" ? "bg-rose-600 text-white" : "bg-slate-200 text-slate-700";
-  return (
-    <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-black ${cls}`}>{n}</span>
-  );
+  return <span className="n">{n}</span>;
 }
 
 // Todo botão que GRAVA nasce assim nesta fase.
 function BotaoBloqueado({ children, tom = "neutro" }) {
-  const cls = {
-    ok: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    erro: "border-rose-200 bg-rose-50 text-rose-700",
-    neutro: "border-slate-200 bg-slate-50 text-slate-500",
-  }[tom];
+  const cor = { ok: "var(--dp-ok-ink)", erro: "var(--dp-danger-ink)" }[tom];
   return (
     <button
       type="button"
       disabled
       title={AVISO_FASE}
-      className={`inline-flex cursor-not-allowed items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-bold opacity-60 ${cls}`}
+      className="dp-btn"
+      style={cor ? { color: cor } : undefined}
     >
       {children}
     </button>
@@ -918,14 +937,14 @@ function PontasES({ reg }) {
     return <Selo titulo="Sem referência para comparar — não force veredito">• sem base</Selo>;
   }
   return (
-    <div className="flex flex-col items-start gap-1">
-      <div className="flex flex-wrap gap-1">{chips}</div>
+    <div style={PILHA}>
+      <div style={FILA}>{chips}</div>
       {reg.diaStatus === "misto" ? (
-        <span className="text-[11px] font-bold text-amber-700" title="Pontas divergem — decidir por ponta">
+        <Selo cor="alerta" titulo="Pontas divergem — decidir por ponta">
           ⚠ conferir · misto
-        </span>
+        </Selo>
       ) : (
-        <span className="text-[11px] text-slate-500" title={`${reg.baseE} · ${reg.baseS}`}>
+        <span className="dp-faint" style={MINI} title={`${reg.baseE} · ${reg.baseS}`}>
           {reg.baseE || reg.baseS || ""}
         </span>
       )}
@@ -933,22 +952,47 @@ function PontasES({ reg }) {
   );
 }
 
-function Cartao({ batidas, vazio = "—" }) {
-  if (!batidas || !batidas.length) return <span className="text-slate-400">{vazio}</span>;
+// O cartão em chips mono, como no original (styles.css .chip). `contra` = o cartão
+// anterior: a batida que não existia lá aparece marcada (.new).
+function Cartao({ batidas, vazio = "—", contra = null }) {
+  if (!batidas || !batidas.length) return <span className="dp-chip none">{vazio}</span>;
+  const conhecidas = contra && contra.length ? new Set(contra) : null;
+  const classe = (t) => `dp-chip${conhecidas && !conhecidas.has(t) ? " new" : ""}`;
+  const primeira = batidas[0];
+  const ultima = batidas[batidas.length - 1];
   return (
-    <span className="font-mono text-xs tabular-nums text-slate-700">
-      <b className="text-slate-400">E</b> {batidas[0]}
+    <span style={FILA}>
+      <span className={classe(primeira)}>
+        <span className="es">E</span>
+        {primeira}
+      </span>
       {batidas.length > 1 ? (
-        <>
-          <span className="px-1 text-slate-300">·</span>
-          <b className="text-slate-400">S</b> {batidas[batidas.length - 1]}
-        </>
-      ) : null}
-      {batidas.length > 2 ? (
-        <span className="ml-1 text-[10px] text-slate-400" title={`Almoço: ${batidas.slice(1, -1).join(" · ")}`}>
-          (+{batidas.length - 2})
+        <span className={classe(ultima)}>
+          <span className="es">S</span>
+          {ultima}
         </span>
       ) : null}
+      {batidas.length > 2 ? (
+        <span className="dp-chip none" title={`Almoço: ${batidas.slice(1, -1).join(" · ")}`}>
+          +{batidas.length - 2}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+// app.js depoisFlags — o que sumiu do cartão sai riscado (.chip.del).
+function Removidas({ antes, depois }) {
+  const fica = new Set(depois || []);
+  const fora = (antes || []).filter((t) => !fica.has(t));
+  if (!fora.length) return null;
+  return (
+    <span style={FILA}>
+      {fora.map((t, i) => (
+        <span key={`${t}-${i}`} className="dp-chip del" title="batida removida pelo ajuste">
+          {t}
+        </span>
+      ))}
     </span>
   );
 }
@@ -971,19 +1015,19 @@ function CelulaDecisao({ reg }) {
   }
   const misto = reg.diaStatus === "misto";
   return (
-    <div className="flex flex-col items-start gap-1">
-      <div className="flex gap-1">
+    <div style={PILHA}>
+      <div style={FILA}>
         <BotaoBloqueado tom="ok">Aceitar</BotaoBloqueado>
         <BotaoBloqueado tom="erro">Rejeitar</BotaoBloqueado>
       </div>
       {misto ? (
-        <span className="text-[11px] font-bold text-amber-700">
+        <span style={{ ...MINI, color: "var(--dp-warn-ink)" }}>
           não entra em lote — abra o caso
         </span>
       ) : reg.diaStatus === "certo" ? (
-        <span className="text-[11px] text-emerald-700">sugestão: aceitar</span>
+        <span style={{ ...MINI, color: "var(--dp-ok-ink)" }}>sugestão: aceitar</span>
       ) : reg.diaStatus === "errado" ? (
-        <span className="text-[11px] text-rose-700">
+        <span style={{ ...MINI, color: "var(--dp-danger-ink)" }}>
           sugestão: rejeitar {reg.temAviso ? "(com aviso → advertência)" : "(sem aviso → só recusa)"}
         </span>
       ) : null}
@@ -993,33 +1037,39 @@ function CelulaDecisao({ reg }) {
 
 // app.js:3972 (env_prazo). PRAZO = 48h desde `aviso_enviado_em`.
 function CelulaPrazo({ reg }) {
-  if (!reg.monitora) return <span className="text-slate-400">—</span>;
+  if (!reg.monitora) return <span className="dp-faint">—</span>;
   if (reg.situacaoAviso === "advertido")
     return (
-      <span className="text-xs font-semibold text-slate-500">
+      <span className="dp-muted" style={MINI}>
         advertido · {fmtDataHora(txt(reg.caso.advertencia_enviada_em).slice(0, 10))}
       </span>
     );
   if (reg.situacaoAviso === "corrigido")
     return (
-      <span className="text-xs font-semibold text-slate-500">
+      <span className="dp-muted" style={MINI}>
         corrigido · {fmtDataHora(txt(reg.caso.correcao_final_em).slice(0, 10))}
       </span>
     );
-  if (reg.restam == null) return <span className="text-slate-400">—</span>;
+  if (reg.restam == null) return <span className="dp-faint">—</span>;
   // Mexeu depois das 48h: NÃO é vencido — o prazo é para corrigir, e ele corrigiu.
   if (reg.foraPrazo)
     return (
-      <span className="text-xs font-bold text-amber-700" title="Ele mexeu no ponto, mas só depois das 48h">
+      <Selo cor="alerta" titulo="Ele mexeu no ponto, mas só depois das 48h">
         ajustou fora do prazo
-      </span>
+      </Selo>
     );
   if (["ajustou", "ajustou_certo", "ajustou_errado", "ajustou_julgar"].includes(reg.situacaoAviso))
-    return <span className="text-xs font-bold text-emerald-700">ajustou a tempo</span>;
+    return <Selo cor="ok">ajustou a tempo</Selo>;
   if (reg.restam > 0)
-    return <span className="text-xs font-bold text-amber-700">faltam {tempoHoras(reg.restam)}</span>;
+    return (
+      <Selo cor="alerta">
+        faltam <span className="dp-num">{tempoHoras(reg.restam)}</span>
+      </Selo>
+    );
   return (
-    <span className="text-xs font-bold text-rose-700">vencido há {tempoHoras(-reg.restam)}</span>
+    <Selo cor="erro">
+      vencido há <span className="dp-num">{tempoHoras(-reg.restam)}</span>
+    </Selo>
   );
 }
 
@@ -1036,17 +1086,24 @@ function CelulaAjustes({ reg, aoAbrir }) {
         type="button"
         onClick={clique}
         title="Ele não mexeu no ponto depois do aviso. Abra para ver o caso."
-        className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-bold text-slate-600 hover:bg-slate-100"
+        className="dp-btn"
       >
         não mexeu
       </button>
     );
-  const cor = reg.diaStatus === "certo" ? "ok" : reg.diaStatus === "errado" ? "erro" : "alerta";
+  const cor = {
+    certo: "var(--dp-ok-ink)",
+    errado: "var(--dp-danger-ink)",
+  }[reg.diaStatus] || "var(--dp-warn-ink)";
   return (
-    <button type="button" onClick={clique} title="Abrir a mesa do dia: cada ajuste contra o alvo">
-      <Selo cor={cor}>
-        {reg.nAjustes === 1 ? "1 ajuste" : `${reg.nAjustes} ajustes`} ▾
-      </Selo>
+    <button
+      type="button"
+      onClick={clique}
+      title="Abrir a mesa do dia: cada ajuste contra o alvo"
+      className="dp-btn"
+      style={{ color: cor }}
+    >
+      <span className="dp-num">{reg.nAjustes === 1 ? "1 ajuste" : `${reg.nAjustes} ajustes`}</span> ▾
     </button>
   );
 }
@@ -1054,10 +1111,10 @@ function CelulaAjustes({ reg, aoAbrir }) {
 function CelulaSituacao({ reg, campo = "situacao" }) {
   const s = SIT[reg[campo]] || { rotulo: reg[campo] || "—", cor: "neutro" };
   return (
-    <div className="flex flex-col items-start gap-1">
+    <div style={PILHA}>
       <Selo cor={s.cor}>{s.rotulo}</Selo>
       {reg.reaberto ? (
-        <Selo cor="alerta" titulo="Um aviso mais novo abriu outro ciclo: a decisão anterior não decide este.">
+        <Selo cor="accent" titulo="Um aviso mais novo abriu outro ciclo: a decisão anterior não decide este.">
           ↻ reaberto
         </Selo>
       ) : null}
@@ -1067,25 +1124,20 @@ function CelulaSituacao({ reg, campo = "situacao" }) {
 
 /* ─────────────────────────────── grade genérica ──────────────────────────── */
 
-function Grade({ colunas, linhas, aoAbrir, vazio }) {
+function Grade({ colunas, linhas, aoAbrir, vazio, porta }) {
   if (!linhas.length)
     return (
-      <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-500">
-        {vazio}
-      </p>
+      <div className="dp-card" style={{ margin: "8px 20px 20px", textAlign: "center" }}>
+        <span className="dp-muted">{vazio}</span>
+      </div>
     );
   return (
-    <div className="overflow-x-auto rounded-2xl border border-slate-200">
-      <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+    <div className="dp-tabela-wrap">
+      <table className="dp-tabela">
         <thead>
-          <tr className="bg-slate-50">
+          <tr>
             {colunas.map((c) => (
-              <th
-                key={c.chave}
-                className="whitespace-nowrap border-b border-slate-200 px-3 py-2.5 text-[11px] font-black uppercase tracking-wide text-slate-500"
-              >
-                {c.label}
-              </th>
+              <th key={c.chave}>{c.label}</th>
             ))}
           </tr>
         </thead>
@@ -1094,12 +1146,11 @@ function Grade({ colunas, linhas, aoAbrir, vazio }) {
             <tr
               key={reg.k}
               onClick={() => aoAbrir(reg)}
-              className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-blue-50/40"
+              className={classeDaLinha(reg, porta)}
+              style={{ cursor: "pointer" }}
             >
               {colunas.map((c) => (
-                <td key={c.chave} className="px-3 py-2.5 align-top">
-                  {c.render(reg)}
-                </td>
+                <td key={c.chave}>{c.render(reg)}</td>
               ))}
             </tr>
           ))}
@@ -1111,13 +1162,22 @@ function Grade({ colunas, linhas, aoAbrir, vazio }) {
 
 /* ───────────────────────────── painel de detalhe ─────────────────────────── */
 
+const ROTULO_CARD = {
+  fontSize: 11,
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: ".04em",
+};
+
 function Linha({ rotulo, children }) {
   return (
-    <div className="flex flex-wrap items-baseline gap-2 py-1">
-      <span className="w-40 shrink-0 text-[11px] font-black uppercase tracking-wide text-slate-500">
+    <div
+      style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: 8, padding: "3px 0" }}
+    >
+      <span className="dp-muted" style={{ ...ROTULO_CARD, width: 150, flexShrink: 0 }}>
         {rotulo}
       </span>
-      <span className="text-sm text-slate-800">{children}</span>
+      <span>{children}</span>
     </div>
   );
 }
@@ -1137,48 +1197,62 @@ function Detalhe({ reg, aoFechar }) {
   ].filter(([, v]) => txt(v));
 
   return (
-    <div className="mt-5 rounded-2xl border-2 border-blue-200 bg-blue-50/40 p-5">
-      <div className="flex items-start justify-between gap-4">
+    <div
+      className="dp-card"
+      style={{ margin: "0 20px 20px", borderColor: "var(--dp-accent)" }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
         <div>
-          <div className="text-xs font-black uppercase tracking-wide text-blue-700">
+          <div style={{ ...ROTULO_CARD, color: "var(--dp-accent)" }}>
             Caso · {reg.temAviso ? "Enviamos para ajuste" : "Pedido do colaborador"}
           </div>
-          <h3 className="mt-1 text-lg font-black text-slate-900">
-            {reg.nome} <span className="text-sm font-bold text-slate-500">· {reg.cracha}</span>
+          <h3 style={{ margin: "4px 0 2px", fontSize: 16, fontWeight: 700 }}>
+            {reg.nome} <span className="dp-muted dp-num">· {reg.cracha}</span>
           </h3>
-          <div className="text-sm font-semibold text-slate-600">
+          <div className="dp-muted dp-num">
             {reg.dataBR} · {reg.categoria}
             {reg.funcao ? ` · ${reg.funcao}` : ""}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={aoFechar}
-          className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 hover:bg-slate-50"
-          aria-label="Fechar detalhe"
-        >
-          <X size={16} />
+        <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar detalhe">
+          <X size={14} />
         </button>
       </div>
 
-      <div className="mt-4 grid gap-5 lg:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="text-[11px] font-black uppercase tracking-wide text-slate-500">
+      <div
+        style={{
+          marginTop: 14,
+          display: "grid",
+          gap: 12,
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+        }}
+      >
+        <div className="dp-card">
+          <div className="dp-muted" style={ROTULO_CARD}>
             O pedido do colaborador
           </div>
           {reg.ajustes.length ? (
-            <ul className="mt-2 space-y-2">
+            <ul style={{ listStyle: "none", margin: "8px 0 0", padding: 0 }}>
               {reg.ajustes.map((o, i) => (
-                <li key={txt(o.id_ocorrencia) || i} className="rounded-lg bg-slate-50 px-3 py-2">
-                  <div className="flex flex-wrap items-center gap-2">
+                <li
+                  key={txt(o.id_ocorrencia) || i}
+                  style={{
+                    background: "var(--dp-surface-2)",
+                    borderRadius: 8,
+                    padding: "7px 10px",
+                    marginBottom: 6,
+                  }}
+                >
+                  <div style={FILA}>
                     <Selo>{txt(o.tipo_ajuste) || "—"}</Selo>
-                    <span className="font-mono text-xs font-bold text-slate-800">
+                    <span className="dp-mono dp-num" style={{ fontWeight: 600 }}>
                       {txt(o.horario_ajuste) || "—"}
                     </span>
                     {txt(o.batida_atual) || txt(o.batida_nova) ? (
-                      <span className="flex items-center gap-1 font-mono text-xs text-slate-600">
-                        {txt(o.batida_atual) || "—"} <ArrowRight size={12} />{" "}
-                        {txt(o.batida_nova) || "—"}
+                      <span style={FILA}>
+                        <span className="dp-chip del">{txt(o.batida_atual) || "—"}</span>
+                        <ArrowRight size={12} className="dp-faint" />
+                        <span className="dp-chip new">{txt(o.batida_nova) || "—"}</span>
                       </span>
                     ) : null}
                     {txt(o.situacao_ajuste) ? (
@@ -1195,7 +1269,7 @@ function Detalhe({ reg, aoFechar }) {
                       </Selo>
                     ) : null}
                   </div>
-                  <div className="mt-1 text-[11px] text-slate-500">
+                  <div className="dp-faint" style={{ ...MINI, marginTop: 4 }}>
                     capturado em {fmtDataHora(o.capturado_em)}
                     {ehVerdadeiro(o.dia_posterior) ? " · dia posterior" : ""}
                   </div>
@@ -1203,37 +1277,42 @@ function Detalhe({ reg, aoFechar }) {
               ))}
             </ul>
           ) : (
-            <p className="mt-2 text-sm font-semibold text-slate-500">
+            <p className="dp-muted" style={{ margin: "8px 0 0" }}>
               Nenhum pedido neste crachá+dia — ele não mexeu no ponto depois do aviso.
             </p>
           )}
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="text-[11px] font-black uppercase tracking-wide text-slate-500">
+        <div className="dp-card">
+          <div className="dp-muted" style={ROTULO_CARD}>
             O cartão e a régua
           </div>
-          <div className="mt-2">
+          <div style={{ marginTop: 8 }}>
             <Linha rotulo={`Antes (${reg.antesFonte})`}>
               <Cartao batidas={reg.antes} vazio="sem cartão" />
             </Linha>
             <Linha rotulo="Depois (congelado)">
-              <Cartao batidas={reg.depois} vazio="não mexeu" />
+              <span style={FILA}>
+                <Cartao batidas={reg.depois} vazio="não mexeu" contra={reg.antes} />
+                <Removidas antes={reg.antes} depois={reg.depois} />
+              </span>
             </Linha>
             <Linha rotulo="Escala">
-              <span className="font-mono text-xs tabular-nums">
+              <span className="dp-mono dp-num">
                 {reg.escala[0] || "—"} – {reg.escala[1] || "—"}
               </span>
             </Linha>
             <Linha rotulo="Pedimos (alvo)">
-              <span className="font-mono text-xs tabular-nums">
+              <span className="dp-mono dp-num">
                 E {reg.alvo[0] || (reg.cobrEntrada ? "—" : "não pedido")} · S{" "}
                 {reg.alvo[1] || (reg.cobrSaida ? "—" : "não pedido")}
               </span>
             </Linha>
             <Linha rotulo="Régua usada">
-              <span className="text-xs text-slate-600">
-                E {reg.refE || "—"} ({reg.baseE || "sem base"}) · S {reg.refS || "—"} (
+              <span className="dp-muted">
+                E <span className="dp-mono dp-num">{reg.refE || "—"}</span> (
+                {reg.baseE || "sem base"}) · S{" "}
+                <span className="dp-mono dp-num">{reg.refS || "—"}</span> (
                 {reg.baseS || "sem base"}) · tolerância {TOLERANCIA_MIN} min
               </span>
             </Linha>
@@ -1247,38 +1326,45 @@ function Detalhe({ reg, aoFechar }) {
         </div>
       </div>
 
-      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
-        <div className="text-[11px] font-black uppercase tracking-wide text-slate-500">
+      <div className="dp-card" style={{ marginTop: 12 }}>
+        <div className="dp-muted" style={ROTULO_CARD}>
           Linha do tempo do caso
         </div>
         {etapas.length ? (
-          <ol className="mt-2 space-y-1">
+          <ol style={{ listStyle: "none", margin: "8px 0 0", padding: 0 }}>
             {etapas.map(([rotulo, valor]) => (
-              <li key={rotulo} className="flex flex-wrap items-baseline gap-2 text-sm">
-                <span className="text-emerald-600">✓</span>
-                <span className="font-semibold text-slate-700">{rotulo}</span>
-                <span className="text-slate-500">{fmtDataHora(valor)}</span>
+              <li key={rotulo} style={{ ...FILA, gap: 6, padding: "2px 0" }}>
+                <span style={{ color: "var(--dp-ok-ink)" }}>✓</span>
+                <span style={{ fontWeight: 600 }}>{rotulo}</span>
+                <span className="dp-muted dp-num">{fmtDataHora(valor)}</span>
               </li>
             ))}
           </ol>
         ) : (
-          <p className="mt-2 text-sm font-semibold text-slate-500">
+          <p className="dp-muted" style={{ margin: "8px 0 0" }}>
             Nenhuma etapa registrada — o caso ainda não entrou no ciclo.
           </p>
         )}
         {txt(c.correcao_status) ? (
-          <p className="mt-2 text-xs font-semibold text-slate-500">
+          <p className="dp-faint" style={{ ...MINI, margin: "8px 0 0" }}>
             correcao_status: {txt(c.correcao_status)}
           </p>
         ) : null}
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
-        <ShieldAlert size={16} className="text-amber-700" />
-        <span className="text-xs font-bold text-amber-800">
+      <div
+        className="dp-card"
+        style={{
+          ...FILA,
+          marginTop: 12,
+          background: "var(--dp-warn-bg)",
+          borderColor: "var(--dp-warn-bg)",
+        }}
+      >
+        <Selo cor="alerta" quebra titulo={AVISO_FASE}>
           Somente leitura nesta fase — {AVISO_FASE.toLowerCase()}.
-        </span>
-        <span className="grow" />
+        </Selo>
+        <span style={{ flex: 1 }} />
         <BotaoBloqueado tom="ok">Aceitar</BotaoBloqueado>
         <BotaoBloqueado tom="erro">Rejeitar</BotaoBloqueado>
         {reg.temAviso ? <BotaoBloqueado tom="erro">Advertir e corrigir</BotaoBloqueado> : null}
@@ -1355,15 +1441,23 @@ export default function Ocorrencias() {
     label: "Colaborador",
     render: (r) => (
       <div>
-        <div className="font-bold text-slate-900">{r.nome}</div>
-        <div className="text-[11px] text-slate-500">
+        <div style={{ fontWeight: 650 }}>{r.nome}</div>
+        <div className="dp-faint dp-num" style={MINI}>
           {r.cracha} · {r.categoria}
         </div>
       </div>
     ),
   };
-  const colDia = { chave: "dia", label: "Dia", render: (r) => <span className="tabular-nums">{r.dataBR}</span> };
-  const colChapa = { chave: "cracha", label: "Chapa", render: (r) => <span className="tabular-nums">{r.cracha}</span> };
+  const colDia = {
+    chave: "dia",
+    label: "Dia",
+    render: (r) => <span className="dp-num">{r.dataBR}</span>,
+  };
+  const colChapa = {
+    chave: "cracha",
+    label: "Chapa",
+    render: (r) => <span className="dp-num dp-mono">{r.cracha}</span>,
+  };
   const colAjustes = {
     chave: "aj",
     label: "Ajustes",
@@ -1383,7 +1477,7 @@ export default function Ocorrencias() {
   const COLS_AVISO = [
     colColaborador,
     colChapa,
-    { chave: "data", label: "Data", render: (r) => <span className="tabular-nums">{r.dataBR}</span> },
+    { chave: "data", label: "Data", render: (r) => <span className="dp-num">{r.dataBR}</span> },
     { chave: "oq", label: "O que", render: (r) => <Selo>{r.tipoLabel}</Selo> },
     {
       chave: "atual",
@@ -1393,14 +1487,25 @@ export default function Ocorrencias() {
     {
       chave: "alvo",
       label: "Pedimos (alvo)",
-      render: (r) => (
-        <span className="font-mono text-xs tabular-nums text-slate-700">
-          {r.alvo[0] || (r.cobrEntrada ? "—" : "")}
-          {r.alvo[0] || r.alvo[1] ? <span className="px-1 text-slate-300">·</span> : null}
-          {r.alvo[1] || (r.cobrSaida ? "—" : "")}
-          {!r.alvo[0] && !r.alvo[1] ? <span className="text-slate-400">—</span> : null}
-        </span>
-      ),
+      render: (r) =>
+        r.alvo[0] || r.alvo[1] ? (
+          <span style={FILA}>
+            {r.alvo[0] || r.cobrEntrada ? (
+              <span className="dp-chip">
+                <span className="es">E</span>
+                {r.alvo[0] || "—"}
+              </span>
+            ) : null}
+            {r.alvo[1] || r.cobrSaida ? (
+              <span className="dp-chip">
+                <span className="es">S</span>
+                {r.alvo[1] || "—"}
+              </span>
+            ) : null}
+          </span>
+        ) : (
+          <span className="dp-faint">—</span>
+        ),
     },
     colAjustes,
     { chave: "prazo", label: "Prazo (48h)", render: (r) => <CelulaPrazo reg={r} /> },
@@ -1409,9 +1514,9 @@ export default function Ocorrencias() {
       label: "Ação",
       render: (r) =>
         r.situacaoAviso === "vencido" ? (
-          <div className="flex flex-col items-start gap-1">
+          <div style={PILHA}>
             <BotaoBloqueado tom="erro">⚠ Vencido — advertir e corrigir</BotaoBloqueado>
-            <span className="text-[11px] font-bold text-rose-700">não entra em lote</span>
+            <span style={{ ...MINI, color: "var(--dp-danger-ink)" }}>não entra em lote</span>
           </div>
         ) : (
           <CelulaDecisao reg={r} />
@@ -1422,7 +1527,7 @@ export default function Ocorrencias() {
   const COLS_COMENT = [
     colColaborador,
     colChapa,
-    { chave: "data", label: "Data", render: (r) => <span className="tabular-nums">{r.dataBR}</span> },
+    { chave: "data", label: "Data", render: (r) => <span className="dp-num">{r.dataBR}</span> },
     { chave: "oq", label: "O que", render: (r) => <Selo>{r.tipoLabel}</Selo> },
     {
       chave: "atual",
@@ -1433,7 +1538,7 @@ export default function Ocorrencias() {
       chave: "quando",
       label: "Enviado em",
       render: (r) => (
-        <span className="text-xs text-slate-600">{fmtDataHora(r.caso.aviso_enviado_em)}</span>
+        <span className="dp-muted dp-num">{fmtDataHora(r.caso.aviso_enviado_em)}</span>
       ),
     },
   ];
@@ -1447,7 +1552,7 @@ export default function Ocorrencias() {
       chave: "quando",
       label: "Quando",
       render: (r) => (
-        <span className="text-xs text-slate-600">
+        <span className="dp-muted dp-num">
           {fmtDataHora(
             r.caso.correcao_final_em ||
               r.caso.advertencia_enviada_em ||
@@ -1469,7 +1574,7 @@ export default function Ocorrencias() {
       chave: "quando",
       label: "Cancelado em",
       render: (r) => (
-        <span className="text-xs text-slate-600">{fmtDataHora(r.caso.aviso_cancelado_em)}</span>
+        <span className="dp-muted dp-num">{fmtDataHora(r.caso.aviso_cancelado_em)}</span>
       ),
     },
     {
@@ -1506,34 +1611,67 @@ export default function Ocorrencias() {
 
   return (
     <AbaShell
-      icone={AlertTriangle}
-      titulo="Ocorrências"
-      resumo="Pedidos do colaborador e avisos enviados pelo DP — a porta de entrada define a consequência."
       carregando={carregando}
       erro={erro}
-      acoes={
-        <Selo cor="alerta" titulo={AVISO_FASE}>
-          <Lock size={12} /> somente leitura
-        </Selo>
+      filtros={
+        <>
+          <select
+            value={funcao}
+            onChange={(e) => setFuncao(e.target.value)}
+            title="Filtro global por função"
+          >
+            {FUNCOES.map(([k, l]) => (
+              <option key={k} value={k}>
+                {l}
+              </option>
+            ))}
+          </select>
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome ou chapa…"
+            style={{ width: 230 }}
+          />
+          <span className="dp-muted dp-num">
+            {linhas.length} {linhas.length === 1 ? "caso" : "casos"} · janela de {JANELA_DIAS} dias
+          </span>
+          {base?.descartados ? (
+            <span
+              className="dp-faint dp-num"
+              title="Linhas de ponto_ajustes_app sem tipo_ajuste (avisos, advertências, atestados). Não são pedido do colaborador."
+            >
+              · {base.descartados} linha(s) descartada(s) por não serem pedido
+            </span>
+          ) : null}
+          <span style={{ flex: 1 }} />
+          <span className="dp-faint dp-num">lido em {fmtDataHora(base?.lidoEm)}</span>
+          <Selo cor="alerta" titulo={AVISO_FASE}>
+            somente leitura
+          </Selo>
+        </>
+      }
+      resumo={
+        /* A regra que manda na tela — sempre visível, no topo (PORTE.md §5). */
+        <>
+          <Selo cor="erro" quebra>
+            Recusar não é advertir — advertência só existe depois de aviso registrado.
+          </Selo>{" "}
+          Recusa sem aviso encerra o caso. Entrada e saída são julgadas separadamente: uma nunca
+          anula a outra, e dia misto obriga abrir o caso. Tolerância de julgamento: {TOLERANCIA_MIN}{" "}
+          min · prazo do colaborador: {PRAZO_HORAS} h.
+        </>
       }
     >
-      {/* A regra que manda na tela — sempre visível (PORTE.md §5). */}
-      <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-        <ShieldAlert size={20} className="mt-0.5 shrink-0 text-amber-700" />
-        <div>
-          <p className="text-sm font-black text-amber-900">
-            Recusar não é advertir — advertência só existe depois de aviso registrado.
-          </p>
-          <p className="mt-1 text-xs font-semibold text-amber-800">
-            Recusa sem aviso encerra o caso. Entrada e saída são julgadas separadamente: uma nunca
-            anula a outra, e dia misto obriga abrir o caso. Tolerância de julgamento:{" "}
-            {TOLERANCIA_MIN} min · prazo do colaborador: {PRAZO_HORAS} h.
-          </p>
-        </div>
-      </div>
-
-      {/* PORTAS — o primeiro nível da navegação. */}
-      <div className="mt-5 grid gap-2 sm:grid-cols-3">
+      {/* PORTAS — o primeiro nível da navegação. Cada porta diz a CONSEQUÊNCIA da
+          recusa; por isso o texto de ajuda fica visível nas três, não só na ativa. */}
+      <div
+        style={{
+          display: "grid",
+          gap: 8,
+          gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+          padding: "8px 20px 0",
+        }}
+      >
         {PORTAS.map((p) => {
           const ativa = p.id === porta;
           return (
@@ -1542,17 +1680,27 @@ export default function Ocorrencias() {
               type="button"
               onClick={() => trocarPorta(p.id)}
               title={p.ajuda}
-              className={`rounded-2xl border p-3 text-left transition ${
-                ativa
-                  ? "border-blue-600 bg-blue-600 text-white shadow-sm"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              }`}
+              className="dp-card"
+              style={{
+                font: "inherit",
+                textAlign: "left",
+                cursor: "pointer",
+                ...(ativa
+                  ? {
+                      borderColor: "var(--dp-accent)",
+                      background: "var(--dp-accent-soft)",
+                      color: "var(--dp-accent)",
+                    }
+                  : null),
+              }}
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-black">{p.label}</span>
-                <Contador n={cont.porta[p.id]} />
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                <span style={{ fontSize: 14, fontWeight: 650 }}>{p.label}</span>
+                {cont.porta[p.id] ? (
+                  <span className="dp-pill danger n">{cont.porta[p.id]}</span>
+                ) : null}
               </div>
-              <p className={`mt-1 text-[11px] leading-4 ${ativa ? "text-blue-100" : "text-slate-500"}`}>
+              <p className={ativa ? "" : "dp-muted"} style={{ ...MINI, margin: "5px 0 0", lineHeight: 1.4 }}>
                 {p.ajuda}
               </p>
             </button>
@@ -1560,8 +1708,8 @@ export default function Ocorrencias() {
         })}
       </div>
 
-      {/* ABAS da porta escolhida. */}
-      <div className="mt-4 flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1.5">
+      {/* ABAS da porta escolhida — o segundo nível. */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: "12px 20px 0" }}>
         {abasDaPorta.map(([id, label]) => {
           const ativa = id === abaAtiva;
           const n = cont.aba[id] ?? cont.aba[`${porta}:${id}`] ?? 0;
@@ -1573,9 +1721,7 @@ export default function Ocorrencias() {
                 setAba(id);
                 setAberto(null);
               }}
-              className={`flex shrink-0 items-center rounded-xl px-3 py-2 text-xs font-bold transition ${
-                ativa ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
-              }`}
+              className={`dp-chip-f${ativa ? " on" : ""}`}
             >
               {label}
               <Contador n={n} />
@@ -1584,56 +1730,17 @@ export default function Ocorrencias() {
         })}
       </div>
 
-      {/* Filtro global por função + busca. */}
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <select
-          value={funcao}
-          onChange={(e) => setFuncao(e.target.value)}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
-          title="Filtro global por função"
-        >
-          {FUNCOES.map(([k, l]) => (
-            <option key={k} value={k}>
-              {l}
-            </option>
-          ))}
-        </select>
-        <div className="relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por nome ou chapa"
-            className="w-56 rounded-xl border border-slate-200 bg-white py-2 pl-8 pr-3 text-sm text-slate-700"
-          />
-        </div>
-        <span className="text-xs font-semibold text-slate-500">
-          {linhas.length} {linhas.length === 1 ? "caso" : "casos"} · janela de {JANELA_DIAS} dias
-        </span>
-        {base?.descartados ? (
-          <span
-            className="text-xs text-slate-400"
-            title="Linhas de ponto_ajustes_app sem tipo_ajuste (avisos, advertências, atestados). Não são pedido do colaborador."
-          >
-            · {base.descartados} linha(s) descartada(s) por não serem pedido
-          </span>
-        ) : null}
-        <span className="grow" />
-        <span className="flex items-center gap-1 text-xs text-slate-400">
-          <CalendarClock size={13} /> lido em {fmtDataHora(base?.lidoEm)}
-        </span>
+      <div className="dp-resumo" style={{ paddingTop: 10 }}>
+        {portaAtual.ajuda}
       </div>
 
-      <p className="mt-3 text-xs font-semibold text-slate-500">{portaAtual.ajuda}</p>
-
-      <div className="mt-3">
-        <Grade
-          colunas={colunas}
-          linhas={linhas}
-          aoAbrir={abrir}
-          vazio={VAZIOS[abaAtiva] || "Nada por aqui."}
-        />
-      </div>
+      <Grade
+        colunas={colunas}
+        linhas={linhas}
+        aoAbrir={abrir}
+        vazio={VAZIOS[abaAtiva] || "Nada por aqui."}
+        porta={porta}
+      />
 
       <Detalhe reg={regAberto} aoFechar={() => setAberto(null)} />
     </AbaShell>

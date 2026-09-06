@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ClipboardCheck, Lock, MapPin, RefreshCw, Search, X } from "lucide-react";
+import { Lock, MapPin, RefreshCw, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
 import { RAIO_LOCAL, RAIO_VEIC, reguaLocal, resumoGps } from "../regrasGps";
@@ -210,15 +210,15 @@ function marcacaoAusente(r) {
 }
 
 // Cor da linha (porte de app.js `p2RowClass`, na mesma ordem de precedência):
-// verde OK · âmbar ponto invertido · azul falta marcação identificada ·
-// âmbar sugestão utilizável · vermelho sem sugestão e sem ponta identificada.
+// row-ok verde OK · row-sug âmbar ponto invertido · row-msg azul falta marcação
+// identificada · row-sug âmbar sugestão utilizável · row-sem vermelho sem
+// sugestão e sem ponta identificada. As classes são as da ferramenta original.
 function classeLinha(r, bloqueio) {
-  if (String(r.status_ponto ?? "").toUpperCase() === "OK")
-    return "bg-emerald-50/70 hover:bg-emerald-100/70";
-  if (ehPontoInvertido(r)) return "bg-amber-50 hover:bg-amber-100";
-  if (marcacaoAusente(r)) return "bg-sky-50 hover:bg-sky-100";
-  if (temSugestaoUtil(r, bloqueio)) return "bg-amber-50 hover:bg-amber-100";
-  return "bg-rose-50 hover:bg-rose-100";
+  if (String(r.status_ponto ?? "").toUpperCase() === "OK") return "row-ok";
+  if (ehPontoInvertido(r)) return "row-sug";
+  if (marcacaoAusente(r)) return "row-msg";
+  if (temSugestaoUtil(r, bloqueio)) return "row-sug";
+  return "row-sem";
 }
 
 /* ---------- Real manual do DP (overlay de exibição) ---------- */
@@ -261,19 +261,10 @@ function aplicarRealManual(linha, rm) {
 }
 
 /* ---------- pedaços de UI ---------- */
-function Pilula({ texto, tom = "slate", titulo }) {
-  const tons = {
-    slate: "bg-slate-100 text-slate-700 ring-slate-200",
-    emerald: "bg-emerald-100 text-emerald-800 ring-emerald-200",
-    amber: "bg-amber-100 text-amber-900 ring-amber-200",
-    rose: "bg-rose-100 text-rose-800 ring-rose-200",
-    sky: "bg-sky-100 text-sky-800 ring-sky-200",
-  };
+// Pílula da ferramenta original: `dp-pill` + tom (ok/warn/danger/accent/mute).
+function Pilula({ texto, tom = "mute", titulo }) {
   return (
-    <span
-      title={titulo}
-      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${tons[tom] || tons.slate}`}
-    >
+    <span title={titulo} className={`dp-pill ${tom}`}>
       {texto}
     </span>
   );
@@ -281,77 +272,120 @@ function Pilula({ texto, tom = "slate", titulo }) {
 
 function BotaoTravado({ children, titulo, className = "" }) {
   return (
-    <button
-      type="button"
-      disabled
-      title={titulo || TRAVA_GRAVACAO}
-      className={`inline-flex cursor-not-allowed items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-bold text-slate-400 ${className}`}
-    >
+    <button type="button" disabled title={titulo || TRAVA_GRAVACAO} className={`dp-btn ${className}`}>
       {children}
     </button>
   );
 }
+
+// Título de bloco do pop-up (o CSS do DP360 não tem classe de heading própria).
+const ESTILO_TITULO = {
+  margin: "0 0 6px",
+  fontSize: 11,
+  fontWeight: 800,
+  textTransform: "uppercase",
+  letterSpacing: ".05em",
+};
+
+function TituloBloco({ children, nota }) {
+  return (
+    <h3 className="dp-muted" style={ESTILO_TITULO}>
+      {children}
+      {nota && (
+        <span
+          className="dp-faint"
+          style={{ marginLeft: 6, fontWeight: 600, textTransform: "none", letterSpacing: 0 }}
+        >
+          {nota}
+        </span>
+      )}
+    </h3>
+  );
+}
+
+// Quadradinho da legenda de cores da linha.
+const ESTILO_LEGENDA = { width: 12, height: 12, borderRadius: 3, display: "inline-block" };
+
+// Rótulo da coluna esquerda dos blocos do pop-up.
+const ESTILO_ROTULO = { width: 118, flex: "none", fontWeight: 600, fontSize: 12 };
+
+// Campo desabilitado do Real manual — mesma paleta da ferramenta.
+const ESTILO_INPUT = {
+  width: "100%",
+  marginTop: 3,
+  font: "inherit",
+  fontSize: 13,
+  fontVariantNumeric: "tabular-nums",
+  padding: "5px 8px",
+  border: "1px solid var(--dp-border-strong)",
+  borderRadius: 8,
+  background: "var(--dp-surface-2)",
+  color: "var(--dp-muted)",
+  cursor: "not-allowed",
+};
 
 // Coluna "Avisado?" — porte de app.js `fmtCol("rv_enviado")`. O aviso da Revisão
 // já era gravado em ponto_caso, mas a tela antiga nunca mostrou: não dava pra
 // saber se o colaborador já tinha recebido a mensagem.
 function Avisado({ caso }) {
   const enviado = String(caso?.aviso_enviado_em ?? "").trim();
-  if (!enviado) return <Pilula texto="não" tom="slate" titulo="Nenhum aviso registrado para este dia" />;
+  if (!enviado) return <Pilula texto="não" tom="mute" titulo="Nenhum aviso registrado para este dia" />;
   const quando = fmtData(enviado.slice(0, 10));
   if (String(caso.correcao_final_em ?? "").trim())
-    return <Pilula texto="🔧 corrigido" tom="emerald" titulo={`Aviso em ${quando} — ponto já corrigido`} />;
+    return <Pilula texto="🔧 corrigido" tom="ok" titulo={`Aviso em ${quando} — ponto já corrigido`} />;
   if (String(caso.advertencia_enviada_em ?? "").trim())
-    return <Pilula texto="⚠ advertido" tom="rose" titulo={`Aviso em ${quando} — depois virou advertência`} />;
+    return <Pilula texto="⚠ advertido" tom="danger" titulo={`Aviso em ${quando} — depois virou advertência`} />;
   if (String(caso.aceite ?? "").trim() === "aceito")
-    return <Pilula texto="✓ resolvido" tom="emerald" titulo={`Aviso em ${quando} — ele ajustou e você aceitou`} />;
+    return <Pilula texto="✓ resolvido" tom="ok" titulo={`Aviso em ${quando} — ele ajustou e você aceitou`} />;
   const visto = String(caso.aviso_conferido_em ?? "").trim();
   if (visto)
     return (
       <Pilula
         texto={`👁 leu · ${quando}`}
-        tom="slate"
+        tom="mute"
         titulo={`Enviado em ${quando} · aberto no app em ${fmtData(visto.slice(0, 10))}`}
       />
     );
-  return <Pilula texto={`📤 ${quando}`} tom="amber" titulo={`Enviado em ${quando} — ainda não abriu no app`} />;
+  return <Pilula texto={`📤 ${quando}`} tom="warn" titulo={`Enviado em ${quando} — ainda não abriu no app`} />;
 }
 
 // TRÊS estados, nunca dois. "Não medido" (âncora do veículo sem coordenada)
 // tem balde próprio: contá-lo como "junto" é o falso 'junto' que contamina a
 // régua e a sugestão (main.py:274-276, bug ALENCAR/Ciganos).
 function LocalGps({ gps }) {
-  if (!gps || !gps.total) return <span className="text-slate-400">—</span>;
+  if (!gps || !gps.total) return <span className="dp-faint">—</span>;
 
   const nm = gps.naoMedido || 0;
   const dicaNm = nm
     ? ` ${nm} batida(s) não medida(s) — âncora do veículo sem coordenada (terminal que a régua não sabe localizar).`
     : "";
   const selo = nm ? (
-    <span
-      className="ml-1 rounded bg-slate-200 px-1 text-[10px] font-black text-slate-600"
-      title={`${nm} batida(s) não medida(s) — âncora do veículo sem coordenada.`}
-    >
-      n/m {nm}
-    </span>
+    <>
+      {" "}
+      <span className="dp-pill mute" title={`${nm} batida(s) não medida(s) — âncora do veículo sem coordenada.`}>
+        n/m {nm}
+      </span>
+    </>
   ) : null;
 
   if (gps.fora)
     return (
-      <span
-        className="whitespace-nowrap font-bold text-rose-700"
-        title={`${gps.fora} de ${gps.total} batida(s) FORA. A mais longe: ${fmtDist(gps.maiorDistancia)}${gps.horaMaisLonge ? ` às ${gps.horaMaisLonge}` : ""}.${dicaNm}`}
-      >
-        📍 {gps.fora}/{gps.total} fora · {fmtDist(gps.maiorDistancia)}
+      <>
+        <span
+          className="dp-pill danger dp-num"
+          title={`${gps.fora} de ${gps.total} batida(s) FORA. A mais longe: ${fmtDist(gps.maiorDistancia)}${gps.horaMaisLonge ? ` às ${gps.horaMaisLonge}` : ""}.${dicaNm}`}
+        >
+          📍 {gps.fora}/{gps.total} fora · {fmtDist(gps.maiorDistancia)}
+        </span>
         {selo}
-      </span>
+      </>
     );
 
   // Nada fora, mas nada medido: não dá para dizer "junto".
   if (!gps.junto)
     return (
       <span
-        className="whitespace-nowrap font-bold text-slate-500"
+        className="dp-pill mute dp-num"
         title={`Nenhuma das ${gps.total} batida(s) pôde ser medida — a âncora do veículo veio sem coordenada. Não é "junto": é sem informação.`}
       >
         n/m ({gps.total})
@@ -359,13 +393,15 @@ function LocalGps({ gps }) {
     );
 
   return (
-    <span
-      className="whitespace-nowrap font-bold text-emerald-700"
-      title={`${gps.junto} de ${gps.total} batida(s) junto da referência operacional (≤ ${RAIO_VEIC} m do veículo, ou ≤ ${RAIO_LOCAL} m do local conhecido).${dicaNm}`}
-    >
-      ✓ junto ({gps.junto})
+    <>
+      <span
+        className="dp-pill ok dp-num"
+        title={`${gps.junto} de ${gps.total} batida(s) junto da referência operacional (≤ ${RAIO_VEIC} m do veículo, ou ≤ ${RAIO_LOCAL} m do local conhecido).${dicaNm}`}
+      >
+        ✓ junto ({gps.junto})
+      </span>
       {selo}
-    </span>
+    </>
   );
 }
 
@@ -377,7 +413,7 @@ function Motivo({ linha }) {
   if (status !== "OK" && batidas === 0 && /JORNADA_INCOMPLETA/i.test(motivo))
     return (
       <span
-        className="whitespace-nowrap font-black text-rose-700"
+        className="dp-pill danger"
         title="Há operação apurada no dia, mas nenhuma batida no cartão. O ponto tem de ser criado pela operação."
       >
         OPEROU SEM PONTO · criar pela operação
@@ -386,25 +422,24 @@ function Motivo({ linha }) {
   if (ehPontoInvertido(linha))
     return (
       <span
-        className="whitespace-nowrap font-black text-amber-700"
+        className="dp-pill warn"
         title="Cartão rotacionado: defeito de posição das batidas. Exige decisão manual do DP — não gera comunicado ao colaborador."
       >
         {motivo || "PONTO_INVERTIDO"}
       </span>
     );
-  if (!motivo) return <span className="text-slate-400">—</span>;
-  return (
-    <span className="whitespace-nowrap text-slate-700" title={motivo}>
-      {motivo.split(" (")[0]}
-    </span>
-  );
+  if (!motivo) return <span className="dp-faint">—</span>;
+  return <span title={motivo}>{motivo.split(" (")[0]}</span>;
 }
 
 function AvisoTrava({ motivo }) {
   if (!motivo) return null;
   return (
-    <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">
-      ⚠ Sugestão bloqueada — {motivo}. Não dá para avisar nem lançar; o DP precisa cravar o Real na mão.
+    <div className="dp-card">
+      <span className="dp-pill warn">⚠ sugestão bloqueada</span>{" "}
+      <span className="dp-muted">
+        {motivo}. Não dá para avisar nem lançar; o DP precisa cravar o Real na mão.
+      </span>
     </div>
   );
 }
@@ -413,40 +448,52 @@ function AvisoTrava({ motivo }) {
 function LinhaFonte({ rotulo, ini, fim, cor, marca, titulo }) {
   if (hm2m(ini) == null && hm2m(fim) == null) return null;
   return (
-    <tr className="border-t border-slate-100" title={titulo}>
-      <td className="py-1.5 pr-2 text-slate-600">
-        <span className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: cor }} />
+    <tr title={titulo} style={{ borderTop: "1px solid var(--dp-border)" }}>
+      <td className="dp-muted" style={{ padding: "6px 8px 6px 0" }}>
+        <span
+          style={{
+            display: "inline-block",
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            marginRight: 6,
+            verticalAlign: "middle",
+            background: cor,
+          }}
+        />
         {rotulo}
         {marca && (
-          <span className="ml-1.5 rounded bg-rose-100 px-1 text-[10px] font-black text-rose-700">{marca}</span>
+          <>
+            {" "}
+            <span className="dp-pill danger">{marca}</span>
+          </>
         )}
       </td>
-      <td className="py-1.5 text-right tabular-nums text-slate-900">{fmtHora(ini) || "—"}</td>
-      <td className="py-1.5 text-right tabular-nums text-slate-900">{fmtHora(fim) || "—"}</td>
-      <td className="py-1.5 text-right tabular-nums font-bold text-slate-700">{durHM(ini, fim)}</td>
+      <td className="dp-num dp-mono" style={{ textAlign: "right", padding: "6px 0" }}>
+        {fmtHora(ini) || "—"}
+      </td>
+      <td className="dp-num dp-mono" style={{ textAlign: "right", padding: "6px 0" }}>
+        {fmtHora(fim) || "—"}
+      </td>
+      <td className="dp-num dp-mono" style={{ textAlign: "right", padding: "6px 0" }}>
+        {durHM(ini, fim)}
+      </td>
     </tr>
   );
 }
 
-function Cartao4({ valores, tom = "slate" }) {
+// Cartão de 4 batidas no formato da ferramenta: chip mono com o rótulo E/S ao lado.
+function Cartao4({ valores, tom = "" }) {
   const rotulos = ["E", "S", "E", "S"];
-  const cores = {
-    slate: "bg-slate-100 text-slate-700",
-    emerald: "bg-emerald-100 text-emerald-800",
-    amber: "bg-amber-100 text-amber-900",
-  };
   const cheios = valores.map(fmtHora);
-  if (!cheios.some(Boolean)) return <span className="text-slate-400">—</span>;
+  if (!cheios.some(Boolean)) return <span className="dp-faint">—</span>;
   return (
-    <span className="flex flex-wrap gap-1">
+    <span style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
       {cheios.map((v, i) =>
         v ? (
-          <span
-            key={`${rotulos[i]}-${i}`}
-            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${cores[tom] || cores.slate}`}
-          >
-            <span className="text-[9px] opacity-60">{rotulos[i]}</span>
+          <span key={`${rotulos[i]}-${i}`} className={`dp-chip dp-num ${tom}`}>
             {v}
+            <span className="es">{rotulos[i]}</span>
           </span>
         ) : null,
       )}
@@ -460,15 +507,20 @@ function BlocoAlmoco({ titulo, ini, fim, travado, tom }) {
   const dur = a != null && b != null ? Math.max(0, b - a) : null;
   return (
     <div
-      className={`rounded-xl border px-3 py-2 ${tom === "sug" ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}
+      className="dp-card"
+      style={{
+        padding: "9px 11px",
+        boxShadow: "none",
+        background: tom === "sug" ? "var(--dp-ok-bg)" : "var(--dp-surface-2)",
+      }}
     >
-      <div className="flex items-center gap-1 text-[11px] font-black uppercase tracking-wide text-slate-500">
+      <div className="dp-muted" style={{ ...ESTILO_TITULO, margin: 0, display: "flex", alignItems: "center", gap: 4 }}>
         {titulo}
-        {travado && <Lock size={11} className="text-slate-500" />}
+        {travado && <Lock size={11} />}
       </div>
-      <div className="mt-1 text-sm font-bold tabular-nums text-slate-800">
+      <div className="dp-num dp-mono" style={{ marginTop: 4, fontWeight: 600 }}>
         {fmtHora(ini) || "—"} → {fmtHora(fim) || "—"}
-        {dur != null && dur > 0 && <span className="ml-2 text-xs font-semibold text-slate-500">{dur} min</span>}
+        {dur != null && dur > 0 && <span className="dp-muted" style={{ marginLeft: 6 }}>{dur} min</span>}
       </div>
     </div>
   );
@@ -588,10 +640,27 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-3 sm:p-6">
-      <div className="w-full max-w-6xl rounded-3xl bg-white shadow-2xl">
-        <header className="flex items-start gap-3 border-b border-slate-200 p-5">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-sm font-black text-blue-700">
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto"
+      style={{ background: "rgba(15,20,32,.5)", padding: 16 }}
+    >
+      <div className="dp-card w-full max-w-6xl" style={{ padding: 0 }}>
+        <header
+          className="flex items-start gap-3"
+          style={{ padding: "14px 18px", borderBottom: "1px solid var(--dp-border)" }}
+        >
+          <div
+            className="flex shrink-0 items-center justify-center"
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 11,
+              background: "var(--dp-accent-soft)",
+              color: "var(--dp-accent)",
+              fontWeight: 700,
+              fontSize: 12,
+            }}
+          >
             {String(linha.nm_funcionario ?? "")
               .trim()
               .split(/\s+/)
@@ -601,52 +670,47 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
               .toUpperCase() || "—"}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-lg font-black text-slate-900">{linha.nm_funcionario || "—"}</div>
-            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
-              <span>Crachá {linha.cracha}</span>
-              <span>· {fmtData(dia)}</span>
+            <div className="truncate" style={{ fontWeight: 650, fontSize: 15 }}>
+              {linha.nm_funcionario || "—"}
+            </div>
+            <div className="dp-muted flex flex-wrap items-center gap-2" style={{ fontSize: 12, marginTop: 1 }}>
+              <span className="dp-num">Crachá {linha.cracha}</span>
+              <span className="dp-num">· {fmtData(dia)}</span>
               {linha.nm_funcao && <span>· {linha.nm_funcao}</span>}
               {linha.categoria && <span>· {linha.categoria}</span>}
             </div>
           </div>
           <Pilula
             texto={linha.status_ponto || "—"}
-            tom={String(linha.status_ponto ?? "").toUpperCase() === "OK" ? "emerald" : "amber"}
+            tom={String(linha.status_ponto ?? "").toUpperCase() === "OK" ? "ok" : "warn"}
           />
-          <button
-            type="button"
-            onClick={aoFechar}
-            className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-            aria-label="Fechar"
-          >
-            <X size={18} />
+          <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar">
+            <X size={14} />
           </button>
         </header>
 
-        <div className="space-y-3 px-5 pt-4">
+        <div style={{ display: "grid", gap: 8, padding: "12px 18px 0" }}>
           <AvisoTrava motivo={bloqueio} />
           {erro && (
-            <p className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{erro}</p>
+            <div className="dp-card">
+              <span className="dp-pill danger">{erro}</span>
+            </div>
           )}
         </div>
 
-        <div className="grid gap-5 p-5 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2" style={{ padding: 18 }}>
           {/* ---------- coluna 1: fontes, sugestão, real ---------- */}
-          <div className="space-y-5">
+          <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
             <section>
-              <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">
-                1 · Fontes
-                <span className="ml-2 font-semibold normal-case tracking-normal text-slate-400">
-                  de onde vêm os números — nenhuma delas é decisão
-                </span>
-              </h3>
-              <table className="mt-2 w-full text-xs">
+              <TituloBloco nota="de onde vêm os números — nenhuma delas é decisão">1 · Fontes</TituloBloco>
+              <div className="dp-card" style={{ padding: "6px 14px" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
                 <thead>
-                  <tr className="text-left text-[11px] font-bold uppercase text-slate-400">
-                    <th className="pb-1">Fonte</th>
-                    <th className="pb-1 text-right">Entrada</th>
-                    <th className="pb-1 text-right">Saída</th>
-                    <th className="pb-1 text-right">Jornada</th>
+                  <tr className="dp-faint" style={{ textAlign: "left", fontSize: 11 }}>
+                    <th style={{ padding: "6px 0", fontWeight: 700 }}>Fonte</th>
+                    <th style={{ padding: "6px 0", textAlign: "right", fontWeight: 700 }}>Entrada</th>
+                    <th style={{ padding: "6px 0", textAlign: "right", fontWeight: 700 }}>Saída</th>
+                    <th style={{ padding: "6px 0", textAlign: "right", fontWeight: 700 }}>Jornada</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -684,10 +748,11 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
                     }
                   />
                 </tbody>
-              </table>
-              {carregando && <p className="mt-2 text-xs font-semibold text-slate-400">Carregando fontes…</p>}
+                </table>
+              </div>
+              {carregando && <p className="dp-faint" style={{ margin: "6px 0 0" }}>Carregando fontes…</p>}
               {!carregando && !g.op_inicio && !g.sst_vinculo && !g.val_inicio && (
-                <p className="mt-2 text-xs font-semibold text-slate-400">
+                <p className="dp-faint" style={{ margin: "6px 0 0" }}>
                   Sem operação apurada neste dia (interno/aprendiz não tem Citatti, SST nem bilhetagem).
                 </p>
               )}
@@ -696,37 +761,36 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
             </section>
 
             <section>
-              <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">
-                2 · Sugestão
-                <span className="ml-2 font-semibold normal-case tracking-normal text-slate-400">
-                  o que a ferramenta propõe — ainda não é lançamento
-                </span>
-              </h3>
-              <div className="mt-2 space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs">
+              <TituloBloco nota="o que a ferramenta propõe — ainda não é lançamento">2 · Sugestão</TituloBloco>
+              <div className="dp-card" style={{ display: "grid", gap: 7 }}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="w-32 shrink-0 font-bold text-slate-500">Operação real</span>
-                  <span className="tabular-nums font-bold text-slate-800">
+                  <span className="dp-muted" style={ESTILO_ROTULO}>Operação real</span>
+                  <span className="dp-num dp-mono" style={{ fontWeight: 600 }}>
                     {fmtHora(g.real_inicio) || "—"} → {fmtHora(g.real_fim) || "—"}
                   </span>
                 </div>
                 <div className="flex flex-wrap items-start gap-2">
                   <span
-                    className="w-32 shrink-0 font-bold text-slate-500"
+                    className="dp-muted"
+                    style={ESTILO_ROTULO}
                     title={`Alvo = operação real com tolerância: entrada −${TOL_ENTRADA_MIN} min, saída +${TOL_SAIDA_MIN} min.`}
                   >
                     Alvo (tol. {TOL_ENTRADA_MIN}/{TOL_SAIDA_MIN})
                   </span>
-                  <Cartao4 valores={alvo4} tom="amber" />
+                  <Cartao4 valores={alvo4} />
                 </div>
                 <div className="flex flex-wrap items-start gap-2">
-                  <span className="w-32 shrink-0 font-bold text-slate-500">Ponto sugerido</span>
+                  <span className="dp-muted" style={ESTILO_ROTULO}>Ponto sugerido</span>
                   {bloqueio ? (
-                    <span className="font-bold text-amber-700">⚠ sugestão inválida</span>
+                    <span className="dp-pill warn">⚠ sugestão inválida</span>
                   ) : (
-                    <Cartao4 valores={sug4} tom="emerald" />
+                    <Cartao4 valores={sug4} tom="done" />
                   )}
                 </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-200 pt-2 text-[11px] font-semibold text-slate-500">
+                <div
+                  className="dp-faint flex flex-wrap gap-x-4 gap-y-1"
+                  style={{ borderTop: "1px solid var(--dp-border)", paddingTop: 7, fontSize: 11.5 }}
+                >
                   <span>Fonte do alvo: {linha.fonte_alvo || "—"}</span>
                   <span>Fonte SUG: {linha.sugestao_fonte || "—"}</span>
                   <span>Ação: {linha.acao_sugerida || "—"}</span>
@@ -736,37 +800,29 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
             </section>
 
             <section>
-              <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">
-                3 · Real
-                <span className="ml-2 font-semibold normal-case tracking-normal text-slate-400">
-                  o que ele bateu
-                </span>
-              </h3>
-              <div className="mt-2 space-y-2 rounded-2xl border border-slate-200 bg-white p-3 text-xs">
+              <TituloBloco nota="o que ele bateu">3 · Real</TituloBloco>
+              <div className="dp-card" style={{ display: "grid", gap: 7 }}>
                 <div className="flex flex-wrap items-start gap-2">
-                  <span className="w-32 shrink-0 font-bold text-slate-500">Ponto (bateu)</span>
+                  <span className="dp-muted" style={ESTILO_ROTULO}>Ponto (bateu)</span>
                   <Cartao4 valores={real4} />
                 </div>
                 <div className="flex flex-wrap items-start gap-2">
-                  <span className="w-32 shrink-0 font-bold text-slate-500">Todas as batidas</span>
-                  <span className="tabular-nums text-slate-700">{linha.todas_batidas || "—"}</span>
+                  <span className="dp-muted" style={ESTILO_ROTULO}>Todas as batidas</span>
+                  <span className="dp-num dp-mono">{linha.todas_batidas || "—"}</span>
                 </div>
                 <div className="flex flex-wrap items-start gap-2">
-                  <span className="w-32 shrink-0 font-bold text-slate-500">Batidas limpas</span>
-                  <span className="tabular-nums text-slate-700">{linha.batidas_limpas || "—"}</span>
+                  <span className="dp-muted" style={ESTILO_ROTULO}>Batidas limpas</span>
+                  <span className="dp-num dp-mono">{linha.batidas_limpas || "—"}</span>
                 </div>
               </div>
             </section>
 
             <section>
-              <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">
+              <TituloBloco nota="crava e vira a régua do veredito e o alvo da correção">
                 4 · Real manual do DP
-                <span className="ml-2 font-semibold normal-case tracking-normal text-slate-400">
-                  crava e vira a régua do veredito e o alvo da correção
-                </span>
-              </h3>
-              <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-[11px] font-semibold text-slate-500">
+              </TituloBloco>
+              <div className="dp-card">
+                <p className="dp-muted" style={{ margin: 0, fontSize: 11.5 }}>
                   {linha.rm_entrada || linha.rm_saida ? (
                     <>
                       ✓ <b>Cravado</b>
@@ -787,7 +843,10 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
                     ["Saída", linha.rm_saida || linha.saida_sug, false],
                   ].map(([rot, valor, cadeado]) => (
                     <label key={rot} className="block">
-                      <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                      <span
+                        className="dp-muted flex items-center gap-1"
+                        style={{ ...ESTILO_TITULO, margin: 0, fontSize: 10 }}
+                      >
                         {rot}
                         {cadeado && <Lock size={10} />}
                       </span>
@@ -798,7 +857,7 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
                         value={fmtHora(valor)}
                         placeholder="HH:MM"
                         title={cadeado ? "Almoço travado pela regra da Revisão." : TRAVA_GRAVACAO}
-                        className="mt-1 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-2 py-1.5 text-sm font-bold tabular-nums text-slate-500"
+                        style={ESTILO_INPUT}
                       />
                     </label>
                   ))}
@@ -818,20 +877,21 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
           </div>
 
           {/* ---------- coluna 2: almoço, GPS, linha do tempo ---------- */}
-          <div className="space-y-5">
+          <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
             <section>
-              <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-500">
+              <h3 className="dp-muted flex items-center gap-2" style={ESTILO_TITULO}>
                 Almoço
                 {travado && (
                   <span
-                    className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold normal-case tracking-normal text-slate-600"
+                    className="dp-pill mute"
                     title="Miolo travado pela regra da Revisão — não é editável."
+                    style={{ textTransform: "none", letterSpacing: 0 }}
                   >
                     <Lock size={10} /> travado
                   </span>
                 )}
               </h3>
-              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-2 sm:grid-cols-3">
                 <BlocoAlmoco titulo="Batido (ponto)" ini={linha.saida_almoco} fim={linha.volta_almoco} />
                 <BlocoAlmoco
                   titulo="Programado (escala)"
@@ -846,7 +906,7 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
                   tom="sug"
                 />
               </div>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-500">
+              <div className="dp-faint mt-2 flex flex-wrap gap-x-4 gap-y-1" style={{ fontSize: 11.5 }}>
                 <span>Fonte do almoço: {linha.fonte_almoco || "—"}</span>
                 <span>Faixa: {linha.almoco_faixa || "—"}</span>
                 <span>Confiável: {ehVerdadeiro(linha.almoco_confiavel) ? "sim" : "não"}</span>
@@ -854,23 +914,25 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
             </section>
 
             <section>
-              <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">
-                📍 Local da batida (GPS do app)
-              </h3>
+              <TituloBloco>📍 Local da batida (GPS do app)</TituloBloco>
               {!gps || !gps.total ? (
-                <p className="mt-2 text-xs font-semibold text-slate-400">Sem GPS registrado neste dia.</p>
+                <p className="dp-faint" style={{ margin: 0 }}>Sem GPS registrado neste dia.</p>
               ) : (
-                <ul className="mt-2 space-y-1 text-xs">
+                <ul className="dp-card" style={{ listStyle: "none", margin: 0, padding: 8, display: "grid", gap: 3 }}>
                   {gps.detalhes.map((d, i) => (
                     <li
                       key={`${d.hora}-${i}`}
-                      className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${
-                        d.fora === null
-                          ? "bg-slate-100 text-slate-600"
+                      className="flex items-center justify-between"
+                      style={{
+                        padding: "5px 8px",
+                        borderRadius: 8,
+                        fontSize: 12,
+                        ...(d.fora === null
+                          ? { background: "var(--dp-surface-2)", color: "var(--dp-muted)" }
                           : d.fora
-                            ? "bg-rose-50 text-rose-800"
-                            : "bg-emerald-50 text-emerald-800"
-                      }`}
+                            ? { background: "var(--dp-danger-bg)", color: "var(--dp-danger-ink)" }
+                            : { background: "var(--dp-ok-bg)", color: "var(--dp-ok-ink)" }),
+                      }}
                       title={
                         d.fora === null
                           ? "Não medido: a âncora do veículo veio sem coordenada — não dá para calcular distância. Não conta como junto."
@@ -879,11 +941,11 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
                             : `${d.papel || "—"} · ${d.fonte || "sem fonte"}${d.horaVeiculo ? ` · veículo às ${d.horaVeiculo}` : ""}`
                       }
                     >
-                      <span className="font-bold tabular-nums">{d.hora || "—"}</span>
-                      <span className="truncate px-2 text-[11px] font-semibold opacity-80">
+                      <span className="dp-num dp-mono" style={{ fontWeight: 600 }}>{d.hora || "—"}</span>
+                      <span className="truncate" style={{ padding: "0 8px", fontSize: 11.5, opacity: 0.85 }}>
                         {referenciaGps(d)}
                       </span>
-                      <span className="whitespace-nowrap font-bold">
+                      <span className="dp-num" style={{ whiteSpace: "nowrap", fontWeight: 600 }}>
                         {d.fora === null ? "não medido" : `${d.fora ? "fora" : "junto"} · ${fmtDist(d.distancia)}`}
                       </span>
                     </li>
@@ -891,7 +953,7 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
                 </ul>
               )}
               {!!gps?.naoMedido && (
-                <p className="mt-2 text-[11px] font-semibold text-slate-500">
+                <p className="dp-faint" style={{ margin: "6px 0 0", fontSize: 11.5 }}>
                   {gps.naoMedido} batida(s) não medida(s): a posição operacional do veículo veio só com o
                   nome do terminal, sem coordenada. Não vira "junto" nem "fora".
                 </p>
@@ -901,32 +963,35 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
             </section>
 
             <section>
-              <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">Linha do tempo do caso</h3>
-              <ol className="mt-2 space-y-2">
+              <TituloBloco>Linha do tempo do caso</TituloBloco>
+              <ol className="dp-card" style={{ listStyle: "none", margin: 0, padding: 8, display: "grid", gap: 3 }}>
                 {passos.map((p) => (
                   <li
                     key={p.titulo}
-                    className={`flex gap-3 rounded-xl border px-3 py-2 ${
-                      p.alerta && p.feito
-                        ? "border-rose-200 bg-rose-50"
+                    className="flex gap-3"
+                    style={{
+                      padding: "6px 9px",
+                      borderRadius: 8,
+                      ...(p.alerta && p.feito
+                        ? { background: "var(--dp-danger-bg)" }
                         : p.feito
-                          ? "border-emerald-200 bg-emerald-50"
-                          : "border-slate-200 bg-white"
-                    }`}
+                          ? { background: "var(--dp-ok-bg)" }
+                          : { background: "var(--dp-surface-2)" }),
+                    }}
                   >
-                    <span className="text-sm">{p.feito ? p.icone : "○"}</span>
+                    <span>{p.feito ? p.icone : "○"}</span>
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-baseline gap-2 text-xs font-bold text-slate-800">
+                      <div className="flex flex-wrap items-baseline gap-2" style={{ fontSize: 12.5, fontWeight: 600 }}>
                         {p.titulo}
-                        {p.quando && <span className="font-semibold text-slate-500">{p.quando}</span>}
+                        {p.quando && <span className="dp-muted dp-num" style={{ fontWeight: 500 }}>{p.quando}</span>}
                       </div>
-                      {p.nota && <div className="mt-0.5 text-[11px] font-semibold text-slate-500">{p.nota}</div>}
+                      {p.nota && <div className="dp-muted" style={{ marginTop: 2, fontSize: 11.5 }}>{p.nota}</div>}
                     </div>
                   </li>
                 ))}
               </ol>
               {!!extra.ajustes.length && (
-                <p className="mt-2 text-[11px] font-semibold text-slate-500">
+                <p className="dp-faint" style={{ margin: "6px 0 0", fontSize: 11.5 }}>
                   {extra.ajustes.length} edição(ões) registrada(s) em ponto_ajustes para este dia.
                 </p>
               )}
@@ -934,8 +999,16 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
           </div>
         </div>
 
-        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
-          <p className="text-[11px] font-semibold text-slate-500">
+        <footer
+          className="flex flex-wrap items-center justify-between gap-3"
+          style={{
+            padding: "12px 18px",
+            borderTop: "1px solid var(--dp-border)",
+            background: "var(--dp-surface-2)",
+            borderRadius: "0 0 var(--dp-radius) var(--dp-radius)",
+          }}
+        >
+          <p className="dp-muted" style={{ margin: 0, fontSize: 11.5 }}>
             Fase de leitura: nenhuma ação desta tela grava na base DP360.
           </p>
           <div className="flex flex-wrap gap-2">
@@ -947,11 +1020,7 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
                   origem: "revisao", tipo, aviso_enviado_em, alvo_* congelado }) e disparo
                   do workflow do robô. Recusar ≠ advertir: advertência só depois de aviso. */}
             <BotaoTravado titulo={TRAVA_GRAVACAO}>📣 Enviar ocorrência</BotaoTravado>
-            <button
-              type="button"
-              onClick={aoFechar}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-            >
+            <button type="button" onClick={aoFechar} className="dp-btn">
               Fechar
             </button>
           </div>
@@ -963,35 +1032,35 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
 
 /* ---------- colunas da grade (ordem do COLS_REV do app antigo) ---------- */
 const COLUNAS = [
-  { id: "cracha", rotulo: "Crachá", classe: "tabular-nums font-semibold" },
-  { id: "nm_funcionario", rotulo: "Nome", classe: "font-bold text-slate-900 whitespace-nowrap" },
-  { id: "nm_funcao", rotulo: "Função", classe: "whitespace-nowrap text-slate-600" },
-  { id: "date_ref", rotulo: "Data", classe: "tabular-nums whitespace-nowrap" },
+  { id: "cracha", rotulo: "Crachá", classe: "dp-num dp-mono" },
+  { id: "nm_funcionario", rotulo: "Nome", estilo: { fontWeight: 600 } },
+  { id: "nm_funcao", rotulo: "Função", classe: "dp-muted" },
+  { id: "date_ref", rotulo: "Data", classe: "dp-num dp-mono" },
   { id: "status_ponto", rotulo: "Status" },
   { id: "_avisado", rotulo: "Avisado?" },
   { id: "_gps", rotulo: "📍 Local" },
   { id: "motivo", rotulo: "Motivo" },
-  { id: "sugestao_fonte", rotulo: "Fonte SUG", classe: "whitespace-nowrap text-slate-600" },
-  { id: "qtd_batidas", rotulo: "Qtd batidas", classe: "tabular-nums text-center" },
-  { id: "todas_batidas", rotulo: "Todas as batidas", classe: "tabular-nums whitespace-nowrap" },
-  { id: "batidas_limpas", rotulo: "Batidas limpas", classe: "tabular-nums whitespace-nowrap" },
-  { id: "entrada", rotulo: "Entrada", classe: "tabular-nums", hora: true },
-  { id: "saida_almoco", rotulo: "Saída almoço", classe: "tabular-nums", hora: true },
-  { id: "volta_almoco", rotulo: "Volta almoço", classe: "tabular-nums", hora: true },
-  { id: "saida", rotulo: "Saída", classe: "tabular-nums", hora: true },
-  { id: "_jornada", rotulo: "Jornada", classe: "tabular-nums" },
-  { id: "esc_entrada", rotulo: "Esc. apresentação", classe: "tabular-nums", hora: true },
-  { id: "programado_entrada", rotulo: "Esc. início", classe: "tabular-nums", hora: true },
-  { id: "programado_saida", rotulo: "Esc. fim", classe: "tabular-nums", hora: true },
-  { id: "esc_saida", rotulo: "Esc. saída", classe: "tabular-nums", hora: true },
+  { id: "sugestao_fonte", rotulo: "Fonte SUG", classe: "dp-muted" },
+  { id: "qtd_batidas", rotulo: "Qtd batidas", classe: "dp-num", alinhar: "center" },
+  { id: "todas_batidas", rotulo: "Todas as batidas", classe: "dp-num dp-mono" },
+  { id: "batidas_limpas", rotulo: "Batidas limpas", classe: "dp-num dp-mono" },
+  { id: "entrada", rotulo: "Entrada", classe: "dp-num dp-mono", hora: true },
+  { id: "saida_almoco", rotulo: "Saída almoço", classe: "dp-num dp-mono", hora: true },
+  { id: "volta_almoco", rotulo: "Volta almoço", classe: "dp-num dp-mono", hora: true },
+  { id: "saida", rotulo: "Saída", classe: "dp-num dp-mono", hora: true },
+  { id: "_jornada", rotulo: "Jornada", classe: "dp-num dp-mono" },
+  { id: "esc_entrada", rotulo: "Esc. apresentação", classe: "dp-num dp-mono", hora: true },
+  { id: "programado_entrada", rotulo: "Esc. início", classe: "dp-num dp-mono", hora: true },
+  { id: "programado_saida", rotulo: "Esc. fim", classe: "dp-num dp-mono", hora: true },
+  { id: "esc_saida", rotulo: "Esc. saída", classe: "dp-num dp-mono", hora: true },
   { id: "_sep", rotulo: "│" },
-  { id: "entrada_sug", rotulo: "Entrada SUG", classe: "tabular-nums", hora: true, sug: true },
-  { id: "almoco_saida_sug", rotulo: "S. almoço SUG", classe: "tabular-nums", hora: true, sug: true },
-  { id: "almoco_volta_sug", rotulo: "V. almoço SUG", classe: "tabular-nums", hora: true, sug: true },
-  { id: "saida_sug", rotulo: "Saída SUG", classe: "tabular-nums", hora: true, sug: true },
-  { id: "duracao_total_sug", rotulo: "Dur. total SUG", classe: "tabular-nums", sug: true },
-  { id: "atraso_min", rotulo: "Atraso (min)", classe: "tabular-nums text-right" },
-  { id: "he_min", rotulo: "HE (min)", classe: "tabular-nums text-right" },
+  { id: "entrada_sug", rotulo: "Entrada SUG", hora: true, sug: true },
+  { id: "almoco_saida_sug", rotulo: "S. almoço SUG", hora: true, sug: true },
+  { id: "almoco_volta_sug", rotulo: "V. almoço SUG", hora: true, sug: true },
+  { id: "saida_sug", rotulo: "Saída SUG", hora: true, sug: true },
+  { id: "duracao_total_sug", rotulo: "Dur. total SUG", classe: "dp-num dp-mono", sug: true },
+  { id: "atraso_min", rotulo: "Atraso (min)", classe: "dp-num", alinhar: "right" },
+  { id: "he_min", rotulo: "HE (min)", classe: "dp-num", alinhar: "right" },
 ];
 
 // Colunas pedidas da ponto_diario. Lista explícita (em vez de `*`) porque a
@@ -1263,12 +1332,12 @@ export default function Revisao() {
   );
 
   const celula = (col, linha, bloqueio) => {
-    if (col.id === "_sep") return <span className="text-slate-300">│</span>;
+    if (col.id === "_sep") return <span className="dp-faint">│</span>;
     if (col.id === "status_ponto")
       return (
         <Pilula
           texto={linha.status_ponto || "—"}
-          tom={String(linha.status_ponto ?? "").toUpperCase() === "OK" ? "emerald" : "amber"}
+          tom={String(linha.status_ponto ?? "").toUpperCase() === "OK" ? "ok" : "warn"}
         />
       );
     if (col.id === "_avisado") return <Avisado caso={casos[chaveDia(linha.cracha, linha.date_ref)]} />;
@@ -1278,201 +1347,177 @@ export default function Revisao() {
     if (col.id === "_jornada") return fmtMin(linha.jornada_liquida_min ?? linha.jornada_total_min);
     const bruto = linha[col.id];
     const texto = col.hora ? fmtHora(bruto) : String(bruto ?? "").trim();
-    if (!texto) return <span className="text-slate-300">—</span>;
+    if (!texto) return <span className="dp-faint">—</span>;
     // Sugestão bloqueada não é sugestão: o valor continua visível (o DP precisa
     // ver o que a view propôs), mas marcado — não dá pra avisar nem lançar.
     if (col.sug && bloqueio)
       return (
-        <span className="font-bold text-amber-700" title={`⚠ ${bloqueio}`}>
-          {texto} ⚠
+        <span className="dp-chip dp-num new" title={`⚠ ${bloqueio}`}>
+          {texto}
+          <span className="es">⚠</span>
         </span>
       );
+    // Horário sugerido utilizável: chip mono, como as batidas da ferramenta.
+    if (col.sug && col.hora) return <span className="dp-chip dp-num">{texto}</span>;
     return texto;
   };
 
   const chips = [
-    ["TODOS", "Todos"],
-    ["REVISAR", "Revisar"],
+    ["TODOS", "TODOS"],
+    ["REVISAR", "REVISAR"],
     ["OK", "OK"],
-    ["FORA", "📍 Fora"],
+    ["FORA", "📍 FORA"],
   ];
 
   return (
     <AbaShell
-      icone={ClipboardCheck}
-      titulo="Revisão"
       resumo="Cartão, fontes e decisão de ajuste. A régua é da view do Athena — esta tela só exibe o que já foi calculado."
       carregando={carregandoDatas && !datas.length}
       erro={erro}
-      acoes={
+      filtros={
         <>
-          {/* TODO(fase de gravação): avisarMotoristas / avisarInternos / avisarFora —
-              gravam ponto_caso e sobem o comunicado. Recusar ≠ advertir, e o alvo do
-              aviso é congelado (nunca reescrito por um segundo aviso). */}
-          <BotaoTravado titulo={TRAVA_GRAVACAO}>📣 Enviar ocorrência</BotaoTravado>
-          <BotaoTravado titulo={TRAVA_GRAVACAO}>📍 Avisar quem bateu fora</BotaoTravado>
+          <select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+            {categorias.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+
+          <select value={data} onChange={(e) => setData(e.target.value)}>
+            {datas.length ? (
+              datas.map((d) => (
+                <option key={d} value={d}>
+                  {fmtData(d)}
+                </option>
+              ))
+            ) : (
+              <option value="">sem datas</option>
+            )}
+          </select>
+
           <button
             type="button"
-            onClick={() => carregarDia()}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+            onClick={() => setLotesDatas((n) => n + PAGINAS_POR_LOTE)}
+            disabled={carregandoDatas}
+            className="dp-btn"
+            title="Busca mais páginas de ponto_diario para trazer datas anteriores."
           >
-            <RefreshCw size={15} /> Atualizar
+            {carregandoDatas ? "carregando…" : "+ datas anteriores"}
           </button>
-        </>
-      }
-    >
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-900">
-        Fase de leitura. Salvar Real manual, marcar ponto conferido e enviar aviso estão desabilitados até a
-        validação — gravação errada aqui vira advertência indevida em cima de trabalhador.
-      </div>
 
-      {/* ---- filtros ---- */}
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <select
-          value={categoria}
-          onChange={(e) => setCategoria(e.target.value)}
-          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800"
-        >
-          {categorias.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
+          {chips.map(([id, rotulo]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setFiltro(id)}
+              className={`dp-chip-f ${filtro === id ? "on" : ""}`}
+            >
+              {rotulo} <span className="n">{contagens[id] || 0}</span>
+            </button>
           ))}
-        </select>
 
-        <select
-          value={data}
-          onChange={(e) => setData(e.target.value)}
-          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800"
-        >
-          {datas.length ? (
-            datas.map((d) => (
-              <option key={d} value={d}>
-                {fmtData(d)}
-              </option>
-            ))
-          ) : (
-            <option value="">sem datas</option>
-          )}
-        </select>
+          <span style={{ flex: 1 }} />
 
-        <button
-          type="button"
-          onClick={() => setLotesDatas((n) => n + PAGINAS_POR_LOTE)}
-          disabled={carregandoDatas}
-          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50"
-          title="Busca mais páginas de ponto_diario para trazer datas anteriores."
-        >
-          {carregandoDatas ? "carregando…" : "+ datas anteriores"}
-        </button>
-
-        <div className="relative ml-auto">
-          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="search"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar por nome ou crachá…"
-            className="w-64 rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-800"
+            style={{ width: 230 }}
           />
-        </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        {chips.map(([id, rotulo]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setFiltro(id)}
-            className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-bold transition ${
-              filtro === id ? "bg-blue-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
-          >
-            {rotulo}
-            <span
-              className={`rounded-full px-1.5 text-[11px] ${filtro === id ? "bg-white/20" : "bg-white text-slate-500"}`}
-            >
-              {contagens[id] || 0}
-            </span>
+          {/* TODO(fase de gravação): avisarMotoristas / avisarInternos / avisarFora —
+              gravam ponto_caso e sobem o comunicado. Recusar ≠ advertir, e o alvo do
+              aviso é congelado (nunca reescrito por um segundo aviso). */}
+          <BotaoTravado titulo={TRAVA_GRAVACAO}>📣 Enviar ocorrência</BotaoTravado>
+          <BotaoTravado titulo={TRAVA_GRAVACAO}>📍 Avisar quem bateu fora</BotaoTravado>
+          <button type="button" onClick={() => carregarDia()} className="dp-btn">
+            <RefreshCw size={13} style={{ display: "inline", verticalAlign: "-2px" }} /> Atualizar
           </button>
-        ))}
-        <span className="ml-auto text-xs font-bold text-slate-500">
-          {comSugestao ? `${comSugestao} com sugestão utilizável` : ""}
-        </span>
+        </>
+      }
+    >
+      {/* Trava da fase de leitura — fica visível, mas discreta. */}
+      <div className="dp-resumo">
+        <span className="dp-pill warn">⚠ fase de leitura</span> Salvar Real manual, marcar ponto conferido e
+        enviar aviso estão desabilitados até a validação — gravação errada aqui vira advertência indevida em cima
+        de trabalhador.
       </div>
 
-      {/* ---- legenda das cores ---- */}
-      <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-500">
+      {/* ---- legenda das cores da linha + contagem de sugestões ---- */}
+      <div className="dp-resumo flex flex-wrap items-center gap-3">
         <span className="flex items-center gap-1.5">
-          <i className="h-3 w-3 rounded bg-emerald-100 ring-1 ring-emerald-300" /> ponto OK
+          <i style={{ ...ESTILO_LEGENDA, background: "var(--dp-ok-bg)" }} /> ponto OK
         </span>
         <span className="flex items-center gap-1.5">
-          <i className="h-3 w-3 rounded bg-amber-100 ring-1 ring-amber-300" /> invertido ou com sugestão utilizável
+          <i style={{ ...ESTILO_LEGENDA, background: "var(--dp-warn-bg)" }} /> invertido ou com sugestão utilizável
         </span>
         <span className="flex items-center gap-1.5">
-          <i className="h-3 w-3 rounded bg-sky-100 ring-1 ring-sky-300" /> falta marcação identificada
+          <i style={{ ...ESTILO_LEGENDA, background: "var(--dp-accent-soft)" }} /> falta marcação identificada
         </span>
         <span className="flex items-center gap-1.5">
-          <i className="h-3 w-3 rounded bg-rose-100 ring-1 ring-rose-300" /> sem sugestão e sem ponta identificada
+          <i style={{ ...ESTILO_LEGENDA, background: "var(--dp-danger-bg)" }} /> sem sugestão e sem ponta
+          identificada
         </span>
+        {!!comSugestao && <span style={{ marginLeft: "auto" }}>{comSugestao} com sugestão utilizável</span>}
       </div>
 
       {/* ---- grade ---- */}
-      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
-        <div className="max-h-[68vh] overflow-auto">
-          <table className="min-w-full border-collapse text-xs">
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-slate-100">
-                {COLUNAS.map((col) => (
-                  <th
-                    key={col.id}
-                    className="whitespace-nowrap border-b border-slate-200 px-2.5 py-2 text-left text-[11px] font-black uppercase tracking-wide text-slate-500"
-                  >
-                    {col.rotulo}
-                  </th>
-                ))}
+      <div className="dp-tabela-wrap">
+        <table className="dp-tabela">
+          <thead>
+            <tr>
+              {COLUNAS.map((col) => (
+                <th key={col.id} style={col.alinhar ? { textAlign: col.alinhar } : undefined}>
+                  {col.rotulo}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {carregando && (
+              <tr>
+                <td colSpan={COLUNAS.length} className="dp-muted" style={{ textAlign: "center", padding: 32 }}>
+                  Carregando a revisão de {fmtData(data)}…
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {carregando && (
-                <tr>
-                  <td colSpan={COLUNAS.length} className="px-3 py-10 text-center text-sm font-semibold text-slate-500">
-                    Carregando a revisão de {fmtData(data)}…
-                  </td>
-                </tr>
-              )}
-              {!carregando && !visiveis.length && (
-                <tr>
-                  <td colSpan={COLUNAS.length} className="px-3 py-10 text-center text-sm font-semibold text-slate-500">
-                    {linhas.length ? "Nada neste filtro." : "Nenhum cartão para esta categoria e data."}
-                  </td>
-                </tr>
-              )}
-              {!carregando &&
-                visiveis.map((linha) => {
-                  const chave = chaveDia(linha.cracha, linha.date_ref);
-                  const bloqueio = bloqueios[chave];
-                  return (
-                    <tr
-                      key={chave}
-                      onClick={() => setAberta(linha)}
-                      className={`cursor-pointer border-b border-slate-100 transition ${classeLinha(linha, bloqueio)}`}
-                      title="Abrir o cartão deste dia"
-                    >
-                      {COLUNAS.map((col) => (
-                        <td key={col.id} className={`px-2.5 py-1.5 align-middle ${col.classe || "text-slate-700"}`}>
-                          {celula(col, linha, bloqueio)}
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-        </div>
+            )}
+            {!carregando && !visiveis.length && (
+              <tr>
+                <td colSpan={COLUNAS.length} className="dp-muted" style={{ textAlign: "center", padding: 32 }}>
+                  {linhas.length ? "Nada neste filtro." : "Nenhum cartão para esta categoria e data."}
+                </td>
+              </tr>
+            )}
+            {!carregando &&
+              visiveis.map((linha) => {
+                const chave = chaveDia(linha.cracha, linha.date_ref);
+                const bloqueio = bloqueios[chave];
+                return (
+                  <tr
+                    key={chave}
+                    onClick={() => setAberta(linha)}
+                    className={classeLinha(linha, bloqueio)}
+                    style={{ cursor: "pointer" }}
+                    title="Abrir o cartão deste dia"
+                  >
+                    {COLUNAS.map((col) => (
+                      <td
+                        key={col.id}
+                        className={col.classe || ""}
+                        style={{ ...(col.alinhar ? { textAlign: col.alinhar } : null), ...col.estilo }}
+                      >
+                        {celula(col, linha, bloqueio)}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+          </tbody>
+        </table>
       </div>
 
-      <p className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+      <p className="dp-resumo flex items-center gap-1.5" style={{ margin: 0, paddingBottom: 20 }}>
         <MapPin size={12} />
         Régua do GPS: mais de {RAIO_VEIC} m da posição do veículo (gps_carro) é "fora"; sem veículo, vale o local
         conhecido até {RAIO_LOCAL} m. Em dia de <b>reserva</b> ele não tem carro — batida em local conhecido vale

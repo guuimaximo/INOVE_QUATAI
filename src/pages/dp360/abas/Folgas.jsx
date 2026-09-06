@@ -15,7 +15,7 @@
 // decisão e dispara o workflow; o robô lê a fila e devolve o resultado em
 // `ponto_ocorrencias`. Até lá, esta aba apenas evidencia o que já foi lançado.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Palette, RefreshCw, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Palette, RefreshCw, Search, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
 
@@ -39,23 +39,13 @@ const MAPA_CLASSIFICACAO = {
   REGIME_INDEFINIDO: ["sem", "?"],
 };
 
-// Cores (equivalentes Tailwind das classes .cell.* de app/ui/styles.css).
-const ESTILO_CELULA = {
-  ok: "bg-emerald-100 text-emerald-800",
-  rev: "bg-amber-100 text-amber-800",
-  folga: "bg-sky-100 text-sky-800",
-  curso: "bg-violet-100 text-violet-800",
-  falta: "bg-rose-100 text-rose-700",
-  res: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-300",
-  verif: "bg-fuchsia-50 text-fuchsia-700",
-  atest: "bg-purple-100 text-purple-800",
-  ferias: "bg-cyan-100 text-cyan-800",
-  afast: "bg-stone-200 text-stone-700",
-  feriado: "bg-slate-200 text-slate-600",
-  just: "bg-slate-100 text-slate-600",
-  sem: "bg-slate-100 text-slate-400",
-  vazio: "bg-transparent text-slate-300",
-};
+// Estados de célula que existem como `.dp-cell.<estado>` no dp360.css (porte
+// direto das classes `.cell.*` de app/ui/styles.css). Qualquer coisa fora daqui
+// cai em "sem" — a cor da célula é a informação, então nunca fica sem classe.
+const ESTADOS_CELULA = new Set([
+  "ok", "rev", "folga", "curso", "falta", "res", "verif",
+  "atest", "ferias", "afast", "feriado", "just", "sem", "vazio",
+]);
 
 // Espelho de LEGENDA (app.js ~3656), sem os itens que dependem de escrita.
 const LEGENDA = [
@@ -321,28 +311,25 @@ function apurarDiasCurso(linhas) {
 /* ─────────────────────────── peças de interface ────────────────────────── */
 
 function Celula({ estado }) {
-  const cls = ESTILO_CELULA[estado.cls] || ESTILO_CELULA.sem;
+  const cls = ESTADOS_CELULA.has(estado.cls) ? estado.cls : "sem";
   return (
-    <div
-      title={estado.full || undefined}
-      className={`flex h-9 items-center justify-center rounded-lg px-1 text-[11px] font-bold leading-tight ${cls}`}
-    >
-      <span className="truncate">{estado.txt}</span>
+    <div className={`dp-cell ${cls}`} title={estado.full || undefined}>
+      <span>{estado.txt}</span>
     </div>
   );
 }
 
 function MarcaBot({ situacao }) {
-  if (!situacao) return <span className="text-xs text-slate-300">—</span>;
+  if (!situacao) return <span className="dp-faint">—</span>;
   if (situacao === "erro") {
     return (
-      <span title="O bot lançou, mas alguma ocorrência falhou" className="text-xs font-bold text-rose-600">
+      <span className="dp-botmark e" title="O bot lançou, mas alguma ocorrência falhou">
         🤖 ✗
       </span>
     );
   }
   return (
-    <span title="Ocorrência lançada pelo bot com sucesso" className="text-xs font-bold text-emerald-600">
+    <span className="dp-botmark o" title="Ocorrência lançada pelo bot com sucesso">
       🤖 ✓
     </span>
   );
@@ -351,39 +338,32 @@ function MarcaBot({ situacao }) {
 function ModalLegenda({ aoFechar }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      className="dp-overlay"
       onClick={(evento) => {
         if (evento.target === evento.currentTarget) aoFechar();
       }}
     >
-      <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-black text-slate-900">🎨 Legenda das cores</h3>
-          <button
-            type="button"
-            onClick={aoFechar}
-            className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"
-            aria-label="Fechar legenda"
-          >
+      <div className="dp-modal">
+        <div className="dp-modal-head">
+          <h3>🎨 Legenda das cores</h3>
+          <button type="button" className="dp-det-x" onClick={aoFechar} aria-label="Fechar legenda">
             <X size={17} />
           </button>
         </div>
-        <ul className="mt-4 space-y-2">
+        <div className="dp-lg-list">
           {LEGENDA.map(([cls, exemplo, titulo, descricao]) => (
-            <li key={cls} className="flex items-start gap-3">
-              <span
-                className={`flex h-8 w-16 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold ${ESTILO_CELULA[cls]}`}
-              >
-                {exemplo}
+            <div key={cls} className="dp-lg-row">
+              <span className={`dp-cell lg-sw ${cls}`}>
+                <span>{exemplo}</span>
               </span>
-              <div className="min-w-0">
-                <div className="text-sm font-bold text-slate-800">{titulo}</div>
-                <div className="text-xs leading-5 text-slate-600">{descricao}</div>
+              <div className="dp-lg-txt">
+                <b>{titulo}</b>
+                <span>{descricao}</span>
               </div>
-            </li>
+            </div>
           ))}
-        </ul>
-        <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+        </div>
+        <p className="dp-lg-foot">
           O lançamento das ocorrências no Transnet é feito pelo robô (fora do navegador). Esta tela
           mostra o que está pendente e o que o robô já lançou.
         </p>
@@ -398,40 +378,36 @@ function PainelDetalhe({ pessoa, semana, ctx, aoFechar }) {
   const situacaoRuim = pessoa.situacao && !/^OK/i.test(pessoa.situacao);
 
   return (
-    <aside className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 p-4 xl:w-[350px]">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-black text-slate-900">{pessoa.nome}</div>
-          <div className="mt-0.5 text-xs font-semibold text-slate-500">
+    <aside className="dp-detail">
+      <div className="dp-det-head">
+        <div style={{ minWidth: 0 }}>
+          <b>{pessoa.nome}</b>
+          <div className="sub">
             crachá {pessoa.cracha}
             {pessoa.regime ? ` · ${pessoa.regime}` : ""}
             {pessoa.funcao ? ` · ${pessoa.funcao}` : ""}
           </div>
           {pessoa.situacao && (
-            <div
-              className={`mt-1 text-xs font-bold ${situacaoRuim ? "text-amber-700" : "text-slate-500"}`}
-            >
-              {situacaoRuim ? "⚠ " : ""}
-              {pessoa.situacao}
+            <div className="sub">
+              {situacaoRuim ? (
+                <span className="dp-pill warn">⚠ {pessoa.situacao}</span>
+              ) : (
+                pessoa.situacao
+              )}
             </div>
           )}
           {pessoa.desligadoEm && (
-            <div className="mt-1 text-xs font-black text-rose-600">
-              ⛔ DESLIGADO EM {ddmm(pessoa.desligadoEm)}
+            <div className="sub">
+              <span className="dp-pill danger">⛔ DESLIGADO EM {ddmm(pessoa.desligadoEm)}</span>
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={aoFechar}
-          className="rounded-lg p-1 text-slate-500 hover:bg-slate-200"
-          aria-label="Fechar detalhe"
-        >
+        <button type="button" className="dp-det-x" onClick={aoFechar} aria-label="Fechar detalhe">
           <X size={16} />
         </button>
       </div>
 
-      <div className="mt-3 space-y-2">
+      <div>
         {[1, 2, 3, 4, 5, 6, 7].map((d) => {
           const linha = pessoa.linha[d];
           const dataRef = texto(linha?.date_ref).slice(0, 10) || somaDias(semana, d - 1);
@@ -449,37 +425,31 @@ function PainelDetalhe({ pessoa, semana, ctx, aoFechar }) {
           const bot = ctx.ocorrencias.get(chaveDia(pessoa.cracha, dataRef));
 
           return (
-            <div key={d} className="rounded-xl border border-slate-200 bg-white p-3">
-              <div className="flex items-center gap-3">
-                <div className="w-12 shrink-0">
-                  <div className="text-xs font-black text-slate-700">{DIAS_SEMANA[d - 1]}</div>
-                  <div className="text-[11px] font-semibold text-slate-400">{ddmm(dataRef)}</div>
+            <div key={d} className="dp-dblock">
+              <div className="dp-drow">
+                <div className="dp-dday">
+                  {DIAS_SEMANA[d - 1]}
+                  <span className="sub">{ddmm(dataRef)}</span>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="w-24">
-                    <Celula estado={estado} />
-                  </div>
+                <div className="dp-dcell">
+                  <Celula estado={estado} />
                 </div>
               </div>
 
-              {!linha && (
-                <div className="mt-2 text-xs text-slate-400">Sem registro deste dia na base.</div>
-              )}
+              {!linha && <div className="dp-dnote mute">Sem registro deste dia na base.</div>}
 
-              {jornada && (
-                <div className="mt-2 font-mono text-[11px] font-semibold text-slate-700">
-                  {batidas || "sem batidas"}
-                </div>
-              )}
+              {jornada && <div className="dp-dnote bat">{batidas || "sem batidas"}</div>}
 
               {lancado && (
-                <div className="mt-1 text-[11px] font-semibold text-emerald-700" title={lancado}>
+                <div className="dp-dnote ok" title={lancado}>
                   ✅ {teCurto(lancado)} — já lançado no Transnet
                 </div>
               )}
 
               {semOperacao(linha) && (
-                <div className="mt-1 text-[11px] font-semibold text-rose-700">
+                <div
+                  className={`dp-dnote ${ctx.reservas.has(chaveDia(pessoa.cracha, dataRef)) ? "ok" : "danger"}`}
+                >
                   {ctx.reservas.has(chaveDia(pessoa.cracha, dataRef))
                     ? "✅ RES. — marcado como reserva (sem operação confirmada)"
                     : "⚠ bateu ponto mas NÃO operou (sem Citatti/bilhetagem) — confirmar se foi reserva"}
@@ -487,17 +457,17 @@ function PainelDetalhe({ pessoa, semana, ctx, aoFechar }) {
               )}
 
               {!lancado && tipo && (
-                <div className="mt-1 text-[11px] font-semibold text-sky-700">
+                <div className="dp-dnote sug">
                   Sugestão: {tipo}-{ROTULO_TIPO[tipo] || tipo} — a lançar pelo robô
                 </div>
               )}
 
               {motivo && texto(linha?.status_ponto) !== "OK" && !semOperacao(linha) && (
-                <div className="mt-1 text-[11px] text-amber-700">⚠ {motivo}</div>
+                <div className="dp-dnote warn">⚠ {motivo}</div>
               )}
 
               {bot && (
-                <div className="mt-1 text-[11px] font-semibold text-slate-500">
+                <div className="dp-dnote mute">
                   🤖 {texto(bot.tipo)} · {texto(bot.status) || "sem status"}
                   {bot.lancado_em ? ` · ${ddmm(bot.lancado_em)}` : ""}
                 </div>
@@ -507,7 +477,7 @@ function PainelDetalhe({ pessoa, semana, ctx, aoFechar }) {
         })}
       </div>
 
-      <p className="mt-3 text-[11px] leading-5 text-slate-500">
+      <p className="dp-det-foot">
         Somente leitura. O lançamento das ocorrências no Transnet continua no robô.
       </p>
     </aside>
@@ -738,184 +708,143 @@ export default function Folgas() {
 
   return (
     <AbaShell
-      icone={CalendarDays}
-      titulo="Folgas"
-      resumo="Calendário semanal do Passo 3: quem está de folga, quem faltou e o que o robô já lançou no Transnet. Somente leitura."
       carregando={carregandoBase}
       erro={erro}
-      acoes={
+      filtros={
         <>
-          <button
-            type="button"
-            onClick={() => setLegendaAberta(true)}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-          >
-            <Palette size={15} /> Legenda
-          </button>
-          <button
-            type="button"
-            onClick={recarregar}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-          >
-            <RefreshCw size={15} /> Atualizar
-          </button>
-        </>
-      }
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <select
-          value={categoria}
-          onChange={(evento) => setCategoria(evento.target.value)}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700"
-        >
-          {CATEGORIAS.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-
-        <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-1 py-1">
-          <button
-            type="button"
-            title="Semana anterior"
-            disabled={indiceSemana < 0 || indiceSemana >= semanas.length - 1}
-            onClick={() => setSemana(semanas[indiceSemana + 1])}
-            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 disabled:opacity-30"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <select
-            value={semana}
-            onChange={(evento) => setSemana(evento.target.value)}
-            className="bg-transparent px-1 py-1 text-sm font-bold text-slate-700"
-          >
-            {semanas.length === 0 && <option value="">Sem semanas</option>}
-            {semanas.map((item) => (
+          <select value={categoria} onChange={(evento) => setCategoria(evento.target.value)}>
+            {CATEGORIAS.map((item) => (
               <option key={item} value={item}>
-                Semana de {ddmm(item)}
+                {item}
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            title="Semana seguinte"
-            disabled={indiceSemana <= 0}
-            onClick={() => setSemana(semanas[indiceSemana - 1])}
-            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 disabled:opacity-30"
-          >
-            <ChevronRight size={16} />
+
+          <div className="dp-weeknav">
+            <button
+              type="button"
+              title="Semana anterior"
+              disabled={indiceSemana < 0 || indiceSemana >= semanas.length - 1}
+              onClick={() => setSemana(semanas[indiceSemana + 1])}
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <select value={semana} onChange={(evento) => setSemana(evento.target.value)}>
+              {semanas.length === 0 && <option value="">Sem semanas</option>}
+              {semanas.map((item) => (
+                <option key={item} value={item}>
+                  Semana de {ddmm(item)}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              title="Semana seguinte"
+              disabled={indiceSemana <= 0}
+              onClick={() => setSemana(semanas[indiceSemana - 1])}
+            >
+              <ChevronRight size={15} />
+            </button>
+          </div>
+
+          <div className="dp-busca">
+            <Search size={14} />
+            <input
+              type="search"
+              value={termo}
+              onChange={(evento) => setTermo(evento.target.value)}
+              placeholder="buscar por nome ou crachá…"
+            />
+          </div>
+
+          <button type="button" className="dp-btn" onClick={() => setLegendaAberta(true)}>
+            <Palette size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
+            Legenda
           </button>
-        </div>
-
-        <div className="relative min-w-[220px] flex-1">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="search"
-            value={termo}
-            onChange={(evento) => setTermo(evento.target.value)}
-            placeholder="Buscar por nome ou crachá…"
-            className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-blue-400"
-          />
-        </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold text-slate-500">
-        <span>{visiveis.length} colaborador(es)</span>
-        <span className="text-sky-700">{totalFolgas} folga(s) a lançar</span>
-        <span className="text-slate-400">
-          Lançamento no Transnet é feito pelo robô — esta tela não grava nada.
-        </span>
-      </div>
-
-      <div className="mt-4 flex flex-col gap-4 xl:flex-row">
-        <div className="min-w-0 flex-1">
+          <button type="button" className="dp-btn" onClick={recarregar}>
+            <RefreshCw size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
+            Atualizar
+          </button>
+        </>
+      }
+      resumo={
+        <>
+          Calendário semanal do Passo 3: quem está de folga, quem faltou e o que o robô já lançou no
+          Transnet. <b>{visiveis.length}</b> colaborador(es) ·{" "}
+          <b>{totalFolgas}</b> folga(s) a lançar ·{" "}
+          <span className="dp-faint">somente leitura — esta tela não grava nada.</span>
+        </>
+      }
+    >
+      <div className="dp-calsplit">
+        <div className="dp-calscroll">
           {carregandoGrade ? (
-            <p className="rounded-xl bg-slate-50 px-4 py-6 text-sm font-semibold text-slate-500">
-              Carregando o calendário da semana…
-            </p>
+            <div className="dp-vazio">Carregando o calendário da semana…</div>
           ) : linhasGrade.length === 0 ? (
-            <p className="rounded-xl bg-slate-50 px-4 py-6 text-sm font-semibold text-slate-500">
+            <div className="dp-vazio">
               {pessoas.length === 0
                 ? "Ninguém nessa categoria/semana."
                 : "Nenhum colaborador bate com a busca."}
-            </p>
+            </div>
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-slate-200">
-              <table className="w-full min-w-[860px] border-collapse text-left">
-                <thead>
-                  <tr className="bg-slate-50">
-                    <th className="sticky left-0 z-10 bg-slate-50 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-500">
-                      Colaborador
-                    </th>
-                    {cabecalhoDias.map((dia) => (
-                      <th
-                        key={dia.rotulo}
-                        className="px-1 py-2 text-center text-xs font-black uppercase text-slate-500"
-                      >
-                        {dia.rotulo}
-                        <div className="text-[10px] font-bold normal-case text-slate-400">{dia.data}</div>
-                      </th>
-                    ))}
-                    <th className="px-2 py-2 text-center text-xs font-black uppercase text-slate-500">
-                      🤖 Bot
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {linhasGrade.map(({ pessoa, celulas, bot }) => {
-                    const situacaoRuim = pessoa.situacao && !/^OK/i.test(pessoa.situacao);
-                    const ativo = pessoa.cracha === selecionado;
-                    return (
-                      <tr
-                        key={pessoa.cracha}
-                        onClick={() => setSelecionado(ativo ? "" : pessoa.cracha)}
-                        className={`cursor-pointer border-t border-slate-100 ${ativo ? "bg-blue-50" : "hover:bg-slate-50"}`}
-                      >
-                        <td
-                          className={`sticky left-0 z-10 px-3 py-1.5 ${ativo ? "bg-blue-50" : "bg-white"}`}
+            <div className="dp-cal">
+              <div className="dp-cal-row dp-cal-head">
+                <div className="dp-calmark" />
+                <div>Colaborador</div>
+                {cabecalhoDias.map((dia) => (
+                  <div key={dia.rotulo}>
+                    {dia.rotulo} <span className="dp-cal-dt">{dia.data}</span>
+                  </div>
+                ))}
+                <div>🤖 Bot</div>
+              </div>
+
+              <div className="dp-cal-body">
+                {linhasGrade.map(({ pessoa, celulas, bot }) => {
+                  const situacaoRuim = pessoa.situacao && !/^OK/i.test(pessoa.situacao);
+                  const ativo = pessoa.cracha === selecionado;
+                  return (
+                    <div
+                      key={pessoa.cracha}
+                      className={`dp-cal-row${ativo ? " sel" : ""}`}
+                      onClick={() => setSelecionado(ativo ? "" : pessoa.cracha)}
+                    >
+                      <div className="dp-calmark">
+                        <i />
+                      </div>
+                      <div className="dp-cal-nome">
+                        <b
+                          title={[pessoa.nome || pessoa.cracha, pessoa.funcao, pessoa.situacao]
+                            .filter(Boolean)
+                            .join(" · ")}
                         >
-                          <div className="flex items-center gap-2">
-                            <span className="max-w-[200px] truncate text-xs font-bold text-slate-800">
-                              {pessoa.nome || pessoa.cracha}
-                            </span>
-                            {pessoa.regime && (
-                              <span
-                                title={rotuloRegime(pessoa.regime, pessoa.categoria)}
-                                className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600"
-                              >
-                                {pessoa.regime}
-                              </span>
-                            )}
-                          </div>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10px] font-semibold text-slate-400">
-                            <span>{pessoa.cracha}</span>
-                            {pessoa.situacao && (
-                              <span className={situacaoRuim ? "text-amber-700" : "text-slate-400"}>
-                                {situacaoRuim ? "⚠ " : ""}
-                                {pessoa.situacao}
-                              </span>
-                            )}
-                            {pessoa.desligadoEm && (
-                              <span className="font-black text-rose-600">
-                                ⛔ DESLIGADO EM {ddmm(pessoa.desligadoEm)}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        {celulas.map((celula) => (
-                          <td key={celula.dia} className="px-1 py-1.5 align-middle">
-                            <Celula estado={celula.estado} />
-                          </td>
-                        ))}
-                        <td className="px-2 py-1.5 text-center">
-                          <MarcaBot situacao={bot} />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          {pessoa.nome || pessoa.cracha}
+                        </b>
+                        {pessoa.regime && (
+                          <span className="reg" title={rotuloRegime(pessoa.regime, pessoa.categoria)}>
+                            {pessoa.regime}
+                          </span>
+                        )}
+                        <span className="cra">{pessoa.cracha}</span>
+                        {pessoa.situacao && situacaoRuim && (
+                          <span className="sit" title={pessoa.situacao}>
+                            ⚠ {pessoa.situacao}
+                          </span>
+                        )}
+                        {pessoa.desligadoEm && (
+                          <span className="desl">⛔ DESLIGADO {ddmm(pessoa.desligadoEm)}</span>
+                        )}
+                      </div>
+                      {celulas.map((celula) => (
+                        <Celula key={celula.dia} estado={celula.estado} />
+                      ))}
+                      <div className="dp-calbot">
+                        <MarcaBot situacao={bot} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

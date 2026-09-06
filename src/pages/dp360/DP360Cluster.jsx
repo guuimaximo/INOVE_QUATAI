@@ -13,6 +13,8 @@ import Folgas from "./abas/Folgas";
 import Gordura from "./abas/Gordura";
 import Ocorrencias from "./abas/Ocorrencias";
 import Motorista from "./abas/Motorista";
+import Importacoes from "./abas/Importacoes";
+import Config from "./abas/Config";
 
 // A aparencia segue a FERRAMENTA (Sistemas/PONTO/app/ui), nao o visual do INOVE:
 // topbar enxuta com abas de texto, fundo cinza, tabela densa. Quem usa o DP passa o
@@ -26,6 +28,8 @@ const ABAS = [
   { id: "gordura", label: "Gordura", Componente: Gordura },
   { id: "ocorrencias", label: "Ocorrências", Componente: Ocorrencias },
   { id: "motorista", label: "Motorista", Componente: Motorista },
+  { id: "importacoes", label: "Importações", Componente: Importacoes },
+  { id: "config", label: "Config", Componente: Config },
 ];
 
 export default function DP360Cluster() {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { MapPin, RefreshCw, UserRound, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import MapaBatidas from "../MapaBatidas";
+import TabelaDP from "../TabelaDP";
 import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
 import { GARAGEM, dentroDoLocal, distanciaM, localConhecido } from "../regrasGps";
 
@@ -47,6 +48,15 @@ function min2hm(valor) {
   if (!Number.isFinite(n)) return "";
   const m = ((Math.round(n) % 1440) + 1440) % 1440;
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Faixa "05:00 – 14:00" das colunas Operação e Escala. Devolve VAZIO quando as duas
+ * pontas faltam: na grade, vazio é o que manda a linha para o fim da ordenação — um
+ * "— – —" seria texto e subiria na frente de 04:10.
+ */
+function faixaHoras(ini, fim) {
+  return ini || fim ? `${ini || "—"} – ${fim || "—"}` : "";
 }
 
 /** "2026-08-04" → "04/08/2026". */
@@ -787,6 +797,135 @@ export default function Motorista() {
     [dias, diaAberto],
   );
 
+  /* ─────────────────────────── colunas da grade ───────────────────────────
+     MESMAS colunas, MESMA ordem e MESMO conteúdo de célula da tabela que estava
+     escrita à mão aqui. A divisão de trabalho é a da TabelaDP:
+       · `valor` é o que ORDENA e o que vai para o CSV — sempre dado (data, hora,
+         número, texto), nunca JSX; ordenar "GPS" pelo chip pintado ordenaria pelo
+         emoji, e "Ponto batido" pelo elemento React;
+       · `render` é só a pinta da célula (chips, pílulas, negrito).
+     A grade só ordena: o filtro de pessoa e o período seguem na barra da aba.     */
+  const colunas = useMemo(
+    () => [
+      {
+        id: "data",
+        titulo: "Data",
+        classe: "dp-num",
+        largura: 120,
+        valor: (d) => fmtData(soData(d.date_ref)),
+        render: (d) => <b>{fmtData(soData(d.date_ref))}</b>,
+      },
+      {
+        id: "dia",
+        titulo: "Dia",
+        classe: "dp-muted",
+        largura: 110,
+        valor: (d) => diaSemana(soData(d.date_ref)),
+      },
+      {
+        id: "ponto",
+        titulo: "Ponto batido",
+        largura: 250,
+        // Só as posições preenchidas, em HH:MM zero-padded: ordena pela entrada e o
+        // CSV sai com o cartão cru em vez dos chips.
+        valor: (d) => cartaoAtual(d).filter(Boolean).join(" "),
+        render: (d) => <LinhaCartao horas={cartaoAtual(d)} />,
+      },
+      {
+        id: "jornada",
+        titulo: "Jornada",
+        classe: "dp-num",
+        largura: 100,
+        valor: (d) => d.jornada_horas || "", // "10h09" — a grade já sabe ordenar
+        render: (d) => d.jornada_horas || <Vazio />,
+      },
+      {
+        id: "operacao",
+        titulo: "Operação",
+        classe: "dp-num",
+        largura: 150,
+        valor: (d) => faixaHoras(min2hm(d.operacao_ini_min), min2hm(d.operacao_fim_min)),
+        render: (d) =>
+          faixaHoras(min2hm(d.operacao_ini_min), min2hm(d.operacao_fim_min)) || <Vazio />,
+      },
+      {
+        id: "escala",
+        titulo: "Escala",
+        classe: "dp-num",
+        largura: 150,
+        valor: (d) =>
+          faixaHoras(
+            fmtHora(d.programado_entrada || d.esc_entrada),
+            fmtHora(d.programado_saida || d.esc_saida),
+          ),
+        render: (d) =>
+          faixaHoras(
+            fmtHora(d.programado_entrada || d.esc_entrada),
+            fmtHora(d.programado_saida || d.esc_saida),
+          ) || <Vazio />,
+      },
+      {
+        id: "sugestao",
+        titulo: "Sugestão",
+        largura: 250,
+        valor: (d) => cartaoSugestao(d).filter(Boolean).join(" "),
+        render: (d) => {
+          const atual = cartaoAtual(d);
+          const sugestao = cartaoSugestao(d);
+          if (!sugestao.some(Boolean)) return <Vazio />;
+          return (
+            <LinhaCartao
+              horas={sugestao}
+              destaque={sugestao.map((v, i) => !!v && v !== atual[i])}
+            />
+          );
+        },
+      },
+      {
+        id: "gps",
+        titulo: "📍 GPS",
+        largura: 180,
+        // NÚMERO, não o texto do chip: a maior distância da garagem entre as batidas
+        // FORA de local conhecido (0 = todas dentro, vazio = nenhuma batida com GPS).
+        // Ordenar "📍 2/5 · 1.2 km" como texto ordenaria pelo 2 e misturaria m com km.
+        valor: (d) => {
+          const gps = gpsPorDia[soData(d.date_ref)];
+          if (!gps || !gps.total) return "";
+          return gps.fora ? gps.dist : 0;
+        },
+        render: (d) => <PilulaGps gps={gpsPorDia[soData(d.date_ref)]} />,
+      },
+      {
+        id: "situacao",
+        titulo: "Situação",
+        largura: 250,
+        valor: (d) => situacaoDoDia(d).texto,
+        render: (d) => (
+          <>
+            <PilulaSituacao situacao={situacaoDoDia(d)} />
+            {d.status_ponto === "REVISAR" && d.motivo && (
+              <div
+                className="dp-faint"
+                style={{
+                  fontSize: 11,
+                  marginTop: 2,
+                  maxWidth: 220,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+                title={String(d.motivo)}
+              >
+                {String(d.motivo).split(" (")[0]}
+              </div>
+            )}
+          </>
+        ),
+      },
+    ],
+    [gpsPorDia],
+  );
+
   // Barra de filtros no formato da ferramenta: pessoa + "de … até …" + recarregar.
   // Os campos herdam o estilo de `.dp-viewbar input` — nada de classe visual aqui.
   const filtros = (
@@ -869,13 +1008,10 @@ export default function Motorista() {
     </>
   );
 
-  const aviso = !cracha
-    ? "Selecione um colaborador para ver os pontos do período."
-    : carregandoDias
-      ? "Carregando os dias do período…"
-      : !dias.length
-        ? "Nenhum registro nesse período para esse colaborador."
-        : "";
+  // Sem colaborador escolhido não há grade nenhuma a mostrar (nem o ⚙/CSV dela): o
+  // convite ocupa a área inteira, como antes. "Carregando" e "nenhum registro" passaram
+  // a ser os estados da própria TabelaDP, com o MESMO texto de sempre.
+  const aviso = !cracha ? "Selecione um colaborador para ver os pontos do período." : "";
 
   return (
     <AbaShell filtros={filtros} resumo={resumo} carregando={carregandoBase} erro={erro}>
@@ -884,95 +1020,18 @@ export default function Motorista() {
           {aviso}
         </div>
       ) : (
-        <div className="dp-tabela-wrap">
-          <table className="dp-tabela">
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Dia</th>
-                <th>Ponto batido</th>
-                <th>Jornada</th>
-                <th>Operação</th>
-                <th>Escala</th>
-                <th>Sugestão</th>
-                <th>📍 GPS</th>
-                <th>Situação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dias.map((dia) => {
-                const data = soData(dia.date_ref);
-                const situacao = situacaoDoDia(dia);
-                const atual = cartaoAtual(dia);
-                const sugestao = cartaoSugestao(dia);
-                const escalaIni = fmtHora(dia.programado_entrada || dia.esc_entrada);
-                const escalaFim = fmtHora(dia.programado_saida || dia.esc_saida);
-                const opIni = min2hm(dia.operacao_ini_min);
-                const opFim = min2hm(dia.operacao_fim_min);
-                const temSugestao = sugestao.some(Boolean);
-                return (
-                  <tr
-                    key={data}
-                    onClick={() => setDiaAberto(data)}
-                    className={LINHA[situacao.tom] || ""}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <td className="dp-num">
-                      <b>{fmtData(data)}</b>
-                    </td>
-                    <td className="dp-muted">{diaSemana(data)}</td>
-                    <td>
-                      <LinhaCartao horas={atual} />
-                    </td>
-                    <td className="dp-num">{dia.jornada_horas || <Vazio />}</td>
-                    <td className="dp-num">
-                      {opIni || opFim ? `${opIni || "—"} – ${opFim || "—"}` : <Vazio />}
-                    </td>
-                    <td className="dp-num">
-                      {escalaIni || escalaFim ? (
-                        `${escalaIni || "—"} – ${escalaFim || "—"}`
-                      ) : (
-                        <Vazio />
-                      )}
-                    </td>
-                    <td>
-                      {temSugestao ? (
-                        <LinhaCartao
-                          horas={sugestao}
-                          destaque={sugestao.map((v, i) => !!v && v !== atual[i])}
-                        />
-                      ) : (
-                        <Vazio />
-                      )}
-                    </td>
-                    <td>
-                      <PilulaGps gps={gpsPorDia[data]} />
-                    </td>
-                    <td>
-                      <PilulaSituacao situacao={situacao} />
-                      {dia.status_ponto === "REVISAR" && dia.motivo && (
-                        <div
-                          className="dp-faint"
-                          style={{
-                            fontSize: 11,
-                            marginTop: 2,
-                            maxWidth: 220,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                          title={String(dia.motivo)}
-                        >
-                          {String(dia.motivo).split(" (")[0]}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <TabelaDP
+          chave="mot"
+          colunas={colunas}
+          linhas={dias}
+          idLinha={(dia) => soData(dia.date_ref)}
+          classeLinha={(dia) => LINHA[situacaoDoDia(dia).tom] || ""}
+          aoClicarLinha={(dia) => setDiaAberto(soData(dia.date_ref))}
+          nomeCsv={`motorista_${pessoa?.cracha || cracha}_${ini}_a_${fim}`}
+          carregando={carregandoDias}
+          mensagemCarregando="Carregando os dias do período…"
+          vazio="Nenhum registro nesse período para esse colaborador."
+        />
       )}
 
       {diaSelecionado && (

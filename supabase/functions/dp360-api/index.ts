@@ -77,6 +77,25 @@ const TABELAS: Record<string, Acesso> = {
   ponto_importacoes: { ler: true, escrever: ["insert"] },
   ponto_leitura: { ler: true, escrever: ["insert"] },
   app_config: { ler: true, escrever: ["upsert"], conflito: "chave" },
+
+  // — FOLHA: liberada a pedido do dono (2026-09-06) para a tela Banco de Horas —
+  // ATENCAO: esta tabela tem HORA EXTRA E VALOR EM R$ por colaborador. Foi
+  // deliberadamente mantida fora da allowlist ate aqui. Entra SOMENTE LEITURA:
+  // nenhuma tela do DP360 escreve folha, e o que alimenta a tabela e o importador.
+  // Continua alcancavel so por Administrador do INOVE (o gate no topo desta funcao)
+  // e a pagina /dp360-banco-horas tambem e admin-only pelo access.js.
+  banco_horas: { ler: true },
+
+  // — FRAUDE DE CARTAO (INOVE Guard): liberadas a pedido do dono (2026-09-06) —
+  // SOMENTE LEITURA. A regra e calculada na origem (SQL diario): bloco = debitos
+  // consecutivos do mesmo cartao no mesmo endereco, gatilho 3+ em 60 min, so
+  // giro_efetuado=1, dedup por r95_id. A tela apenas apresenta e filtra.
+  // ATENCAO: `fraude_cartao_bloqueado` tem `numero_cartao`. A tela NAO deve exibir o
+  // numero inteiro — mascare. Manter a coluna acessivel e necessario para casar os
+  // registros, mas mostrar cartao completo numa tela e vazamento gratuito.
+  fraude_cartao_bloqueado: { ler: true },
+  fraude_cartao_giros: { ler: true },
+  fraude_cartao_sequencial: { ler: true },
 };
 
 const LIMITE_MAX = 5000;

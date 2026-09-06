@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AbaShell from "./AbaShell";
+import TabelaDP from "../TabelaDP";
 import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -155,28 +156,72 @@ function CelulaJornada({ linha }) {
   );
 }
 
-/* ─────────────────────────── colunas ─────────────────────────── */
+/* ─────────────────────────── colunas ───────────────────────────
+   Formato do TabelaDP: `valor` é o que ORDENA e o que sai no CSV; `render` só
+   desenha. Coluna calculada (realizado, importação, programado) SEM `valor`
+   ordenaria pelo JSX — por isso todas trazem o par. Onde o `id` já é o campo da
+   linha (`fonte`, `sugestao_origem`…) o `valor` fica de fora de propósito: a
+   grade cai em `linha[id]`, que é exatamente o valor certo.
+
+   Duas escolhas de `valor` que fogem do que aparece na tela:
+     · HORA vai como texto cru ("12:34") — o `chaveOrd` da grade já entende hora,
+       e é o mesmo que a pessoa lê; só o "—" do vazio é coisa do `render`.
+     · DURAÇÃO vai como NÚMERO. "45 min" não casa com nenhum formato do
+       `chaveOrd`, cairia no localeCompare e poria "100 min" antes de "45 min". */
+
+const valorHora = (valor) => String(valor ?? "").trim();
+
+const valorMin = (valor) => {
+  const n = num(valor);
+  return n == null ? "" : Math.round(n);
+};
+
+// Mesma régua da CelulaJornada: o Citatti manda, o ponto entra só na falta dele.
+function valorJornada(linha) {
+  const n = num(linha.jornada_citatti_min) ?? num(linha.jornada_total_min);
+  return n == null || n <= 0 ? "" : fmtMin(n);
+}
+
+// Ordena/exporta o rótulo curto da pílula — é o que está na tela. O status cru
+// ("DIVERGENTE (transnet x sugestao)") continua no title da pílula.
+const valorStatus = (linha) => {
+  const bruto = String(linha.status_almoco ?? "");
+  return ESTILO_STATUS[chaveStatus(bruto)][0] || bruto;
+};
 
 const COL_CRACHA = {
-  chave: "cracha",
+  id: "cracha",
   rotulo: "Crachá",
-  numerica: true,
+  classe: "dp-mono dp-num",
+  largura: 92,
   render: (r) => r.cracha || "—",
 };
 const COL_NOME = {
-  chave: "nm_funcionario",
+  id: "nm_funcionario",
   rotulo: "Nome",
-  render: (r) => <span style={{ fontWeight: 600 }}>{r.nm_funcionario || "—"}</span>,
+  largura: 230,
+  estilo: { fontWeight: 600 },
+  render: (r) => r.nm_funcionario || "—",
 };
-const COL_DATA = { chave: "data_ref", rotulo: "Data", numerica: true, render: (r) => fmtData(r.data_ref) };
+const COL_DATA = {
+  id: "data_ref",
+  rotulo: "Data",
+  classe: "dp-mono dp-num",
+  largura: 104,
+  valor: (r) => fmtData(r.data_ref),
+};
 const COL_JORNADA = {
-  chave: "jornada",
+  id: "jornada",
   rotulo: "Jornada",
+  largura: 96,
+  valor: valorJornada,
   render: (r) => <CelulaJornada linha={r} />,
 };
 const COL_STATUS = {
-  chave: "status_almoco",
+  id: "status_almoco",
   rotulo: "Status",
+  largura: 132,
+  valor: valorStatus,
   render: (r) => <PilulaStatus status={r.status_almoco} />,
 };
 
@@ -186,16 +231,79 @@ const COLUNAS_PADRAO = [
   COL_NOME,
   COL_DATA,
   COL_JORNADA,
-  { chave: "fonte", rotulo: "Fonte", render: (r) => r.fonte || "—" },
-  { chave: "rea_ini", rotulo: "Realizado início", numerica: true, render: (r) => fmtHora(almocoRef(r).ini) },
-  { chave: "rea_fim", rotulo: "Realizado fim", numerica: true, render: (r) => fmtHora(almocoRef(r).fim) },
-  { chave: "rea_dur", rotulo: "Duração intervalo", numerica: true, render: (r) => fmtDur(almocoRef(r).min) },
-  { chave: "imp_ini", rotulo: "Importação início", numerica: true, render: (r) => fmtHora(r.importacao_inicio) },
-  { chave: "imp_fim", rotulo: "Importação fim", numerica: true, render: (r) => fmtHora(r.importacao_fim) },
-  { chave: "imp_dur", rotulo: "Duração importação", numerica: true, render: (r) => fmtDur(r.importacao_duracao_min) },
-  { chave: "prog_ini", rotulo: "Programado início", numerica: true, render: (r) => fmtHora(r.programado_inicio) },
-  { chave: "prog_fim", rotulo: "Programado fim", numerica: true, render: (r) => fmtHora(r.programado_fim) },
-  { chave: "prog_dur", rotulo: "Duração programado", numerica: true, render: (r) => fmtDur(r.programado_duracao_min) },
+  { id: "fonte", rotulo: "Fonte", largura: 120, render: (r) => r.fonte || "—" },
+  {
+    id: "rea_ini",
+    rotulo: "Realizado início",
+    classe: "dp-mono dp-num",
+    largura: 132,
+    valor: (r) => valorHora(almocoRef(r).ini),
+    render: (r) => fmtHora(almocoRef(r).ini),
+  },
+  {
+    id: "rea_fim",
+    rotulo: "Realizado fim",
+    classe: "dp-mono dp-num",
+    largura: 132,
+    valor: (r) => valorHora(almocoRef(r).fim),
+    render: (r) => fmtHora(almocoRef(r).fim),
+  },
+  {
+    id: "rea_dur",
+    rotulo: "Duração intervalo",
+    classe: "dp-mono dp-num",
+    largura: 144,
+    valor: (r) => valorMin(almocoRef(r).min),
+    render: (r) => fmtDur(almocoRef(r).min),
+  },
+  {
+    id: "imp_ini",
+    rotulo: "Importação início",
+    classe: "dp-mono dp-num",
+    largura: 132,
+    valor: (r) => valorHora(r.importacao_inicio),
+    render: (r) => fmtHora(r.importacao_inicio),
+  },
+  {
+    id: "imp_fim",
+    rotulo: "Importação fim",
+    classe: "dp-mono dp-num",
+    largura: 132,
+    valor: (r) => valorHora(r.importacao_fim),
+    render: (r) => fmtHora(r.importacao_fim),
+  },
+  {
+    id: "imp_dur",
+    rotulo: "Duração importação",
+    classe: "dp-mono dp-num",
+    largura: 144,
+    valor: (r) => valorMin(r.importacao_duracao_min),
+    render: (r) => fmtDur(r.importacao_duracao_min),
+  },
+  {
+    id: "prog_ini",
+    rotulo: "Programado início",
+    classe: "dp-mono dp-num",
+    largura: 132,
+    valor: (r) => valorHora(r.programado_inicio),
+    render: (r) => fmtHora(r.programado_inicio),
+  },
+  {
+    id: "prog_fim",
+    rotulo: "Programado fim",
+    classe: "dp-mono dp-num",
+    largura: 132,
+    valor: (r) => valorHora(r.programado_fim),
+    render: (r) => fmtHora(r.programado_fim),
+  },
+  {
+    id: "prog_dur",
+    rotulo: "Duração programado",
+    classe: "dp-mono dp-num",
+    largura: 144,
+    valor: (r) => valorMin(r.programado_duracao_min),
+    render: (r) => fmtDur(r.programado_duracao_min),
+  },
   COL_STATUS,
 ];
 
@@ -206,10 +314,31 @@ const COLUNAS_ABAIXO = [
   COL_NOME,
   COL_DATA,
   COL_JORNADA,
-  { chave: "sug_ini", rotulo: "Realizado início", numerica: true, render: (r) => fmtHora(r.sugestao_inicio) },
-  { chave: "sug_fim", rotulo: "Realizado fim", numerica: true, render: (r) => fmtHora(r.sugestao_fim) },
-  { chave: "sug_dur", rotulo: "Duração intervalo", numerica: true, render: (r) => fmtDur(r.sugestao_duracao_min) },
-  { chave: "sugestao_origem", rotulo: "Origem", render: (r) => r.sugestao_origem || "—" },
+  {
+    id: "sug_ini",
+    rotulo: "Realizado início",
+    classe: "dp-mono dp-num",
+    largura: 132,
+    valor: (r) => valorHora(r.sugestao_inicio),
+    render: (r) => fmtHora(r.sugestao_inicio),
+  },
+  {
+    id: "sug_fim",
+    rotulo: "Realizado fim",
+    classe: "dp-mono dp-num",
+    largura: 132,
+    valor: (r) => valorHora(r.sugestao_fim),
+    render: (r) => fmtHora(r.sugestao_fim),
+  },
+  {
+    id: "sug_dur",
+    rotulo: "Duração intervalo",
+    classe: "dp-mono dp-num",
+    largura: 144,
+    valor: (r) => valorMin(r.sugestao_duracao_min),
+    render: (r) => fmtDur(r.sugestao_duracao_min),
+  },
+  { id: "sugestao_origem", rotulo: "Origem", largura: 120, render: (r) => r.sugestao_origem || "—" },
   COL_STATUS,
 ];
 
@@ -219,12 +348,19 @@ const COLUNAS_OK = [
   COL_NOME,
   COL_DATA,
   COL_JORNADA,
-  { chave: "jornada_origem", rotulo: "Origem jornada", render: (r) => r.jornada_origem || "—" },
+  { id: "jornada_origem", rotulo: "Origem jornada", largura: 160, render: (r) => r.jornada_origem || "—" },
   COL_STATUS,
 ];
 
 const colunasDoFiltro = (filtro) =>
   filtro === "AB" ? COLUNAS_ABAIXO : filtro === "OK" ? COLUNAS_OK : COLUNAS_PADRAO;
+
+/* Uma chave de preferência POR CONJUNTO de colunas (`tbl_p1_sug`, `tbl_p1_ab`,
+   `tbl_p1_red`, como na ferramenta original). Chave única para os três faria a
+   coluna escondida no "Abaixo 27min" sumir também no padrão — e o `sortKey` de
+   uma grade apontaria para uma coluna que não existe na outra. */
+const chaveTabelaDoFiltro = (filtro) =>
+  filtro === "AB" ? "p1_ab" : filtro === "OK" ? "p1_red" : "p1_sug";
 
 const FILTROS = [
   ["TODOS", "Todos"],
@@ -677,51 +813,21 @@ export default function Refeicao() {
             )}
           </div>
 
-          {/* grade */}
-          {carregandoLinhas ? (
-            <div className="dp-resumo">Carregando o intervalo de {fmtData(data)}…</div>
-          ) : !visiveis.length ? (
-            <div className="dp-resumo">Nada nesse dia com esse filtro.</div>
-          ) : (
-            <div className="dp-tabela-wrap">
-              <table className="dp-tabela">
-                <thead>
-                  <tr>
-                    {colunas.map((coluna) => (
-                      <th key={coluna.chave} scope="col">
-                        {coluna.rotulo}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {visiveis.map((linha) => (
-                    <tr
-                      key={`${linha.cracha}|${linha.data_ref}`}
-                      className={classeLinha(linha)}
-                      onClick={() => setDetalhe(linha)}
-                      onKeyDown={(evento) => {
-                        if (evento.key === "Enter" || evento.key === " ") {
-                          evento.preventDefault();
-                          setDetalhe(linha);
-                        }
-                      }}
-                      tabIndex={0}
-                      role="button"
-                      title="Abrir o detalhe do dia"
-                      style={{ cursor: "pointer" }}
-                    >
-                      {colunas.map((coluna) => (
-                        <td key={coluna.chave} className={coluna.numerica ? "dp-mono dp-num" : undefined}>
-                          {coluna.render(linha)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {/* grade — ordenar/⚙/fixar/CSV vêm da grade compartilhada. A chave muda
+              com o conjunto de colunas, senão a preferência de um filtro estraga
+              a do outro. */}
+          <TabelaDP
+            chave={chaveTabelaDoFiltro(filtro)}
+            colunas={colunas}
+            linhas={visiveis}
+            classeLinha={classeLinha}
+            aoClicarLinha={(linha) => setDetalhe(linha)}
+            idLinha={(linha) => `${linha.cracha}|${linha.data_ref}`}
+            nomeCsv={`refeicao_${data}`}
+            vazio="Nada nesse dia com esse filtro."
+            carregando={carregandoLinhas}
+            mensagemCarregando={`Carregando o intervalo de ${fmtData(data)}…`}
+          />
 
           <Legenda />
         </>

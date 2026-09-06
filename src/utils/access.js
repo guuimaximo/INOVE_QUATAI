@@ -130,8 +130,14 @@ export function canUserAccessPageKey(user, pageKey, accessProfileMap = {}) {
   if (!user?.nivel) return false;
 
   const nivelNorm = normalizeText(user.nivel).toLowerCase();
-  // DP360 concentra dados pessoais e automações do ponto: acesso exclusivo de administrador.
-  if (key === "dp360") return nivelNorm === "administrador" || nivelNorm === "admin";
+  // DP360 concentra dados pessoais e automações do ponto: acesso exclusivo de
+  // administrador. Vale para o CLUSTER inteiro (dp360, dp360_abandonos,
+  // dp360_banco_horas, dp360_resumo...) — a regra é por prefixo de propósito: página
+  // nova do cluster nasce protegida, sem depender de alguém lembrar de listar aqui.
+  // O Banco de Horas, em especial, mostra folha.
+  if (key === "dp360" || key.startsWith("dp360_")) {
+    return nivelNorm === "administrador" || nivelNorm === "admin";
+  }
 
   // Administrador sempre vê tudo — não depende de profileMap nem DB.
   if (nivelNorm === "administrador" || nivelNorm === "admin") return true;

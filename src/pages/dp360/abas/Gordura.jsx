@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bus, CalendarClock, Info, PauseCircle, X } from "lucide-react";
 import AbaShell from "./AbaShell";
+import TabelaDP from "../TabelaDP";
 import { lerDatasDP360, lerTudoDP360 } from "../../../services/dp360Api";
 // A reserva LANÇADA pelo gestor mora na base do PRÓPRIO INOVE (tabela
 // `reservas_motoristas` — quem grava é src/pages/pessoas/ControleReservas.jsx:91-99 e
@@ -929,6 +930,155 @@ function PainelDetalhe({ linha, aoFechar }) {
   );
 }
 
+/* ---------------------------- colunas da grade ------------------------------ */
+// MESMAS colunas, MESMA ordem e MESMO conteúdo de célula da tabela que estava escrita
+// à mão nesta aba. A divisão de trabalho é a da TabelaDP:
+//   · `valor` ORDENA e vai para o CSV — e por isso é sempre o dado CRU (minutos, hora,
+//     texto). É exatamente o papel do `COLS_P4_CSV` do app antigo, que existia para
+//     exportar `gordura_entrada` em MINUTOS no lugar do chip colorido da tela; aqui a
+//     mesma lista de colunas serve às duas coisas, sem uma segunda lista para manter.
+//   · `render` é só a pinta (chips do cartão, `dp-gmark` do nível, ícones da linha).
+// A grade só ordena: dia, piso, busca e chips de nível seguem na barra da aba.
+const COLUNAS_P4 = [
+  {
+    id: "nm_funcionario",
+    titulo: "Colaborador",
+    largura: 300,
+    valor: (r) => txt(r.nm_funcionario),
+    render: (r) => (
+      <span className="flex items-center gap-1.5" style={{ fontWeight: 600 }}>
+        {txt(r.nm_funcionario) || "—"}
+        {r.__linha99 && (
+          <span
+            title="Linha 99 — Citatti é a fonte das pontas"
+            style={{ color: COR.linha99, flex: "none" }}
+          >
+            <Bus size={13} aria-label="linha 99" />
+          </span>
+        )}
+        {/* Lançada pelo gestor x deduzida do dado são coisas distintas
+            e o operador precisa distinguir de relance. */}
+        {r.__reservaInove && (
+          <span
+            title={`Reserva lançada pelo gestor no INOVE${
+              fmtHora(r.reserva_inove_entrada) || fmtHora(r.reserva_inove_saida)
+                ? ` — ${H(r.reserva_inove_entrada)} às ${H(r.reserva_inove_saida)}`
+                : ""
+            } — real = união reserva ∪ operação`}
+            style={{ color: COR.reservaInove, flex: "none" }}
+          >
+            <CalendarClock size={13} aria-label="reserva lançada pelo gestor" />
+          </span>
+        )}
+        {r.__reserva && !r.__reservaInove && (
+          <span
+            title={
+              r.reserva_por_gps
+                ? "Reserva detectada pelo GPS (ninguém lançou) — não corrige, só valida"
+                : "Reserva / prontidão — não corrige, só valida"
+            }
+            style={{ color: COR.reserva, flex: "none" }}
+          >
+            <PauseCircle size={13} aria-label="reserva" />
+          </span>
+        )}
+      </span>
+    ),
+  },
+  {
+    id: "cracha",
+    titulo: "Crachá",
+    classe: "dp-mono dp-num dp-muted",
+    largura: 110,
+    valor: (r) => txt(r.cracha),
+    render: (r) => txt(r.cracha) || "—",
+  },
+  {
+    id: "data_ref",
+    titulo: "Data",
+    classe: "dp-num dp-muted",
+    largura: 110,
+    valor: (r) => fmtData(r.data_ref),
+  },
+  {
+    id: "ponto",
+    titulo: "Ponto (bateu)",
+    largura: 300,
+    // Horas CRUAS dos slots preenchidos: ordena pela entrada e o CSV sai com o cartão.
+    valor: (r) => r.__cartao.atual.filter(Boolean).join(" "),
+    render: (r) => <LinhaCartao horas={r.__cartao.atual} />,
+  },
+  {
+    id: "alvo",
+    titulo: "Alvo (c/ tolerância)",
+    largura: 300,
+    valor: (r) =>
+      r.__cartao.alvoValido ? r.__cartao.alvo.filter(Boolean).join(" ") : "revisar alvo e refeição",
+    render: (r) =>
+      r.__cartao.alvoValido ? (
+        <LinhaCartao horas={r.__cartao.alvo} mudou={r.__cartao.mudou} />
+      ) : (
+        <span style={{ fontWeight: 700, color: "var(--dp-danger-ink)" }}>
+          revisar alvo e refeição
+        </span>
+      ),
+  },
+  {
+    id: "jornada",
+    titulo: "Jornada",
+    classe: "dp-mono dp-num dp-muted",
+    largura: 110,
+    // "10h09" a grade ordena; o "—" de jornada indefinida seria TEXTO e subiria na
+    // frente do 00h05, então vira vazio no `valor` e continua "—" na tela.
+    valor: (r) => {
+      const d = durHM(r.real_inicio, r.real_fim);
+      return d === "—" ? "" : d;
+    },
+    render: (r) => durHM(r.real_inicio, r.real_fim),
+  },
+  {
+    id: "gordura_entrada",
+    titulo: "Gordura entrada",
+    largura: 160,
+    // MINUTOS crus (número). O chip é "42min · P1": como texto ordenaria 9 depois de
+    // 42, e o CSV sairia com o rótulo do nível em vez do número que o DP soma.
+    valor: (r) => num(r.gordura_entrada),
+    render: (r) => <ChipNivel minutos={r.gordura_entrada} nivel={r.nivel_entrada} />,
+  },
+  {
+    id: "gordura_saida",
+    titulo: "Gordura saída",
+    largura: 160,
+    valor: (r) => num(r.gordura_saida),
+    render: (r) => <ChipNivel minutos={r.gordura_saida} nivel={r.nivel_saida} />,
+  },
+  {
+    id: "esc_inicio",
+    titulo: "Esc. início",
+    classe: "dp-mono dp-num dp-faint",
+    largura: 110,
+    valor: (r) => fmtHora(r.esc_inicio), // hora crua; sem escala vai para o fim
+    render: (r) => H(r.esc_inicio),
+  },
+  {
+    id: "esc_fim",
+    titulo: "Esc. fim",
+    classe: "dp-mono dp-num dp-faint",
+    largura: 110,
+    valor: (r) => fmtHora(r.esc_fim),
+    render: (r) => H(r.esc_fim),
+  },
+  {
+    id: "justificativa",
+    titulo: "Justificativa",
+    classe: "dp-muted",
+    largura: 240,
+    estilo: { maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis" },
+    valor: (r) => txt(r.justificativa),
+    render: (r) => <span title={txt(r.justificativa)}>{txt(r.justificativa) || "—"}</span>,
+  },
+];
+
 /* --------------------------------- a aba ----------------------------------- */
 export default function Gordura() {
   const [datas, setDatas] = useState([]);
@@ -1187,125 +1337,26 @@ export default function Gordura() {
         para popular <span className="dp-mono">ponto_gordura</span>.
       </div>
     );
-  } else if (carregandoDia) {
-    corpo = <div className="dp-resumo">Carregando a gordura do dia…</div>;
   } else {
     corpo = (
-      <div className="dp-tabela-wrap">
-        <table className="dp-tabela">
-          <thead>
-            <tr>
-              <th>Colaborador</th>
-              <th>Crachá</th>
-              <th>Data</th>
-              <th>Ponto (bateu)</th>
-              <th>Alvo (c/ tolerância)</th>
-              <th>Jornada</th>
-              <th>Gordura entrada</th>
-              <th>Gordura saída</th>
-              <th>Esc. início</th>
-              <th>Esc. fim</th>
-              <th>Justificativa</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visiveis.map((r) => (
-              <tr
-                key={r.__chave}
-                tabIndex={0}
-                onClick={() => setDetalhe(r)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setDetalhe(r);
-                  }
-                }}
-                // A linha inteira é pintada pelo PIOR nível — é a cor da linha que o
-                // operador lê primeiro, como na ferramenta.
-                className={classeLinha(r)}
-                style={{ cursor: "pointer" }}
-              >
-                <td>
-                  <span className="flex items-center gap-1.5" style={{ fontWeight: 600 }}>
-                    {txt(r.nm_funcionario) || "—"}
-                    {r.__linha99 && (
-                      <span
-                        title="Linha 99 — Citatti é a fonte das pontas"
-                        style={{ color: COR.linha99, flex: "none" }}
-                      >
-                        <Bus size={13} aria-label="linha 99" />
-                      </span>
-                    )}
-                    {/* Lançada pelo gestor x deduzida do dado são coisas distintas
-                        e o operador precisa distinguir de relance. */}
-                    {r.__reservaInove && (
-                      <span
-                        title={`Reserva lançada pelo gestor no INOVE${
-                          fmtHora(r.reserva_inove_entrada) || fmtHora(r.reserva_inove_saida)
-                            ? ` — ${H(r.reserva_inove_entrada)} às ${H(r.reserva_inove_saida)}`
-                            : ""
-                        } — real = união reserva ∪ operação`}
-                        style={{ color: COR.reservaInove, flex: "none" }}
-                      >
-                        <CalendarClock size={13} aria-label="reserva lançada pelo gestor" />
-                      </span>
-                    )}
-                    {r.__reserva && !r.__reservaInove && (
-                      <span
-                        title={
-                          r.reserva_por_gps
-                            ? "Reserva detectada pelo GPS (ninguém lançou) — não corrige, só valida"
-                            : "Reserva / prontidão — não corrige, só valida"
-                        }
-                        style={{ color: COR.reserva, flex: "none" }}
-                      >
-                        <PauseCircle size={13} aria-label="reserva" />
-                      </span>
-                    )}
-                  </span>
-                </td>
-                <td className="dp-mono dp-num dp-muted">{txt(r.cracha) || "—"}</td>
-                <td className="dp-num dp-muted">{fmtData(r.data_ref)}</td>
-                <td>
-                  <LinhaCartao horas={r.__cartao.atual} />
-                </td>
-                <td>
-                  {r.__cartao.alvoValido ? (
-                    <LinhaCartao horas={r.__cartao.alvo} mudou={r.__cartao.mudou} />
-                  ) : (
-                    <span style={{ fontWeight: 700, color: "var(--dp-danger-ink)" }}>
-                      revisar alvo e refeição
-                    </span>
-                  )}
-                </td>
-                <td className="dp-mono dp-num dp-muted">{durHM(r.real_inicio, r.real_fim)}</td>
-                <td>
-                  <ChipNivel minutos={r.gordura_entrada} nivel={r.nivel_entrada} />
-                </td>
-                <td>
-                  <ChipNivel minutos={r.gordura_saida} nivel={r.nivel_saida} />
-                </td>
-                <td className="dp-mono dp-num dp-faint">{H(r.esc_inicio)}</td>
-                <td className="dp-mono dp-num dp-faint">{H(r.esc_fim)}</td>
-                <td
-                  className="dp-muted"
-                  style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }}
-                  title={txt(r.justificativa)}
-                >
-                  {txt(r.justificativa) || "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!visiveis.length && (
-          <p className="dp-muted" style={{ padding: "28px 16px", textAlign: "center" }}>
-            {base.length
-              ? "Nada nesse nível ou nessa busca."
-              : "Nenhuma ponta fora da régua fixa de aviso neste dia."}
-          </p>
-        )}
-      </div>
+      <TabelaDP
+        chave="p4"
+        colunas={COLUNAS_P4}
+        linhas={visiveis}
+        idLinha={(r) => r.__chave}
+        // A linha inteira é pintada pelo PIOR nível — é a cor da linha que o
+        // operador lê primeiro, como na ferramenta.
+        classeLinha={classeLinha}
+        aoClicarLinha={(r) => setDetalhe(r)}
+        nomeCsv={`gordura_${data}`}
+        carregando={carregandoDia}
+        mensagemCarregando="Carregando a gordura do dia…"
+        vazio={
+          base.length
+            ? "Nada nesse nível ou nessa busca."
+            : "Nenhuma ponta fora da régua fixa de aviso neste dia."
+        }
+      />
     );
   }
 

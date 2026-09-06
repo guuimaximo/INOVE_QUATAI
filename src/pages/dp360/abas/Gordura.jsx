@@ -9,6 +9,25 @@ import { lerDatasDP360, lerTudoDP360 } from "../../../services/dp360Api";
 // na allowlist do gateway `dp360-api`: aqui se lê com o cliente Supabase normal do
 // INOVE, exatamente como o app antigo faz em ferramenta/supabase_client.py:695-715.
 import { supabase } from "../../../supabase";
+// AS QUATRO CAMADAS DA GORDURA (o `_gord()` do app antigo) e as conversões que elas
+// exigem moram em `regrasGordura.js` — módulo puro, sem React e sem rede. Estavam
+// escritas aqui dentro e por isso o Resumo não conseguia mostrar oportunidade sem
+// reimplementá-las (e devolver outro número). A régua é a MESMA nas duas telas.
+import {
+  PRECEDENCIA,
+  aplicarCamadasGordura,
+  chaveDe,
+  cracha8,
+  dia10,
+  ehVerdade,
+  fmtHora,
+  hm2m,
+  maiorPonta,
+  nivKey,
+  num,
+  passaRegua,
+  txt,
+} from "../regrasGordura";
 
 // ---------------------------------------------------------------------------
 // PASSO 4 — GORDURA DE PONTO (só MOTORISTA).
@@ -25,25 +44,8 @@ import { supabase } from "../../../supabase";
 // ainda não existe aqui (ver TODO em `Gordura`).
 // ---------------------------------------------------------------------------
 
-// RÉGUA FIXA DO DP (main.py TOL_ENTRADA_MIN / TOL_SAIDA_MIN, decisão de 24/08/2026:
-// "10 e 8 em tudo"). NÃO é configuração de tela: ele bate o ponto e ainda anda até o
-// carro (entrada −10 min) e, no fim, estaciona/confere e volta ao relógio (saída +8).
-// Estes números também vivem no SQL da Revisão — mexeu aqui, mexe lá.
-const TOL_ENTRADA = 10;
-const TOL_SAIDA = 8;
-
-// Assinatura da reserva sem lançamento (main.py `_aplica_reserva_gps`).
-const RES_GPS_ESCALA = 15; // GPS × escala: até isso é a mesma hora
-const RES_GPS_BILH = 30; // bilhetagem depois disso do GPS = ele estava esperando, não rodando
-
-// Tolerância aplicada DEPOIS da união com a reserva lançada (main.py:4876 e 4884).
-// AMBIGUIDADE (herdada do original): aqui o Python usa 10 nas DUAS pontas, enquanto a
-// régua declarada na tela e usada em `camadaAlvo` é 10 na entrada e 8 na SAÍDA
-// (TOL_SAIDA). Ou seja, uma saída com 9 min de gordura vira TOLERANCIA_OPERACIONAL
-// nesta camada e seria P-alguma-coisa em qualquer outro caminho. Portado como está para
-// não divergir do app antigo; se o DP decidir alinhar, é só trocar esta constante por
-// TOL_SAIDA no lado da saída.
-const TOL_RESERVA_INOVE = 10;
+// A RÉGUA FIXA DO DP (10 min na entrada, 8 na saída), as tolerâncias da reserva e a
+// assinatura da reserva por GPS ficam em `regrasGordura.js` — são regra, não tela.
 
 const PISOS = [
   { valor: 0, rotulo: "tudo" },
@@ -53,55 +55,9 @@ const PISOS = [
   { valor: 120, rotulo: "2 horas" },
 ];
 
-/* ------------------------- conversões (campos são TEXTO) ------------------- */
-// ATENÇÃO: em `ponto_gordura` TODAS as colunas são text — inclusive minutos e
-// booleanos ("true"/"false"). Nada aqui pode assumir number/boolean nativo.
-const txt = (v) => (v == null ? "" : String(v).trim());
-const ehVerdade = (v) => ["true", "t", "1", "sim", "yes", "y"].includes(txt(v).toLowerCase());
-const num = (v) => {
-  const n = Number.parseFloat(txt(v).replace(",", "."));
-  return Number.isFinite(n) ? n : null;
-};
-const modulo = (v) => Math.abs(num(v) || 0);
-// Crachá com menos de 8 dígitos vira 8 com zeros à esquerda (main.py `_cracha8`).
-const cracha8 = (c) => {
-  const s = txt(c);
-  return /^\d+$/.test(s) && s.length > 0 && s.length < 8 ? s.padStart(8, "0") : s;
-};
-const dia10 = (d) => txt(d).slice(0, 10);
-const chaveDe = (cra, dia) => `${cracha8(cra)}|${dia10(dia)}`;
-
-// "0130" -> "01:30" (a escala vem sem os dois pontos na gordura). Texto que não
-// vira horário volta vazio — melhor a célula ficar "—" do que exibir lixo.
-function fmtHora(valor) {
-  const s = txt(valor);
-  if (!s) return "";
-  if (s.includes(":")) return s.slice(0, 5);
-  const d = s.replace(/\D/g, "");
-  if (d.length === 3) return `0${d[0]}:${d.slice(1)}`;
-  if (d.length === 4) return `${d.slice(0, 2)}:${d.slice(2)}`;
-  return "";
-}
-function hm2m(valor) {
-  const t = fmtHora(valor);
-  const m = /^(\d{1,3}):(\d{2})$/.exec(t);
-  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
-}
-function m2hm(minutos) {
-  const v = Math.round(minutos);
-  const h = Math.floor(v / 60);
-  const m = ((v % 60) + 60) % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-// Variante de t (t−24h, t, t+24h) mais perto de ref — é o que faz 02:08 casar com a
-// batida 26:08 do cartão em vez de virar 02:08 da madrugada errada (simulador.var).
-const variante = (t, ref) =>
-  [t - 1440, t, t + 1440].reduce((a, b) => (Math.abs(b - ref) < Math.abs(a - ref) ? b : a));
-// Minutos entre dois horários no relógio, sempre 0..720 (main.py `_dif_relogio`).
-const difRelogio = (a, b) => {
-  const d = Math.abs(a - b) % 1440;
-  return Math.min(d, 1440 - d);
-};
+/* ---------------------------- formatação da tela --------------------------- */
+// As conversões que a REGRA usa (txt, num, hm2m, fmtHora, cracha8, chaveDe…) vêm de
+// `regrasGordura.js`. Aqui ficam só as que existem para desenhar a célula.
 function durHM(ini, fim, almoco = 0) {
   const a = hm2m(ini);
   const b = hm2m(fim);
@@ -151,13 +107,8 @@ const NIVEL_GCLS = {
 };
 // Tolerância / sem dado / ponto incompleto não são gordura: a célula fica "—".
 const NIVEIS_MUDOS = new Set(["", "TOLERANCIA_OPERACIONAL", "SEM_DADO", "PONTO_INCOMPLETO"]);
-// P3 e P3⁻ contam como o mesmo nível nos chips e na pintura da linha.
-const nivKey = (n) => {
-  const k = txt(n).toUpperCase();
-  return k === "P3_SEM_CONFIRMACAO" ? "P3" : k;
-};
-// A linha inteira é pintada pelo PIOR nível presente, nesta precedência.
-const PRECEDENCIA = ["P1", "P2", "P3", "P4", "RESERVA", "OPERACAO_FORA_PONTO"];
+// `nivKey` (P3⁻ conta como P3) e `PRECEDENCIA` (a linha é pintada pelo PIOR nível)
+// vêm de `regrasGordura.js` — são regra, e o Resumo conta pelo mesmo critério.
 // A LINHA INTEIRA pintada (não uma borda lateral): é assim que a ferramenta mostra o
 // nível — `.dp-tabela tbody tr.row-p1 td` e irmãs, porte de app/ui/styles.css.
 const LINHA_CLS = {
@@ -182,14 +133,6 @@ const CHIPS = [
   ["RESERVA", "Reserva"],
   ["OPERACAO_FORA_PONTO", "Fora"],
 ];
-
-/* ------------------------------ régua da lista ----------------------------- */
-// 1º corte: só quem tem gordura acima da régua fixa em ALGUMA ponta. As pontas são
-// independentes — uma saída fora da régua entra mesmo com a entrada dentro dela.
-const passaRegua = (o) => modulo(o.gordura_entrada) > TOL_ENTRADA || modulo(o.gordura_saida) > TOL_SAIDA;
-// Piso de exibição: NÃO é régua, é filtro de tela ("hoje só quero olhar acima de
-// 30 min"). Olha a ponta MAIOR do dia.
-const maiorPonta = (o) => Math.max(modulo(o.gordura_entrada), modulo(o.gordura_saida));
 
 /* --------------------------- cartão de ponto e alvo ------------------------ */
 function cartaoValido(horas) {
@@ -289,28 +232,10 @@ function cartoesGordura(g, pd, rm, caso) {
   };
 }
 
-/* ----------------- camadas aplicadas na leitura (main.py `_gord`) ---------- */
-
-// `_aplica_prioridade_citatti_linha99` — na linha 99 o Citatti é a fonte principal das
-// duas pontas. A 99 costuma ser a primeira viagem, antes da tabela regular: bilhetagem
-// e SST podem começar depois dela.
-function camadaLinha99(g, com99) {
-  if (!com99.has(chaveDe(g.cracha, g.data_ref))) return g;
-  const out = { ...g };
-  const oi = hm2m(g.op_inicio);
-  const of = hm2m(g.op_fim);
-  if (oi != null) {
-    out.real_inicio_sem_linha99 = txt(g.real_inicio);
-    out.real_inicio = m2hm(oi);
-  }
-  if (of != null) {
-    out.real_fim_sem_linha99 = txt(g.real_fim);
-    out.real_fim = m2hm(of);
-  }
-  out.prioridade_citatti_linha99 = true;
-  out.fonte_operacao = "Citatti · linha 99";
-  return out;
-}
+/* --------------- leitura da camada que mora fora do DP360 ------------------ */
+// As QUATRO CAMADAS (linha 99 · reserva do INOVE · reserva por GPS · alvo) estão em
+// `regrasGordura.js`. O que sobra aqui é a LEITURA da reserva, que vem de outra base
+// e por isso não cabe num módulo puro.
 
 // Reservas LANÇADAS no INOVE para um dia, indexadas por crachá|dia.
 // Porte de `ferramenta/supabase_client.py:695-715` (`ler_reservas_motoristas`), só que
@@ -339,153 +264,6 @@ async function lerReservasInove(dia) {
   } catch {
     return new Map();
   }
-}
-
-// `_aplica_reserva` (main.py:4844-4885) — RESERVA LANÇADA PELO GESTOR no INOVE.
-// Quem estava de reserva estava À DISPOSIÇÃO desde a hora lançada pelo gestor; a espera
-// até assumir a tabela NÃO é gordura. Então a operação real vale a UNIÃO reserva ∪
-// operação: início = min(entrada da reserva, real) e fim = max(saída da reserva, real).
-// Medido no original: 31 de 55 dias com reserva cobravam indevidamente (62,5 h).
-// Os valores antigos ficam em `*_sem_reserva` para não perder o rastro do que mudou.
-function camadaReservaInove(g, reservas) {
-  const r = reservas.get(chaveDe(g.cracha, g.data_ref));
-  if (!r) return g;
-
-  // AMBIGUIDADE (também do original): min/max são no relógio cru, sem `variante`. A
-  // reserva vem de um formulário e é sempre 00:00-23:59, enquanto `real_fim` pode passar
-  // das 24h ("26:08") no turno que cruza a meia-noite. Nesse caso o max já escolhe o
-  // real, que é o certo; mas uma reserva lançada de madrugada num turno virado pode não
-  // casar de volta. main.py:4863-4866 tem exatamente a mesma limitação — não inventei
-  // correção aqui para não divergir do número que o DP já conhece.
-  const rem = hm2m(r.hora_entrada); // reserva: entrada lançada
-  const rsm = hm2m(r.hora_saida); // reserva: saída lançada
-  const oi = hm2m(g.real_inicio);
-  const of = hm2m(g.real_fim);
-  const inicios = [rem, oi].filter((v) => v != null);
-  const fins = [rsm, of].filter((v) => v != null);
-  const ni = inicios.length ? Math.min(...inicios) : null;
-  const nf = fins.length ? Math.max(...fins) : null;
-  const pe = hm2m(g.tn_entrada);
-  const ps = hm2m(g.tn_saida);
-
-  const out = { ...g };
-  // Marca SEMPRE que existe lançamento, mesmo quando nenhuma ponta muda: é esta flag
-  // que faz `camadaReservaGps` sair do caminho (main.py:4868 lendo em 4901).
-  out.tem_reserva_inove = true;
-  out.reserva_inove_entrada = fmtHora(r.hora_entrada);
-  out.reserva_inove_saida = fmtHora(r.hora_saida);
-  out.reserva_inove_cobertura = txt(r.cobertura);
-
-  if (ni != null && ni !== oi) {
-    out.real_inicio_sem_reserva = txt(g.real_inicio);
-    out.gordura_entrada_sem_reserva = txt(g.gordura_entrada);
-    out.nivel_entrada_sem_reserva = txt(g.nivel_entrada);
-    out.real_inicio = m2hm(ni);
-    if (pe != null) {
-      const ge = Math.round((ni - pe) * 10) / 10;
-      out.gordura_entrada = String(ge);
-      // main.py:4876 — 10 min, ver AMBIGUIDADE em TOL_RESERVA_INOVE.
-      out.nivel_entrada =
-        Math.abs(ge) <= TOL_RESERVA_INOVE ? "TOLERANCIA_OPERACIONAL" : txt(g.nivel_entrada);
-    }
-  }
-  if (nf != null && nf !== of) {
-    out.real_fim_sem_reserva = txt(g.real_fim);
-    out.gordura_saida_sem_reserva = txt(g.gordura_saida);
-    out.nivel_saida_sem_reserva = txt(g.nivel_saida);
-    out.real_fim = m2hm(nf);
-    if (ps != null) {
-      const gs = Math.round((ps - nf) * 10) / 10;
-      out.gordura_saida = String(gs);
-      // main.py:4884 — também 10 aqui, e NÃO TOL_SAIDA (8). Inconsistência do original.
-      out.nivel_saida =
-        Math.abs(gs) <= TOL_RESERVA_INOVE ? "TOLERANCIA_OPERACIONAL" : txt(g.nivel_saida);
-    }
-  }
-  return out;
-}
-
-// `_aplica_reserva_gps` — reserva SEM lançamento, detectada pelo próprio dado. Na
-// reserva o motorista está à disposição mas não vende passagem: a bilhetagem só começa
-// quando ele assume uma tabela, e o tempo de espera sumia da jornada. A assinatura é
-// GPS concordando com a ESCALA e a bilhetagem aparecendo bem depois.
-function camadaReservaGps(g) {
-  if (ehVerdade(g.tem_reserva_inove)) return g; // o lançamento do gestor já mandou
-  const e = hm2m(g.esc_inicio);
-  const o = hm2m(g.op_inicio);
-  const v = hm2m(g.val_inicio);
-  const r = hm2m(g.real_inicio);
-  if ([e, o, v, r].some((x) => x == null)) return g;
-  const assinatura =
-    Math.abs(o - e) <= RES_GPS_ESCALA && v - o >= RES_GPS_BILH && Math.abs(r - v) <= 2;
-  if (!assinatura) return g; // sem a assinatura, ou o real já não é a bilhetagem
-  const out = { ...g };
-  out.real_inicio_sem_reserva = txt(g.real_inicio);
-  out.gordura_entrada_sem_reserva = txt(g.gordura_entrada);
-  out.nivel_entrada_sem_reserva = txt(g.nivel_entrada);
-  out.reserva_por_gps = true;
-  out.real_inicio = m2hm(o);
-  const pe = hm2m(g.tn_entrada);
-  if (pe != null) {
-    const ge = Math.round((o - pe) * 10) / 10;
-    out.gordura_entrada = String(ge);
-    out.nivel_entrada = Math.abs(ge) <= 10 ? "TOLERANCIA_OPERACIONAL" : txt(g.nivel_entrada);
-  }
-  return out;
-}
-
-// `_aplica_alvo` — ALVO DA CORREÇÃO = real ∓ tolerância, e QUEM APURA A OPERAÇÃO É A
-// REVISÃO (decisão do DP, 03-04/09/2026): o alvo publicado em `ponto_diario` manda.
-// A gordura exibida e filtrada é a diferença PONTO × ALVO, não PONTO × operação bruta —
-// senão o motorista é COBRADO contra um horário e AVISADO com outro. A conta local
-// abaixo só alcança o dia que a Revisão não apurou.
-function camadaAlvo(g, pd) {
-  const out = { ...g };
-  const revE = fmtHora(pd.alvo_entrada || pd.alvo_entrada_ref);
-  const revS = fmtHora(pd.alvo_saida || pd.alvo_saida_ref);
-  const ri = hm2m(g.real_inicio);
-  const rf = hm2m(g.real_fim);
-  const pe = hm2m(g.tn_entrada);
-  const ps = hm2m(g.tn_saida);
-
-  if (hm2m(revE) != null) {
-    out.alvo_entrada = revE;
-    out.fonte_alvo_gordura = "revisao";
-  } else if (ri != null) {
-    let alvoEntrada = Math.max(0, ri - TOL_ENTRADA);
-    // Encaixe na escala com a MESMA régua da Revisão: ela olha a BATIDA, com janela
-    // de 30 min — bateu perto da escala, vale o maior entre os dois (a escala já vem
-    // com tolerância; não se aplica tolerância sobre tolerância).
-    const esc = hm2m(g.esc_inicio || g.esc_entrada);
-    if (esc != null && pe != null && difRelogio(pe, esc) <= 30) alvoEntrada = Math.max(pe, esc);
-    out.alvo_entrada = m2hm(alvoEntrada);
-    out.fonte_alvo_gordura = "gordura";
-  }
-  if (hm2m(revS) != null) {
-    out.alvo_saida = revS;
-    out.fonte_alvo_gordura = "revisao";
-  } else if (rf != null) {
-    out.alvo_saida = m2hm(rf + TOL_SAIDA);
-    if (!out.fonte_alvo_gordura) out.fonte_alvo_gordura = "gordura";
-  }
-
-  const ae = hm2m(out.alvo_entrada);
-  const af = hm2m(out.alvo_saida);
-  if (pe != null && ae != null) {
-    // `00:42` depois de uma saída `24:53` é 24:42, não 00:42 do início do dia:
-    // alinha a ponta do alvo à mesma volta do relógio do cartão antes de subtrair.
-    const ge = Math.round((variante(ae, pe) - pe) * 10) / 10;
-    out.gordura_entrada = String(ge);
-    if (Math.abs(ge) <= TOL_ENTRADA) out.nivel_entrada = "TOLERANCIA_OPERACIONAL";
-    else if (ge < 0) out.nivel_entrada = "OPERACAO_FORA_PONTO";
-  }
-  if (ps != null && af != null) {
-    const gs = Math.round((ps - variante(af, ps)) * 10) / 10;
-    out.gordura_saida = String(gs);
-    if (Math.abs(gs) <= TOL_SAIDA) out.nivel_saida = "TOLERANCIA_OPERACIONAL";
-    else if (gs < 0) out.nivel_saida = "OPERACAO_FORA_PONTO";
-  }
-  return out;
 }
 
 /* --------------------------------- pedaços --------------------------------- */
@@ -1152,12 +930,10 @@ export default function Gordura() {
 
       // Mesma ordem do app antigo (main.py:4699-4704, `_gord`):
       // linha 99 -> reserva do INOVE -> reserva por GPS -> alvo.
-      // A ordem importa: a reserva por GPS só age quando NÃO há lançamento do gestor
-      // (`tem_reserva_inove`), e o alvo é sempre a última palavra sobre a gordura.
-      const g = camadaAlvo(
-        camadaReservaGps(camadaReservaInove(camadaLinha99(bruta, com99), reservas)),
-        pd,
-      );
+      // A ordem importa e por isso vive dentro de `aplicarCamadasGordura`: a reserva
+      // por GPS só age quando NÃO há lançamento do gestor (`tem_reserva_inove`), e o
+      // alvo é sempre a última palavra sobre a gordura.
+      const g = aplicarCamadasGordura(bruta, { com99, reservas, pontoDiario: pd });
 
       const cartao = cartoesGordura(g, pd, rm, caso);
       const nivies = [txt(g.nivel_entrada).toUpperCase(), txt(g.nivel_saida).toUpperCase()];

@@ -4,6 +4,20 @@ import { AuthContext } from "../../context/AuthContext";
 import { useAccessGovernance } from "../../context/AccessContext";
 import { canUserAccessPath } from "../../utils/access";
 import { lerDP360, lerTudoDP360 } from "../../services/dp360Api";
+// As QUATRO CAMADAS da gordura (main.py `_gord`) e a trava do aviso (`_ponta_conta`).
+// Mesma régua que a aba Gordura roda — é o que faz o número desta tela ser o mesmo.
+import {
+  NIVEIS_P,
+  PORTA_GORDURA,
+  TETO_GORDURA_DIA,
+  aplicarCamadasGordura,
+  chaveDe,
+  pontaConta,
+} from "./regrasGordura";
+// A reserva LANÇADA pelo gestor mora na base do PRÓPRIO INOVE (`reservas_motoristas`),
+// não na base de importação do DP360 — por isso sai pelo cliente Supabase normal e não
+// pelo gateway `dp360-api` (mesma leitura da aba Gordura, só que por período).
+import { supabase } from "../../supabase";
 import "./dp360.css";
 
 /* =============================================================================
@@ -46,19 +60,35 @@ import "./dp360.css";
      diferentes — mas num único painel/modal.
 
    ---------------------------------------------------------------------------
-   TODO — NÃO PORTADO NESTA FASE (falta a régua, não o dado)
+   OPORTUNIDADE — o que nasce de `self._gord()` (JÁ PORTADO)
    ---------------------------------------------------------------------------
-   Tudo que no `get_dashboard_horas` nasce de `self._gord()` ficou de fora:
-   oportunidade por nível P (P1..P4), "P1 oficial", pessoas com P1, gordura por
+   O bloco de oportunidade do `get_dashboard_horas` está aqui: horas abertas,
+   oportunidade por nível P (P1..P4), "P1 oficial" e pessoas com P1, gordura por
    ponta (entrada × saída), top ofensores, a caixa "Ainda não avisados"
-   (`faltam`), as duas séries (diária e por competência) e o "potencial aberto"
-   em R$. Motivo: `_gord()` é `ponto_gordura` DEPOIS de quatro camadas
-   (prioridade Citatti/linha 99, reserva, reserva por GPS e alvo) que moram em
-   app/main.py e ainda não estão num módulo compartilhado do INOVE. Reimplementar
-   por cima da `ponto_gordura` crua devolveria um número DIFERENTE do da
-   ferramenta — e número que não bate ninguém usa pra decidir.
-   Quando essas camadas virarem módulo (como `regrasGps`/`regrasPonto`), este
-   arquivo ganha o bloco de oportunidade sem mexer no resto.
+   (`faltam`), a série diária e o "potencial aberto" em R$.
+
+   Deu pra portar porque as QUATRO CAMADAS que transformam a `ponto_gordura`
+   CRUA no número que o DP usa — prioridade Citatti/linha 99, reserva lançada no
+   INOVE, reserva por GPS e alvo publicado pela Revisão — saíram de dentro da aba
+   Gordura e viraram `regrasGordura.js`. As duas telas rodam a MESMA régua, então
+   o número daqui é o mesmo número de lá (e o mesmo da ferramenta): reimplementar
+   por cima da tabela crua daria outro, e número que não bate ninguém usa.
+
+   ---------------------------------------------------------------------------
+   CONTINUA FORA — uma coisa só, e o motivo
+   ---------------------------------------------------------------------------
+   • SÉRIE POR COMPETÊNCIA (o gráfico "Ano por competência · P1" do painel
+     original). No Python ela é calculada sobre a gordura INTEIRA, todas as
+     competências de uma vez — `serie_comp` é montada ANTES do filtro do seletor
+     ("a série anual não depende do seletor aberto na tela"). Aqui isso seria
+     baixar a `ponto_gordura` inteira no navegador: ~10 mil linhas POR
+     competência, 12 competências no gráfico. A metade barata dá pra fazer (o
+     congelado dos casos P1 vem da `ponto_caso`, que é pequena), mas a outra
+     metade — a oportunidade P1 ainda ABERTA das competências passadas — só
+     existe na gordura; sem ela cada barra antiga sairia MENOR que a da
+     ferramenta, e barra que não bate ninguém usa. Entra no dia em que o gateway
+     `dp360-api` ganhar uma ação de agregação (soma por competência feita no
+     servidor); nada mais nesta tela precisa mudar para isso.
    ========================================================================== */
 
 /* ---------------- constantes (espelham app/main.py; mexeu aqui, mexe lá) --- */
@@ -114,9 +144,20 @@ const METRICAS = [
   ["sem_ponto", "Sem ponto", "var(--dp-faint)"],
 ];
 
-/* AS PLACAS DA ESTEIRA. `id` é a caixa do backend (main.py `_DASH_CAIXAS`); o
-   rótulo e a ajuda vêm de app.js `DASH_CAIXAS` — linguagem de tela.
-   FALTA a caixa `faltam` ("Ainda não avisados"): ver TODO no topo. */
+/* A CAIXA QUE NÃO NASCE DO CASO. `faltam` é a única das `_DASH_CAIXAS` que sai da
+   GORDURA, não da `ponto_caso`: por definição são os dias que ninguém tocou, então
+   não existe caso pra eles. Fica separada de `CAIXAS` porque `apurarCaptura` só
+   sabe ler caso — quem a preenche é `apurarOportunidade`. */
+const CAIXA_FALTAM = {
+  id: "faltam",
+  rot: "Ainda não avisados",
+  tom: "res",
+  ajuda: "Dias com gordura acima da régua do aviso que nunca viraram aviso. É a oportunidade aberta.",
+};
+
+/* AS PLACAS DA ESTEIRA que saem da `ponto_caso`. `id` é a caixa do backend
+   (main.py `_DASH_CAIXAS`); o rótulo e a ajuda vêm de app.js `DASH_CAIXAS` —
+   linguagem de tela. */
 const CAIXAS = [
   { id: "aguardando", rot: "Avisados, no prazo", tom: "accent",
     ajuda: "O aviso saiu e as 48h ainda não venceram. A bola está com o colaborador." },
@@ -142,9 +183,43 @@ const COLUNAS_PONTO = [
   "cracha", "nm_funcionario", "nm_funcao", "categoria", "date_ref",
   "status_ponto", "motivo", "jornada_liquida_min", "jornada_transnet",
   "teve_operacao", "te_descricao_dia", "classificacao", "todas_batidas",
+  // As quatro do ALVO alimentam a camada 4 da gordura (`camadaAlvo`): é o alvo
+  // publicado pela Revisão que manda sobre a conta local. Conferidas no mesmo
+  // arquivo (`3_vw_ponto_revisao_motorista.sql`, colunas alvo_entrada/alvo_saida
+  // e alvo_entrada_ref/alvo_saida_ref).
+  "alvo_entrada", "alvo_saida", "alvo_entrada_ref", "alvo_saida_ref",
 ].join(",");
 
+// Colunas da `ponto_gordura` que as quatro camadas + o painel precisam. Lista
+// explícita (a competência inteira tem ~10 mil linhas) e conferida contra o DDL da
+// tabela em Sistemas/PONTO `supabase_gordura.sql` — pedir coluna que não existe
+// devolve HTTP 400 e derruba a leitura. NÃO existem ali `alvo_entrada`/`alvo_saida`
+// (quem as cria é a camada 4) nem `esc_entrada` (só `esc_inicio`).
+const COLUNAS_GORDURA = [
+  "cracha", "nm_funcionario", "data_ref",
+  "esc_inicio", "tn_entrada", "tn_saida", "val_inicio", "op_inicio", "op_fim",
+  "real_inicio", "real_fim",
+  "gordura_entrada", "nivel_entrada", "gordura_saida", "nivel_saida",
+].join(",");
+
+// `ponto_linha99` é a tabela mínima do lake: uma linha = crachá × dia com prioridade
+// Citatti (DDL em importador_supabase/criar_tabela_ponto_linha99.sql).
+const COLUNAS_LINHA99 = "cracha,data_ref";
+
 const LIMITE_LISTA = 400; // main.py `get_dashboard_detalhe`: `itens[:400]`
+
+// app.js `viewDash`: os níveis aparecem com P3⁻ no lugar de P3_SEM_CONFIRMACAO.
+const NIVEL_ROT = (cod) => cod.replace("_SEM_CONFIRMACAO", "⁻");
+
+// As MESMAS cores de nível da aba Gordura (`dp-gmark.g-p1..g-p4` em dp360.css), pra
+// P1 ser vermelho nas duas telas. P3 e P3⁻ dividem a cor, como lá.
+const COR_NIVEL = {
+  P1: "var(--dp-danger-ink)",
+  P2: "var(--dp-warn-ink)",
+  P3: "var(--dp-accent)",
+  P3_SEM_CONFIRMACAO: "var(--dp-accent)",
+  P4: "var(--dp-muted)",
+};
 
 /* ------------------------------- utilitários ------------------------------ */
 
@@ -238,6 +313,19 @@ function hhmm(minutos) {
 const fmtJornada = (min) => (min == null ? "—" : hhmm(min));
 const brl = (v) => (num(v)).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const pct = (parte, total) => (total ? Math.round((parte / total) * 100) : 0);
+
+/* A CADEIA DE ARREDONDAMENTO DO PAINEL DE HORAS, preservada de propósito:
+   `get_dashboard_horas` devolve as horas de oportunidade com UMA casa
+   (`round(min/60, 1)`) e o app.js desenha ESSE número (`dh`). 743 min viram 12,4 h
+   e a placa mostra "12h24" — não "12h23". Pular o passo do meio daria um número
+   diferente do que o DP já conhece, então aqui a conta é a mesma, em duas etapas.
+   AMBIGUIDADE: o `round()` do Python é bancário (metade vai pro par) e o
+   Math.round sobe sempre; só divergem quando min/60 cai exatamente em .x5, e o
+   efeito é de 0,1 h no rótulo — nunca na decisão, que usa os minutos crus. */
+const horas1 = (min) => Math.round((num(min) / 60) * 10) / 10;
+// app.js `dh`: 12.4 -> "12h24". A fração vem sempre de `horas1` (no máximo .9),
+// então `Math.round(.9 * 60)` = 54 e nunca estoura para "h60".
+const hmDeHoras = (h) => `${Math.floor(h)}h${String(Math.round((h % 1) * 60)).padStart(2, "0")}`;
 
 /* --------------------------- GERENCIAL (ponto_diario) --------------------- */
 
@@ -487,6 +575,195 @@ function apurarCaptura(casos) {
   };
 }
 
+/* --------------------- OPORTUNIDADE (gordura já normalizada) -------------- */
+
+/**
+ * main.py `get_dashboard_horas` — a metade que nasce de `self._gord()`, mais a
+ * caixa `faltam` de `get_dashboard_detalhe`.
+ *
+ * ENTRA A GORDURA **DEPOIS DAS QUATRO CAMADAS** (`aplicarCamadasGordura`), nunca a
+ * `ponto_gordura` crua: é a camada do alvo que decide quem cai em
+ * TOLERANCIA_OPERACIONAL e qual é o minuto de cada ponta.
+ *
+ * `gorduras` e `casos` já chegam recortados pela competência — a leitura filtra
+ * `data_ref`/`date_ref` na janela 20→19, que é a própria definição de competência
+ * (o Python faz o mesmo recorte com `self._competencia(...) != competencia`).
+ *
+ * DUAS PORTAS DIFERENTES, de propósito, iguais às do original:
+ *  · os totais por nível P, o "P1 oficial" e a divisão entrada×saída usam
+ *    `PORTA_GORDURA` (10 min nas DUAS pontas) — é o indicador histórico, main.py:7643;
+ *  · a caixa `faltam` usa `pontaConta` (10 na entrada, 8 na saída), que é A MESMA
+ *    TRAVA DO AVISO: essa caixa vira trabalho pra alguém, então tem de listar
+ *    exatamente o que o sistema aceitaria avisar.
+ */
+function apurarOportunidade(gorduras, casos) {
+  const casosGordura = (casos || []).filter(casoEhGordura);
+  const ehP1 = (c) => txt(c.nivel).toUpperCase() === "P1";
+  const casosP1 = casosGordura.filter(ehP1);
+  const chavesCasoP1 = new Set(casosP1.map((c) => chaveDe(c.cracha, c.date_ref)));
+  // `vistos` = todo dia de gordura que JÁ virou caso (em qualquer estágio). O que
+  // sobra é a caixa `faltam` (main.py:3752-3762).
+  const vistos = new Set(casosGordura.map((c) => chaveDe(c.cracha, c.date_ref)));
+
+  const op = {};
+  NIVEIS_P.forEach((n) => { op[n] = { min: 0, pontas: 0 }; });
+  const serie = new Map();
+  const porPessoa = new Map();
+  const dias = new Set();
+  const faltamItens = [];
+  let entradaMin = 0;
+  let saidaMin = 0;
+  let ruidoMin = 0;
+
+  const noDia = (dia) => {
+    if (!serie.has(dia)) serie.set(dia, { dia, oportunidadeMin: 0, capturadoMin: 0 });
+    return serie.get(dia);
+  };
+
+  (gorduras || []).forEach((g) => {
+    const dia = dia10(g.data_ref);
+    const chave = chaveDe(g.cracha, g.data_ref);
+    // main.py `dias`: o par é o CRU (a gordura tem PK cracha+data_ref), só pra
+    // dizer sobre quantos dias-pessoa a oportunidade foi medida.
+    dias.add(`${txt(g.cracha)}|${txt(g.data_ref)}`);
+    const sd = noDia(dia);
+
+    [[g.nivel_entrada, g.gordura_entrada], [g.nivel_saida, g.gordura_saida]].forEach(([niv, gor]) => {
+      const n = txt(niv).toUpperCase();
+      const v = num(gor);
+      if (op[n] && v > PORTA_GORDURA) {
+        op[n].min += v;
+        op[n].pontas += 1;
+      }
+      // Dia SEM caso: a linha está aberta e a gordura de hoje é a oportunidade.
+      // Dia COM caso P1: entra logo abaixo pelo valor CONGELADO do aviso — senão a
+      // barra amarela encolheria justamente quando a correção deu certo.
+      if (n === "P1" && v > PORTA_GORDURA && !chavesCasoP1.has(chave)) sd.oportunidadeMin += v;
+    });
+
+    // Onde está o desvio P1 (entrada × saída) e a concentração por pessoa
+    // (main.py:3950-3970). A ponta que não passa a porta é zerada, não descartada:
+    // a pessoa entra na lista pela ponta que passou.
+    let ge = txt(g.nivel_entrada).toUpperCase() === "P1" ? num(g.gordura_entrada) : 0;
+    let gs = txt(g.nivel_saida).toUpperCase() === "P1" ? num(g.gordura_saida) : 0;
+    if (ge > PORTA_GORDURA) entradaMin += ge; else ge = 0;
+    if (gs > PORTA_GORDURA) saidaMin += gs; else gs = 0;
+    if (ge || gs) {
+      const cra = txt(g.cracha);
+      if (!porPessoa.has(cra)) {
+        porPessoa.set(cra, { cracha: cra, nome: txt(g.nm_funcionario), min: 0, dias: 0 });
+      }
+      const p = porPessoa.get(cra);
+      p.min += ge + gs;
+      p.dias += 1;
+    }
+
+    /* CAIXA `faltam` — ATENÇÃO, AQUI O NÚMERO NÃO BATE COM A FERRAMENTA, E É DE
+       PROPÓSITO. Em app/main.py:3777 e 3780 a chamada é
+       `self._ponta_conta(niv, gor, ponta)` com `ponta` NUNCA DEFINIDO naquele
+       escopo (o `for` itera só `niv, gor`). Isso levanta NameError, o
+       `except Exception` de `get_dashboard_detalhe` devolve `ok: False`, o
+       dashboard grava `caixas["faltam"] = None` e a tela pinta 0 / "não deu pra
+       contar". Ou seja: hoje a ferramenta NÃO mostra esta caixa — não existe um
+       número dela pra divergir.
+       Portamos a intenção escrita no próprio comentário do Python ("`_ponta_conta`
+       é a mesma trava do aviso"), com a ponta correta em cada lado: 10 min na
+       entrada, 8 na saída. Se um dia o Python for consertado, os dois passam a
+       bater; se for consertado de outro jeito, é aqui que se ajusta. */
+    if (vistos.has(chave)) return;
+    let m = 0;
+    const niveis = [];
+    [["entrada", g.nivel_entrada, g.gordura_entrada],
+      ["saida", g.nivel_saida, g.gordura_saida]].forEach(([ponta, niv, gor]) => {
+      const n = txt(niv).toUpperCase();
+      const v = num(gor);
+      // DIA DE RESERVA NÃO PRODUZ GORDURA COBRÁVEL: em standby não há operação, o
+      // "real" não existe e a diferença bateu×operou vira artefato (DOUGLAS 19/05
+      // aparecia com 717 min num dia em que não rodou). Fica fora da oportunidade e
+      // é contado à parte, pra ninguém achar que sumiu.
+      if (n === "RESERVA") {
+        if (pontaConta(niv, gor, ponta) && v > 0) ruidoMin += v;
+        return;
+      }
+      if (pontaConta(niv, gor, ponta) && v > 0) {
+        m += v;
+        niveis.push(n);
+      }
+    });
+    // UM DIA NÃO TEM 12 HORAS DE GORDURA (main.py:3785). Acima disso é defeito de
+    // cálculo — virada de meia-noite mal desenrolada —, não oportunidade; e painel
+    // que soma defeito não é confiável.
+    if (m > 0 && m <= TETO_GORDURA_DIA) {
+      faltamItens.push({
+        cracha: txt(g.cracha),
+        nome: txt(g.nm_funcionario),
+        dia,
+        min: Math.round(m),
+        detalhe: [...new Set(niveis)].join(" · "),
+      });
+    }
+  });
+
+  // A FOTOGRAFIA DO AVISO (main.py:3897-3906): o P1 que já entrou no fluxo continua
+  // sendo a oportunidade identificada naquele dia, pelo valor congelado no aviso.
+  casosP1.forEach((c) => {
+    const v = Math.max(0, num(c.gordura_min));
+    if (!v) return;
+    noDia(dia10(c.date_ref)).oportunidadeMin += v;
+  });
+
+  // O VERDE É P1 CONTRA P1 e só depois da correção FINAL confirmada — aceite,
+  // recusa ou conferência isolada são etapas do fluxo, não hora recuperada. O dia
+  // do gráfico é o do PONTO, não o da execução.
+  casosGordura.forEach((c) => {
+    const [dif, tp] = capturaConfirmada(c);
+    if (!tp || dif <= 0 || !ehP1(c)) return;
+    noDia(dia10(c.date_ref)).capturadoMin += dif;
+  });
+
+  const totalMin = NIVEIS_P.reduce((s, n) => s + op[n].min, 0);
+  faltamItens.sort(
+    (a, b) => (b.min || 0) - (a.min || 0) || a.nome.localeCompare(b.nome, "pt-BR"),
+  );
+
+  return {
+    porP: NIVEIS_P.map((n) => ({
+      cod: n,
+      rot: NIVEL_ROT(n),
+      min: Math.round(op[n].min),
+      horas: horas1(op[n].min),
+      pontas: op[n].pontas,
+    })),
+    pontasTotal: NIVEIS_P.reduce((s, n) => s + op[n].pontas, 0),
+    totalMin: Math.round(totalMin),
+    oficialMin: Math.round(op.P1.min), // "P1 oficial" — o único número cobrável
+    porPonta: { entradaMin, saidaMin },
+    // main.py devolve top 8; app.js desenha 6. Fica o que o DP vê.
+    top: [...porPessoa.values()]
+      .sort((a, b) => b.min - a.min)
+      .slice(0, 8)
+      .map((p) => ({ nome: p.nome, horas: horas1(p.min), dias: p.dias })),
+    pessoasP1: porPessoa.size,
+    diasBase: dias.size,
+    faltam: {
+      itens: faltamItens,
+      qtd: faltamItens.length,
+      min: faltamItens.reduce((s, i) => s + (i.min || 0), 0),
+      pessoas: new Set(faltamItens.map((i) => i.cracha)).size,
+      ruidoMin: Math.round(ruidoMin),
+    },
+    // main.py corta em 21 dias; app.js desenha os últimos 14 (feito na tela).
+    serieDiaria: [...serie.values()]
+      .sort((a, b) => a.dia.localeCompare(b.dia))
+      .slice(-21)
+      .map((x) => ({
+        dia: x.dia,
+        oportunidadeMin: Math.round(x.oportunidadeMin),
+        capturadoMin: Math.round(x.capturadoMin),
+      })),
+  };
+}
+
 /* ------------------------------ leitura paginada -------------------------- */
 
 // `lerTudoDP360` pagina de 1.000 em 1.000 (teto do próprio helper). Uma
@@ -503,6 +780,45 @@ async function lerPaginado(tabela, opcoes, maxPaginas = 12, passo = 5000) {
     if (bloco.length < passo) break;
   }
   return todas;
+}
+
+/**
+ * Reservas LANÇADAS no INOVE no período, indexadas por crachá|dia — a entrada da
+ * camada 2 (`camadaReservaInove`). Mesma leitura da aba Gordura
+ * (abas/Gordura.jsx `lerReservasInove`), só que por PERÍODO em vez de por dia, e
+ * paginada: o PostgREST corta em 1.000 linhas por resposta e uma competência tem
+ * dezenas de reservas por dia.
+ *
+ * Ordem crescente de `atualizado_em` + "o último vence" deixa no mapa a reserva
+ * MAIS RECENTE de cada dia — mesmo critério do pop-up do app antigo.
+ *
+ * DEGRADAÇÃO: se a tabela não existir, a RLS negar ou a rede cair, devolve vazio e
+ * a tela segue SEM a camada, igual ao try/except do original (main.py:4851-4856).
+ */
+async function lerReservasDoPeriodo(ini, fim) {
+  const mapa = new Map();
+  const passo = 1000;
+  try {
+    for (let pagina = 0; pagina < 20; pagina += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      const { data, error } = await supabase
+        .from("reservas_motoristas")
+        .select("funcionario_cracha,data_referencia,hora_entrada,hora_saida,cobertura,atualizado_em")
+        .gte("data_referencia", ini)
+        .lte("data_referencia", fim)
+        .order("atualizado_em", { ascending: true, nullsFirst: true })
+        .range(pagina * passo, (pagina + 1) * passo - 1);
+      if (error) throw error;
+      (data || []).forEach((r) => {
+        if (!txt(r.funcionario_cracha)) return; // sem crachá não há como casar
+        mapa.set(chaveDe(r.funcionario_cracha, r.data_referencia), r);
+      });
+      if (!data || data.length < passo) break;
+    }
+    return mapa;
+  } catch {
+    return new Map();
+  }
 }
 
 /* ================================ componente ============================== */
@@ -522,6 +838,18 @@ export default function DP360Resumo() {
   const [erro, setErro] = useState("");
   const [avisoCasos, setAvisoCasos] = useState("");
   const [recarga, setRecarga] = useState(0);
+
+  // Oportunidade (gordura): estado PRÓPRIO e leitura própria. É a parte mais cara
+  // da tela (~10 mil linhas de `ponto_gordura` na competência, mais linha 99 e as
+  // reservas do INOVE) e a única que depende de outra base — se ela demorar ou
+  // falhar, o resto do Resumo continua de pé. `null` = ainda não veio / não deu:
+  // LEITURA QUE FALHA NÃO É ZERO (main.py:3995-4001) — a caixa some ou avisa, nunca
+  // finge fila vazia.
+  const [gorduraBruta, setGorduraBruta] = useState(null);
+  const [com99, setCom99] = useState(() => new Set());
+  const [reservas, setReservas] = useState(() => new Map());
+  const [carregandoGordura, setCarregandoGordura] = useState(false);
+  const [avisoGordura, setAvisoGordura] = useState("");
 
   // filtros do Gerencial (app.js: gerFiltro / gerCat / gerTermo)
   const [filtro, setFiltro] = useState("grave");
@@ -619,9 +947,79 @@ export default function DP360Resumo() {
     return () => { vivo = false; };
   }, [competencia, recarga]);
 
+  // Competência escolhida, parte da OPORTUNIDADE: a gordura crua, a marcação da
+  // linha 99 e as reservas lançadas no INOVE. Efeito separado de propósito (ver o
+  // comentário do estado): esta leitura é a cara e a que depende de outra base.
+  useEffect(() => {
+    if (!competencia) return undefined;
+    const [ini, fim] = periodoDaCompetencia(competencia);
+    if (!ini || !fim) return undefined;
+    let vivo = true;
+    setCarregandoGordura(true);
+    setGorduraBruta(null);
+    setAvisoGordura("");
+    (async () => {
+      try {
+        const [gordura, linha99, res] = await Promise.all([
+          lerPaginado("ponto_gordura", {
+            colunas: COLUNAS_GORDURA,
+            filtros: { data_ref: [`gte.${ini}`, `lte.${fim}`] },
+            ordem: "data_ref,cracha",
+          }),
+          // A linha 99 é um enriquecimento: sem ela a camada 1 não roda, mas a
+          // oportunidade continua de pé (é o mesmo try/except de main.py:4726).
+          lerPaginado("ponto_linha99", {
+            colunas: COLUNAS_LINHA99,
+            filtros: { data_ref: [`gte.${ini}`, `lte.${fim}`] },
+            ordem: "data_ref,cracha",
+          }).catch(() => []),
+          lerReservasDoPeriodo(ini, fim), // já degrada sozinha
+        ]);
+        if (!vivo) return;
+        setCom99(new Set(linha99.map((x) => chaveDe(x.cracha, x.data_ref))));
+        setReservas(res);
+        setGorduraBruta(gordura);
+      } catch (falha) {
+        if (!vivo) return;
+        setGorduraBruta(null);
+        setAvisoGordura(
+          falha?.message || "Não deu pra ler a gordura da competência (ponto_gordura).",
+        );
+      } finally {
+        if (vivo) setCarregandoGordura(false);
+      }
+    })();
+    return () => { vivo = false; };
+  }, [competencia, recarga]);
+
   const gerencial = useMemo(() => apurarGerencial(linhas), [linhas]);
   const baldes = useMemo(() => apurarBaldes(linhas), [linhas]);
   const captura = useMemo(() => apurarCaptura(casos), [casos]);
+
+  // O alvo publicado pela Revisão (camada 4) vem da `ponto_diario`, que é do OUTRO
+  // efeito — por isso as camadas são aplicadas aqui, e não na leitura: assim não
+  // importa qual das duas respostas chega primeiro.
+  const pontoPorChave = useMemo(() => {
+    const m = new Map();
+    linhas.forEach((r) => m.set(chaveDe(r.cracha, r.date_ref), r));
+    return m;
+  }, [linhas]);
+
+  const gorduras = useMemo(() => {
+    // Sem o ponto do dia a camada 4 cairia na conta local e mostraria outro alvo:
+    // espera as duas leituras antes de calcular (nada é desenhado nesse meio-tempo).
+    if (!gorduraBruta || !linhas.length) return null;
+    return gorduraBruta.map((bruta) => aplicarCamadasGordura(bruta, {
+      com99,
+      reservas,
+      pontoDiario: pontoPorChave.get(chaveDe(bruta.cracha, bruta.data_ref)),
+    }));
+  }, [gorduraBruta, linhas.length, com99, reservas, pontoPorChave]);
+
+  const oportunidade = useMemo(
+    () => (gorduras ? apurarOportunidade(gorduras, casos) : null),
+    [gorduras, casos],
+  );
 
   const pessoasVisiveis = useMemo(() => {
     let ls = gerencial.pessoas;
@@ -645,6 +1043,17 @@ export default function DP360Resumo() {
   const taxaResposta = pct(ciclo.respondidos, ciclo.avisados);
   const taxaCorrecao = pct(ciclo.corrigidos, ciclo.avisados);
 
+  // app.js `viewDash`: HORAS ABERTAS = o que ainda não foi encerrado — o que nunca
+  // virou aviso + o avisado no prazo + o vencido + o advertido. É o número do topo
+  // do Radar e a base do "potencial aberto" em R$. Sem a gordura lida, `faltam`
+  // não entra e o card não é desenhado (em vez de mostrar um total menor).
+  const faltam = oportunidade?.faltam || null;
+  const abertoMin = faltam
+    ? faltam.min + ["aguardando", "vencido", "advertido"].reduce(
+      (s, id) => s + (captura.caixas[id]?.min || 0), 0,
+    )
+    : 0;
+
   const abrirCaixa = (caixa) => {
     const def = CAIXAS.find((c) => c.id === caixa);
     const dados = captura.caixas[caixa];
@@ -657,6 +1066,37 @@ export default function DP360Resumo() {
       itens: dados.itens,
     });
   };
+
+  const abrirFaltam = () => {
+    if (!faltam?.qtd) return;
+    setPainel({
+      tipo: "caso",
+      titulo: CAIXA_FALTAM.rot,
+      ajuda: CAIXA_FALTAM.ajuda,
+      resumo: `${faltam.qtd} dia(s) · ${faltam.pessoas} pessoa(s) · ${hhmm(faltam.min)}`
+        + (faltam.ruidoMin ? ` · ${hhmm(faltam.ruidoMin)} de dia de reserva ficaram de fora` : ""),
+      itens: faltam.itens,
+    });
+  };
+
+  // A esteira desenha `faltam` NA FRENTE das caixas do caso — a mesma ordem do
+  // painel original, que vai do "ainda não entrou no fluxo" até o "ponto fechado".
+  const placas = [
+    {
+      ...CAIXA_FALTAM,
+      qtd: faltam?.qtd || 0,
+      min: faltam?.min || 0,
+      indisponivel: !faltam,
+      abrir: abrirFaltam,
+    },
+    ...CAIXAS.map((c) => ({
+      ...c,
+      qtd: captura.caixas[c.id]?.qtd || 0,
+      min: captura.caixas[c.id]?.min || 0,
+      indisponivel: false,
+      abrir: () => abrirCaixa(c.id),
+    })),
+  ];
 
   const abrirBalde = (catId, catLabel, metrica, metricaLabel) => {
     const itens = itensDoBalde(linhas, catId, metrica);
@@ -727,6 +1167,14 @@ export default function DP360Resumo() {
       {!erro && avisoCasos && (
         <div className="dp-resumo"><span className="dp-pill warn">{avisoCasos}</span></div>
       )}
+      {!erro && avisoGordura && (
+        <div className="dp-resumo">
+          <span className="dp-pill warn">
+            {avisoGordura} — a oportunidade e a caixa &quot;ainda não avisados&quot; ficam de fora
+            até a próxima leitura.
+          </span>
+        </div>
+      )}
 
       {ocupado && <div className="dp-resumo">Carregando dados da base DP360…</div>}
 
@@ -765,61 +1213,82 @@ export default function DP360Resumo() {
                 tom="ok"
               />
             )}
+            {/* Os quatro do Radar de captura (app.js `viewDash`). Só aparecem com a
+                gordura em mãos: o total de horas abertas conta a caixa `faltam`, e
+                mostrar a soma sem ela seria um número menor sem avisar. */}
+            {oportunidade && (
+              <>
+                <Cartao rotulo="Horas abertas" valor={hhmm(abertoMin)}
+                  nota="potencial ainda não encerrado (sem aviso + em fluxo)" tom="warn" />
+                <Cartao rotulo="P1 oficial" valor={hmDeHoras(horas1(oportunidade.oficialMin))}
+                  nota={`${oportunidade.pessoasP1} pessoa(s) com P1 · o único número cobrável`} />
+                <Cartao rotulo="Ainda sem aviso" valor={faltam.qtd}
+                  nota={`${hhmm(faltam.min)} · oportunidade que não entrou no fluxo`} />
+                {valorHora > 0 && (
+                  <Cartao
+                    rotulo="Potencial aberto"
+                    valor={brl((abertoMin / 60) * valorHora)}
+                    nota={`horas abertas × ${brl(valorHora)} · a captura usa só o líquido confirmado`}
+                    tom="warn"
+                  />
+                )}
+              </>
+            )}
           </div>
 
-          {/* ---------------- esteira de captura (ponto_caso) -------------- */}
+          {/* ---------------- esteira de captura (gordura + ponto_caso) ---- */}
           <Secao
             titulo="Esteira de captura"
             tag="clique na placa para abrir a lista"
             rodape={
-              "A esteira separa o que exige ação agora do que já foi comprovado no Transnet. "
-              + "Só entra caso com origem `gordura`: correção de revisão ou refeição fecha "
-              + "cartão, mas não é hora de gordura recuperada."
+              "A esteira separa o que ainda é potencial (nunca avisado), o que exige ação "
+              + "agora e o que já foi comprovado no Transnet. Só entra caso com origem "
+              + "`gordura`: correção de revisão ou refeição fecha cartão, mas não é hora de "
+              + "gordura recuperada."
             }
           >
             <div style={{ display: "grid", gap: 10,
               gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))" }}>
-              {CAIXAS.map((c) => {
-                const d = captura.caixas[c.id] || { qtd: 0, min: 0 };
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    className="dp-card"
-                    onClick={() => abrirCaixa(c.id)}
-                    disabled={!d.qtd}
-                    title={c.ajuda}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 12, textAlign: "left",
-                      font: "inherit", cursor: d.qtd ? "pointer" : "default",
-                      opacity: d.qtd ? 1 : 0.55,
-                    }}
-                  >
-                    <span className="dp-num" style={{ fontSize: 24, fontWeight: 700, minWidth: 44 }}>
-                      {d.qtd}
+              {placas.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="dp-card"
+                  onClick={c.abrir}
+                  disabled={!c.qtd}
+                  title={c.indisponivel ? `${c.ajuda} — não deu pra contar agora.` : c.ajuda}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12, textAlign: "left",
+                    font: "inherit", cursor: c.qtd ? "pointer" : "default",
+                    opacity: c.qtd ? 1 : 0.55,
+                  }}
+                >
+                  <span className="dp-num" style={{ fontSize: 24, fontWeight: 700, minWidth: 44 }}>
+                    {/* LEITURA QUE FALHA NÃO É ZERO: a caixa que não deu pra contar
+                        mostra "—" e não uma fila vazia (main.py:3995-4001). */}
+                    {c.indisponivel ? "—" : c.qtd}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <b style={{ display: "block", fontSize: 12.5 }}>{c.rot}</b>
+                    <span className="dp-faint" style={{ fontSize: 11 }}>
+                      {c.min ? hhmm(c.min) : "—"}
                     </span>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <b style={{ display: "block", fontSize: 12.5 }}>{c.rot}</b>
-                      <span className="dp-faint" style={{ fontSize: 11 }}>
-                        {d.min ? hhmm(d.min) : "—"}
-                      </span>
-                    </span>
-                    <span className={`dp-pill ${c.tom}`}>{c.id}</span>
-                  </button>
-                );
-              })}
+                  </span>
+                  <span className={`dp-pill ${c.tom}`}>{c.id}</span>
+                </button>
+              ))}
             </div>
 
             <div style={{ marginTop: 12 }}>
               <BarraProporcao
-                partes={CAIXAS.map((c) => ({
+                partes={placas.map((c) => ({
                   id: c.id,
                   rotulo: c.rot,
-                  valor: captura.caixas[c.id]?.qtd || 0,
+                  valor: c.qtd,
                   cor: {
                     ok: "var(--dp-ok-ink)", warn: "var(--dp-warn-ink)",
                     danger: "var(--dp-danger-ink)", accent: "var(--dp-accent)",
-                    mute: "var(--dp-faint)",
+                    mute: "var(--dp-faint)", res: "var(--dp-res-ink)",
                   }[c.tom],
                 }))}
               />
@@ -832,10 +1301,137 @@ export default function DP360Resumo() {
               {economizado.devolvidoMin > 0 && (
                 <> Devolvido (cartão estava a menos): <b>{hhmm(economizado.devolvidoMin)}</b>.</>
               )}
-              {" "}
-              A caixa &quot;ainda não avisados&quot; do painel original não entra aqui: ela nasce da
-              gordura normalizada, que ainda não foi portada para o INOVE.
+              {faltam?.ruidoMin > 0 && (
+                <>
+                  {" "}
+                  Fora de &quot;ainda não avisados&quot;: <b>{hhmm(faltam.ruidoMin)}</b> de dias
+                  marcados como reserva — standby não produz gordura cobrável, e o número fica
+                  aqui para ninguém achar que sumiu.
+                </>
+              )}
             </div>
+          </Secao>
+
+          {/* ------- oportunidade de gordura (ponto_gordura + 4 camadas) --- */}
+          <Secao
+            titulo="Oportunidade de gordura"
+            tag={oportunidade
+              ? `${oportunidade.diasBase} dia(s)-pessoa medidos · só motorista`
+              : "gordura de ponto"}
+            rodape={
+              "Gordura = tempo que o motorista bateu ponto a mais do que operou, medido só "
+              + "nas PONTAS. O número sai da `ponto_gordura` DEPOIS das quatro camadas do DP "
+              + "(linha 99 · reserva lançada · reserva por GPS · alvo da Revisão), a mesma "
+              + "régua da aba Gordura — por isso bate com ela. Só P1 é cobrável; P2/P3/P4 "
+              + "ficam no radar, rotulados."
+            }
+          >
+            {!oportunidade ? (
+              <div className="dp-vazio">
+                {carregandoGordura
+                  ? "Carregando a gordura da competência…"
+                  : (avisoGordura || "Sem gordura calculada nesta competência.")}
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "grid", gap: 12,
+                  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
+                  {/* qualidade: quanto de cada nível P */}
+                  <div className="dp-card">
+                    <div className="dp-muted" style={{ fontSize: 11.5, fontWeight: 600 }}>
+                      Qualidade da oportunidade · P1 é prioridade
+                    </div>
+                    <div style={{ marginTop: 8, display: "grid", gap: 7 }}>
+                      {oportunidade.porP.map((p) => (
+                        <BarraNivel
+                          key={p.cod}
+                          rotulo={p.rot}
+                          nota={`${p.pontas} ponta(s) · ${pct(p.pontas, oportunidade.pontasTotal)}%`}
+                          valor={hmDeHoras(p.horas)}
+                          fracao={p.horas / Math.max(...oportunidade.porP.map((x) => x.horas), 1)}
+                          cor={COR_NIVEL[p.cod]}
+                        />
+                      ))}
+                    </div>
+                    <div className="dp-faint" style={{ fontSize: 11.5, marginTop: 8 }}>
+                      Total nos cinco níveis: <b>{hmDeHoras(horas1(oportunidade.totalMin))}</b> ·
+                      conta a ponta acima de {PORTA_GORDURA} min.
+                    </div>
+                  </div>
+
+                  {/* onde está o desvio P1: entrada × saída */}
+                  <div className="dp-card">
+                    <div className="dp-muted" style={{ fontSize: 11.5, fontWeight: 600 }}>
+                      Onde está o desvio P1
+                    </div>
+                    <div style={{ marginTop: 10 }}>
+                      <BarraProporcao
+                        partes={[
+                          { id: "entrada", rotulo: "Entrada",
+                            valor: Math.round(oportunidade.porPonta.entradaMin),
+                            cor: "var(--dp-accent)" },
+                          { id: "saida", rotulo: "Saída",
+                            valor: Math.round(oportunidade.porPonta.saidaMin),
+                            cor: "var(--dp-warn-ink)" },
+                        ]}
+                      />
+                    </div>
+                    <div style={{ marginTop: 10, display: "flex", gap: 18 }}>
+                      <div>
+                        <div className="dp-muted" style={{ fontSize: 11.5 }}>Entrada</div>
+                        <div className="dp-num" style={{ fontSize: 20, fontWeight: 700 }}>
+                          {hmDeHoras(horas1(oportunidade.porPonta.entradaMin))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="dp-muted" style={{ fontSize: 11.5 }}>Saída</div>
+                        <div className="dp-num" style={{ fontSize: 20, fontWeight: 700 }}>
+                          {hmDeHoras(horas1(oportunidade.porPonta.saidaMin))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="dp-faint" style={{ fontSize: 11.5, marginTop: 8 }}>
+                      As pontas são independentes: uma saída P1 conta mesmo com a entrada dentro
+                      da tolerância. É a ponta que concentra o desvio que diz onde ler
+                      comportamento.
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 12, display: "grid", gap: 12,
+                  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
+                  {/* concentração por pessoa (top ofensores) */}
+                  <div className="dp-card">
+                    <div className="dp-muted" style={{ fontSize: 11.5, fontWeight: 600 }}>
+                      Concentração por pessoa · top {Math.min(6, oportunidade.top.length)}
+                    </div>
+                    <div style={{ marginTop: 8, display: "grid", gap: 7 }}>
+                      {oportunidade.top.slice(0, 6).map((t, i) => (
+                        <BarraNivel
+                          key={`${t.nome}-${i}`}
+                          rotulo={`${i + 1}. ${t.nome || "—"}`}
+                          nota={`${t.dias} dia(s) · média ${hmDeHoras(t.horas / Math.max(1, t.dias))}/dia`}
+                          valor={hmDeHoras(t.horas)}
+                          fracao={t.horas / Math.max(...oportunidade.top.map((x) => x.horas), 1)}
+                          cor="var(--dp-danger-ink)"
+                        />
+                      ))}
+                      {!oportunidade.top.length && (
+                        <span className="dp-faint">Sem gordura P1 nesta competência.</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* série diária: oportunidade P1 × gordura corrigida */}
+                  <div className="dp-card">
+                    <div className="dp-muted" style={{ fontSize: 11.5, fontWeight: 600 }}>
+                      Gordura P1 corrigida × oportunidade identificada
+                    </div>
+                    <SerieDiaria dias={oportunidade.serieDiaria.slice(-14)} />
+                  </div>
+                </div>
+              </>
+            )}
           </Secao>
 
           {/* ---------------- baldes por categoria (ponto_diario) ---------- */}
@@ -1118,6 +1714,81 @@ function BarraProporcao({ partes, compacta }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* Uma linha de barra horizontal (app.js `.dbar-row`): rótulo + trilho + valor.
+   Serve tanto para o nível P quanto para o top de ofensores. */
+function BarraNivel({ rotulo, nota, valor, fracao, cor }) {
+  const largura = Math.max(1.5, Math.min(100, (Number.isFinite(fracao) ? fracao : 0) * 100));
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <span style={{ width: 168, minWidth: 168 }}>
+        <b style={{ fontSize: 12.5 }}>{rotulo}</b>
+        <span className="dp-faint" style={{ display: "block", fontSize: 11 }}>{nota}</span>
+      </span>
+      <span style={{ flex: 1, minWidth: 40, height: 9, borderRadius: 6,
+        background: "var(--dp-surface-2)", overflow: "hidden" }}
+      >
+        <span style={{ display: "block", width: `${largura}%`, height: "100%", background: cor }} />
+      </span>
+      <span className="dp-num" style={{ width: 62, textAlign: "right", fontWeight: 700 }}>
+        {valor}
+      </span>
+    </div>
+  );
+}
+
+/* A SÉRIE DIÁRIA (app.js `.dtrend`): por dia, duas colunas — amarelo = oportunidade
+   P1 identificada (a viva do dia, ou a congelada no aviso quando o dia já virou
+   caso); verde = gordura P1 cuja correção foi CONFIRMADA no Transnet. O dia é o do
+   PONTO, não o da execução, pra cada par comparar a mesma coisa. */
+function SerieDiaria({ dias }) {
+  const teto = Math.max(
+    ...dias.map((d) => Math.max(d.oportunidadeMin || 0, d.capturadoMin || 0)), 1,
+  );
+  const somaOp = dias.reduce((s, d) => s + (d.oportunidadeMin || 0), 0);
+  const somaCap = dias.reduce((s, d) => s + (d.capturadoMin || 0), 0);
+  if (!dias.length) {
+    return <div className="dp-vazio">Sem dias com oportunidade P1 nesta competência.</div>;
+  }
+  return (
+    <div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 14, margin: "8px 0 10px" }}>
+        <span className="dp-muted" style={{ fontSize: 11.5 }}>
+          <i style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2,
+            background: "var(--dp-warn-ink)", marginRight: 5 }}
+          />
+          Oportunidade identificada <b className="dp-num">{hhmm(somaOp)}</b>
+        </span>
+        <span className="dp-muted" style={{ fontSize: 11.5 }}>
+          <i style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2,
+            background: "var(--dp-ok-ink)", marginRight: 5 }}
+          />
+          Gordura corrigida <b className="dp-num">{hhmm(somaCap)}</b>
+        </span>
+      </div>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 108 }}>
+        {dias.map((d) => (
+          <div
+            key={d.dia}
+            title={`${fmtDia(d.dia)} — oportunidade ${hhmm(d.oportunidadeMin)} · corrigida ${hhmm(d.capturadoMin)}`}
+            style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
+              alignItems: "center", gap: 4 }}
+          >
+            <span style={{ flex: 1, display: "flex", alignItems: "flex-end", gap: 2, width: "100%" }}>
+              <i style={{ flex: 1, height: `${Math.max(0, ((d.oportunidadeMin || 0) / teto) * 100)}%`,
+                background: "var(--dp-warn-ink)", borderRadius: "3px 3px 0 0" }}
+              />
+              <i style={{ flex: 1, height: `${Math.max(0, ((d.capturadoMin || 0) / teto) * 100)}%`,
+                background: "var(--dp-ok-ink)", borderRadius: "3px 3px 0 0" }}
+              />
+            </span>
+            <span className="dp-faint" style={{ fontSize: 10 }}>{fmtDia(d.dia)}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -28,7 +28,30 @@ async function motivoReal(error) {
   return error?.message || "Não foi possível consultar a base DP360.";
 }
 
+// O gateway exige o token do USUARIO (nao a anon key). Mas o INOVE deixa a pessoa
+// navegando com o `user` do localStorage mesmo quando a sessao do Supabase caiu — o
+// guard de rota so olha o localStorage. Resultado: a tela abre, o invoke vai sem token
+// valido e TUDO devolve 401 "sessão do INOVE inválida", sem a pessoa entender por que.
+// Aqui a gente tenta renovar antes de desistir; so reclama se nem o refresh salvar.
+async function garantirSessao() {
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data?.session?.access_token) return data.session;
+  } catch { /* sem sessao em memoria — tenta renovar abaixo */ }
+  try {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (!error && data?.session?.access_token) return data.session;
+  } catch { /* refresh falhou — a sessao morreu de vez */ }
+  return null;
+}
+
 async function chamar(body) {
+  const sessao = await garantirSessao();
+  if (!sessao) {
+    throw new Error(
+      "Sua sessão do INOVE expirou. Saia e entre de novo para abrir a DP360."
+    );
+  }
   const { data, error } = await supabase.functions.invoke("dp360-api", { body });
   if (error) throw new Error(await motivoReal(error));
   if (!data?.ok) throw new Error(data?.error || "Não foi possível consultar a base DP360.");

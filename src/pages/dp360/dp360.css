@@ -738,3 +738,275 @@
 }
 .dp360 .dp-det-bot-linha { font-size: 12px; line-height: 1.5; }
 .dp360 .dp-det-bot-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ═══════════════════ REVISÃO — pop-up do dia (prefixo `rv-`) ═══════════════════
+ * ACRÉSCIMO: nada aqui reescreve regra existente. O prefixo `rv-` é da Revisão.
+ *
+ * O pop-up crescia com o conteúdo — "dependendo da quantidade de batidas vai
+ * empurrando o pop-up para baixo". A correção não é apertar as batidas: é o BOX
+ * ser dono da própria rolagem, com cabeçalho e rodapé parados, do mesmo jeito
+ * que o `gd-modal` do INOVE Guard já resolveu. E as duas colunas do miolo são
+ * independentes (`align-content:start` + `min-width:0`): uma coluna comprida
+ * rola dentro do corpo, não empurra a outra nem estica a grade.
+ */
+.dp360 .rv-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 20, 32, 0.5);
+}
+/* As viagens abrem SOBRE o cartão (e sobre o comunicado, que é z-index 60). */
+.dp360 .rv-overlay-alto { z-index: 70; }
+
+.dp360 .rv-box {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1240px;
+  max-height: 92vh;
+  overflow: hidden;
+}
+/* Cabeçalho e rodapé não rolam: o botão de fechar e o de gravar ficam sempre à mão. */
+.dp360 .rv-fixo { flex: none; }
+.dp360 .rv-corpo {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.dp360 .rv-box .rv-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex: none;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--dp-border);
+  background: var(--dp-surface-2);
+}
+/* Só o pop-up das viagens tem padding no corpo: o do cartão já traz o
+ * espaçamento nas próprias seções. */
+.dp360 .rv-corpo-pad { padding: 14px 16px; }
+
+/* Duas colunas que não se empurram. */
+.dp360 .rv-colunas {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (min-width: 1024px) {
+  .dp360 .rv-colunas { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+/* Lista longa (as batidas do GPS) rola dentro de si a partir de ~8 linhas, em
+ * vez de esticar a coluna e jogar o mapa e o rodapé para fora da tela. */
+.dp360 .rv-rolante {
+  max-height: 260px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* ── linha do tempo: a LARGURA INTEIRA, no pé do pop-up ──
+ * Era uma coluna estreita à direita, com cinco passos vazios e sem lugar para o
+ * texto da mensagem. Aqui ela ocupa o pop-up todo e o balão fica legível.
+ */
+.dp360 .rv-tl-sec { padding: 0 18px 18px; }
+.dp360 .rv-tl {
+  list-style: none;
+  margin: 0;
+  padding: 14px 14px 6px 30px;
+  position: relative;
+}
+.dp360 .rv-tl::before {
+  content: "";
+  position: absolute;
+  left: 22px;
+  top: 20px;
+  bottom: 18px;
+  width: 2px;
+  background: var(--dp-border-strong);
+}
+.dp360 .rv-tl-passo { position: relative; padding: 0 0 14px 18px; }
+.dp360 .rv-tl-passo:last-child { padding-bottom: 2px; }
+.dp360 .rv-tl-marca {
+  position: absolute;
+  left: -14px;
+  top: -1px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--dp-surface);
+  border: 2px solid var(--dp-border-strong);
+  color: var(--dp-faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+}
+.dp360 .rv-tl-passo.feito .rv-tl-marca { border-color: var(--dp-ok-ink); background: var(--dp-ok-bg); }
+.dp360 .rv-tl-passo.agora .rv-tl-marca {
+  border-color: var(--dp-accent);
+  background: var(--dp-accent-soft);
+  color: var(--dp-accent);
+  font-weight: 800;
+}
+.dp360 .rv-tl-passo.alerta .rv-tl-marca { border-color: var(--dp-danger-ink); background: var(--dp-danger-bg); }
+.dp360 .rv-tl-conteudo { min-width: 0; }
+.dp360 .rv-tl-titulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--dp-muted);
+}
+.dp360 .rv-tl-passo.feito .rv-tl-titulo,
+.dp360 .rv-tl-passo.agora .rv-tl-titulo { color: var(--dp-ink); }
+.dp360 .rv-tl-passo.alerta .rv-tl-titulo { color: var(--dp-danger-ink); }
+.dp360 .rv-tl-titulo time { font-size: 11px; font-weight: 500; color: var(--dp-muted); }
+.dp360 .rv-tl-nota { font-size: 12px; color: var(--dp-muted); margin-top: 4px; line-height: 1.45; }
+
+/* O que ele pediu, um chip por AÇÃO com o veredito — é o que permite ler um caso
+ * misto sem achar que foi tudo recusado. */
+.dp360 .rv-tl-acoes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.dp360 .rv-acao {
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--dp-border);
+  background: var(--dp-surface-2);
+  color: var(--dp-muted);
+}
+.dp360 .rv-acao b { color: var(--dp-ink); font-weight: 700; }
+.dp360 .rv-acao i { font-style: normal; opacity: 0.75; }
+.dp360 .rv-acao.ok { border-color: var(--dp-ok-ink); background: var(--dp-ok-bg); color: var(--dp-ok-ink); }
+.dp360 .rv-acao.nao { border-color: var(--dp-danger-line); background: var(--dp-danger-bg); color: var(--dp-danger-ink); }
+
+/* O BALÃO da mensagem: o texto que o colaborador recebeu, ou a prévia do que vai
+ * sair. Sem ele o DP clicava no botão sem saber o que a pessoa ia ler. */
+.dp360 .rv-balao {
+  margin-top: 7px;
+  max-width: 780px;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-border);
+  border-radius: 10px;
+  border-top-left-radius: 3px;
+  padding: 9px 12px;
+  font-size: 12px;
+  color: var(--dp-ink);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.dp360 .rv-balao-lb {
+  display: block;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dp-accent);
+  margin-bottom: 4px;
+}
+
+/* ── botão das viagens na linha do Citatti + o pop-up das viagens ── */
+.dp360 .rv-vg {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border: 1px solid var(--dp-border-strong);
+  border-radius: 6px;
+  background: var(--dp-surface);
+  color: var(--dp-muted);
+  font-size: 11px;
+  line-height: 1.7;
+  cursor: pointer;
+}
+.dp360 .rv-vg:hover { border-color: var(--dp-accent); color: var(--dp-accent); }
+
+.dp360 .rv-alerta {
+  padding: 8px 11px;
+  border: 1px solid var(--dp-warn-ink);
+  background: var(--dp-warn-bg);
+  color: var(--dp-warn-ink);
+  border-radius: 9px;
+  font-size: 12.5px;
+}
+.dp360 .rv-gap {
+  margin: 4px 0;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--dp-warn-ink);
+  font-variant-numeric: tabular-nums;
+}
+.dp360 .rv-bloco {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  border: 1px solid var(--dp-border);
+  border-radius: 9px;
+  padding: 8px 11px;
+  background: var(--dp-surface-2);
+}
+.dp360 .rv-bloco-tab {
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dp-accent);
+  min-width: 74px;
+}
+.dp360 .rv-bloco-hora { font-size: 15px; font-weight: 800; }
+.dp360 .rv-bloco-det { font-size: 12px; }
+
+/* A tabela larga rola DENTRO da própria caixa: o pop-up nunca ganha rolagem lateral. */
+.dp360 .rv-tabela-wrap { overflow-x: auto; border: 1px solid var(--dp-border); border-radius: 10px; }
+.dp360 .rv-tabela { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.dp360 .rv-tabela th {
+  text-align: left;
+  padding: 6px 9px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dp-muted);
+  background: var(--dp-surface-2);
+  border-bottom: 1px solid var(--dp-border);
+  white-space: nowrap;
+}
+.dp360 .rv-tabela td { padding: 5px 9px; border-bottom: 1px solid var(--dp-border); white-space: nowrap; }
+.dp360 .rv-tabela tr:last-child td { border-bottom: 0; }
+
+/* ── célula SUG editável na grade ──
+ * A sugestão É o Real manual: o campo grava um campo do `ponto_real_manual`.
+ * O sinal de retorno é o mesmo `ed-ok`/`ed-err` da ferramenta.
+ */
+.dp360 .rv-sug { display: inline-flex; align-items: center; gap: 4px; }
+.dp360 .rv-sug input {
+  width: 62px;
+  padding: 2px 6px;
+  border: 1px solid var(--dp-border);
+  border-radius: 7px;
+  background: var(--dp-surface);
+  color: var(--dp-ink);
+  font-size: 12px;
+  text-align: center;
+}
+.dp360 .rv-sug input:hover { border-color: var(--dp-border-strong); }
+.dp360 .rv-sug input:focus {
+  outline: none;
+  border-color: var(--dp-accent);
+  box-shadow: 0 0 0 2px var(--dp-accent-soft);
+}
+.dp360 .rv-sug input:read-only { background: var(--dp-surface-2); color: var(--dp-muted); cursor: not-allowed; }
+.dp360 .rv-sug.bloqueada input { border-color: var(--dp-warn-ink); background: var(--dp-warn-bg); }
+.dp360 .rv-sug.gravando input { opacity: 0.6; }
+.dp360 .rv-sug.ok input { border-color: var(--dp-ok-ink); background: var(--dp-ok-bg); }
+.dp360 .rv-sug.erro input { border-color: var(--dp-danger-ink); background: var(--dp-danger-bg); }
+.dp360 .rv-sug-marca { font-size: 11px; color: var(--dp-warn-ink); line-height: 1; }
+.dp360 .rv-sug-marca.ok { color: var(--dp-ok-ink); }
+.dp360 .rv-sug-marca.erro { color: var(--dp-danger-ink); }

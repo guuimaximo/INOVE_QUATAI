@@ -38,6 +38,7 @@ import {
   difRelogio,
   hm2min,
   jornadaEntreMin,
+  julgaAcoes,
   min2hm,
   removeFantasmas,
   simulaCartao,
@@ -679,8 +680,272 @@ function normalizarRealManual(form, campos = CAMPOS_RM) {
   return { limpos, erro: "" };
 }
 
-function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar, aoAvisar, impedimentoAviso }) {
-  const [extra, setExtra] = useState({ gordura: null, intervalo: null, ajustes: [] });
+/* ═══════════════════ AS VIAGENS DO DIA (Citatti) ═══════════════════
+   Porte de main.py `get_viagens` (~445), de `supabase_client.ler_viagens_dia`
+   (1086) e do pop-up `modalViagens` (app.js:4839, aberto pelo botão 🚌 que a
+   linha do Citatti ganha em app.js:4602-4605).
+
+   POR QUE ISTO EXISTE: a `viagens_qh` é a ÚNICA fonte com LINHA, TABELA e
+   VEÍCULO, e é ela que desfaz a leitura errada da DUPLA PEGADA. O bloco
+   "1 · Fontes" mostra "Citatti 04:12 → 21:38" e a jornada sai 17h26 — número
+   que engana: são TRÊS tabelas (manhã/tarde/noite) no mesmo crachá, com horas
+   de intervalo entre elas. Sem os blocos por tabela e o buraco entre eles, a
+   operação apurada junta tudo numa jornada só, e não é.
+
+   CONTRATO DA TABELA (conferido na base, HTTP 200): a chave é `matricula`
+   (o CRACHÁ) — `motorista` é o NOME e não serve de filtro. As colunas abaixo
+   são as que existem: pedir uma que não existe devolve HTTP 400 no gateway e
+   mata a aba inteira, então esta lista não se chuta.                          */
+
+const COLUNAS_VIAGENS = [
+  "iniciorealizado",
+  "fimrealizado",
+  "inicioprogramado",
+  "fimprogramado",
+  "linha",
+  "tabela",
+  "veiculo",
+  "sentido",
+  "passageiros",
+  "numeroviagem",
+  "atividade",
+].join(",");
+
+// O pedido do colaborador, como a Ocorrências já o lê (`COLS_AJUSTES`). Só o que a
+// linha do tempo precisa: o tipo, o horário pedido e se ele ainda está aberto.
+const COLUNAS_PEDIDO_APP = "id_ocorrencia,tipo_ajuste,horario_ajuste,situacao_ajuste,capturado_em";
+
+// A hora sai do timestamp POR FATIA, igual ao Python (`t[11:16]`) — nada de
+// `new Date(...)`, que reinterpretaria o texto do lake em fuso do navegador.
+const horaDoTs = (v) => {
+  const t = String(v ?? "");
+  return t.length >= 16 ? t.slice(11, 16) : "";
+};
+
+// `passageiros` chega como TEXTO no lake e pode vir com vírgula decimal
+// (main.py `_pax`). Lixo vira 0 em vez de NaN somando na tela.
+const paxDaViagem = (v) => {
+  const n = parseFloat(String(v ?? "").replace(",", "."));
+  return Number.isFinite(n) ? Math.trunc(n) : 0;
+};
+
+/** Viagens do dia + os BLOCOS POR TABELA com o buraco entre um e outro. */
+async function lerViagensDia(cracha, dia) {
+  const cr = String(cracha ?? "").trim();
+  // Mesmo truque do resto da tela: as tabelas do lake divergem no zero à esquerda.
+  const variantes = [...new Set([cr, cr.replace(/^0+/, ""), cra8(cr)].filter(Boolean))].join(",");
+  const brutas = await lerDP360("viagens_qh", {
+    colunas: COLUNAS_VIAGENS,
+    filtros: { matricula: `in.(${variantes})`, data: `eq.${dia}` },
+    ordem: "iniciorealizado.asc",
+    limite: 500,
+  });
+
+  const viagens = (brutas || []).map((x) => ({
+    ini: horaDoTs(x.iniciorealizado),
+    fim: horaDoTs(x.fimrealizado),
+    iniProg: horaDoTs(x.inicioprogramado),
+    fimProg: horaDoTs(x.fimprogramado),
+    linha: String(x.linha ?? "").trim(),
+    tabela: String(x.tabela ?? "").trim(),
+    veiculo: String(x.veiculo ?? "").trim(),
+    sentido: String(x.sentido ?? "").trim(),
+    pax: paxDaViagem(x.passageiros),
+    n: x.numeroviagem,
+    atividade: String(x.atividade ?? "").trim(),
+  }));
+
+  // Blocos por TABELA, na ordem do dia (main.py:467-485). A troca de tabela é o
+  // que separa uma pegada da outra; o `gap` entre elas é a prova da dupla pegada.
+  const blocos = [];
+  let atual = null;
+  for (const v of viagens) {
+    if (!atual || v.tabela !== atual.tabela) {
+      atual = {
+        tabela: v.tabela,
+        ini: v.ini,
+        fim: v.fim,
+        linhas: new Set(),
+        veiculos: new Set(),
+        atividades: new Set(),
+        n: 0,
+        pax: 0,
+        gap: null,
+      };
+      blocos.push(atual);
+    }
+    atual.fim = v.fim || atual.fim;
+    atual.n += 1;
+    atual.pax += v.pax;
+    if (v.linha) atual.linhas.add(v.linha);
+    if (v.veiculo) atual.veiculos.add(v.veiculo);
+    if (v.atividade) atual.atividades.add(v.atividade);
+  }
+  for (const b of blocos) {
+    b.linhas = [...b.linhas].sort();
+    b.veiculos = [...b.veiculos].sort();
+    b.atividades = [...b.atividades].sort();
+  }
+  for (let i = 1; i < blocos.length; i += 1) {
+    const fimAnterior = hm2min(blocos[i - 1].fim);
+    const iniAtual = hm2min(blocos[i].ini);
+    // Só conta buraco quando o bloco seguinte começa DEPOIS (main.py:483) — a
+    // virada de meia-noite daria um "gap" negativo sem sentido.
+    blocos[i].gap = fimAnterior != null && iniAtual != null && iniAtual > fimAnterior ? iniAtual - fimAnterior : null;
+  }
+
+  return { viagens, blocos };
+}
+
+/** O pop-up SOBRE o pop-up (app.js `modalViagens`): resumo por tabela + a lista. */
+function ModalViagens({ cracha, nome, dia, aoFechar }) {
+  const [dados, setDados] = useState(null);
+  const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    let ativo = true;
+    setCarregando(true);
+    setErro("");
+    lerViagensDia(cracha, dia)
+      .then((r) => {
+        if (ativo) setDados(r);
+      })
+      .catch((falha) => {
+        if (ativo) setErro(falha.message || "Não foi possível ler as viagens deste dia.");
+      })
+      .finally(() => {
+        if (ativo) setCarregando(false);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [cracha, dia]);
+
+  useEffect(() => {
+    const escapa = (e) => {
+      if (e.key === "Escape") {
+        e.stopPropagation(); // fecha SÓ este; o cartão de trás continua aberto
+        aoFechar();
+      }
+    };
+    document.addEventListener("keydown", escapa, true);
+    return () => document.removeEventListener("keydown", escapa, true);
+  }, [aoFechar]);
+
+  const viagens = dados?.viagens || [];
+  const blocos = dados?.blocos || [];
+
+  return (
+    <div className="rv-overlay rv-overlay-alto" onClick={(e) => e.target === e.currentTarget && aoFechar()}>
+      <div className="rv-box dp-card" style={{ maxWidth: 860, padding: 0 }}>
+        <header className="rv-head">
+          <div className="min-w-0">
+            <b style={{ fontSize: 14 }}>🚌 Viagens do dia</b>
+            <div className="dp-muted" style={{ fontSize: 12, marginTop: 2 }}>
+              <b style={{ color: "var(--dp-ink)" }}>{nome || "—"}</b>
+              <span className="dp-num"> · crachá {cracha} · {fmtData(dia)}</span>
+            </div>
+          </div>
+          <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar">
+            <X size={14} />
+          </button>
+        </header>
+
+        <div className="rv-corpo rv-corpo-pad" style={{ display: "grid", gap: 12 }}>
+          {carregando && <p className="dp-faint" style={{ margin: 0 }}>Carregando as viagens…</p>}
+          {!!erro && <span className="dp-pill danger">{erro}</span>}
+
+          {!carregando && !erro && !viagens.length && (
+            <p className="dp-muted" style={{ margin: 0, fontSize: 12.5 }}>
+              Nenhuma viagem registrada nesse dia (o motorista não operou, ou a viagem não veio do Citatti).
+            </p>
+          )}
+
+          {!!viagens.length && (
+            <>
+              {/* A DUPLA PEGADA, dita com todas as letras. É o motivo do pop-up existir. */}
+              {blocos.length > 1 && (
+                <div className="rv-alerta">
+                  ⚠ <b>{blocos.length} pegadas</b> no mesmo dia — a operação apurada junta tudo numa jornada só,
+                  e não é.
+                </div>
+              )}
+
+              <div style={{ display: "grid", gap: 6 }}>
+                {blocos.map((b, i) => (
+                  <div key={`${b.tabela}-${i}`}>
+                    {b.gap != null && (
+                      <div className="rv-gap">
+                        ⏸ <b>{fmtMin(b.gap)}</b> parado entre uma pegada e outra
+                      </div>
+                    )}
+                    <div className="rv-bloco">
+                      <span className="rv-bloco-tab">{b.tabela || "—"}</span>
+                      <span className="rv-bloco-hora dp-num dp-mono">
+                        {b.ini || "--"} – {b.fim || "--"}
+                      </span>
+                      <span className="rv-bloco-det dp-muted">
+                        {b.n} viagem(ns) · linha <b style={{ color: "var(--dp-ink)" }}>{b.linhas.join(" / ") || "—"}</b>
+                        {" · "}carro {b.veiculos.join(" / ") || "—"} · {b.pax} passageiros
+                        {b.atividades.length ? ` · ${b.atividades.join(" / ")}` : ""}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rv-tabela-wrap">
+                <table className="rv-tabela">
+                  <thead>
+                    <tr>
+                      <th>Horário</th>
+                      <th>Linha</th>
+                      <th>Tabela</th>
+                      <th>Atividade</th>
+                      <th>Sentido</th>
+                      <th>Carro</th>
+                      <th style={{ textAlign: "right" }}>Pax</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {viagens.map((v, i) => (
+                      <tr key={`${v.tabela}-${v.n ?? i}-${i}`}>
+                        <td
+                          className="dp-num dp-mono"
+                          title={
+                            v.iniProg || v.fimProg
+                              ? `programado ${v.iniProg || "--"} – ${v.fimProg || "--"}`
+                              : "sem horário programado"
+                          }
+                        >
+                          {v.ini || "--"} <span className="dp-faint">→</span> {v.fim || "--"}
+                        </td>
+                        <td>
+                          <b>{v.linha || "—"}</b>
+                        </td>
+                        <td>{v.tabela || "—"}</td>
+                        <td className="dp-muted">{v.atividade || "—"}</td>
+                        <td className="dp-muted">{v.sentido || "—"}</td>
+                        <td className="dp-num dp-mono">{v.veiculo || "—"}</td>
+                        <td className="dp-num dp-muted" style={{ textAlign: "right" }}>
+                          {v.pax || 0}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar, aoAvisar, impedimentoAviso, previaAviso }) {
+  const [extra, setExtra] = useState({ gordura: null, intervalo: null, ajustes: [], pedidos: [] });
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
 
@@ -688,6 +953,9 @@ function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar, aoAvisar, imped
   const [salvando, setSalvando] = useState("");
   const [recadoRm, setRecadoRm] = useState(null);
   const [recadoOk, setRecadoOk] = useState(null);
+  // O detalhamento das viagens abre SOBRE o cartão (não no lugar dele): o DP está
+  // olhando o caso e as viagens são a explicação da operação que ele está lendo.
+  const [verViagens, setVerViagens] = useState(false);
 
   const dia = String(linha.date_ref ?? "").slice(0, 10);
   const cracha = linha.cracha;
@@ -702,10 +970,26 @@ function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar, aoAvisar, imped
       lerDP360("ponto_gordura", { filtros: { cracha: `in.(${variantes})`, data_ref: `eq.${dia}` }, limite: 5 }),
       lerDP360("ponto_intervalo", { filtros: { cracha: `in.(${variantes})`, data_ref: `eq.${dia}` }, limite: 5 }),
       lerDP360("ponto_ajustes", { filtros: { cracha: `in.(${variantes})`, date_ref: `eq.${dia}` }, limite: 50 }),
+      // O QUE ELE PEDIU NO APP. Sem isto a linha do tempo dizia só "Ajuste no app"
+      // e não dizia o quê (app.js:4585-4589 usa o mesmo dado, vindo do
+      // pré-carregamento da Conferência). Aqui a Revisão lê direto o crachá×dia.
+      // `ponto_ajustes_app` guarda aviso/advertência/atestado na MESMA tabela, sem
+      // `tipo_ajuste`; essas linhas NÃO são pedido do colaborador e são descartadas
+      // abaixo (a mesma regra da Ocorrências).
+      lerDP360("ponto_ajustes_app", {
+        colunas: COLUNAS_PEDIDO_APP,
+        filtros: { cracha: `in.(${variantes})`, date_ref: `eq.${dia}` },
+        limite: 50,
+      }).catch(() => []),
     ])
-      .then(([gordura, intervalo, ajustes]) => {
+      .then(([gordura, intervalo, ajustes, pedidos]) => {
         if (!ativo) return;
-        setExtra({ gordura: gordura?.[0] || null, intervalo: intervalo?.[0] || null, ajustes: ajustes || [] });
+        setExtra({
+          gordura: gordura?.[0] || null,
+          intervalo: intervalo?.[0] || null,
+          ajustes: ajustes || [],
+          pedidos: (pedidos || []).filter((p) => String(p.tipo_ajuste ?? "").trim()),
+        });
       })
       .catch((falha) => {
         if (ativo) setErro(falha.message || "Não foi possível carregar as fontes deste dia.");
@@ -718,13 +1002,42 @@ function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar, aoAvisar, imped
     };
   }, [cracha, dia]);
 
+  /* ---- A MENSAGEM do balão da linha do tempo ----
+     O modelo é o MESMO que o envio usa: sai do `app_config` (chave `template_<tipo>`)
+     e cai no texto oficial quando não há nada salvo (`escolherTemplate`). Quem monta
+     o texto é o `previaAviso` da aba, que já sabe a rota do dia (motorista, interno
+     ou bateu-fora) e usa as mesmas funções do disparo — assim a prévia e o que sai de
+     verdade não podem divergir. Sem modelo, o balão só não aparece: nada trava. */
+  const [mensagemAviso, setMensagemAviso] = useState("");
+  const chavePrevia = previaAviso?.chave || "";
+  useEffect(() => {
+    let ativo = true;
+    setMensagemAviso("");
+    if (!chavePrevia || !previaAviso?.montar) return undefined;
+    lerDP360("app_config", { filtros: { chave: `eq.${chaveTemplate(chavePrevia)}` }, limite: 1 })
+      .then((cfg) => {
+        if (!ativo) return;
+        setMensagemAviso(previaAviso.montar(escolherTemplate(cfg?.[0]?.valor, chavePrevia)) || "");
+      })
+      .catch(() => {
+        // Sem o app_config o balão ainda vale: o texto oficial é o mesmo do envio.
+        if (ativo) setMensagemAviso(previaAviso.montar(escolherTemplate("", chavePrevia)) || "");
+      });
+    return () => {
+      ativo = false;
+    };
+    // `montar` fecha sobre a linha; a identidade dele já muda quando a linha muda.
+  }, [chavePrevia, previaAviso]);
+
   useEffect(() => {
     const escapa = (e) => {
-      if (e.key === "Escape") aoFechar();
+      // Com as viagens abertas por cima, o Esc fecha SÓ elas (quem trata é o
+      // próprio pop-up das viagens) — senão os dois sumiriam de uma vez.
+      if (e.key === "Escape" && !verViagens) aoFechar();
     };
     document.addEventListener("keydown", escapa);
     return () => document.removeEventListener("keydown", escapa);
-  }, [aoFechar]);
+  }, [aoFechar, verViagens]);
 
   const g = extra.gordura || {};
   const iv = extra.intervalo || {};
@@ -912,61 +1225,169 @@ function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar, aoAvisar, imped
     }
   };
 
+  /* ═══════════════════ A LINHA DO TEMPO DO CASO ═══════════════════
+     Porte de app.js:4655-4713 (`tlDefs`). Ela responde três perguntas que a versão
+     curta não respondia (os três buracos que o DP apontou em 25/08): O QUE FOI
+     FEITO, PARA QUAL HORÁRIO, e se a advertência veio de PEDIDO INCORRETO ou de
+     VENCIMENTO DO PRAZO — a tela dizia as duas coisas do mesmo jeito ("Advertência"
+     e a data) e quem abria o histórico não sabia qual dos dois caminhos foi.        */
+
+  // O QUE ELE PEDIU, com VEREDITO POR AÇÃO. O julgamento é do MOTOR (`julgaAcoes`,
+  // o mesmo da Ocorrências, validado 1:1 contra o Python) — nada de reescrever aqui
+  // a régua de "bate / não bate". A duplicata vira "2×" em vez de repetir na tela.
+  const acoesPedidas = useMemo(() => {
+    if (!extra.pedidos.length) return [];
+    return julgaAcoes({
+      pedidos: extra.pedidos.map((o) => ({
+        tipo: String(o.tipo_ajuste ?? "").trim(),
+        hora: String(o.horario_ajuste ?? "").trim(),
+        ajuste: String(o.horario_ajuste ?? "").trim(),
+        id: String(o.id_ocorrencia ?? "").trim(),
+      })),
+      // O alvo do CASO é o congelado no aviso — é contra ele que o pedido é julgado.
+      alvo: {
+        entrada: caso?.alvo_entrada,
+        saida: caso?.alvo_saida,
+        almSaida: caso?.alvo_alm_saida,
+        almVolta: caso?.alvo_alm_volta,
+        origem: caso?.origem,
+      },
+      gordura: extra.gordura || {},
+      sugestao: {
+        entrada_sug: linha.entrada_sug,
+        saida_sug: linha.saida_sug,
+        almoco_saida_sug: linha.almoco_saida_sug,
+        almoco_volta_sug: linha.almoco_volta_sug,
+      },
+      escala: { entrada: linha.esc_entrada, saida: linha.esc_saida },
+      // `cartao` aceita a linha do ponto_diario direto (lê `todas_batidas`).
+      cartao: linha,
+    });
+    // dep na `extra.gordura` e não no `g` local: `g` é um `{}` novo a cada render
+    // quando não há gordura, e o memo nunca guardaria nada.
+  }, [extra.pedidos, extra.gordura, caso, linha]);
+
+  // A frase de uma linha: horário pedido + veredito, no formato do original.
+  const textoPedido = useMemo(() => {
+    if (!acoesPedidas.length) return "";
+    const veredito = (a) =>
+      a.redundante ? "já tinha" : a.ok === null ? "sem base" : a.ok ? "bate" : "não bate";
+    // "D/ 09:19 P/ 08:30" (alteração) vira "09:19→08:30": é o que se lê num relance.
+    const hora = (a) => {
+      const m = /D\/\s*(\S+)\s*P\/\s*(\S+)/.exec(a.hora || "");
+      return m ? `${m[1]}→${m[2]}` : a.hora || "";
+    };
+    return acoesPedidas.slice(0, 3).map((a) => ({
+      tipo: String(a.tipo || "").slice(0, 3).toLowerCase(),
+      hora: hora(a),
+      n: a.n,
+      veredito: veredito(a),
+      ok: a.redundante ? false : a.ok,
+    }));
+  }, [acoesPedidas]);
+
+  // NÃO RESPONDEU vs RESPONDEU ERRADO (app.js:4680-4683). `ajuste_ids` guarda as
+  // ocorrências do ciclo com prefixo R:/A: — R é o que ele PEDIU, A é o que foi
+  // advertido. Vencido = houve aviso e nada voltou.
+  const idsR = String(caso?.ajuste_ids ?? "").split(",").filter((x) => x.trim().startsWith("R:")).length;
+  const idsA = String(caso?.ajuste_ids ?? "").split(",").filter((x) => x.trim().startsWith("A:")).length;
+  const respondeu = !!(acoesPedidas.length || idsR || idsA || (caso?.ajuste && caso.ajuste !== "nao_ajustou"));
+  const houveAviso = !!String(caso?.aviso_enviado_em ?? "").trim();
+  const venceu = !respondeu && houveAviso;
+  const advertido = !!String(caso?.advertencia_enviada_em ?? "").trim();
+
+  // PARA QUAL HORÁRIO FOI: o alvo CONGELADO no aviso (não o alvo de hoje). É o
+  // horário que a pessoa recebeu, e é por ele que a correção lança.
+  const alvoCongelado = [caso?.alvo_entrada, caso?.alvo_alm_saida, caso?.alvo_alm_volta, caso?.alvo_saida]
+    .map((x) => String(x ?? "").trim())
+    .filter(Boolean);
+  const gorduraCortada = parseInt(caso?.gordura_min, 10);
+
   const passos = [
     {
       icone: "📤",
       titulo: "Aviso enviado",
       quando: fmtDataHora(caso?.aviso_enviado_em),
-      feito: !!String(caso?.aviso_enviado_em ?? "").trim(),
+      feito: houveAviso,
       nota: caso?.aviso_conferido_em ? `visto no app · ${fmtDataHora(caso.aviso_conferido_em)}` : "",
+      // O BALÃO SEMPRE APARECE (app.js:4665): se já mandamos, mostra o que foi; se
+      // não, a PRÉVIA do que vai sair. Sem isso a linha do tempo dizia "Aviso
+      // enviado" e não dizia qual mensagem — o DP clicava no botão sem saber o texto
+      // que o colaborador ia receber.
+      balao: true,
     },
     {
-      icone: "✏️",
-      titulo: "Pedido do colaborador",
+      icone: venceu ? "⏰" : "✏️",
+      titulo: venceu ? "Não respondeu" : textoPedido.length ? "Pedido do colaborador" : "Ajuste no app",
       quando: "",
-      feito: !!(caso?.ajuste_ids || (caso?.ajuste && caso.ajuste !== "nao_ajustou")),
-      nota: caso?.pedido_txt || (caso?.ajuste === "nao_ajustou" ? "não ajustou" : "sem pedido registrado neste dia"),
+      feito: !!(textoPedido.length || venceu || (caso?.ajuste && caso.ajuste !== "nao_ajustou")),
+      alerta: venceu,
+      nota: venceu
+        ? "o prazo de 48 h venceu sem ajuste — por isso a advertência"
+        : textoPedido.length
+          ? ""
+          : caso?.ajuste === "nao_ajustou"
+            ? "não ajustou"
+            : // O caso diz que ele respondeu mas o pedido não veio (leitura de
+              // `ponto_ajustes_app` falhou, ou a ocorrência já foi arquivada): dizer
+              // "não pediu nada" aqui seria mentira — o detalhe está na Ocorrências.
+              respondeu
+              ? `${idsR || idsA || "algum"} pedido(s) no ciclo — o detalhe está nas Ocorrências`
+              : "não pediu nada neste dia",
+      acoes: venceu ? [] : textoPedido,
+      maisAcoes: acoesPedidas.length > 3 ? acoesPedidas.length - 3 : 0,
     },
     {
       icone: "⚖️",
       titulo: "Decisão do DP",
       quando: fmtDataHora(caso?.aceito_em),
-      feito: !!(caso?.aceite && caso.aceite !== "pendente"),
-      nota:
-        caso?.aceite === "aceito"
+      feito: !!(venceu || (caso?.aceite && caso.aceite !== "pendente")),
+      nota: venceu
+        ? "nada a decidir — vencido segue direto para advertir e corrigir"
+        : caso?.aceite === "aceito"
           ? "aceitou — o ponto fica como ele pediu"
           : caso?.aceite === "rejeitado"
-            ? "recusou — advertência e correção"
+            ? houveAviso
+              ? `recusou ${idsR ? `${idsR} pedido(s) ` : ""}— advertência e correção`
+              : "recusou — o ponto continua como estava"
             : "",
     },
     {
-      icone: caso?.advertencia_enviada_em ? "⚠" : "✓",
-      titulo: caso?.advertencia_enviada_em ? "Advertência" : "Ponto OK",
+      icone: advertido ? "⚠" : "✓",
+      titulo: advertido ? "Advertência" : "Ponto OK",
       quando: fmtDataHora(caso?.advertencia_enviada_em || caso?.conferido_em),
-      feito: !!(caso?.advertencia_enviada_em || caso?.conferido_em),
-      alerta: !!caso?.advertencia_enviada_em,
-      nota: "",
+      feito: !!(caso?.conferido_em || advertido),
+      alerta: advertido,
+      // A distinção que faltava: vencimento (não corrigiu no prazo) ≠ pedido incorreto.
+      nota: advertido ? (venceu ? "motivo: não corrigiu no prazo" : "motivo: ajuste incorreto") : "",
     },
     {
       icone: "🔧",
       titulo: "Correção do ponto",
       quando: fmtDataHora(caso?.correcao_final_em),
       feito: !!String(caso?.correcao_final_em ?? "").trim(),
-      nota: [caso?.alvo_entrada, caso?.alvo_alm_saida, caso?.alvo_alm_volta, caso?.alvo_saida]
-        .map((x) => String(x ?? "").trim())
-        .filter(Boolean)
-        .join(" · "),
+      nota: String(caso?.correcao_final_em ?? "").trim()
+        ? (alvoCongelado.length ? `ponto lançado para ${alvoCongelado.join(" · ")}` : "lançado") +
+          (gorduraCortada > 0 ? ` · ${fmtMin(gorduraCortada)} de gordura cortada` : "")
+        : alvoCongelado.length
+          ? `vai lançar ${alvoCongelado.join(" · ")}`
+          : "",
     },
   ];
+  // "agora" = o primeiro passo que ainda não aconteceu (app.js:4712).
+  const passoAtual = passos.findIndex((p) => !p.feito);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto"
-      style={{ background: "rgba(15,20,32,.5)", padding: 16 }}
-    >
-      <div className="dp-card w-full max-w-6xl" style={{ padding: 0 }}>
+    /* LAYOUT (queixa do dono: "dependendo da quantidade de batidas vai empurrando o
+       pop-up para baixo"). O box é o DONO DA ROLAGEM — cabeçalho e rodapé ficam
+       parados e só o corpo rola, com `max-height` em vez de crescer sem fim. E as
+       duas colunas são independentes: `align-content: start` + `min-width: 0` no
+       grid impedem que uma coluna comprida (o mapa, a lista de batidas) empurre a
+       outra. Mesmo desenho do `gd-modal` do INOVE Guard, que já resolveu isto. */
+    <div className="rv-overlay">
+      <div className="rv-box dp-card" style={{ padding: 0 }}>
         <header
-          className="flex items-start gap-3"
+          className="flex items-start gap-3 rv-fixo"
           style={{ padding: "14px 18px", borderBottom: "1px solid var(--dp-border)" }}
         >
           <div
@@ -1009,6 +1430,7 @@ function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar, aoAvisar, imped
           </button>
         </header>
 
+        <div className="rv-corpo">
         <div style={{ display: "grid", gap: 8, padding: "12px 18px 0" }}>
           <AvisoTrava motivo={bloqueio} />
           {erro && (
@@ -1018,9 +1440,9 @@ function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar, aoAvisar, imped
           )}
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2" style={{ padding: 18 }}>
+        <div className="rv-colunas" style={{ padding: 18 }}>
           {/* ---------- coluna 1: fontes, sugestão, real ---------- */}
-          <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
+          <div style={{ display: "grid", gap: 16, alignContent: "start", minWidth: 0 }}>
             <section>
               <TituloBloco nota="de onde vêm os números — nenhuma delas é decisão">1 · Fontes</TituloBloco>
               <div className="dp-card" style={{ padding: "6px 14px" }}>
@@ -1041,8 +1463,24 @@ function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar, aoAvisar, imped
                     cor="#94a3b8"
                     titulo="Escala publicada — apresentação e saída."
                   />
+                  {/* A LINHA DO CITATTI VIRA BOTÃO (app.js:4602-4605): é a operação dele
+                      que fica estranha na dupla pegada, e as viagens são a explicação.
+                      Clicar abre linha, tabela, veículo e os intervalos entre as pegadas
+                      sem sair do caso. */}
                   <LinhaFonte
-                    rotulo="Citatti"
+                    rotulo={
+                      <>
+                        Citatti{" "}
+                        <button
+                          type="button"
+                          className="rv-vg"
+                          onClick={() => setVerViagens(true)}
+                          title="Ver as viagens do dia: linha, tabela, atividade, veículo e os intervalos entre as pegadas."
+                        >
+                          🚌 viagens
+                        </button>
+                      </>
+                    }
                     ini={g.op_inicio}
                     fim={g.op_fim}
                     cor="#059669"
@@ -1240,8 +1678,8 @@ function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar, aoAvisar, imped
             </section>
           </div>
 
-          {/* ---------- coluna 2: almoço, GPS, linha do tempo ---------- */}
-          <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
+          {/* ---------- coluna 2: almoço e GPS (a linha do tempo saiu daqui) ---------- */}
+          <div style={{ display: "grid", gap: 16, alignContent: "start", minWidth: 0 }}>
             <section>
               <h3 className="dp-muted flex items-center gap-2" style={ESTILO_TITULO}>
                 Almoço
@@ -1283,7 +1721,13 @@ function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar, aoAvisar, imped
               {!gps || !gps.total ? (
                 <p className="dp-faint" style={{ margin: 0 }}>Sem GPS registrado neste dia.</p>
               ) : (
-                <ul className="dp-card" style={{ listStyle: "none", margin: 0, padding: 8, display: "grid", gap: 3 }}>
+                /* MUITAS BATIDAS NÃO PODEM EMPURRAR O RESTO (queixa do dono): a lista
+                   é dona da própria rolagem a partir de umas 8 linhas, em vez de
+                   esticar a coluna e jogar o mapa e o rodapé para fora da tela. */
+                <ul
+                  className="dp-card rv-rolante"
+                  style={{ listStyle: "none", margin: 0, padding: 8, display: "grid", gap: 3 }}
+                >
                   {gps.detalhes.map((d, i) => (
                     <li
                       key={`${d.hora}-${i}`}
@@ -1339,45 +1783,81 @@ function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar, aoAvisar, imped
               )}
             </section>
 
-            <section>
-              <TituloBloco>Linha do tempo do caso</TituloBloco>
-              <ol className="dp-card" style={{ listStyle: "none", margin: 0, padding: 8, display: "grid", gap: 3 }}>
-                {passos.map((p) => (
-                  <li
-                    key={p.titulo}
-                    className="flex gap-3"
-                    style={{
-                      padding: "6px 9px",
-                      borderRadius: 8,
-                      ...(p.alerta && p.feito
-                        ? { background: "var(--dp-danger-bg)" }
-                        : p.feito
-                          ? { background: "var(--dp-ok-bg)" }
-                          : { background: "var(--dp-surface-2)" }),
-                    }}
-                  >
-                    <span>{p.feito ? p.icone : "○"}</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-baseline gap-2" style={{ fontSize: 12.5, fontWeight: 600 }}>
-                        {p.titulo}
-                        {p.quando && <span className="dp-muted dp-num" style={{ fontWeight: 500 }}>{p.quando}</span>}
-                      </div>
-                      {p.nota && <div className="dp-muted" style={{ marginTop: 2, fontSize: 11.5 }}>{p.nota}</div>}
-                    </div>
-                  </li>
-                ))}
-              </ol>
-              {!!extra.ajustes.length && (
-                <p className="dp-faint" style={{ margin: "6px 0 0", fontSize: 11.5 }}>
-                  {extra.ajustes.length} edição(ões) registrada(s) em ponto_ajustes para este dia.
-                </p>
-              )}
-            </section>
           </div>
         </div>
 
+        {/* ═══ LINHA DO TEMPO — A LARGURA INTEIRA, à esquerda (pedido do dono) ═══
+            Era uma coluna estreita à direita com cinco passos vazios; o balão da
+            mensagem não cabia ali. Aqui ela ocupa o pé do pop-up inteiro, e o texto
+            que o colaborador recebeu (ou vai receber) fica legível sem quebrar em
+            palavra por linha. */}
+        <section className="rv-tl-sec">
+          <TituloBloco nota="o que já aconteceu com este dia — e o que a pessoa recebeu">
+            Linha do tempo do caso
+          </TituloBloco>
+          <ol className="dp-card rv-tl">
+            {passos.map((p, i) => (
+              <li
+                key={p.titulo}
+                className={`rv-tl-passo${p.feito ? " feito" : ""}${i === passoAtual ? " agora" : ""}${
+                  p.alerta && p.feito ? " alerta" : ""
+                }`}
+              >
+                <span className="rv-tl-marca">{p.feito ? p.icone : i === passoAtual ? "•" : ""}</span>
+                <div className="rv-tl-conteudo">
+                  <div className="rv-tl-titulo">
+                    {p.titulo}
+                    {p.quando && <time className="dp-muted dp-num">{p.quando}</time>}
+                  </div>
+
+                  {/* O QUE ELE PEDIU, com veredito por ação (não por dia): é o que
+                      permite ler um caso MISTO sem achar que foi tudo recusado. */}
+                  {!!p.acoes?.length && (
+                    <div className="rv-tl-acoes">
+                      {p.acoes.map((a, j) => (
+                        <span
+                          key={`${a.tipo}-${a.hora}-${j}`}
+                          className={`rv-acao${a.ok === true ? " ok" : a.ok === false ? " nao" : ""}`}
+                        >
+                          {a.tipo} <b className="dp-num dp-mono">{a.hora}</b>
+                          {a.n > 1 ? ` ${a.n}×` : ""} <i>({a.veredito})</i>
+                        </span>
+                      ))}
+                      {p.maisAcoes > 0 && <span className="dp-faint">+{p.maisAcoes}</span>}
+                    </div>
+                  )}
+
+                  {p.nota && <div className="rv-tl-nota">{p.nota}</div>}
+
+                  {/* O BALÃO. Se já mandamos, é o que saiu; se não, a prévia do que
+                      vai sair — o DP não clica mais no botão sem saber o texto. */}
+                  {p.balao && !!mensagemAviso && (
+                    <div className="rv-balao">
+                      <span className="rv-balao-lb">
+                        {houveAviso ? "o que mandamos" : `prévia — ${previaAviso?.rotulo || "o que vai sair"}`}
+                      </span>
+                      {mensagemAviso}
+                    </div>
+                  )}
+                  {p.balao && !mensagemAviso && !houveAviso && (
+                    <div className="rv-tl-nota">
+                      {impedimentoAviso || "Nada a pedir por aqui — não há mensagem para este dia."}
+                    </div>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+          {!!extra.ajustes.length && (
+            <p className="dp-faint" style={{ margin: "6px 0 0", fontSize: 11.5 }}>
+              {extra.ajustes.length} edição(ões) registrada(s) em ponto_ajustes para este dia.
+            </p>
+          )}
+        </section>
+        </div>
+
         <footer
-          className="flex flex-wrap items-center justify-between gap-3"
+          className="flex flex-wrap items-center justify-between gap-3 rv-fixo"
           style={{
             padding: "12px 18px",
             borderTop: "1px solid var(--dp-border)",
@@ -1439,6 +1919,17 @@ function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar, aoAvisar, imped
           </div>
         </footer>
       </div>
+
+      {/* As viagens ficam POR CIMA do cartão em vez de fechá-lo: quem clicou no
+          Citatti continua vendo o dia que está lendo. */}
+      {verViagens && (
+        <ModalViagens
+          cracha={cracha}
+          nome={linha.nm_funcionario || ""}
+          dia={dia}
+          aoFechar={() => setVerViagens(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1795,6 +2286,122 @@ function ModalComunicado({
    e a ordenação compara `[object Object]`.
    As colunas que dependem de estado da aba (Avisado?, 📍 Local, Motivo, e os chips
    de sugestão bloqueada) recebem `render`/`valor` dentro do componente. */
+/* ═══════════ A CÉLULA SUG, EDITÁVEL NA PRÓPRIA GRADE ═══════════
+   Porte de main.py `salvar_real_manual_campo` (~902) e do par `editable`/`onEdit`
+   do Passo 2 (app.js:6005-6008).
+
+   A SUGESTÃO É O REAL: cada campo da sugestão mapeia num campo do Real manual
+   (`_SUG2REAL`), e editar a célula grava UM campo direto no `ponto_real_manual` —
+   persiste e passa a mandar no veredito e na correção. Antes disto o clique na
+   célula só abria o pop-up e a edição existia lá dentro; o dono clicou numa célula
+   "editável" e o que abriu foi o cartão.
+
+   A `TabelaDP` documenta que célula editável ficou FORA do porte porque
+   `contenteditable` briga com o cursor a cada re-render, e manda usar um <input>
+   controlado no `render` da coluna. É exatamente o que está aqui — a regra fica na
+   aba, não no componente compartilhado. */
+
+const SUG_PARA_REAL = {
+  entrada_sug: "entrada",
+  almoco_saida_sug: "alm_saida",
+  almoco_volta_sug: "alm_volta",
+  saida_sug: "saida",
+};
+
+function CelulaSug({ linha, campo, bloqueio, aoGravar }) {
+  const salvo = fmtHora(linha[campo]);
+  const [valor, setValor] = useState(salvo);
+  const [estado, setEstado] = useState(""); // "" | "gravando" | "ok" | "erro"
+  const [recado, setRecado] = useState("");
+
+  // Re-semeia quando o VALOR gravado muda (não a cada re-render da grade): assim a
+  // releitura pós-gravação aparece na célula sem atropelar quem está digitando.
+  useEffect(() => {
+    setValor(salvo);
+  }, [salvo]);
+
+  // ALMOÇO TRAVADO (main.py:906-910): os dois campos do miolo não são editáveis e
+  // não vão no payload — o servidor recusa o dia inteiro se forem. Mesma regra do
+  // pop-up, lida do mesmo campo.
+  const travado = ehVerdadeiro(linha.almoco_travado) && ["almoco_saida_sug", "almoco_volta_sug"].includes(campo);
+
+  const gravar = async () => {
+    if (travado || estado === "gravando") return;
+    const bruto = String(valor ?? "").trim();
+    if (bruto === salvo) return; // nada mudou: não gasta gravação
+    // `hm2min`/`min2hm` são do motor: aceitam "1420" (o que a tela do Cartão de Ponto
+    // devolve) e preservam a notação 25:40 do turno que vira o dia.
+    let limpo = "";
+    if (bruto) {
+      const m = hm2min(bruto);
+      if (m === null || m < 0) {
+        setEstado("erro");
+        setRecado(`Horário inválido: ${bruto}`);
+        setValor(salvo);
+        window.setTimeout(() => setEstado(""), 1600);
+        return;
+      }
+      limpo = min2hm(m);
+    }
+    setEstado("gravando");
+    setRecado("");
+    try {
+      await aoGravar(linha, campo, limpo);
+      // Nada de estado otimista: `aoGravar` relê a linha do banco e a grade repinta
+      // com o que ficou LÁ. Aqui só sobra o ✓ que diz que a gravação passou.
+      setEstado("ok");
+      window.setTimeout(() => setEstado(""), 1200);
+    } catch (falha) {
+      setEstado("erro");
+      setRecado(falha.message || "Não foi possível gravar.");
+      setValor(salvo);
+      window.setTimeout(() => setEstado(""), 2400);
+    }
+  };
+
+  const titulo = travado
+    ? "Almoço travado pela regra da Revisão — este campo não é editável."
+    : bloqueio
+      ? `⚠ ${bloqueio} — o valor está aqui para leitura, mas o dia não dá para avisar nem lançar.`
+      : "Edite e saia do campo (ou Enter) para cravar no Real manual deste dia. Vazio limpa só este campo.";
+
+  return (
+    <span className={`rv-sug${estado ? ` ${estado}` : ""}${bloqueio ? " bloqueada" : ""}`} title={recado || titulo}>
+      <input
+        className="dp-num dp-mono"
+        type="text"
+        inputMode="numeric"
+        placeholder="--:--"
+        value={valor}
+        readOnly={travado}
+        disabled={estado === "gravando"}
+        aria-label={`${campo} de ${linha.nm_funcionario || linha.cracha}`}
+        onChange={(e) => setValor(e.target.value)}
+        // O clique na LINHA continua abrindo o cartão; a célula editável não pode
+        // disparar isso. E o `onKeyDown` da linha abre no Enter/espaço — sem parar
+        // aqui, digitar um espaço abriria o pop-up por cima do que se está editando.
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+          } else if (e.key === "Escape") {
+            setValor(salvo);
+            e.currentTarget.blur();
+          }
+        }}
+        onBlur={gravar}
+      />
+      {travado && <Lock size={10} className="rv-sug-marca" />}
+      {!travado && !!bloqueio && <span className="rv-sug-marca">⚠</span>}
+      {estado === "ok" && <span className="rv-sug-marca ok">✓</span>}
+      {estado === "erro" && <span className="rv-sug-marca erro">✕</span>}
+    </span>
+  );
+}
+
 const COLUNAS = [
   { id: "cracha", rotulo: "Crachá", classe: "dp-num dp-mono", largura: 92 },
   { id: "nm_funcionario", rotulo: "Nome", estilo: { fontWeight: 600 }, largura: 210 },
@@ -1988,7 +2595,16 @@ export default function Revisao() {
     setCarregando(true);
     setErro("");
     setGpsPorCracha({});
-    const filtrosDia = { date_ref: `eq.${data}`, categoria: `eq.${categoria}` };
+    /* SÓ DIAS COM PONTO. Porte de `ferramenta/processar_ponto.py:28-33`, onde a
+       Revisão descarta a linha cujo `tem_ponto` não é "true" antes de montar a lista:
+       quem não bateu não tem CARTÃO para conferir — é assunto das Folgas e dos
+       Abandonos, não da conferência. Medido em 02/09, MOTORISTA: 246 linhas no dia,
+       197 com ponto e 47 SEM_PONTO; as 47 apareciam aqui e não aparecem na ferramenta.
+       O filtro é no SERVIDOR: além de ser o comportamento certo, corta ~20% do payload
+       do dia. NÃO REMOVER achando que é filtro esquecido.
+       `tem_ponto` é STRING "true"/"false" no lake — `eq.true` resolve no PostgREST;
+       nunca comparar esse campo como booleano em JS. */
+    const filtrosDia = { date_ref: `eq.${data}`, categoria: `eq.${categoria}`, tem_ponto: "eq.true" };
 
     Promise.all([
       lerTudoDP360("ponto_diario", {
@@ -2141,6 +2757,68 @@ export default function Revisao() {
     [linhas, bloqueios],
   );
 
+  /* ---- releitura de UMA linha depois de gravar ----
+     A tela nunca pinta o estado otimista: relê `ponto_diario` (cru), `ponto_real_manual`
+     e `ponto_caso` do crachá/dia e reaplica o overlay do Real. O `ponto_diario` cru é o
+     que permite DESFAZER o overlay quando o Real manual é apagado — reaproveitar a linha
+     já sobrescrita deixaria `entrada_sug`/`alvo_*` com o valor antigo do DP.
+     `in.(...)` com as variantes do crachá porque as tabelas do lake divergem no zero à
+     esquerda (é o mesmo truque do pop-up).
+     (Fica ANTES das colunas porque a célula SUG editável grava e relê por aqui.) */
+  const recarregarLinha = useCallback(async (cracha, dia) => {
+    const cr = String(cracha ?? "").trim();
+    const variantes = [...new Set([cr, cr.replace(/^0+/, ""), cra8(cr)].filter(Boolean))].join(",");
+    const filtros = { cracha: `in.(${variantes})`, date_ref: `eq.${dia}` };
+    const [diario, reaisManuais, listaCasos] = await Promise.all([
+      lerDP360("ponto_diario", { colunas: COLUNAS_PONTO_DIARIO, filtros, limite: 5 }),
+      lerDP360("ponto_real_manual", { filtros, limite: 5 }),
+      lerDP360("ponto_caso", { filtros, limite: 5 }),
+    ]);
+    const chave = chaveDia(cr, dia);
+    const rm = reaisManuais?.[0] || null;
+    const caso = listaCasos?.[0] || null;
+    const nova = diario?.[0] ? aplicarRealManual(diario[0], rm) : null;
+
+    setCasos((mapa) => {
+      const novo = { ...mapa };
+      if (caso) novo[chave] = caso;
+      else delete novo[chave];
+      return novo;
+    });
+    if (!nova) return;
+    setLinhas((ls) => ls.map((l) => (chaveDia(l.cracha, l.date_ref) === chave ? nova : l)));
+    // O pop-up aberto recebe a MESMA linha nova: sem isto ele continuaria mostrando o
+    // Real antigo enquanto a grade atrás dele já mostra o novo.
+    setAberta((a) => (a && chaveDia(a.cracha, a.date_ref) === chave ? nova : a));
+  }, []);
+
+  /* ---- gravar UM campo do Real manual pela célula da grade ----
+     Porte de main.py `salvar_real_manual_campo` (~902): mesmo mapa `_SUG2REAL`,
+     mesma trava de almoço, mesmo par `definido_por`/`definido_em`. O `date_ref` sai
+     da LINHA (nunca de `new Date()`, que depois das 21h BRT viraria o dia seguinte);
+     o `definido_em` é carimbo de INSTANTE, e aí o UTC do `toISOString()` é o certo —
+     é o que o Python faz. Coluna ausente no upsert não é tocada, então gravar a
+     entrada não apaga a saída que já estava lá. */
+  const gravarCampoSug = useCallback(
+    async (linha, campo, valorHm) => {
+      const dia = String(linha.date_ref ?? "").slice(0, 10);
+      const real = SUG_PARA_REAL[campo];
+      if (!real) throw new Error(`Campo inválido: ${campo}`);
+      if (["alm_saida", "alm_volta"].includes(real) && ehVerdadeiro(linha.almoco_travado)) {
+        throw new Error("O almoço deste motorista foi travado pela regra da Revisão.");
+      }
+      await upsertDP360("ponto_real_manual", {
+        cracha: cra8(linha.cracha),
+        date_ref: dia,
+        [real]: valorHm || null,
+        definido_por: quemEstaUsando(),
+        definido_em: agoraUtc(),
+      });
+      await recarregarLinha(linha.cracha, dia);
+    },
+    [recarregarLinha],
+  );
+
   /* ---- colunas da TabelaDP: mesma ordem/cor/render de antes, agora com `valor` ----
      `render` continua sendo o que a tela mostra (pílulas, chips, "—"); `valor` é a
      versão TEXTO/NÚMERO que a grade usa para ordenar e para o CSV. Sem os dois, ou o
@@ -2216,6 +2894,26 @@ export default function Revisao() {
 
         const valor = col.hora ? (l) => fmtHora(l[col.id]) : (l) => String(l[col.id] ?? "").trim();
 
+        // AS QUATRO CÉLULAS DA SUGESTÃO SÃO EDITÁVEIS NA GRADE (app.js:6005) — a
+        // sugestão É o Real manual. O `valor` (ordenação e CSV) continua sendo o
+        // texto: só a EXIBIÇÃO virou campo. Sugestão bloqueada continua visível e
+        // marcada — o DP precisa ver o que a view propôs, e cravar por cima é
+        // justamente como se destrava o dia.
+        if (col.sug && col.hora && SUG_PARA_REAL[col.id])
+          return {
+            ...col,
+            valor,
+            render: (l) => (
+              <CelulaSug
+                key={`${chaveDia(l.cracha, l.date_ref)}|${col.id}`}
+                linha={l}
+                campo={col.id}
+                bloqueio={bloqueioDe(l)}
+                aoGravar={gravarCampoSug}
+              />
+            ),
+          };
+
         return {
           ...col,
           valor,
@@ -2238,42 +2936,8 @@ export default function Revisao() {
           },
         };
       }),
-    [bloqueios, casos, gpsPorCracha],
+    [bloqueios, casos, gpsPorCracha, gravarCampoSug],
   );
-
-  /* ---- releitura de UMA linha depois de gravar ----
-     A tela nunca pinta o estado otimista: relê `ponto_diario` (cru), `ponto_real_manual`
-     e `ponto_caso` do crachá/dia e reaplica o overlay do Real. O `ponto_diario` cru é o
-     que permite DESFAZER o overlay quando o Real manual é apagado — reaproveitar a linha
-     já sobrescrita deixaria `entrada_sug`/`alvo_*` com o valor antigo do DP.
-     `in.(...)` com as variantes do crachá porque as tabelas do lake divergem no zero à
-     esquerda (é o mesmo truque do pop-up). */
-  const recarregarLinha = useCallback(async (cracha, dia) => {
-    const cr = String(cracha ?? "").trim();
-    const variantes = [...new Set([cr, cr.replace(/^0+/, ""), cra8(cr)].filter(Boolean))].join(",");
-    const filtros = { cracha: `in.(${variantes})`, date_ref: `eq.${dia}` };
-    const [diario, reaisManuais, listaCasos] = await Promise.all([
-      lerDP360("ponto_diario", { colunas: COLUNAS_PONTO_DIARIO, filtros, limite: 5 }),
-      lerDP360("ponto_real_manual", { filtros, limite: 5 }),
-      lerDP360("ponto_caso", { filtros, limite: 5 }),
-    ]);
-    const chave = chaveDia(cr, dia);
-    const rm = reaisManuais?.[0] || null;
-    const caso = listaCasos?.[0] || null;
-    const nova = diario?.[0] ? aplicarRealManual(diario[0], rm) : null;
-
-    setCasos((mapa) => {
-      const novo = { ...mapa };
-      if (caso) novo[chave] = caso;
-      else delete novo[chave];
-      return novo;
-    });
-    if (!nova) return;
-    setLinhas((ls) => ls.map((l) => (chaveDia(l.cracha, l.date_ref) === chave ? nova : l)));
-    // O pop-up aberto recebe a MESMA linha nova: sem isto ele continuaria mostrando o
-    // Real antigo enquanto a grade atrás dele já mostra o novo.
-    setAberta((a) => (a && chaveDia(a.cracha, a.date_ref) === chave ? nova : a));
-  }, []);
 
   /* ═══════════════════ AVISO AO TRABALHADOR (o robô do Transnet) ═══════════════════
      Três rotas, as mesmas do app antigo (app.js `avisarMotoristas`, `avisarInternos`,
@@ -2460,6 +3124,75 @@ export default function Revisao() {
     const { modelo, divergencia } = rotaAvisoInterno(linha, medianas);
     return abrirInternos([{ ...linha, __modelo: modelo, __divergencia: divergencia }]);
   };
+
+  /* ---- A MENSAGEM que o balão da linha do tempo mostra (app.js:4992-5000) ----
+     Mesma rota, mesmo modelo e MESMAS funções do envio de verdade — a prévia não
+     pode ser um texto parecido escrito à parte, ou o DP lê uma coisa e o colaborador
+     recebe outra. Só o modelo (o texto do `app_config`) é lido dentro do cartão.
+
+     JÁ ENVIADO: o texto é RECONSTRUÍDO — o Transnet não devolve a mensagem, e o
+     `ponto_caso` guarda só o carimbo. Quem diz qual modelo saiu é o `tipo` do caso
+     ("fora" · "cerco" · "almoco"/"incompleto"/"curta"), gravado no envio; e a ponta
+     cobrada vem do `caso.ponta` congelado, não da leitura de hoje. Sem isso um dia
+     já corrigido mostraria o texto errado, ou nenhum. */
+  const previaAviso = useMemo(() => {
+    if (!aberta) return null;
+    const caso = casos[chaveDia(aberta.cracha, aberta.date_ref)] || null;
+    const enviado = !!String(caso?.aviso_enviado_em ?? "").trim();
+    const tipoCaso = String(caso?.tipo ?? "").trim().toLowerCase();
+    const gpsDaLinha = gpsPorCracha[cra8(aberta.cracha)];
+
+    const daFora = () =>
+      gpsDaLinha
+        ? {
+            chave: "aviso_fora",
+            rotulo: "avisar que bateu fora",
+            montar: (tpl) => mensagemBateuFora(tpl, aberta, gpsDaLinha),
+          }
+        : null;
+    const daInterno = (modelo, divergencia) => ({
+      chave: `interno_${modelo}`,
+      rotulo: `aviso de ${modelo === "almoco" ? "almoço curto" : modelo === "curta" ? "jornada curta" : "registro incompleto"}`,
+      montar: (tpl) => mensagemInterno(tpl, aberta, divergencia),
+    });
+    const daMotorista = (falta) => ({
+      chave: "ocorrencia_motorista",
+      rotulo: "enviar ocorrência",
+      montar: (tpl) => mensagemRevisaoMotorista(tpl, aberta, falta),
+    });
+
+    if (enviado) {
+      if (tipoCaso === "fora") return daFora();
+      if (["almoco", "curta", "incompleto"].includes(tipoCaso) && ehInterno) {
+        const { divergencia } = rotaAvisoInterno(aberta, medianas);
+        return daInterno(tipoCaso, divergencia);
+      }
+      if (tipoCaso === "cerco" || tipoCaso === "incompleto") {
+        // `ponta` é o que foi cobrado NAQUELE aviso; a leitura de hoje pode já ter
+        // mudado (o DP cravou o Real depois).
+        const ponta = String(caso?.ponta ?? "").trim().toLowerCase();
+        const falta =
+          ponta === "ambos"
+            ? "ENTRADA E SAÍDA"
+            : ponta === "entrada"
+              ? "ENTRADA"
+              : ponta === "saida"
+                ? "SAÍDA"
+                : marcacaoAusente(aberta);
+        if (falta) return daMotorista(falta);
+      }
+    }
+
+    if (ehInterno) {
+      const { modelo, divergencia } = rotaAvisoInterno(aberta, medianas);
+      return modelo ? daInterno(modelo, divergencia) : null;
+    }
+    const falta = marcacaoAusente(aberta);
+    // Sem marcação faltando não há ocorrência a pedir. Mas se ele bateu FORA, a
+    // mensagem que sai é a de justificativa — e é essa que o balão deve mostrar.
+    if (!falta) return gpsDaLinha?.fora ? daFora() : null;
+    return daMotorista(falta);
+  }, [aberta, casos, ehInterno, medianas, gpsPorCracha]);
 
   const chips = [
     ["TODOS", "TODOS"],
@@ -2660,6 +3393,7 @@ export default function Revisao() {
           aoRecarregar={recarregarLinha}
           aoAvisar={avisarUmaLinha}
           impedimentoAviso={impedimentoAviso}
+          previaAviso={previaAviso}
         />
       )}
 

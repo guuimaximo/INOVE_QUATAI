@@ -14,18 +14,17 @@
 // e a base confirmando: 369 linhas, ZERO com batida, contra 291 de 369 no dia
 // 02/09. Não era uma garagem faltosa; era um dia que não chegou.
 //
-// São DUAS perguntas, com réguas diferentes, e a diferença foi medida (ver o
-// bloco de números junto das constantes):
-//   · `consolidado` — porte literal do original (>= 30% de quem tem balde
-//     bateu). É a régua do ABANDONO: domingo fica de fora, e é assim que tem
-//     de ser, porque contar falta num dia de folga geral não faz sentido.
-//   · `importado`   — o ponto do dia chegou do Transnet? Régua própria e baixa.
-//     Usar os 30% aqui acusaria o domingo (24%, com 89 pessoas que bateram) de
-//     "dia não chegou" — uma mentira, e das que fazem alguém avisar quem não
-//     devia.
+// São DUAS perguntas, e cada uma já tem resposta no original:
 //
-// O denominador das duas é o mesmo: quem `_bucket` classifica
-// (MOTORISTA/INTERNO/APRENDIZ). Férias, atestado e afastado ficam de fora.
+//   · "o dia CHEGOU?" → `datasComPonto` (main.py:7067). O seletor da Revisão da
+//     ferramenta é montado SÓ com dias que têm alguém com `tem_ponto = true`.
+//     Dia sem ponto importado simplesmente não existe na lista.
+//   · "o dia conta para ABANDONO?" → `consolidado` (main.py:7580, >= 30% de quem
+//     tem balde bateu). Régua diferente de propósito: domingo tem ponto (98
+//     pessoas bateram em 30/08) mas não deve contar falta.
+//
+// O denominador do `consolidado` é quem `_bucket` classifica
+// (MOTORISTA/INTERNO/APRENDIZ) — férias, atestado e afastado ficam de fora.
 // ============================================================================
 
 const txt = (valor) => String(valor ?? "").trim();
@@ -36,7 +35,7 @@ const ehFalso = (valor) => valor === false || txt(valor).toLowerCase() === "fals
 
 // main.py:7455 — `_DASH_CATS`. Quem está fora destas três é ignorado pelo balde
 // (devolve null): não conta para consolidar o dia.
-export const CATEGORIAS_DASH = new Set(["MOTORISTA", "INTERNO", "APRENDIZ"]);
+const CATEGORIAS_DASH = new Set(["MOTORISTA", "INTERNO", "APRENDIZ"]);
 
 // main.py:7601 — os três baldes que provam que a pessoa APARECEU no dia.
 export const COM_PONTO = new Set(["ok", "incorreto", "sem_operacao"]);
@@ -45,36 +44,17 @@ export const COM_PONTO = new Set(["ok", "incorreto", "sem_operacao"]);
 // contagem de faltas quando a garagem apareceu em massa.
 export const FRACAO_CONSOLIDADO = 0.3;
 
-// …E POR QUE ELA NÃO SERVE PARA DIZER "O DIA NÃO CHEGOU".
+// …E POR QUE ELA NÃO RESPONDE "O DIA CHEGOU?". Medido na base em 06/09/2026:
 //
-// Medido na base em 06/09/2026, com esta mesma função:
-//
-//     2026-09-04 sex    0/369    0%   ← não importado
-//     2026-09-03 qui    0/369    0%   ← não importado
+//     2026-09-04 sex    0/369    0%   ← não chegou
+//     2026-09-03 qui    0/369    0%   ← não chegou
 //     2026-09-02 qua  289/369   78%
 //     2026-08-30 dom   89/370   24%   ← DOMINGO: chegou, só rodou pouco
 //     2026-08-29 sáb  159/371   43%
 //
-// Pelos 30%, o domingo seria acusado de "não chegou" — e 89 pessoas bateram
-// ponto nele; as linhas delas são casos de verdade para revisar. As duas
-// perguntas são diferentes:
-//   · "o dia conta para abandono?"  → 30% (a régua do original, acima)
-//   · "o ponto do dia foi importado?" → praticamente ninguém bateu.
-// Por isso a segunda tem régua própria e baixa. Entre 0% e 24% não existe caso
-// real conhecido: ou o dia entrou, ou não entrou.
-export const FRACAO_IMPORTADO = 0.05;
-
-// As colunas que o balde lê. Pedir menos que isto faz a classificação mentir
-// em silêncio (um `undefined` vira string vazia e o dia muda de balde).
-export const COLUNAS_CONSOLIDACAO = [
-  "date_ref",
-  "categoria",
-  "status_ponto",
-  "te_descricao_dia",
-  "classificacao",
-  "jornada_transnet",
-  "teve_operacao",
-];
+// Pelos 30% o domingo seria acusado de "não chegou", e 98 pessoas bateram ponto
+// nele. Para essa pergunta a resposta é `datasComPonto`, abaixo — que é o que a
+// ferramenta usa, e não depende de limiar nenhum.
 
 /** main.py `_bucket`: em que balde esta linha-dia cai (null = fora da conta). */
 export function balde(linha) {
@@ -101,75 +81,41 @@ export function balde(linha) {
   return null;
 }
 
-/**
- * Consolidação de UM dia, a partir das linhas daquele dia.
- * Devolve `{ total, comPonto, fracao, consolidado }` — `total` já é só quem tem
- * balde, como no original.
- */
-export function consolidacaoDoDia(linhas) {
-  let total = 0;
-  let comPonto = 0;
-  for (const linha of linhas || []) {
-    const b = balde(linha);
-    if (b === null) continue;
-    total += 1;
-    if (COM_PONTO.has(b)) comPonto += 1;
-  }
-  return medir(total, comPonto);
-}
-
-/** As duas leituras de um dia, a partir dos contadores. */
-function medir(total, comPonto) {
-  const fracao = total ? comPonto / total : 0;
-  return {
-    total,
-    comPonto,
-    fracao,
-    // conta para abandono (régua do original)
-    consolidado: total > 0 && comPonto >= FRACAO_CONSOLIDADO * total,
-    // o ponto do dia já foi importado do Transnet
-    importado: total > 0 && comPonto >= FRACAO_IMPORTADO * total,
-  };
-}
+// Colunas do índice do seletor — as três do original (main.py:7066,
+// `ler_ponto_diario_resumo_revisao`).
+export const COLUNAS_INDICE_DATAS = ["date_ref", "categoria", "tem_ponto"];
 
 /**
- * O mesmo, para um lote que mistura vários dias: `Map(dia → consolidação)`.
- * É o passo 1 do `get_abandonos`, e serve para uma tela escolher a data que
- * abre — abrir num dia que não chegou é mostrar a garagem inteira como faltosa.
+ * PORTE de main.py:7066-7071 (`get_revisao_datas`).
+ *
+ * O seletor de dia da Revisão nasce SÓ das linhas com `tem_ponto = true`. Um dia
+ * cujo ponto ainda não foi importado do Transnet não entra na lista — e é isso
+ * que impede a tela de abrir num dia em que a garagem inteira aparece como
+ * SEM_PONTO (as linhas existem desde que a escala existe; a batida chega depois).
+ *
+ * Devolve também `semPonto`: os dias que TÊM linha mas não têm ninguém com
+ * ponto. O original descarta esses dias em silêncio, e aí ninguém entende por
+ * que ontem sumiu do seletor. Aqui eles voltam como aviso, não como opção.
+ *
+ * `tem_ponto` chega como STRING "true"/"false" (convenção do lake).
  */
-export function consolidacaoPorDia(linhas) {
-  const acumulado = new Map();
-  for (const linha of linhas || []) {
-    const dia = txt(linha?.date_ref).slice(0, 10);
+export function datasComPonto(linhas) {
+  const comPonto = new Set();
+  const todos = new Set();
+  const categorias = new Set();
+  for (const l of linhas || []) {
+    const dia = txt(l?.date_ref).slice(0, 10);
     if (!dia) continue;
-    const b = balde(linha);
-    if (b === null) continue;
-    const par = acumulado.get(dia) || [0, 0];
-    par[0] += 1;
-    if (COM_PONTO.has(b)) par[1] += 1;
-    acumulado.set(dia, par);
+    todos.add(dia);
+    if (txt(l?.tem_ponto).toLowerCase() !== "true") continue;
+    comPonto.add(dia);
+    const cat = txt(l?.categoria).toUpperCase();
+    if (cat) categorias.add(cat);
   }
-  const mapa = new Map();
-  for (const [dia, [total, comPonto]] of acumulado) mapa.set(dia, medir(total, comPonto));
-  return mapa;
-}
-
-/** A data mais recente que já consolidou (ou "" se nenhuma). Régua do abandono. */
-export function diaMaisRecenteConsolidado(datas, mapa) {
-  for (const dia of datas || []) {
-    if (mapa?.get(dia)?.consolidado) return dia;
-  }
-  return "";
-}
-
-/**
- * A data mais recente cujo ponto JÁ FOI IMPORTADO — é nela que uma tela de
- * conferência deve abrir. Diferente da de cima de propósito: domingo entra aqui
- * (chegou, só rodou pouco) e não entra lá.
- */
-export function diaMaisRecenteImportado(datas, mapa) {
-  for (const dia of datas || []) {
-    if (mapa?.get(dia)?.importado) return dia;
-  }
-  return "";
+  const desc = (a, b) => b.localeCompare(a);
+  return {
+    datas: [...comPonto].sort(desc),
+    semPonto: [...todos].filter((d) => !comPonto.has(d)).sort(desc),
+    categorias: [...categorias].sort(),
+  };
 }

@@ -13,12 +13,7 @@ import {
 import { supabase } from "../../../supabase";
 import { getStoredUser } from "../../../utils/auth";
 import { RAIO_LOCAL, RAIO_VEIC, reguaLocal, resumoGps } from "../regrasGps";
-import {
-  COLUNAS_CONSOLIDACAO,
-  consolidacaoDoDia,
-  consolidacaoPorDia,
-  diaMaisRecenteImportado,
-} from "../regrasDia";
+import { COLUNAS_INDICE_DATAS, datasComPonto } from "../regrasDia";
 import {
   MOTIVO_AVISO,
   TIPO,
@@ -1935,8 +1930,9 @@ export default function Revisao() {
   const [categorias, setCategorias] = useState(CATEGORIAS_PADRAO);
   const [datas, setDatas] = useState([]);
   const [data, setData] = useState("");
-  // dia → { total, comPonto, fracao, consolidado }. Ver `regrasDia.js`.
-  const [consolidacao, setConsolidacao] = useState(() => new Map());
+  // Dias que TÊM linha na base mas ainda não têm ponto importado. Não entram no
+  // seletor (é a regra do original); viram aviso, para ninguém procurar ontem.
+  const [datasSemPonto, setDatasSemPonto] = useState([]);
   const [lotesDatas, setLotesDatas] = useState(PAGINAS_POR_LOTE);
   const [carregandoDatas, setCarregandoDatas] = useState(true);
 
@@ -1951,34 +1947,27 @@ export default function Revisao() {
   const [aberta, setAberta] = useState(null);
 
   /* ---- datas e categorias disponíveis ---- */
-  // (a faixa de "dia não chegou" fica logo acima da grade, ver `AvisoDiaCru`)
   useEffect(() => {
     let ativo = true;
     setCarregandoDatas(true);
     // TODO(port DP360): trocar por um endpoint `distinct` no gateway. Hoje o
     // PostgREST não expõe DISTINCT por aqui, então paginamos date_ref desc.
-    // As colunas do balde vêm junto: é com elas que se sabe se o dia CHEGOU.
-    // A `ponto_diario` tem uma linha por pessoa por dia desde que a escala
-    // existe — a linha nasce antes da batida. Sem esta conta, a tela abre no dia
-    // mais recente e mostra a garagem inteira como SEM_PONTO.
-    const colunasDatas = [...new Set(["date_ref", "categoria", ...COLUNAS_CONSOLIDACAO])].join(",");
-    lerTudoDP360("ponto_diario", { colunas: colunasDatas, ordem: "date_ref.desc" }, lotesDatas)
+    // `tem_ponto` vem junto: é ele que diz se o dia CHEGOU (main.py:7067). A
+    // `ponto_diario` cria uma linha por pessoa por dia assim que a escala existe
+    // — a linha nasce antes da batida —, então sem este filtro o seletor oferece
+    // o dia que ainda está importando e a tela mostra a garagem toda em SEM_PONTO.
+    lerTudoDP360(
+      "ponto_diario",
+      { colunas: COLUNAS_INDICE_DATAS.join(","), ordem: "date_ref.desc" },
+      lotesDatas,
+    )
       .then((rows) => {
         if (!ativo) return;
-        const dts = [...new Set(rows.map((r) => String(r.date_ref ?? "").slice(0, 10)).filter(Boolean))].sort(
-          (a, b) => b.localeCompare(a),
-        );
-        const cats = [...new Set(rows.map((r) => String(r.categoria ?? "").trim().toUpperCase()).filter(Boolean))].sort();
-        const cons = consolidacaoPorDia(rows);
+        const { datas: dts, semPonto, categorias: cats } = datasComPonto(rows);
         setDatas(dts);
-        setConsolidacao(cons);
+        setDatasSemPonto(semPonto);
         if (cats.length) setCategorias(cats);
-        // ABRE NO DIA QUE JÁ CHEGOU, não no mais recente: o mais recente costuma
-        // ser o que ainda está importando. Se NENHUM consolidou, cai no mais
-        // recente mesmo — e a faixa de aviso explica o que a pessoa está vendo.
-        setData((atual) =>
-          atual && dts.includes(atual) ? atual : diaMaisRecenteImportado(dts, cons) || dts[0] || "",
-        );
+        setData((atual) => (atual && dts.includes(atual) ? atual : dts[0] || ""));
         setErro("");
       })
       .catch((falha) => {
@@ -1991,16 +1980,6 @@ export default function Revisao() {
       ativo = false;
     };
   }, [lotesDatas]);
-
-  // O dia escolhido já chegou? Vale a medição do LOTE de datas (que cobre todos
-  // os dias lidos); se por algum motivo o dia não estiver lá, mede pelas linhas
-  // que a grade carregou — nunca fica sem resposta.
-  const chegou = useMemo(() => {
-    const doLote = consolidacao.get(data);
-    if (doLote) return doLote;
-    if (!linhas.length) return null;
-    return consolidacaoDoDia(linhas);
-  }, [consolidacao, data, linhas]);
 
   /* ---- grade do dia ---- */
   const carregarDia = useCallback(() => {
@@ -2509,7 +2488,6 @@ export default function Revisao() {
               datas.map((d) => (
                 <option key={d} value={d}>
                   {fmtData(d)}
-                  {consolidacao.get(d) && !consolidacao.get(d).importado ? "  ⚠ não chegou" : ""}
                 </option>
               ))
             ) : (
@@ -2605,26 +2583,16 @@ export default function Revisao() {
         </>
       }
     >
-      {/* DIA QUE NÃO CHEGOU. A `ponto_diario` tem uma linha por pessoa por dia desde
-          que a escala existe — ela nasce antes da batida. Enquanto o ponto do dia não
-          é importado, TODAS dizem SEM_PONTO com o cartão vazio, e a tela mostraria a
-          garagem inteira como gente que não bateu. A régua é a mesma do original
-          (`regrasDia.js`, >= 30% de quem tem balde bateu). */}
-      {chegou && !chegou.importado && (
+      {/* O dia sem ponto importado NÃO entra no seletor (regra do original,
+          main.py:7067). Mas some em silêncio lá, e aí ninguém entende por que
+          ontem não está na lista — então ele aparece aqui, como aviso. */}
+      {datasSemPonto.length > 0 && (
         <div className="dp-resumo" style={{ borderColor: "var(--dp-danger-line)" }}>
-          <span className="dp-pill danger">⚠ o dia {fmtData(data)} ainda não chegou</span>{" "}
-          <b className="dp-num">{chegou.comPonto}</b> de <b className="dp-num">{chegou.total}</b>{" "}
-          bateram ponto ({Math.round(chegou.fracao * 100)}%).{" "}
-          <b>A lista abaixo não é de gente que faltou</b>: é o dia que ainda não foi importado do
-          Transnet. Não avise ninguém por ela.{" "}
-          {(() => {
-            const bom = diaMaisRecenteImportado(datas, consolidacao);
-            return bom && bom !== data ? (
-              <button type="button" className="dp-btn" onClick={() => setData(bom)}>
-                ir para {fmtData(bom)}
-              </button>
-            ) : null;
-          })()}
+          <span className="dp-pill danger">ponto ainda não importado</span>{" "}
+          <b>{datasSemPonto.slice(0, 5).map(fmtData).join(" · ")}</b>
+          {datasSemPonto.length > 5 ? ` e mais ${datasSemPonto.length - 5}` : ""} — esses dias já têm
+          escala na base, mas nenhuma batida chegou do Transnet, então não entram no seletor. Não é
+          gente que faltou: é dia que não chegou.
         </div>
       )}
 

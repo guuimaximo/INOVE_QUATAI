@@ -1062,3 +1062,113 @@
 @media (prefers-reduced-motion: reduce) {
   .dp360 .oc-prog.indeterminada .oc-prog-fill { animation: none; width: 100%; opacity: 0.5; }
 }
+
+/* ═════════ OCORRÊNCIAS — o cartão em quatro slots (prefixo `oc-`) ═════════
+ * ACRÉSCIMO: nada aqui reescreve regra existente.
+ *
+ * O CARTÃO É UMA GRADE DE QUATRO COLUNAS, NÃO UMA FILA QUE QUEBRA. Com flex-wrap
+ * (o que havia antes) quatro chips de cinco caracteres não cabiam na coluna: saíam
+ * três em cima e um embaixo, e cada linha da tabela ficava com uma altura própria.
+ * `1fr` × 4 resolve os dois problemas de uma vez — grade não quebra, e o mesmo slot
+ * cai na MESMA posição horizontal em todas as linhas, então "Ponto (bateu)" e
+ * "Alvo" leem-se de cima a baixo, slot contra slot.
+ *
+ * A LARGURA DA COLUNA é que garante a linha única (268 px, em `COLS_AVISO`): quatro
+ * chips de 5 caracteres + a marca E/S + vãos + o respiro da célula. Apertar isto não
+ * traz a quebra de volta; corta o texto. Se um dia precisar de espaço, tire a marca
+ * E/S antes de tirar largura.
+ */
+.dp360 .oc-slots {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  /* no detalhe do caso a linha não tem coluna que a limite: sem teto ela esticaria
+     o cartão pela largura toda do painel. */
+  max-width: 320px;
+}
+.dp360 .oc-slots > .dp-chip {
+  justify-content: center;
+  gap: 3px;
+  padding: 2px 4px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  /* ALTURA TRAVADA: o slot vazio (`.dp-chip.none`) usa a fonte de texto e o slot com
+     hora usa a mono — caixas de linha diferentes, 22 px contra 20 px. A linha da
+     tabela seguia a mais alta, então uma linha com slot vazio ficava 2 px maior que a
+     de cartão cheio. Com altura fixa as duas medem 21 px e a grade fica uniforme (o
+     alinhamento pela base do "E"/"S" continua o mesmo). */
+  height: 21px;
+  box-sizing: border-box;
+}
+.dp360 .oc-slots > .dp-chip .es { flex: none; }
+/* a célula dos dois cartões respira menos de lado: a largura é do cartão, não da
+   margem (é o que faz os 268 px fecharem a conta). */
+.dp360 table.dp-tabela td.oc-cel-cartao { padding-left: 9px; padding-right: 9px; }
+
+/* ═════════ OCORRÊNCIAS — o topo da tela (prefixo `oc-`) ═════════
+ * O topo pagava altura fixa por coisa que se lê uma vez: três cartões de porta com
+ * respiro de cartão grande, uma linha só de abas e o cartão da CAPTURA sempre aberto
+ * (ação rara — o importador diário traz as ocorrências sozinho). Aqui a altura cai
+ * sem nenhum texto sumir: as portas continuam com a ajuda inteira nas três (é ela que
+ * avisa em qual porta a recusa vira advertência), e a captura fica a um clique.
+ */
+.dp360 .oc-portas {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  padding: 6px 20px 0;
+}
+.dp360 .oc-porta {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 9px 12px;
+}
+.dp360 .oc-porta.on {
+  border-color: var(--dp-accent);
+  background: var(--dp-accent-soft);
+  color: var(--dp-accent);
+}
+.dp360 .oc-porta p {
+  margin: 3px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* abas + filtros da aba + o botão da captura, tudo numa linha */
+.dp360 .oc-linha-abas {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 10px 20px 0;
+}
+.dp360 .oc-empurra { flex: 1 1 auto; min-width: 0; }
+.dp360 .oc-sep {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: var(--dp-border-strong);
+}
+/* select compacto no idioma dos chips: são muitas datas (uma por dia da janela) e
+   chip com contagem viraria uma parede — aqui vale trocar altura por largura. */
+.dp360 .oc-sel {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 9px;
+  max-width: 210px;
+  border: 1px solid var(--dp-border);
+  border-radius: 999px;
+  background: var(--dp-surface);
+  color: var(--dp-muted);
+  outline: none;
+  cursor: pointer;
+}
+.dp360 .oc-sel:focus { border-color: var(--dp-accent); }
+.dp360 .oc-captura { margin: 8px 20px 0; }

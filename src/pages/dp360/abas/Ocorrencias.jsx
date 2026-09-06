@@ -994,8 +994,9 @@ function montarRegistros(base) {
     const rot = rotuloCaso(caso.origem, caso.tipo);
 
     // os quatro compartimentos do cartão (só a porta do aviso desenha assim)
-    const slotsAntes = quatroSlots(lim);
+    const slotsAntes = slotsDoCartao({ cp, caso, lim });
     const slotsAlvo = alvoQuatroSlots(caso);
+    const almocoLancado = [caso.alvo_alm_saida, caso.alvo_alm_volta];
 
     // ── monitor de avisos (main.py:4283-4361) ─────────────────────────────
     // ids ainda PENDENTES no Transnet que a nossa decisão NÃO cobre
@@ -1083,11 +1084,11 @@ function montarRegistros(base) {
       escala: [txt(cp.esc_entrada) || txt(g.esc_inicio), txt(cp.esc_saida) || txt(g.esc_fim)],
       alvo: [txt(caso.alvo_entrada), txt(caso.alvo_saida)],
       // ── os quatro compartimentos (porta "Enviamos para ajuste") ─────────────
-      // `slotsAntes` sai do MESMO cartão limpo que o motor julga (`lim`), não de uma
-      // segunda leitura do lake: duas fontes para o mesmo cartão é como se cria a
-      // divergência entre o que a tela mostra e o que o veredito usou.
+      // As HORAS saem do MESMO cartão limpo que o motor julga (`lim`) — duas fontes
+      // para a mesma hora é como se cria divergência entre o que a tela mostra e o
+      // que o veredito usou. Quem diz a POSIÇÃO de cada hora é `slotsDoCartao`.
       slotsAntes,
-      slotsDepois: quatroSlots(sim),
+      slotsDepois: quatroSlots(sim, almocoLancado),
       slotsAlvo,
       // slot destacado = o alvo é diferente do que está no cartão hoje
       slotsAlvoMudou: slotsAlvo.map((v, i) => Boolean(v) && v !== slotsAntes[i]),
@@ -1146,15 +1147,38 @@ const daPorta = (porta) => (r) => {
 // app.js:2069 — o Transnet já efetuou/recusou: não existe mais decisão humana.
 const resolvidoNoTransnet = (r) => ["EFETUADO", "RECUSADO"].includes(r.desfecho);
 
+/**
+ * app.js:2088 (`viewConfDecisao`) — O SELETOR DA ABA "A DECIDIR" TEM DOIS ESTADOS, E
+ * ISSO É A REGRA, NÃO PREGUIÇA DE PORTE.
+ *
+ * Ele já teve CINCO, e quatro deles eram desfecho ("Já decidi", "Efetuado", "Recusado
+ * no Transnet"): traziam de volta para a caixa de entrada linhas que já vivem na aba
+ * do desfecho. Medido em 27/08: das 34 linhas da aba, 13 pediam decisão e 21 eram
+ * recusas já executadas e carimbadas — as MESMAS 21 que estão em "Recusados". Ver
+ * duas vezes o mesmo caso é o caminho para decidir duas vezes. Sobrou "Todos" como
+ * saída de emergência, dizendo quantas estão no desfecho.
+ *
+ * NÃO RECRIE OS CINCO ESTADOS. O que o Transnet já efetuou ou recusou nunca aparece
+ * aqui — nem por "Todos" (o `resolvidoNoTransnet` fica no filtro base, fora do eixo).
+ */
+const EIXOS_CONF = [
+  ["PENDENTE", "Pendente — aguarda MINHA decisão"],
+  ["TODOS", "Pendentes e decisões ainda não executadas"],
+];
+
+// O eixo do status, aplicado sobre as linhas que a aba já selecionou.
+const porEixoStatus = (eixo) => (r) => (eixo === "TODOS" ? true : !r.decJa);
+
 function linhasDaAba(registros, porta, aba) {
   const base = registros.filter(daPorta(porta));
   if (aba === "conf") {
-    // app.js:2077 — a caixa de entrada da decisão do DP.
+    // app.js:2077 — a caixa de entrada da decisão do DP. O `!decJa` NÃO entra aqui:
+    // ele é o eixo `EIXOS_CONF`, aplicado depois (com "Pendente" como padrão), senão
+    // a opção "Todos" do original não teria o que mostrar.
     return base.filter(
       (r) =>
         ["conf_certo", "conf_errado", "conf", "recusado"].includes(r.situacao) &&
-        !resolvidoNoTransnet(r) &&
-        !r.decJa,
+        !resolvidoNoTransnet(r),
     );
   }
   if (aba === "aguard") {
@@ -1891,15 +1915,109 @@ function Cartao({ batidas, vazio = "—", contra = null }) {
  */
 const SLOT_ES = ["E", "S", "E", "S"];
 
-// Minutos do motor → os quatro slots, com a MESMA regra de forma da Gordura:
-// duas batidas são as PONTAS (nunca almoço); quatro ou mais, os quatro primeiros da
-// sequência. Uma ou três batidas é cartão incompleto — preenche na ordem e deixa o
-// resto vazio, que é exatamente o que ele é (a nota do motor explica o porquê).
-function quatroSlots(minutos) {
+// "03:07" / "3:07" → "03:07"; qualquer outra coisa (vazio, "--") → "". É o `hora()`
+// que app.js usa dentro de `cartoesAviso`, sem inventar formato.
+function horaSlot(v) {
+  const s = txt(v);
+  const m = s.match(/^(\d{1,2}):(\d{2})$/);
+  return m ? `${m[1].padStart(2, "0")}:${m[2]}` : "";
+}
+
+/**
+ * PORTE de app.js `cartoesAviso` (~2760) — os quatro slots do cartão ATUAL na porta
+ * do aviso. Não é régua nova: é a que a ferramenta já usa nesta MESMA fila.
+ *
+ * POR QUE ISTO EXISTE (o caso real que provou o defeito): LUCIANO DA SILVA 30060552,
+ * 28/08/2026. `ponto_diario.todas_batidas` = "E03:07 | S03:37"; o `ponto_caso`
+ * congelou alvo_entrada 01:00 · alm 03:07–03:37 · alvo_saida 10:49, e o lake diz
+ * `motivo=FALTA_ENTRADA_E_SAIDA`, `pede_entrada=true`, `pede_saida=true`,
+ * `almoco_saida_sug=03:07`, `almoco_volta_sug=03:37`. Ou seja: ele NÃO bateu entrada
+ * nem saída — bateu só o miolo do almoço que o DP já tinha lançado no cartão.
+ * A regra antiga aqui ("duas batidas = pontas") desenhava `E 03:07 · — · — · S 03:37`
+ * e a tela mostrava as MESMAS duas horas em posições diferentes nas duas colunas.
+ * O lado errado era o do BATEU; o alvo congelado estava certo.
+ *
+ * A regra "duas batidas são as pontas" é da GORDURA (`cartoesGordura`), e lá ela vem
+ * amarrada às marcas E/S do cartão. Copiá-la para cá sem a amarra foi o erro: nesta
+ * porta a ferramenta usa OUTRA função, `cartoesAviso`, que sabe reconhecer o almoço
+ * lançado. É ela que está portada abaixo, na mesma ordem.
+ *
+ * MEDIDO NA BASE antes de trocar (janela de 20/06 a hoje, 798 cartões da porta do
+ * aviso): 84 mudam de desenho, e todos na direção do alvo congelado —
+ *   · 6 são o almoço lançado que virava pontas (o caso acima);
+ *   · 1 é `E10:45 S11:12 E11:15 S11:16` com alvo `04:18 · 11:12 · 11:15 · 13:39`:
+ *     a regra antiga jogava 10:45/11:16 nas pontas e deixava o almoço VAZIO,
+ *     enquanto o alvo diz que 11:12–11:15 é exatamente o almoço;
+ *   · 75 são cartão de quatro marcas em que a regra antiga cortava a saída fora
+ *     (`09:50 · 10:20 · 14:46 · —`) por pegar "os quatro primeiros" de uma lista já
+ *     sem o fantasma — agora a saída é a ÚLTIMA S tipada, como no original;
+ *   · 2 são cartão de oito marcas (o caso ANDRE do comentário abaixo).
+ *
+ * `lim` (o cartão limpo que o motor julga) é a fonte das HORAS nos dois caminhos que
+ * não dependem da tipagem. A leitura tipada usa `todas_batidas` COMO ELA É — inclusive
+ * a batida colada que o motor colapsa —, porque esta coluna se chama "Ponto (bateu)":
+ * ela mostra o que a pessoa registrou, e é o veredito, não a coluna, que julga.
+ */
+function slotsDoCartao({ cp, caso, lim }) {
+  const limpas = (lim || []).filter((t) => t != null).map(min2hm).filter(Boolean);
+  const brutoQuatro = limpas.slice(0, 4);
+
+  // 1) AS DUAS BATIDAS SÃO O ALMOÇO QUE O DP JÁ LANÇOU → elas NÃO são as pontas.
+  //    Mostra vazio em entrada/saída, que é justamente o que o aviso está cobrando.
+  //    Sem tolerância nenhuma nesta identificação: só o par IDÊNTICO ao congelado.
+  const almoco = [horaSlot(caso?.alvo_alm_saida), horaSlot(caso?.alvo_alm_volta)];
+  if (
+    brutoQuatro.length === 2 &&
+    almoco.every(Boolean) &&
+    brutoQuatro[0] === almoco[0] &&
+    brutoQuatro[1] === almoco[1]
+  ) {
+    return ["", brutoQuatro[0], brutoQuatro[1], ""];
+  }
+
+  // 2) LEITURA TIPADA: primeira E, primeiro intervalo S→E e a ÚLTIMA S. Cartão com
+  //    inserção tem cinco ou mais marcas, e aí `ponto_diario.saida` (4ª posição) não
+  //    é a saída do dia — o caso ANDRE 27/08 do original: E04:14 S11:27 E11:57 S14:45
+  //    E14:47 S17:32, a grade dizia 14:45 e o Transnet dizia 17:32.
+  const marcas = [...txt(cp?.todas_batidas).matchAll(/\b([ES])\s*(\d{1,2}:\d{2})/gi)]
+    .map((m) => ({ tipo: m[1].toUpperCase(), hora: horaSlot(m[2]) }))
+    .filter((m) => m.hora);
+  const iEnt = marcas.findIndex((m) => m.tipo === "E");
+  const iAlmSai = marcas.findIndex((m, i) => i > iEnt && m.tipo === "S");
+  const iAlmVolta = marcas.findIndex((m, i) => i > iAlmSai && m.tipo === "E");
+  const iSai = marcas.reduce((ultimo, m, i) => (i > iAlmVolta && m.tipo === "S" ? i : ultimo), -1);
+  let tipado = [];
+  if (iEnt >= 0 && iSai >= 0) {
+    const temAlm = iAlmSai >= 0 && iAlmVolta >= 0;
+    tipado = [
+      marcas[iEnt].hora,
+      temAlm ? marcas[iAlmSai].hora : "",
+      temAlm ? marcas[iAlmVolta].hora : "",
+      marcas[iSai].hora,
+    ];
+  }
+
+  // 3) o cartão apurado pela ferramenta; e, em último caso, as horas na ordem crua.
+  const apurado = [cp?.entrada, cp?.saida_almoco, cp?.volta_almoco, cp?.saida].map(horaSlot);
+  if (tipado[0] && tipado[3]) return tipado;
+  if (apurado[0] && apurado[3]) return apurado;
+  return [0, 1, 2, 3].map((i) => brutoQuatro[i] || "");
+}
+
+// O cartão DEPOIS é SIMULAÇÃO (minutos do motor), não texto tipado: não há marca E/S
+// para ler, então aqui vale a forma da Gordura — duas batidas são as pontas. A única
+// exceção é a mesma do cartão de cima: se as duas horas são o almoço já lançado, elas
+// não são as pontas (senão a coluna "depois" repetiria o defeito que acabou de sair).
+function quatroSlots(minutos, almocoLancado) {
   const b = (minutos || []).filter((t) => t != null);
   if (!b.length) return ["", "", "", ""];
-  if (b.length === 2) return [min2hm(b[0]), "", "", min2hm(b[1])];
-  const quatro = b.slice(0, 4).map(min2hm);
+  const hm = b.map(min2hm);
+  if (hm.length === 2) {
+    const alm = [horaSlot(almocoLancado?.[0]), horaSlot(almocoLancado?.[1])];
+    if (alm.every(Boolean) && hm[0] === alm[0] && hm[1] === alm[1]) return ["", hm[0], hm[1], ""];
+    return [hm[0], "", "", hm[1]];
+  }
+  const quatro = hm.slice(0, 4);
   while (quatro.length < 4) quatro.push("");
   return quatro;
 }
@@ -1911,9 +2029,19 @@ const alvoQuatroSlots = (caso) =>
     txt(v),
   );
 
+/**
+ * OS QUATRO SLOTS SÃO UMA GRADE DE QUATRO COLUNAS, NÃO UMA FILA QUE QUEBRA.
+ * Com `flex-wrap` (o que estava aqui) quatro chips de 5 caracteres não cabiam na
+ * coluna: quebravam três em cima e um embaixo, e cada linha da tabela ficava com uma
+ * altura diferente. Grade de `1fr` resolve as duas coisas de uma vez — nunca quebra
+ * (grade não quebra) e o mesmo slot fica na MESMA posição horizontal em todas as
+ * linhas, então a coluna "Ponto (bateu)" e a "Alvo" leem-se de cima a baixo.
+ * A largura das duas colunas é fixa (`largura` do TabelaDP) e foi dimensionada para
+ * a hora mais larga que existe aqui — cinco caracteres, notação 25:40 inclusive.
+ */
 function LinhaCartao({ horas, mudou }) {
   return (
-    <span style={FILA}>
+    <span className="oc-slots">
       {(horas || ["", "", "", ""]).map((h, i) =>
         h ? (
           <span key={`slot-${i}`} className={`dp-chip${mudou && mudou[i] ? " new" : ""}`}>
@@ -2613,6 +2741,10 @@ export default function Ocorrencias() {
   const [aba, setAba] = useState("conf");
   const [funcao, setFuncao] = useState("TODAS");
   const [busca, setBusca] = useState("");
+  // Os dois eixos da aba "A decidir" (app.js `dfstatus` e `dt5`). O padrão é o do
+  // original: só o que ainda aguarda decisão, todas as datas.
+  const [eixoStatus, setEixoStatus] = useState("PENDENTE");
+  const [eixoData, setEixoData] = useState("TODAS");
   const [aberto, setAberto] = useState(null);
   const [gravando, setGravando] = useState(false);
   const [recado, setRecado] = useState("");
@@ -2627,6 +2759,9 @@ export default function Ocorrencias() {
   // O texto grande das regras vive RECOLHIDO. Ele não some (é onde as travas do
   // trabalhador estão explicadas); fica atrás do botão, fechado por padrão.
   const [explica, setExplica] = useState(false);
+  // O cartão da captura também: é ação RARA (o importador diário traz tudo sozinho),
+  // e ele ocupava a mesma altura em toda visita. Fechado por padrão, a um clique.
+  const [verCaptura, setVerCaptura] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -2679,7 +2814,10 @@ export default function Ocorrencias() {
   const abasDaPorta = ABAS[porta] || ABAS.pedido;
   const abaAtiva = abasDaPorta.some(([k]) => k === aba) ? aba : abasDaPorta[0][0];
 
-  const linhas = useMemo(() => {
+  // As linhas da aba ANTES dos dois eixos próprios de "A decidir". A busca já entra
+  // aqui porque ela vale nas duas contagens de chip (o chip conta o que a pessoa está
+  // vendo, não a base inteira).
+  const daAba = useMemo(() => {
     const lista = linhasDaAba(porFuncao, porta, abaAtiva);
     const q = busca.trim().toLowerCase();
     if (!q) return lista;
@@ -2688,11 +2826,56 @@ export default function Ocorrencias() {
     );
   }, [porFuncao, porta, abaAtiva, busca]);
 
+  // Os dois eixos só existem na caixa de entrada da decisão do DP (`conf`). Nas outras
+  // abas da porta não há o que filtrar por status — elas JÁ são um status.
+  const temEixosConf = abaAtiva === "conf";
+
+  // As datas presentes NAS LINHAS DA ABA (não a janela de 70 dias da leitura), do dia
+  // mais novo para o mais antigo — `revd` do original.
+  const datasDaAba = useMemo(() => {
+    if (!temEixosConf) return [];
+    const vistas = new Set(daAba.map((r) => r.iso).filter(Boolean));
+    return [...vistas].sort((a, b) => b.localeCompare(a));
+  }, [daAba, temEixosConf]);
+
+  // Data escolhida que sumiu da lista (mudou de porta, de função, ou o dado saiu da
+  // janela) não pode deixar a aba vazia sem explicação: vale como "todas".
+  const dataAtiva = datasDaAba.includes(eixoData) ? eixoData : "TODAS";
+
+  // O recorte do eixo DATA, que os dois usos abaixo compartilham.
+  const noRecorteDeData = useMemo(
+    () => (dataAtiva === "TODAS" ? daAba : daAba.filter((r) => r.iso === dataAtiva)),
+    [daAba, dataAtiva],
+  );
+
+  // CONTAGEM DE CHIP = o efeito de mudar AQUELE eixo, mantendo o resto dos filtros (é
+  // assim na Refeição, na Gordura e na Fraudes). Por isso a função, a busca e a data
+  // entram na conta dos dois chips, e o eixo do status NÃO entra na sua própria conta.
+  const contEixo = useMemo(() => {
+    if (!temEixosConf) return { PENDENTE: 0, decididos: 0 };
+    const pendentes = noRecorteDeData.filter((r) => !r.decJa).length;
+    return { PENDENTE: pendentes, decididos: noRecorteDeData.length - pendentes };
+  }, [noRecorteDeData, temEixosConf]);
+
+  const linhas = useMemo(
+    () => (temEixosConf ? noRecorteDeData.filter(porEixoStatus(eixoStatus)) : daAba),
+    [daAba, noRecorteDeData, temEixosConf, eixoStatus],
+  );
+
+  // Os eixos de "A decidir" voltam ao padrão a cada troca de porta/aba — é o que o
+  // original faz (`viewConfDecisao` nasce com dfStatus=PENDENTE e data5=TODAS).
+  // Filtro que sobrevive à navegação é como se abre uma aba que parece vazia.
+  const zerarEixos = () => {
+    setEixoStatus("PENDENTE");
+    setEixoData("TODAS");
+  };
+
   const trocarPorta = (id) => {
     setPorta(id);
     setAba((ABAS[id] || ABAS.pedido)[0][0]);
     setAberto(null);
     setSelIds([]);
+    zerarEixos();
   };
 
   // O recado do robô é DAQUELE caso: trocar de caso sem limpar faria o resultado de
@@ -3213,17 +3396,26 @@ export default function Ocorrencias() {
     // Nesta porta o ajuste é RESPOSTA a um aviso nosso: o assunto é o dia todo, não
     // a ponta. Por isso as duas colunas mostram os quatro slots — o que estava
     // (`Ponto (bateu)`) e o que fica (`Alvo`), com o slot que muda destacado.
+    //
+    // LARGURA FIXA E IGUAL NAS DUAS: `oc-slots` divide a célula em quatro colunas de
+    // `1fr`, então a largura da COLUNA é o que garante os quatro horários numa linha
+    // só. 268 px é a conta do pior caso — quatro chips de cinco caracteres (25:40
+    // inclusive) com a marca E/S, mais os vãos e o respiro da célula. Encolher isto
+    // não faz o cartão quebrar de novo (grade não quebra), faz o texto ser cortado:
+    // se um dia precisar apertar, tire a marca E/S antes de tirar largura.
     {
       id: "atual",
       titulo: "Ponto (bateu)",
-      largura: 230,
+      largura: 268,
+      classe: "oc-cel-cartao",
       valor: (r) => r.slotsAntes.filter(Boolean).join(" "),
       render: (r) => <LinhaCartao horas={r.slotsAntes} />,
     },
     {
       id: "alvo",
       titulo: "Alvo (o que pedimos)",
-      largura: 230,
+      largura: 268,
+      classe: "oc-cel-cartao",
       valor: (r) => r.slotsAlvo.filter(Boolean).join(" "),
       render: (r) =>
         r.slotsAlvo.some(Boolean) ? (
@@ -3602,15 +3794,12 @@ export default function Ocorrencias() {
       }
     >
       {/* PORTAS — o primeiro nível da navegação. Cada porta diz a CONSEQUÊNCIA da
-          recusa; por isso o texto de ajuda fica visível nas três, não só na ativa. */}
-      <div
-        style={{
-          display: "grid",
-          gap: 8,
-          gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-          padding: "8px 20px 0",
-        }}
-      >
+          recusa; por isso o texto de ajuda fica visível nas três, não só na ativa —
+          isso NÃO mudou, e não deve mudar: quem lê a ajuda só da porta ativa não
+          descobre que existe uma porta onde a recusa vira advertência.
+          O que mudou foi só o RESPIRO: `oc-portas` aperta o cartão (menos padding,
+          entrelinha menor) sem tirar uma palavra do texto. */}
+      <div className="oc-portas">
         {PORTAS.map((p) => {
           const ativa = p.id === porta;
           return (
@@ -3619,19 +3808,7 @@ export default function Ocorrencias() {
               type="button"
               onClick={() => trocarPorta(p.id)}
               title={p.ajuda}
-              className="dp-card"
-              style={{
-                font: "inherit",
-                textAlign: "left",
-                cursor: "pointer",
-                ...(ativa
-                  ? {
-                      borderColor: "var(--dp-accent)",
-                      background: "var(--dp-accent-soft)",
-                      color: "var(--dp-accent)",
-                    }
-                  : null),
-              }}
+              className={`dp-card oc-porta${ativa ? " on" : ""}`}
             >
               <div
                 style={{
@@ -3641,24 +3818,21 @@ export default function Ocorrencias() {
                   gap: 8,
                 }}
               >
-                <span style={{ fontSize: 14, fontWeight: 650 }}>{p.label}</span>
+                <span style={{ fontSize: 13.5, fontWeight: 650 }}>{p.label}</span>
                 {cont.porta[p.id] ? (
                   <span className="dp-pill danger n">{cont.porta[p.id]}</span>
                 ) : null}
               </div>
-              <p
-                className={ativa ? "" : "dp-muted"}
-                style={{ ...MINI, margin: "5px 0 0", lineHeight: 1.4 }}
-              >
-                {p.ajuda}
-              </p>
+              <p className={ativa ? "" : "dp-muted"}>{p.ajuda}</p>
             </button>
           );
         })}
       </div>
 
-      {/* ABAS da porta escolhida — o segundo nível. */}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: "12px 20px 0" }}>
+      {/* ABAS da porta escolhida (segundo nível) + os filtros DA ABA, numa linha só.
+          Eram três linhas empilhadas — abas, cartão da captura e nada de filtro; agora
+          é uma, e o que saiu da vista continua a um clique. */}
+      <div className="oc-linha-abas">
         {abasDaPorta.map(([id, label]) => {
           const ativa = id === abaAtiva;
           const n = cont.aba[id] ?? cont.aba[`${porta}:${id}`] ?? 0;
@@ -3670,6 +3844,7 @@ export default function Ocorrencias() {
                 setAba(id);
                 setAberto(null);
                 setSelIds([]);
+                zerarEixos();
               }}
               className={`dp-chip-f${ativa ? " on" : ""}`}
             >
@@ -3678,60 +3853,121 @@ export default function Ocorrencias() {
             </button>
           );
         })}
+
+        {/* ── OS DOIS FILTROS DE "A DECIDIR" (app.js `dfstatus` e `dt5`) ─────────
+            O original usa dois <select>. Aqui o status vira CHIP COM CONTAGEM — o
+            idioma que a Refeição, a Gordura e a Fraudes já usam (`dp-chip-f`): a
+            pessoa vê quantos casos sobram em cada opção SEM abrir o seletor, e dois
+            chips ocupam menos que um select largo. A data continua select porque são
+            muitas (uma por dia da janela) e chip viraria uma parede.
+            As contagens seguem a regra das outras abas: cada chip conta o efeito de
+            mudar AQUELE eixo, mantendo os outros filtros (função, busca e data). */}
+        {temEixosConf ? (
+          <>
+            <span className="oc-sep" aria-hidden="true" />
+            {EIXOS_CONF.map(([id, rotulo]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setEixoStatus(id)}
+                className={`dp-chip-f${eixoStatus === id ? " on" : ""}`}
+                title={
+                  id === "PENDENTE"
+                    ? "Só o que ainda aguarda a SUA decisão."
+                    : `Inclui as decisões que o bot ainda não executou (${contEixo.decididos}). ` +
+                      "O que o Transnet já efetuou ou recusou nunca aparece aqui — isso vive nas abas de desfecho, e ver o mesmo caso duas vezes é o caminho para decidir duas vezes."
+                }
+              >
+                {rotulo}
+                <Contador n={id === "PENDENTE" ? contEixo.PENDENTE : contEixo.decididos} />
+              </button>
+            ))}
+            {datasDaAba.length > 1 ? (
+              <select
+                className="oc-sel"
+                value={dataAtiva}
+                onChange={(e) => setEixoData(e.target.value)}
+                title="Data de referência — só os dias que existem nas linhas desta aba."
+              >
+                <option value="TODAS">Referência: todas ({datasDaAba.length} dias)</option>
+                {datasDaAba.map((d) => (
+                  <option key={d} value={d}>
+                    {paraBR(d)}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+          </>
+        ) : null}
+
+        <span className="oc-empurra" />
+
+        {/* ── CAPTURA DA GRADE — ação de TELA, não de linha, e RARA ──────────────
+            Ela não tem escopo (é a grade inteira do Transnet) e não decide nada. Era
+            um cartão aberto no topo o tempo todo, com dois parágrafos que ninguém
+            relê depois da primeira vez — altura fixa pagando por uma ação que se usa
+            de vez em quando. Agora é um botão que ABRE o cartão; nada foi apagado, e
+            o que este caminho NÃO faz (o carimbo e o congelamento da prova, que no
+            original rodam na máquina depois do run) continua escrito lá dentro. */}
+        <button
+          type="button"
+          className={`dp-chip-f${verCaptura ? " on" : ""}`}
+          aria-expanded={verCaptura}
+          onClick={() => setVerCaptura((v) => !v)}
+          title={AVISO_CAPTURA}
+        >
+          {verCaptura ? "▾" : "▸"} 🤖 Captura da grade
+        </button>
       </div>
 
       {/* A ajuda da porta ativa NÃO se repete aqui: ela já está escrita dentro do
           cartão da porta, dois blocos acima, e a repetição só apertava o topo. */}
 
-      {/* ── CAPTURA DA GRADE — ação de TELA, não de linha ───────────────────────
-          Fica fora das grades de propósito: ela não tem escopo (é a grade inteira do
-          Transnet) e não decide nada. E ao lado dela vai escrito o que este caminho
-          NÃO faz — o carimbo e o congelamento do original, que rodam na máquina
-          depois do run. Deixar isso só no comentário faria a tela prometer o que ela
-          não entrega. */}
-      <div className="dp-card" style={{ margin: "8px 20px 0" }}>
-        <div style={{ ...FILA, gap: 10 }}>
-          <button
-            type="button"
-            className="dp-btn"
-            onClick={aoCapturar}
-            disabled={gravando || disparando}
-            title={AVISO_CAPTURA}
-          >
-            🤖 Capturar a grade do Transnet
-          </button>
-          <span className="dp-muted" style={MINI}>
-            Robô <span className="dp-mono">ajustes</span> · modo “{MODO_CAPTURAR}” · sem escopo (a
-            grade inteira). Só LÊ a grade e grava as ocorrências novas na base — não aceita, não
-            rejeita, não decide. <b>Não é o caminho normal:</b> a ocorrência entra sozinha pelo
-            importador diário (latência de um dia). Isto aqui serve para trazer <b>o dia de
-            hoje</b>, antes de o importador passar.
-          </span>
+      {verCaptura ? (
+        <div className="dp-card oc-captura">
+          <div style={{ ...FILA, gap: 10 }}>
+            <button
+              type="button"
+              className="dp-btn"
+              onClick={aoCapturar}
+              disabled={gravando || disparando}
+              title={AVISO_CAPTURA}
+            >
+              🤖 Capturar a grade do Transnet
+            </button>
+            <span className="dp-muted" style={MINI}>
+              Robô <span className="dp-mono">ajustes</span> · modo “{MODO_CAPTURAR}” · sem escopo (a
+              grade inteira). Só LÊ a grade e grava as ocorrências novas na base — não aceita, não
+              rejeita, não decide. <b>Não é o caminho normal:</b> a ocorrência entra sozinha pelo
+              importador diário (latência de um dia). Isto aqui serve para trazer <b>o dia de
+              hoje</b>, antes de o importador passar.
+            </span>
+          </div>
+          <div style={{ ...FILA, gap: 10, marginTop: 6 }}>
+            <Selo
+              titulo="app_config.ultima_captura — carimbado por main.py:1565, na máquina, DEPOIS do run. Um disparo daqui não move este carimbo."
+              quebra
+            >
+              última captura carimbada: {fmtDataHora(base?.ultimaCaptura)}
+            </Selo>
+            <Selo
+              cor={base?.capturaMaisNova ? "accent" : "neutro"}
+              titulo="O maior `capturado_em` de ponto_ajustes_app. ESTE se move quando a captura roda pela nuvem, porque o bot carimba cada linha que grava."
+              quebra
+            >
+              ocorrência mais nova na base: {fmtDataHora(base?.capturaMaisNova)}
+            </Selo>
+            <span className="dp-faint" style={MINI}>
+              O carimbo da esquerda só se move pela ferramenta desktop — o disparo daqui não o toca,
+              porque quando o botão volta a captura ainda nem começou. E o{" "}
+              <b>congelamento da prova não acontece por este caminho</b>: no original ele roda na
+              máquina depois do run (<span className="dp-mono">congelar_antes</span>); aqui a prova
+              (antes/depois) é congelada só na hora da <b>decisão</b>, que é depois — então a
+              ocorrência capturada pela nuvem entra sem prova congelada.
+            </span>
+          </div>
         </div>
-        <div style={{ ...FILA, gap: 10, marginTop: 6 }}>
-          <Selo
-            titulo="app_config.ultima_captura — carimbado por main.py:1565, na máquina, DEPOIS do run. Um disparo daqui não move este carimbo."
-            quebra
-          >
-            última captura carimbada: {fmtDataHora(base?.ultimaCaptura)}
-          </Selo>
-          <Selo
-            cor={base?.capturaMaisNova ? "accent" : "neutro"}
-            titulo="O maior `capturado_em` de ponto_ajustes_app. ESTE se move quando a captura roda pela nuvem, porque o bot carimba cada linha que grava."
-            quebra
-          >
-            ocorrência mais nova na base: {fmtDataHora(base?.capturaMaisNova)}
-          </Selo>
-          <span className="dp-faint" style={MINI}>
-            O carimbo da esquerda só se move pela ferramenta desktop — o disparo daqui não o toca,
-            porque quando o botão volta a captura ainda nem começou. E o{" "}
-            <b>congelamento da prova não acontece por este caminho</b>: no original ele roda na
-            máquina depois do run (<span className="dp-mono">congelar_antes</span>); aqui a prova
-            (antes/depois) é congelada só na hora da <b>decisão</b>, que é depois — então a
-            ocorrência capturada pela nuvem entra sem prova congelada.
-          </span>
-        </div>
-      </div>
+      ) : null}
 
       <TabelaDP
         key={`${grade.chave}-${versao}`}

@@ -159,11 +159,15 @@ que já existe (mesmo dono dos dois repos).
 
 ## 7c. O que a fase 5 NÃO cobre (e por quê)
 
-- **O resultado não volta.** Os workflows guardam a evidência como artefato e não
-  escrevem no Supabase; quem preenche `ponto_ocorrencias` e carimba
-  `advertencia_enviada_em` / `correcao_final_em` é o pós-processo da ferramenta
-  desktop, que ESPERA o run. Conserto certo: um passo no workflow do repo DP360
-  que grave o resultado — outro repositório, não mexido.
+- **O resultado não volta — mas menos do que eu escrevi aqui antes.** Corrigido
+  em 06/09 pela comparação da seção 9: o robô `ajustes`, no modo
+  `conferir (so leitura)` COM confirmar, JÁ grava de volta (`conferido_em`,
+  `aviso_conferido_em` e o veredito — `bot_ajustes_app.py:718`), e o workflow já
+  carrega a credencial do Supabase (`ajustes.yml:50`). O caminho existe e está
+  pronto: falta o INOVE disparar esse modo. Para os robôs `ponto`, `comunicado` e
+  `ocorrencias` a frase continua valendo — quem preenche `ponto_ocorrencias` e
+  carimba `advertencia_enviada_em` / `correcao_final_em` é o pós-processo da
+  ferramenta desktop, que ESPERA o run.
 - **"Advertir e corrigir" continua desligado.** Não é um robô: é uma corrente de
   três elos (`app.js:347`, comentário do próprio original) — `executar_decisoes`
   → `comunicado` motivo 103 → `ponto`. Ligar só o primeiro mandaria carta sem

@@ -211,8 +211,8 @@ como suspeita.
 
 | # | Tela | Buraco | Onde (ferramenta) | Tam. |
 |---|---|---|---|---|
-| 1 | Ocorrências | `conferir (so leitura)` **com confirmar** grava de volta (`conferido_em`, veredito) e o workflow já tem a credencial do Supabase — ninguém dispara. É o caminho de volta do resultado, e ele existe | `bot_ajustes_app.py:718`, `ajustes.yml:50` | peq |
-| 2 | Ocorrências | `capturar a grade` não é disparado: **ocorrência nova só entra na base pelo desktop** — trava a fase 6 | `main.py:1540` | peq |
+| 1 | Ocorrências | ~~`conferir (so leitura)` não era disparado~~ **feito** — dois escopos (caso aberto e linhas marcadas), escopo vazio recusado | `bot_ajustes_app.py:718` | — |
+| 2 | Ocorrências | ~~`capturar a grade` não era disparado~~ **feito**, com uma ressalva: o `ajustes.yml` roda a captura SEM `$CONF`, então é UM botão (um "ensaio" que escreve seria mentira), e o congelamento da prova não acontece por este caminho — a tela diz isso e mostra a data da última captura | `ajustes.yml:66` | — |
 | 3 | Refeição | ~~robô reescreve as pontas do snapshot D-1~~ **resolvido**: dia com `conferido_em`/`correcao_final_em` sai do lote | `main.py:2856` | — |
 | 4 | Folgas | picker de motivo do dia `S/PONTO` (14 códigos do Transnet). É o único dia que não fecha sozinho, e o motivo marcado no desktop aparece lá e não aqui | `app.js:3682`, `main.py:7016` | grande |
 | 5 | Gordura | o alvo que a carta cobra não usa a cascata por ponta do `_contrato_alvo` (rm > alvo congelado > régua > sug > cartão, iterando até fechar cartão cronológico) — o Real manual do DP não vence a carta | `main.py:5932` | médio |

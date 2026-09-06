@@ -766,7 +766,9 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 1240px;
+  /* 1240 era largura de DUAS colunas. Com a linha do tempo virando a terceira,
+     nesta largura os cartões da esquerda ficavam espremidos. */
+  max-width: 1500px;
   max-height: 92vh;
   overflow: hidden;
 }
@@ -792,7 +794,8 @@
  * espaçamento nas próprias seções. */
 .dp360 .rv-corpo-pad { padding: 14px 16px; }
 
-/* Duas colunas que não se empurram. */
+/* Colunas que não se empurram: cartão, mapa e linha do tempo. O `minmax(0, …)`
+ * é o que impede uma tabela larga de esticar a grade e criar rolagem lateral. */
 .dp360 .rv-colunas {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -801,6 +804,11 @@
 }
 @media (min-width: 1024px) {
   .dp360 .rv-colunas { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+@media (min-width: 1440px) {
+  .dp360 .rv-colunas {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(300px, 0.8fr);
+  }
 }
 
 /* Lista longa (as batidas do GPS) rola dentro de si a partir de ~8 linhas, em
@@ -811,10 +819,17 @@
   overscroll-behavior: contain;
 }
 
-/* ── linha do tempo: a LARGURA INTEIRA, no pé do pop-up ──
- * Era uma coluna estreita à direita, com cinco passos vazios e sem lugar para o
- * texto da mensagem. Aqui ela ocupa o pop-up todo e o balão fica legível.
+/* ── linha do tempo: COLUNA PRÓPRIA, altura inteira, à direita ──
+ * Já foi faixa no pé do pop-up, e ali ficava abaixo da dobra num cartão com
+ * muitas batidas — ninguém via a mensagem que o colaborador recebeu. Como
+ * coluna, ela acompanha o cartão desde o topo. Abaixo de 1440px a grade volta a
+ * duas colunas e ela cai para o fim, que é o certo: espremida em três colunas o
+ * balão quebraria em palavra por linha.
  */
+.dp360 .rv-tl-col { min-width: 0; }
+/* Dentro da coluna o espaçamento já vem da grade; o padding próprio só vale
+   quando ela cai para o fim do pop-up (abaixo de 1440px). */
+.dp360 .rv-tl-col .rv-tl-sec { padding: 0; }
 .dp360 .rv-tl-sec { padding: 0 18px 18px; }
 .dp360 .rv-tl {
   list-style: none;

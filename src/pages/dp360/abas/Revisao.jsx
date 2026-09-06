@@ -1784,14 +1784,14 @@ function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar, aoAvisar, imped
             </section>
 
           </div>
-        </div>
 
-        {/* ═══ LINHA DO TEMPO — A LARGURA INTEIRA, à esquerda (pedido do dono) ═══
-            Era uma coluna estreita à direita com cinco passos vazios; o balão da
-            mensagem não cabia ali. Aqui ela ocupa o pé do pop-up inteiro, e o texto
-            que o colaborador recebeu (ou vai receber) fica legível sem quebrar em
-            palavra por linha. */}
-        <section className="rv-tl-sec">
+          {/* ---------- coluna 3: a LINHA DO TEMPO ----------
+              Coluna própria, altura inteira, à direita — onde o dono marcou. Já foi
+              faixa no pé do pop-up: com o cartão comprido a linha do tempo ficava
+              abaixo da dobra e ninguém via a mensagem que o colaborador recebeu.
+              Numa coluna ela acompanha o cartão desde o topo, e o balão continua
+              largo o bastante para o texto não quebrar em palavra por linha. */}
+          <section className="rv-tl-col">
           <TituloBloco nota="o que já aconteceu com este dia — e o que a pessoa recebeu">
             Linha do tempo do caso
           </TituloBloco>
@@ -1853,7 +1853,9 @@ function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar, aoAvisar, imped
               {extra.ajustes.length} edição(ões) registrada(s) em ponto_ajustes para este dia.
             </p>
           )}
-        </section>
+          </section>
+        </div>
+
         </div>
 
         <footer

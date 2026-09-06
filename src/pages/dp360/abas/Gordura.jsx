@@ -2,7 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bus, CalendarClock, Info, PauseCircle, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import TabelaDP from "../TabelaDP";
-import { lerDatasDP360, lerTudoDP360 } from "../../../services/dp360Api";
+import {
+  dispararRoboDP360,
+  lerDP360,
+  lerDatasDP360,
+  lerTudoDP360,
+  upsertDP360,
+} from "../../../services/dp360Api";
 // A reserva LANÇADA pelo gestor mora na base do PRÓPRIO INOVE (tabela
 // `reservas_motoristas` — quem grava é src/pages/pessoas/ControleReservas.jsx:91-99 e
 // 460-489), NÃO na base de importação do DP360. Por isso ela não está (nem deve estar)
@@ -26,8 +32,26 @@ import {
   nivKey,
   num,
   passaRegua,
+  pontaConta,
   txt,
 } from "../regrasGordura";
+// O COMUNICADO NÃO É DESTA TELA: o formato do CSV do Transnet, a trava dos barrados,
+// o payload de `ponto_caso` (com o alvo congelado) e os reavisos moram em
+// `../comunicadoTransnet` — porte de main.py `_escrever_comunicados` (~2340). A
+// Revisão manda o MESMO arquivo pelo MESMO robô; aqui só se escolhe QUEM entra,
+// QUAL alvo cobrar e COMO o texto é escrito.
+import {
+  MOTIVO_AVISO,
+  TIPO,
+  batidasParaTexto,
+  ddmmaaaa,
+  escolherTemplate,
+  horaMensagem,
+  marcarReavisos,
+  prepararComunicado,
+  preencherTemplate,
+  variaveisPendentes,
+} from "../comunicadoTransnet";
 
 // ---------------------------------------------------------------------------
 // PASSO 4 — GORDURA DE PONTO (só MOTORISTA).
@@ -40,8 +64,11 @@ import {
 // Porte de `viewP4Motorista` (Sistemas/PONTO — app/ui/app.js) + das camadas que
 // o app antigo aplica na LEITURA (app/main.py `_gord`).
 //
-// NESTA FASE A ABA É SOMENTE LEITURA: nada é gravado e o envio de comunicado
-// ainda não existe aqui (ver TODO em `Gordura`).
+// O QUE ESTA ABA GRAVA: nada do cálculo — a gordura continua sendo LIDA. O único
+// caminho de escrita é o `📣 Enviar Ocorrência` (o `g4auto` do app antigo): ele
+// dispara o robô do Transnet com o CSV do comunicado e, quando o envio é o de
+// verdade, abre/atualiza `ponto_caso` com o alvo CONGELADO. As regras desse envio
+// são de `../comunicadoTransnet`, não daqui.
 // ---------------------------------------------------------------------------
 
 // A RÉGUA FIXA DO DP (10 min na entrada, 8 na saída), as tolerâncias da reserva e a
@@ -232,6 +259,149 @@ function cartoesGordura(g, pd, rm, caso) {
   };
 }
 
+/* ------------------- o texto e o alvo que o aviso cobra -------------------- */
+
+/** Carimbo UTC do INSTANTE do envio (`aviso_enviado_em`/`atualizado_em`). É
+ *  timestamp, não data local — aqui o `toISOString()` é o certo. O `date_ref` do
+ *  caso, esse sim data local, NUNCA sai de `new Date()`: vem da linha do banco. */
+const agoraUtc = () => new Date().toISOString();
+
+/** Quantos nomes o `confirm` lista antes de resumir. A pessoa precisa reconhecer
+ *  QUEM vai receber; 80 linhas num window.confirm ninguém lê. */
+const NOMES_NA_CONFIRMACAO = 8;
+
+/**
+ * A chave do modelo da GORDURA no `app_config` — `comunicado_modelo`, a mesma de
+ * app.js `comunicadoModal` (~5700). NÃO é `template_ocorrencia_motorista`: aquele
+ * é da Revisão e a frase dele é "NÃO houve marcação de {DIVERGENCIA}", que só faz
+ * sentido para quem NÃO bateu. Aqui o colaborador bateu — bateu a mais —, e o
+ * {DIVERGENCIA} é uma oração inteira ("a entrada foi apontada às 04:10, porém…").
+ * Trocar as duas chaves faria a carta dizer "não houve marcação de a entrada foi
+ * apontada às 04:10". São dois modelos porque são dois pedidos diferentes.
+ */
+const CHAVE_MODELO = "comunicado_modelo";
+
+/** app.js `COMUNICADO_MODELO` (~5459) — o texto oficial da gordura, usado quando a
+ *  chave está vazia no `app_config`. Fica aqui e não em `TEMPLATES_PADRAO` porque
+ *  aquele mapa é da família `template_*` (a aba Config), e esta chave não é dessa
+ *  família. CÓPIA: mexeu no app.js, atualize aqui. */
+const MODELO_PADRAO =
+  "Prezado(a) {NOME}, seu registro de ponto do dia {DATA} apresenta divergências: {DIVERGENCIA}. " +
+  "Conforme o Art. 74 da CLT, solicito que {PEDIDO} no aplicativo de registro de ponto. " +
+  "Dúvidas? Fale com seu supervisor ou o RH. Quataí Transporte de Passageiros.";
+
+/** app.js:5705 — modelo salvo com os placeholders da versão ANTIGA ({PONTOS},
+ *  {ESC_INICIO}, {ESC_FIM}) é descartado em favor do padrão novo: ninguém preenche
+ *  mais essas variáveis, e `normalizaMensagem` as apagaria, deixando a frase manca. */
+const PLACEHOLDERS_APOSENTADOS = /\{PONTOS\}|\{ESC_INICIO\}|\{ESC_FIM\}/i;
+
+function modeloDoBanco(valor) {
+  // `escolherTemplate` aceita o jsonb como vier; sem entrada em TEMPLATES_PADRAO
+  // para esta chave ele devolve "" quando está vazia — daí o padrão daqui.
+  const salvo = escolherTemplate(valor, CHAVE_MODELO);
+  if (!salvo.trim()) return MODELO_PADRAO;
+  return PLACEHOLDERS_APOSENTADOS.test(salvo) ? MODELO_PADRAO : salvo;
+}
+
+/**
+ * O ALVO CONGELADO do aviso da gordura (o `_contrato_alvo(..., "gordura")` do
+ * original). Não recalcula nada: LÊ o cartão que a própria aba já montou em
+ * `cartoesGordura` — o mesmo que a coluna "Alvo (c/ tolerância)" mostra e que o
+ * DP conferiu antes de marcar a linha. Cobrar na carta um horário diferente do
+ * que está na tela seria pior do que não avisar.
+ *
+ * `cartaoValido` já é a checagem de cartão cronológico do contrato (quatro slots
+ * em ordem, virada de meia-noite desenrolada, ≤ 24 h); quando ela falha a tela já
+ * escreve "revisar alvo e refeição", e é essa mesma frase que vira o motivo do
+ * barrado — o DP lê a mesma coisa nos dois lugares.
+ */
+function contratoDaGordura(r) {
+  const cartao = r?.__cartao;
+  if (!cartao?.alvoValido) {
+    return { contrato: null, erro: "revisar alvo e refeição antes de cobrar" };
+  }
+  const [entrada, almSaida, almVolta, saida] = cartao.alvo;
+  return {
+    contrato: {
+      alvo_entrada: entrada,
+      alvo_alm_saida: almSaida || "",
+      alvo_alm_volta: almVolta || "",
+      alvo_saida: saida,
+    },
+    erro: "",
+  };
+}
+
+/**
+ * Porte de app.js `fillTpl` — o texto da gordura, por linha. A carta contrapõe o
+ * que foi APONTADO (tn_*) ao que a operação mostra (real_*), e o PEDIDO usa o
+ * ALVO (real com a tolerância de entrada −10 / saída +8): é ele que o caso congela
+ * e que o robô lança depois, então pedir o real cru criaria uma cobrança que a
+ * correção não cumpriria.
+ *
+ * QUAL PONTA ENTRA NA FRASE é `pontaConta` — A MESMA função que o módulo usa para
+ * decidir o `ponta` do caso e para barrar o aviso sem ponta. Escrever aqui uma
+ * segunda lista de níveis (o original tinha uma, mais estreita, no front) faria o
+ * texto genérico "o registro de ponto diverge da operação" sair justamente para
+ * quem o caso registra como ponta cobrada — o pedido que não pede nada que a
+ * trava existe para impedir.
+ */
+function mensagemGordura(template, r) {
+  const temEntrada = pontaConta(r.nivel_entrada, r.gordura_entrada, "entrada");
+  const temSaida = pontaConta(r.nivel_saida, r.gordura_saida, "saida");
+
+  // `horaMensagem`: a carta vai para o COLABORADOR, e ele não lê "25:43" — vira
+  // "01:43 (do dia seguinte)". `fmtHora` antes porque a gordura guarda "0410"; o
+  // "--" no fim é o do `fmtHora` do app antigo, para a frase nunca sair com um
+  // buraco ("apontada às , porém…") se um campo vier vazio.
+  const hora = (v) => horaMensagem(fmtHora(v)) || "--";
+  const apontadaEntrada = hora(r.tn_entrada);
+  const apontadaSaida = hora(r.tn_saida);
+  const operouDe = hora(r.real_inicio);
+  const operouAte = hora(r.real_fim);
+
+  const { contrato } = contratoDaGordura(r);
+  const alvoEntrada = horaMensagem(contrato?.alvo_entrada) || operouDe;
+  const alvoSaida = horaMensagem(contrato?.alvo_saida) || operouAte;
+
+  // Gordura só cobra ENTRADA e SAÍDA — almoço nunca entra.
+  let divergencia;
+  let pedido;
+  if (temEntrada && temSaida) {
+    divergencia =
+      `a entrada foi apontada às ${apontadaEntrada} e a saída às ${apontadaSaida}, porém nossos ` +
+      `sistemas identificam início de operação às ${operouDe} e encerramento às ${operouAte}`;
+    pedido = `corrija sua entrada para ${alvoEntrada} e sua saída para ${alvoSaida}`;
+  } else if (temEntrada) {
+    divergencia =
+      `a entrada foi apontada às ${apontadaEntrada}, porém nossos sistemas identificam início ` +
+      `de operação às ${operouDe}`;
+    pedido = `corrija sua entrada para ${alvoEntrada}`;
+  } else if (temSaida) {
+    divergencia =
+      `a saída foi apontada às ${apontadaSaida}, porém nossos sistemas identificam encerramento ` +
+      `da operação às ${operouAte}`;
+    pedido = `corrija sua saída para ${alvoSaida}`;
+  } else {
+    // Rede de segurança: sem ponta a linha é BARRADA antes de virar CSV
+    // (`prepararComunicado`, barreira 1), então este texto não chega a ninguém.
+    divergencia = "o registro de ponto diverge da operação identificada";
+    pedido = "corrija o ponto conforme a operação";
+  }
+
+  return preencherTemplate(template, {
+    NOME: txt(r.nm_funcionario) || "Colaborador(a)",
+    CRACHA: txt(r.cracha),
+    DATA: ddmmaaaa(r.data_ref || r.date_ref),
+    DIVERGENCIA: divergencia,
+    PEDIDO: pedido,
+    // Não estão no texto padrão, mas o editor aceita as duas (Config `VARS`):
+    // sem preencher, `normalizaMensagem` as apagaria e a frase ficaria manca.
+    ESCALA: `${fmtHora(r.esc_inicio) || "--"} – ${fmtHora(r.esc_fim) || "--"}`,
+    BATIDAS: batidasParaTexto(r),
+  });
+}
+
 /* --------------- leitura da camada que mora fora do DP360 ------------------ */
 // As QUATRO CAMADAS (linha 99 · reserva do INOVE · reserva por GPS · alvo) estão em
 // `regrasGordura.js`. O que sobra aqui é a LEITURA da reserva, que vem de outra base
@@ -307,6 +477,25 @@ const ESTILO = {
     color: "var(--dp-res-ink)",
     borderRadius: 10,
     padding: "10px 12px",
+  },
+  campo: {
+    width: "100%",
+    font: "inherit",
+    fontSize: 13,
+    lineHeight: 1.55,
+    padding: "6px 8px",
+    minHeight: 120,
+    resize: "vertical",
+    border: "1px solid var(--dp-border-strong)",
+    borderRadius: 8,
+    background: "var(--dp-surface)",
+    color: "var(--dp-ink)",
+  },
+  rodapeEnvio: {
+    padding: "12px 18px",
+    borderTop: "1px solid var(--dp-border)",
+    background: "var(--dp-surface-2)",
+    borderRadius: "0 0 var(--dp-radius) var(--dp-radius)",
   },
   linhaNivel: { padding: "9px 0", borderBottom: "1px solid var(--dp-border)" },
   marcaNivel: { flex: "none", marginTop: 2, minWidth: 88, textAlign: "center", height: "fit-content" },
@@ -437,7 +626,7 @@ function Overlay({ titulo, largura = 860, aoFechar, children }) {
 // Detalhe do dia: horários e jornada POR FONTE + o cálculo da gordura por ponta.
 // Ato disciplinar merece o DP enxergar GPS/SST/bilhetagem antes de confirmar,
 // não só o número final.
-function PainelDetalhe({ linha, aoFechar }) {
+function PainelDetalhe({ linha, aoFechar, aoAvisar }) {
   const r = linha;
   const opIni = hm2m(r.op_inicio) != null ? hm2m(r.op_inicio) : hm2m(r.sst_vinculo);
   const valIni = hm2m(r.val_inicio);
@@ -704,7 +893,373 @@ function PainelDetalhe({ linha, aoFechar }) {
           </p>
         )}
       </div>
+
+      {/* O aviso deste DIA, para esta PESSOA — o `avisoDaGordura` do app antigo, que
+          abria a MESMA tela de mensagem já com a linha daquele crachá×dia. Quem monta
+          o CSV, decide os barrados e grava o caso é o `ModalComunicado`, o mesmo do
+          botão do lote; aqui só se escolhe o escopo de uma linha. */}
+      <div
+        className="mt-4 flex flex-wrap items-center justify-end gap-2"
+        style={{ borderTop: "1px solid var(--dp-border)", paddingTop: 12 }}
+      >
+        {aoAvisar && (
+          <button
+            type="button"
+            className="dp-btn"
+            onClick={() => aoAvisar(r)}
+            title="Abre o comunicado deste dia: prévia do texto, quem recebe, quem fica de fora e os dois botões (Ensaio · Enviar de verdade)."
+          >
+            📣 Enviar ocorrência
+          </button>
+        )}
+        <button type="button" className="dp-btn" onClick={aoFechar}>
+          Fechar
+        </button>
+      </div>
     </Overlay>
+  );
+}
+
+/* ═══════════════════════ O COMUNICADO AO TRABALHADOR ═══════════════════════
+   Porte de app.js `comunicadoModal` (~5694) + do `g4auto` da barra do Passo 4.
+
+   As regras (formato do CSV, quem é barrado, que caso abre, o que congela num
+   reaviso) NÃO moram aqui: são de `../comunicadoTransnet`, as MESMAS que a Revisão
+   usa — é o mesmo arquivo, pelo mesmo robô. Este componente é a TELA: mostra a
+   prévia, quem recebe, QUEM FICOU DE FORA e por quê, e oferece os dois botões.
+
+   O AVISO SAI DAQUI, MAS QUEM DIRIGE O TRANSNET É O ROBÔ. O navegador não fala com
+   o Transnet: o Selenium (`bot_comunicado.py`) roda no GitHub Actions do repo DP360,
+   onde a credencial já é secret.
+
+   DOIS BOTÕES, NUNCA UM CHECKBOX "confirmar". Marcado por engano ele vira comunicado
+   real na ficha de alguém e, 48 h depois, advertência. Ensaio: o robô anexa o arquivo
+   no Envio via CSV e NÃO confirma — e ENSAIO NÃO ABRE CASO (main.py:2440: enquanto
+   abria, o prazo passava a correr por causa de um teste, sem nenhuma mensagem ter
+   saído).                                                                          */
+
+function ListaPessoas({ itens, limite = 12 }) {
+  const mostrados = itens.slice(0, limite);
+  return (
+    <ul style={{ margin: "6px 0 0", padding: 0, listStyle: "none", fontSize: 12 }}>
+      {mostrados.map((i) => (
+        <li key={`${i.cracha}|${i.data}`} className="dp-muted">
+          · <b style={{ color: "var(--dp-ink)" }}>{i.nome || "—"}</b>{" "}
+          <span className="dp-num">{i.cracha}</span>
+          {i.motivo ? ` — ${i.motivo}` : ""}
+        </li>
+      ))}
+      {itens.length > mostrados.length && (
+        <li className="dp-faint">+ {itens.length - mostrados.length} outro(s)</li>
+      )}
+    </ul>
+  );
+}
+
+function ModalComunicado({ linhas, casoDe, comPontoAntes, aoFechar, aoConcluir }) {
+  const [template, setTemplate] = useState(null);
+  const [erro, setErro] = useState("");
+  const [disparando, setDisparando] = useState(false);
+  const [recado, setRecado] = useState(null);
+
+  // O modelo vive no `app_config` — a MESMA chave que a ferramenta antiga lê na hora
+  // do envio. Vazio (ou com placeholder aposentado) cai no texto oficial.
+  useEffect(() => {
+    let ativo = true;
+    lerDP360("app_config", { filtros: { chave: `eq.${CHAVE_MODELO}` } })
+      .then((cfg) => {
+        if (ativo) setTemplate(modeloDoBanco((cfg || [])[0]?.valor));
+      })
+      .catch((falha) => {
+        if (!ativo) return;
+        // Sem o app_config o envio não trava: cai no texto oficial e a tela avisa.
+        setTemplate(MODELO_PADRAO);
+        setErro(
+          `Não foi possível ler o modelo salvo (${falha?.message || falha}). Usando o texto padrão.`,
+        );
+      });
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const aoTeclar = (e) => {
+      if (e.key === "Escape" && !disparando) aoFechar();
+    };
+    document.addEventListener("keydown", aoTeclar);
+    return () => document.removeEventListener("keydown", aoTeclar);
+  }, [aoFechar, disparando]);
+
+  // O carimbo do caso é o INSTANTE do envio, então o preparo é refeito no clique.
+  // Este aqui é só o da tela (prévia, contagem, barrados, o que a pessoa vê).
+  const montar = useCallback(
+    (agora) =>
+      prepararComunicado({
+        tipo: TIPO.GORDURA, // é ele que liga a barreira da ponta e a origem do caso
+        linhas,
+        mensagemDe: (l) => mensagemGordura(template, l),
+        alvoDe: contratoDaGordura,
+        comPontoAntes,
+        agora,
+      }),
+    [linhas, template, comPontoAntes],
+  );
+
+  const preparo = useMemo(() => (template == null ? null : montar(undefined)), [template, montar]);
+
+  // app.js `varsPendentes`: variável sem preencher BLOQUEIA o envio. Depois do
+  // `normalizaMensagem` só sobra o que foi digitado errado no modelo ({data} em vez
+  // de {DATA}) — e isso não pode chegar ao colaborador dentro de uma carta.
+  const pendentes = useMemo(
+    () => [...new Set((preparo?.itens || []).flatMap((i) => variaveisPendentes(i.mensagem)))],
+    [preparo],
+  );
+
+  const disparar = async (confirmar) => {
+    const p = montar(agoraUtc());
+    if (!p.itens.length) {
+      setRecado({ tipo: "erro", texto: "Nenhum comunicado a enviar — veja os barrados abaixo." });
+      return;
+    }
+    // main.py `enviar_comunicados` (~2519): a tela do Transnet recebe UMA Data
+    // Referência por envio. Duas datas no mesmo arquivo carimbariam o dia errado.
+    if (p.datas.length > 1) {
+      setRecado({
+        tipo: "erro",
+        texto: `A tela envia uma data por vez, e há ${p.datas.length} datas: ${p.datas.join(", ")}.`,
+      });
+      return;
+    }
+    if (pendentes.length) {
+      setRecado({
+        tipo: "erro",
+        texto: `Envio bloqueado: variável sem preencher (${pendentes.join(", ")}).`,
+      });
+      return;
+    }
+
+    const nomes = p.itens
+      .slice(0, NOMES_NA_CONFIRMACAO)
+      .map((i) => `· ${i.nome || i.cracha} (${i.cracha})`)
+      .join("\n");
+    const resto =
+      p.itens.length > NOMES_NA_CONFIRMACAO
+        ? `\n· … e mais ${p.itens.length - NOMES_NA_CONFIRMACAO}`
+        : "";
+    const cabeca = confirmar
+      ? `ENVIAR DE VERDADE ${p.itens.length} comunicado(s) no Transnet, do dia ${p.datas[0]}:`
+      : `ENSAIO (o robô anexa o arquivo e NÃO confirma o envio) — ${p.itens.length} comunicado(s) do dia ${p.datas[0]}:`;
+    // O que ACONTECE, dito sem eufemismo. O caso é o que faz o ciclo (48 h →
+    // advertência) existir; onde ele não nasce, a tela diz isso em vez de deixar
+    // subentendido.
+    const efeito = confirmar
+      ? "Cada um recebe a mensagem no Transnet e o caso do dia é aberto/atualizado em ponto_caso " +
+        "(origem gordura, tipo cerco), com o prazo correndo a partir de agora — o alvo já " +
+        "congelado não é reescrito."
+      : "Nada é enviado e NENHUM caso é aberto.";
+    if (
+      !window.confirm(
+        `${cabeca}\n\n${nomes}${resto}\n\n${efeito}\n\n` +
+          "Quem executa é o robô, no GitHub Actions. O disparo fica registrado com o seu nome.",
+      )
+    )
+      return;
+
+    setDisparando(true);
+    setRecado(null);
+    try {
+      // ORDEM DELIBERADA: dispara PRIMEIRO, grava o caso DEPOIS. O caso é o que faz o
+      // prazo de 48 h correr e a advertência nascer; gravá-lo antes de saber se o robô
+      // saiu deixaria alguém "avisado" por um disparo que o GitHub recusou. O contrário
+      // (mensagem enviada e caso não gravado) é barulho recuperável — e a tela grita.
+      const r = await dispararRoboDP360("comunicado", {
+        csv: p.csv,
+        data: p.datas[0],
+        motivo: MOTIVO_AVISO, // aviso. Advertência (103) não sai desta tela.
+        confirmar: confirmar ? "true" : "false",
+      });
+
+      // O MODELO EDITADO VIRA O PADRÃO, como no original (app.js:5741 `saveTpl` é
+      // chamado no preparo que serve tanto ao "só gerar CSV" quanto ao envio). Quem
+      // ajusta a carta espera encontrá-la ajustada da próxima vez; sem isso o DP
+      // reescreveria a mesma correção todo dia. A chave é a mesma da ferramenta, então
+      // as duas telas continuam vendo o mesmo texto.
+      //
+      // Vai DEPOIS do disparo e o erro é engolido de propósito: falhar em guardar
+      // preferência não pode virar erro de uma mensagem que já saiu.
+      try {
+        await upsertDP360("app_config", { chave: CHAVE_MODELO, valor: template });
+      } catch {
+        /* preferência não gravada — o envio, que é o que importa, já aconteceu */
+      }
+
+      let alerta = "";
+      let reavisados = [];
+      if (confirmar && p.casos.length) {
+        const { casos, reavisos } = marcarReavisos(p.casos, casoDe);
+        reavisados = reavisos;
+        try {
+          await upsertDP360("ponto_caso", casos);
+        } catch (falha) {
+          alerta =
+            ` ATENÇÃO: o comunicado SAIU, mas o registro em ponto_caso falhou (${falha?.message || falha}).` +
+            " O prazo de 48 h não está correndo para este lote — avise quem cuida do ciclo.";
+        }
+      }
+      setRecado({
+        tipo: alerta ? "erro" : "ok",
+        texto:
+          `${confirmar ? "Envio" : "Ensaio"} disparado — ${p.itens.length} comunicado(s) do dia ${p.datas[0]}.` +
+          (reavisados.length
+            ? ` ${reavisados.length} já tinham sido avisados antes (o alvo original ficou).`
+            : "") +
+          alerta,
+        painel: r?.painel || "",
+      });
+      if (confirmar && aoConcluir) await aoConcluir();
+    } catch (falha) {
+      setRecado({ tipo: "erro", texto: falha?.message || "Não foi possível disparar o robô." });
+    } finally {
+      setDisparando(false);
+    }
+  };
+
+  const primeira = preparo?.itens?.[0];
+
+  return (
+    <div
+      className="fixed inset-0 flex items-start justify-center overflow-y-auto"
+      style={{ background: "rgba(15,20,32,.5)", padding: 16, zIndex: 60 }}
+    >
+      <div className="dp-card w-full max-w-3xl" style={{ padding: 0 }}>
+        <header
+          className="flex items-start justify-between gap-3"
+          style={{ padding: "14px 18px", borderBottom: "1px solid var(--dp-border)" }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <b style={{ fontSize: 14 }}>📣 Enviar Ocorrência — {linhas.length} colaborador(es)</b>
+            <div className="dp-muted" style={{ fontSize: 11.5, marginTop: 2 }}>
+              Campos por linha: <b>{"{NOME}"}</b> · <b>{"{DATA}"}</b> · <b>{"{DIVERGENCIA}"}</b>{" "}
+              (apontado × operação, só nas pontas com gordura) · <b>{"{PEDIDO}"}</b> (corrigir para
+              o alvo). Almoço nunca entra — a gordura só cobra entrada e saída. O CSV sai idêntico
+              ao Transnet: <b>uma linha por colaborador, campos entre aspas</b> (Empresa · Crachá ·
+              Comunicado).
+            </div>
+          </div>
+          <button type="button" className="dp-det-x" onClick={aoFechar} aria-label="Fechar">
+            <X size={16} />
+          </button>
+        </header>
+
+        <div style={{ padding: "14px 18px", display: "grid", gap: 12 }}>
+          {erro && <div className="dp-pill warn">{erro}</div>}
+          {template == null && <div className="dp-muted">Carregando o modelo…</div>}
+
+          {template != null && (
+            <div>
+              <label
+                className="dp-muted"
+                style={{ fontSize: 11.5, display: "block", marginBottom: 4 }}
+              >
+                Texto que vai para o colaborador — o que você editar aqui{" "}
+                <b>vira o modelo salvo</b> ao enviar, como na ferramenta.
+              </label>
+              <textarea
+                value={template}
+                onChange={(e) => setTemplate(e.target.value)}
+                rows={7}
+                style={ESTILO.campo}
+              />
+            </div>
+          )}
+
+          {primeira && (
+            <div className="dp-card" style={{ fontSize: 12 }}>
+              <b>Prévia ({primeira.nome || primeira.cracha}) — como vai no CSV:</b>
+              <div style={{ marginTop: 4 }}>&quot;{primeira.mensagem}&quot;</div>
+            </div>
+          )}
+
+          {!!pendentes.length && (
+            <div className="dp-pill danger">
+              Não enviar: variável sem preencher ({pendentes.join(", ")}).
+            </div>
+          )}
+
+          {!!preparo?.itens?.length && (
+            <div>
+              <b style={{ fontSize: 12.5 }}>{preparo.itens.length} vão receber</b>
+              <ListaPessoas itens={preparo.itens} />
+            </div>
+          )}
+
+          {/* OS BARRADOS APARECEM. A pessoa não some da lista em silêncio: quem não
+              recebe e POR QUE fica escrito, senão o DP marca 40 e vê 31 enviados sem
+              nunca saber o que houve com os outros nove. O motivo mais comum aqui é a
+              trava da gordura: nenhuma ponta acima da porta (10 min na entrada, 8 na
+              saída) — sem ponta o texto viraria um pedido que não pede nada. */}
+          {!!preparo?.barrados?.length && (
+            <div className="dp-card" style={{ borderColor: "var(--dp-danger-ink)" }}>
+              <span className="dp-pill danger">⚠ {preparo.barrados.length} não recebem</span>{" "}
+              <span className="dp-muted" style={{ fontSize: 11.5 }}>
+                O aviso não sai para estes — o motivo está ao lado do nome. Nada é enviado e nenhum
+                caso é aberto para eles.
+              </span>
+              <ListaPessoas itens={preparo.barrados} />
+            </div>
+          )}
+        </div>
+
+        <footer
+          className="flex flex-wrap items-center justify-between gap-3"
+          style={ESTILO.rodapeEnvio}
+        >
+          <div className="dp-det-bot-linha" style={{ minWidth: 0 }}>
+            {disparando && <span className="dp-pill accent">disparando…</span>}
+            {recado && (
+              <>
+                <span className={`dp-pill ${recado.tipo === "ok" ? "ok" : "danger"}`}>
+                  {recado.texto}
+                </span>
+                {recado.painel && (
+                  <>
+                    {" "}
+                    <a className="dp-btn" href={recado.painel} target="_blank" rel="noreferrer">
+                      ver o robô rodando
+                    </a>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+          <div className="dp-det-bot-acoes">
+            <button
+              type="button"
+              className="dp-btn"
+              disabled={disparando || !preparo?.itens?.length}
+              onClick={() => disparar(false)}
+              title="O robô anexa o arquivo no Envio via CSV e NÃO confirma — serve para conferir o lote. Nenhum caso é aberto."
+            >
+              🤖 Ensaio
+            </button>
+            <button
+              type="button"
+              className="dp-btn"
+              style={{ color: "var(--dp-danger-ink)" }}
+              disabled={disparando || !preparo?.itens?.length}
+              onClick={() => disparar(true)}
+              title="Publica o comunicado na ficha de cada colaborador, no Transnet."
+            >
+              ⚠ Enviar de verdade
+            </button>
+            <button type="button" className="dp-btn" onClick={aoFechar} disabled={disparando}>
+              Fechar
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
   );
 }
 
@@ -870,6 +1425,14 @@ export default function Gordura() {
   const [filtro, setFiltro] = useState("TODOS");
   const [verNiveis, setVerNiveis] = useState(false);
   const [detalhe, setDetalhe] = useState(null);
+  // Quem o DP marcou (✔) na grade — o `visiveis.filter(r => r.__sel)` do app antigo.
+  // Guarda IDS, não linhas: assim uma recarga do dia (ou o chip de nível mudando)
+  // não deixa para trás um objeto velho, e id de outro dia simplesmente não casa.
+  const [marcados, setMarcados] = useState([]);
+  // O lote é CONGELADO no clique: o que a prévia mostra é o que vai sair, mesmo que
+  // a lista atrás recarregue enquanto o modal está aberto.
+  const [envio, setEnvio] = useState(null);
+  const [refresco, setRefresco] = useState(0);
 
   // Lista de dias com gordura calculada — `data_ref` distintas, mais recente primeiro.
   // A deduplicação acontece NO SERVIDOR, na ação `datas` do gateway
@@ -948,7 +1511,16 @@ export default function Gordura() {
         __reserva:
           !!g.reserva_por_gps || ehVerdade(g.tem_reserva_inove) || nivies.includes("RESERVA"),
         __casoStatus: txt(caso.correcao_status) || txt(caso.aceite) || "",
+        // O caso INTEIRO fica na linha: é dele que o envio lê `aviso_enviado_em`
+        // (para saber que isto é um REaviso e não reescrever o alvo congelado) e a
+        // presença da coluna `ponto_antes`, que não existe em toda instalação.
+        __caso: casoMapa.has(chave) ? caso : null,
         __busca: semAcento(`${txt(g.nm_funcionario)} ${txt(g.cracha)} ${cracha8(g.cracha)}`),
+        // O RETRATO DO CARTÃO ANTES DO AVISO. `ponto_gordura` não guarda batida; quem
+        // tem é a `ponto_diario`. Sem estes dois campos o caso nasceria com `usuario`
+        // vazio e ninguém saberia depois como o cartão estava quando se cobrou.
+        todas_batidas: txt(g.todas_batidas) || txt(pd.todas_batidas),
+        batidas_limpas: txt(g.batidas_limpas) || txt(pd.batidas_limpas),
         rm_entrada: txt(rm.entrada),
         rm_alm_saida: txt(rm.alm_saida),
         rm_alm_volta: txt(rm.alm_volta),
@@ -964,6 +1536,8 @@ export default function Gordura() {
     let ativo = true;
     setCarregandoDia(true);
     setErro("");
+    // `refresco` entra na dependência de propósito: depois de um envio de verdade a
+    // lista é relida para as marcas do caso (avisado, status) refletirem o que saiu.
     carregarDia(data)
       .then((prontas) => {
         if (ativo) setLinhas(prontas);
@@ -979,7 +1553,12 @@ export default function Gordura() {
     return () => {
       ativo = false;
     };
-  }, [data, carregarDia]);
+  }, [data, carregarDia, refresco]);
+
+  // Trocar de dia zera a marcação: os ✔ do dia anterior não podem virar lote de hoje.
+  useEffect(() => {
+    setMarcados([]);
+  }, [data]);
 
   // Recorte base: quem passou da régua fixa (e do piso de exibição). Os chips de
   // nível e o resumo contam SOBRE esse recorte.
@@ -1098,8 +1677,43 @@ export default function Gordura() {
     </span>
   );
 
-  // TODO(porte): o envio de comunicado (📣 Enviar Ocorrência) do Passo 4 grava em
-  // `ponto_caso` e dispara o robô do Transnet — fica para a fase de execução.
+  /* ═══════════ AVISO AO TRABALHADOR (o robô do Transnet) — o `g4auto` ═══════════
+     Rota `tipo="gordura"` de `_escrever_comunicados`: o caso nasce com
+     origem='gordura', tipo='cerco', a ponta cobrada, os minutos, o nível e o alvo
+     CONGELADO. Quem monta tudo isso é `prepararComunicado`; aqui só se escolhe o
+     escopo (o lote marcado ou uma linha) e se lê o caso que já existe.            */
+
+  // O caso já gravado de (crachá, dia) — o `marcarReavisos` lê dele o
+  // `aviso_enviado_em` para não reescrever o alvo congelado de um primeiro aviso.
+  const casoPorChave = useMemo(() => {
+    const mapa = new Map();
+    linhas.forEach((l) => {
+      if (l.__caso) mapa.set(l.__chave, l.__caso);
+    });
+    return mapa;
+  }, [linhas]);
+  const casoDe = useCallback(
+    (cracha, dia) => casoPorChave.get(chaveDe(cracha, dia)) || null,
+    [casoPorChave],
+  );
+
+  // main.py `sc.tem_coluna("ponto_caso", "ponto_antes")`: a coluna existe em algumas
+  // instalações e não em outras. Mandar coluna inexistente no upsert derruba o lote
+  // inteiro, então só entra quando ela foi VISTA numa linha já lida.
+  const comPontoAntes = useMemo(
+    () =>
+      [...casoPorChave.values()].some(
+        (c) => c && Object.prototype.hasOwnProperty.call(c, "ponto_antes"),
+      ),
+    [casoPorChave],
+  );
+
+  // O lote: os marcados que continuam VISÍVEIS (mesma semântica do original, onde o
+  // botão mandava `visiveis.filter(r => r.__sel)` — mudar o chip de nível muda o lote).
+  const alvoLote = useMemo(
+    () => visiveis.filter((r) => marcados.includes(r.__chave)),
+    [visiveis, marcados],
+  );
 
   const semDatas = !carregando && !datas.length;
   // Antes de o primeiro dia chegar, a barra ficaria com um <select> vazio — não desenha.
@@ -1124,6 +1738,25 @@ export default function Gordura() {
         // operador lê primeiro, como na ferramenta.
         classeLinha={classeLinha}
         aoClicarLinha={(r) => setDetalhe(r)}
+        // ✔ por linha: quem recebe o comunicado é escolhido A MÃO, nunca "todos da
+        // tela por padrão" — é ficha de colaborador, não relatório.
+        selecionavel
+        aoSelecionar={(ids) => setMarcados(ids)}
+        acoes={
+          <button
+            type="button"
+            className="dp-btn primary"
+            disabled={!alvoLote.length}
+            onClick={() => setEnvio(alvoLote)}
+            title={
+              alvoLote.length
+                ? "Abre o comunicado do lote: prévia, quem recebe, quem fica de fora e os dois botões (Ensaio · Enviar de verdade)."
+                : "Marque (✔) os colaboradores que vão receber o comunicado."
+            }
+          >
+            📣 Enviar Ocorrência{alvoLote.length ? ` (${alvoLote.length})` : ""}
+          </button>
+        }
         nomeCsv={`gordura_${data}`}
         carregando={carregandoDia}
         mensagemCarregando="Carregando a gordura do dia…"
@@ -1146,7 +1779,25 @@ export default function Gordura() {
       {corpo}
 
       {verNiveis && <ModalNiveis aoFechar={() => setVerNiveis(false)} />}
-      {detalhe && <PainelDetalhe linha={detalhe} aoFechar={() => setDetalhe(null)} />}
+      {detalhe && (
+        <PainelDetalhe
+          linha={detalhe}
+          aoFechar={() => setDetalhe(null)}
+          aoAvisar={(r) => setEnvio([r])}
+        />
+      )}
+
+      {/* O comunicado fica POR CIMA do detalhe (z-index maior) em vez de fechá-lo:
+          quem clicou em "Enviar ocorrência" continua vendo o dia que está cobrando. */}
+      {envio && (
+        <ModalComunicado
+          linhas={envio}
+          casoDe={casoDe}
+          comPontoAntes={comPontoAntes}
+          aoFechar={() => setEnvio(null)}
+          aoConcluir={() => setRefresco((n) => n + 1)}
+        />
+      )}
     </AbaShell>
   );
 }

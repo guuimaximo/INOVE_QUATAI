@@ -197,3 +197,54 @@ que já existe (mesmo dono dos dois repos).
   antes da fase 6 porque o app atual depende disso.
 - `supabase_gordura.sql` concede `all to anon using(true)` — mesmo padrão que o
   INOVE já proibiu no próprio banco.
+
+## 9. Inventário ferramenta × INOVE (06/09/2026)
+
+Comparação tela a tela das 13 da ferramenta contra o porte. Só entra buraco que
+muda a vida de quem usa — diferença de cor, ícone ou ordem de coluna não conta,
+salvo quando a cor **é** o veredito. O que não deu para confirmar está marcado
+como suspeita.
+
+| # | Tela | Buraco | Onde (ferramenta) | Tam. |
+|---|---|---|---|---|
+| 1 | Ocorrências | `conferir (so leitura)` **com confirmar** grava de volta (`conferido_em`, veredito) e o workflow já tem a credencial do Supabase — ninguém dispara. É o caminho de volta do resultado, e ele existe | `bot_ajustes_app.py:718`, `ajustes.yml:50` | peq |
+| 2 | Ocorrências | `capturar a grade` não é disparado: **ocorrência nova só entra na base pelo desktop** — trava a fase 6 | `main.py:1540` | peq |
+| 3 | Refeição | ~~robô reescreve as pontas do snapshot D-1~~ **resolvido**: dia com `conferido_em`/`correcao_final_em` sai do lote | `main.py:2856` | — |
+| 4 | Folgas | picker de motivo do dia `S/PONTO` (14 códigos do Transnet). É o único dia que não fecha sozinho, e o motivo marcado no desktop aparece lá e não aqui | `app.js:3682`, `main.py:7016` | grande |
+| 5 | Gordura | o alvo que a carta cobra não usa a cascata por ponta do `_contrato_alvo` (rm > alvo congelado > régua > sug > cartão, iterando até fechar cartão cronológico) — o Real manual do DP não vence a carta | `main.py:5932` | médio |
+| 6 | Folgas | seleção múltipla + lançamento em lote: a tela conta "N folgas a lançar" e não oferece como lançar as N | `app.js:3740` | grande |
+| 7 | Pop-up | faixa "Semana dele" — a trava contra inserir ponto no dia de folga de alguém | `main.py:797`, `app.js:5044` | médio |
+| 8 | Revisão | "✅ Lançar ajuste" (correção em lote). O `sugBloqueio` já está portado e a Refeição já dispara o robô `ponto` — falta ligar | `main.py:2820` | médio |
+| 9 | Ocorrências | fechar o caso à mão quando o robô não consegue ("lancei à mão", "Transnet não aceita o dia") — sem isso a fila só cresce | `main.py:8289` | peq |
+| 10 | Gordura | coluna "Status atual" do ciclo: o DP monta o lote sem ver quem já foi avisado (reaviso reinicia as 48 h) nem quem venceu | `app.js:4322` | médio |
+| 11 | Refeição | não sai arquivo nenhum: quem não tem cartão completo fica sem refeição e sem caminho manual | `main.py:2705` | médio |
+| 12 | Pop-up | rota "pedir exclusão de batida indevida" — o modelo é editável no Config e **nada o envia** | `app.js:4927` | médio |
+| 13 | Banco de Horas | "com a folha fechada" calculado só sobre a competência carregada, e o padrão é a mais nova (a aberta) | `main.py:7219` | médio |
+| 14 | Folgas | marcar o dia como reserva — sem isso a célula fica vermelha `S/OPER.` para sempre (a cor é o veredito) | `main.py:4443` | médio |
+| 15 | Gordura | cravar o Real manual sem sair da Gordura — é o que destrava a linha barrada por alvo | `app.js:4279` | médio |
+
+Menores, confirmados: Banco de Horas sem o modo "por mês" (a curva do passivo);
+Resumo sem "todas as competências" e com o drill-down cortado em 400 sem saída;
+Config sem "↩ Padrão" e sem o teste de modelos (o da ferramenta pega `{Nome}`
+minúsculo, que passaria até o colaborador); Refeição sem o "incluir Abaixo 27min".
+
+Suspeitas (não confirmadas): categoria em branco some das Folgas (o pivô da
+ferramenta trata vazio como INTERNO); o seletor do Motorista para no teto de
+páginas sem sinalizar, ao contrário do Abandonos, que avisa "leitura truncada".
+
+### Divergências docstring × código no original (vale o código)
+
+- `main.py:2340` diz que `tipo='fora'` não cria `ponto_caso`; o código cria (`:2434`).
+- `main.py:8905` diz "recusa o 05"; recusa o `102` (`:8909`).
+- `main.py:3829` diz "gordura congelada"; o código prefere `captura_min` (`:3668`).
+- `processar_intervalo.py:126` diz "força 30 min"; grava o gap real (`:121`).
+- `main.py:3567` diz "menos almoço curto/longo"; tira **seis** motivos (`:3557`).
+- `main.py:4389` diz "registra quem mandou"; grava `usuario="bot"` fixo (`:4485`) —
+  aqui o porte está à frente: `dp360_auditoria` guarda autor, workflow e escopo.
+
+### Existe na ferramenta, mas morto (não portar)
+
+`corrigir_ponto_invertido` (`main.py:8374`) recusa sempre que a linha traz
+`acao_sugerida`, e a view atual sempre traz — além de não ser chamado de lugar
+nenhum no `app.js`. `_filtra_gordura_cartao_valido` (`main.py:4683`) é definido e
+nunca chamado. `run_etapa3` (`main.py:1577`) está marcado OBSOLETO no próprio código.

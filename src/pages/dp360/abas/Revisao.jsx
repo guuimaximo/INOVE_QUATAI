@@ -3,10 +3,31 @@ import { Lock, MapPin, RefreshCw, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import TabelaDP from "../TabelaDP";
 import MapaBatidas from "../MapaBatidas";
-import { apagarDP360, lerDP360, lerTudoDP360, upsertDP360 } from "../../../services/dp360Api";
+import {
+  apagarDP360,
+  dispararRoboDP360,
+  lerDP360,
+  lerTudoDP360,
+  upsertDP360,
+} from "../../../services/dp360Api";
 import { supabase } from "../../../supabase";
 import { getStoredUser } from "../../../utils/auth";
 import { RAIO_LOCAL, RAIO_VEIC, reguaLocal, resumoGps } from "../regrasGps";
+import {
+  MOTIVO_AVISO,
+  TIPO,
+  chaveTemplate,
+  contratoDaRevisao,
+  escolherTemplate,
+  marcarReavisos,
+  medianasJornada,
+  mensagemBateuFora,
+  mensagemInterno,
+  mensagemRevisaoMotorista,
+  prepararComunicado,
+  rotaAvisoInterno,
+  variaveisPendentes,
+} from "../comunicadoTransnet";
 import {
   CONSTANTES,
   almocoDaRefeicao,
@@ -30,9 +51,19 @@ import {
        igual a main.py `salvar_real_manual` ~392);
      · Ponto conferido    -> `ponto_caso` com tipo='ponto_ok' (upsert), e o desfazer
        grava tipo='' / aceite='pendente' (main.py `marcar_ponto_ok` ~415).
-   O QUE AINDA NÃO GRAVA:
-     · Enviar ocorrência / avisar quem bateu fora. Essa ação MANDA COMUNICADO ao
-       trabalhador e depende do robô do Transnet — continua desabilitada, com TODO.
+     · Aviso ao trabalhador -> CSV do comunicado disparado no robô do Transnet
+       (`dispararRoboDP360("comunicado", …)`) e, quando o envio é o de verdade,
+       `ponto_caso` com o alvo CONGELADO. O formato do CSV, os barrados, os casos
+       e os reavisos moram em `../comunicadoTransnet` (porte de main.py
+       `_escrever_comunicados` ~2340 e `enviar_aviso_interno` ~2646), porque a
+       Gordura manda o MESMO arquivo pelo MESMO robô.
+
+   O AVISO SAI DAQUI, MAS QUEM DIRIGE O TRANSNET É O ROBÔ. O navegador não fala
+   com o Transnet: o Selenium (`bot_comunicado.py`) roda no GitHub Actions do repo
+   DP360, onde a credencial já é secret. Esta tela DECIDE e dispara; e são sempre
+   DOIS BOTÕES — Ensaio (o robô anexa o arquivo e não confirma) e Enviar de verdade
+   —, nunca um checkbox "confirmar", que marcado por engano manda comunicado real
+   para a ficha de alguém.
 
    A REGRA DE NEGÓCIO NÃO MORA AQUI. `status_ponto`, `motivo`, `acao_sugerida`,
    `alvo_*`, `*_sug`, `almoco_*`, `pede_entrada/pede_saida`, `requer_alvo_manual`,
@@ -68,10 +99,9 @@ const DIVERGENCIA_BILHETAGEM_MIN = DELTA_FONTE;
 const CATEGORIAS_PADRAO = ["MOTORISTA", "INTERNO", "APRENDIZ"];
 const PAGINAS_POR_LOTE = 6; // 6 × 1000 linhas de ponto_diario ≈ 15 dias de datas
 
-// Só o AVISO continua trancado: ele dispara comunicado ao trabalhador e depende do
-// robô do Transnet. Real manual e ponto conferido gravam.
-const TRAVA_AVISO =
-  "O aviso ao trabalhador ainda não está ligado — depende do robô do Transnet (fase seguinte)";
+// Quantos nomes a confirmação lista antes de resumir o resto. A pessoa precisa
+// reconhecer QUEM vai receber; uma lista de 80 linhas num window.confirm não é lida.
+const NOMES_NA_CONFIRMACAO = 8;
 
 /** Quem está cravando. Porte de main.py `_quem_esta_usando` (lá é a conta do Windows;
  *  aqui o INOVE tem login de verdade, então vale o usuário da sessão). */
@@ -314,9 +344,11 @@ function Pilula({ texto, tom = "mute", titulo }) {
   );
 }
 
-function BotaoTravado({ children, titulo, className = "" }) {
+/** Botão que existe mas não tem o que fazer agora: fica visível (some da tela =
+ *  "sumiu a função") e o title diz POR QUE está apagado. */
+function BotaoSemAlvo({ children, titulo, className = "" }) {
   return (
-    <button type="button" disabled title={titulo || TRAVA_AVISO} className={`dp-btn ${className}`}>
+    <button type="button" disabled title={titulo} className={`dp-btn ${className}`}>
       {children}
     </button>
   );
@@ -646,7 +678,7 @@ function normalizarRealManual(form, campos = CAMPOS_RM) {
   return { limpos, erro: "" };
 }
 
-function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar }) {
+function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar, aoAvisar, impedimentoAviso }) {
   const [extra, setExtra] = useState({ gordura: null, intervalo: null, ajustes: [] });
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
@@ -1360,7 +1392,10 @@ function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar }) {
                 conta como certo nas Folgas.
               </>
             ) : (
-              <>Real manual e ponto conferido gravam. O aviso ao trabalhador ainda não.</>
+              <>
+                Real manual e ponto conferido ficam na base do DP. <b>Enviar ocorrência</b> fala com o
+                trabalhador: abre o comunicado deste dia, com Ensaio e envio de verdade.
+              </>
             )}
           </p>
           <div className="flex flex-wrap items-center gap-2">
@@ -1380,13 +1415,368 @@ function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar }) {
             >
               {salvando === "ok" ? "gravando…" : jaConferido ? "↩ Desfazer conferido" : "✓ Ponto conferido"}
             </button>
-            {/* TODO(fase do robô): upsertDP360("ponto_caso", { cracha, date_ref,
-                  origem: "revisao", tipo, aviso_enviado_em, alvo_* congelado }) e disparo do
-                  workflow do Transnet. NÃO ligar sem o robô: isto MANDA MENSAGEM para o
-                  trabalhador, e o alvo do aviso é congelado (nunca reescrito por um segundo
-                  aviso). Recusar ≠ advertir: advertência só depois de aviso. */}
-            <BotaoTravado titulo={TRAVA_AVISO}>📣 Enviar ocorrência</BotaoTravado>
+            {/* O aviso deste DIA, para esta PESSOA. Quem monta o CSV, decide os barrados
+                e grava `ponto_caso` (com o alvo congelado, nunca reescrito por um segundo
+                aviso) é o `ModalComunicado`, o mesmo da barra de filtros — aqui só se
+                escolhe o escopo de uma linha. Recusar ≠ advertir: a advertência só existe
+                depois de um aviso que ele não atendeu, e ela não sai desta tela. */}
+            {impedimentoAviso ? (
+              <BotaoSemAlvo titulo={impedimentoAviso}>📣 Enviar ocorrência</BotaoSemAlvo>
+            ) : (
+              <button
+                type="button"
+                className="dp-btn"
+                onClick={() => aoAvisar && aoAvisar(linha)}
+                title="Abre o comunicado deste dia: prévia do texto, quem recebe e os dois botões (Ensaio · Enviar de verdade)."
+              >
+                📣 Enviar ocorrência
+              </button>
+            )}
             <button type="button" onClick={aoFechar} className="dp-btn">
+              Fechar
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════ O COMUNICADO AO TRABALHADOR ═══════════════════════════
+   Porte de app.js `comunicadoModal` + do padrão de disparo já pronto em `Folgas.jsx`.
+
+   As regras (formato do CSV, quem é barrado, que caso abre) NÃO moram aqui: são de
+   `../comunicadoTransnet`, porque a Gordura manda o MESMO arquivo pelo MESMO robô.
+   Este componente é a TELA: mostra a prévia, mostra quem recebe, mostra QUEM FICOU DE
+   FORA e por quê, e oferece os dois botões.
+
+   DOIS BOTÕES, NUNCA UM CHECKBOX. "Confirmar" marcado por engano vira comunicado real
+   na ficha de alguém e, 48 h depois, advertência. Ensaio: o robô anexa o arquivo no
+   Envio via CSV e NÃO confirma — e ENSAIO NÃO ABRE CASO (main.py:2440: enquanto abria,
+   o prazo passava a correr por causa de um teste, sem nenhuma mensagem ter saído).   */
+
+function ListaPessoas({ itens, limite = 12 }) {
+  const mostrados = itens.slice(0, limite);
+  return (
+    <ul style={{ margin: "6px 0 0", padding: 0, listStyle: "none", fontSize: 12 }}>
+      {mostrados.map((i) => (
+        <li key={`${i.cracha}|${i.data}`} className="dp-muted">
+          · <b style={{ color: "var(--dp-ink)" }}>{i.nome || "—"}</b>{" "}
+          <span className="dp-num">{i.cracha}</span>
+          {i.motivo ? ` — ${i.motivo}` : ""}
+        </li>
+      ))}
+      {itens.length > mostrados.length && (
+        <li className="dp-faint">+ {itens.length - mostrados.length} outro(s)</li>
+      )}
+    </ul>
+  );
+}
+
+function ModalComunicado({
+  titulo,
+  ajuda,
+  rota, // TIPO.REVMOT | TIPO.FORA | TIPO.INTERNO
+  linhas, // alvo já escolhido pela aba
+  chavesTemplate, // quais modelos ler do app_config
+  templateEditavel, // qual deles a caixa de texto edita (null = nenhum)
+  mensagemDe, // (linha, templates) => texto renderizado
+  alvoDe, // (linha) => { contrato, erro } — só revmot
+  casoTipoDe, // (linha) => "almoco"|"incompleto"|"curta" — só interno
+  congelarReaviso = true,
+  comPontoAntes = false,
+  casoDe, // (cracha, date_ref) => caso já gravado
+  nota, // texto extra da aba (ex.: os pulados do interno)
+  aoFechar,
+  aoConcluir,
+}) {
+  const [templates, setTemplates] = useState(null);
+  const [erro, setErro] = useState("");
+  const [disparando, setDisparando] = useState(false);
+  const [recado, setRecado] = useState(null);
+
+  // Os modelos vivem no `app_config` — a MESMA chave que a ferramenta antiga lê na hora
+  // do envio (aba Config). Vazio cai no texto oficial (Quataí + Art. 74 da CLT).
+  useEffect(() => {
+    let ativo = true;
+    const chaves = chavesTemplate.map(chaveTemplate);
+    lerDP360("app_config", { filtros: { chave: `in.(${chaves.join(",")})` } })
+      .then((linhasCfg) => {
+        if (!ativo) return;
+        // `app_config.valor` é jsonb e a ferramenta grava STRING; `escolherTemplate`
+        // aceita o que vier e cai no texto oficial quando está vazio.
+        const salvos = {};
+        for (const l of linhasCfg || []) salvos[l.chave] = l.valor;
+        const out = {};
+        for (const tipo of chavesTemplate) out[tipo] = escolherTemplate(salvos[chaveTemplate(tipo)], tipo);
+        setTemplates(out);
+      })
+      .catch((falha) => {
+        if (!ativo) return;
+        // Sem o app_config o envio não fica travado: cai no texto oficial e a tela avisa.
+        const out = {};
+        for (const tipo of chavesTemplate) out[tipo] = escolherTemplate("", tipo);
+        setTemplates(out);
+        setErro(`Não foi possível ler os modelos salvos (${falha.message || falha}). Usando o texto padrão.`);
+      });
+    return () => {
+      ativo = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chavesTemplate.join(",")]);
+
+  useEffect(() => {
+    const escapa = (e) => {
+      if (e.key === "Escape" && !disparando) aoFechar();
+    };
+    document.addEventListener("keydown", escapa);
+    return () => document.removeEventListener("keydown", escapa);
+  }, [aoFechar, disparando]);
+
+  // O carimbo do caso é o INSTANTE do envio, então o preparo é refeito no clique. Este
+  // aqui é só o da tela (prévia, contagem, barrados, CSV que a pessoa vê).
+  const montar = useCallback(
+    (agora) =>
+      prepararComunicado({
+        tipo: rota,
+        linhas,
+        mensagemDe: (l) => mensagemDe(l, templates),
+        alvoDe,
+        casoTipoDe,
+        comPontoAntes,
+        agora,
+      }),
+    [rota, linhas, mensagemDe, templates, alvoDe, casoTipoDe, comPontoAntes],
+  );
+
+  const preparo = useMemo(() => (templates ? montar(undefined) : null), [templates, montar]);
+
+  // app.js `varsPendentes`: variável que ficou sem preencher BLOQUEIA o envio. Depois do
+  // `normalizaMensagem` só sobra o que foi digitado errado no modelo ({data} em vez de
+  // {DATA}) — e isso não pode chegar ao colaborador dentro de uma carta.
+  const pendentes = useMemo(
+    () => [...new Set((preparo?.itens || []).flatMap((i) => variaveisPendentes(i.mensagem)))],
+    [preparo],
+  );
+
+  const disparar = async (confirmar) => {
+    const p = montar(agoraUtc());
+    if (!p.itens.length) {
+      setRecado({ tipo: "erro", texto: "Nenhum comunicado a enviar — veja os barrados abaixo." });
+      return;
+    }
+    // main.py `enviar_aviso_interno` (~2687): a tela do Transnet recebe UMA Data
+    // Referência por envio. Duas datas no mesmo arquivo carimbariam o dia errado.
+    if (p.datas.length > 1) {
+      setRecado({
+        tipo: "erro",
+        texto: `A tela envia uma data por vez, e há ${p.datas.length} datas: ${p.datas.join(", ")}. Filtre por data.`,
+      });
+      return;
+    }
+    if (pendentes.length) {
+      setRecado({ tipo: "erro", texto: `Envio bloqueado: variável sem preencher (${pendentes.join(", ")}).` });
+      return;
+    }
+
+    const nomes = p.itens
+      .slice(0, NOMES_NA_CONFIRMACAO)
+      .map((i) => `· ${i.nome || i.cracha} (${i.cracha})`)
+      .join("\n");
+    const resto = p.itens.length > NOMES_NA_CONFIRMACAO ? `\n· … e mais ${p.itens.length - NOMES_NA_CONFIRMACAO}` : "";
+    const cabeca = confirmar
+      ? `ENVIAR DE VERDADE ${p.itens.length} comunicado(s) no Transnet, do dia ${p.datas[0]}:`
+      : `ENSAIO (o robô anexa o arquivo e NÃO confirma o envio) — ${p.itens.length} comunicado(s) do dia ${p.datas[0]}:`;
+    // O que ACONTECE, dito sem eufemismo. O caso é o que faz o ciclo (48 h → advertência)
+    // existir; onde ele não é aberto, a tela diz isso em vez de deixar subentendido.
+    const efeito = !confirmar
+      ? `Nada é enviado e NENHUM caso é aberto.`
+      : rota === TIPO.FORA
+        ? `Cada um recebe a mensagem no Transnet. NENHUM caso é aberto: bater ponto fora é ` +
+          `justificativa, não ajuste — e um caso aqui sobrescreveria o do dia.`
+        : `Cada um recebe a mensagem no Transnet e o caso do dia é aberto/atualizado em ` +
+          `ponto_caso, com o prazo correndo a partir de agora (o alvo já congelado não é reescrito).`;
+    if (
+      !window.confirm(
+        `${cabeca}\n\n${nomes}${resto}\n\n${efeito}\n\n` +
+          `Quem executa é o robô, no GitHub Actions. O disparo fica registrado com o seu nome.`,
+      )
+    )
+      return;
+
+    setDisparando(true);
+    setRecado(null);
+    try {
+      // ORDEM DELIBERADA: dispara PRIMEIRO, grava o caso DEPOIS. O caso é o que faz o
+      // prazo de 48 h correr e a advertência nascer; gravá-lo antes de saber se o robô
+      // saiu deixaria alguém "avisado" por um disparo que o GitHub recusou. O contrário
+      // (mensagem enviada e caso não gravado) é barulho recuperável — e a tela grita.
+      const r = await dispararRoboDP360("comunicado", {
+        csv: p.csv,
+        data: p.datas[0],
+        motivo: MOTIVO_AVISO, // aviso. Advertência (103) não sai desta tela.
+        confirmar: confirmar ? "true" : "false",
+      });
+
+      let alerta = "";
+      let reavisados = [];
+      if (confirmar && p.casos.length) {
+        const { casos, reavisos } = marcarReavisos(p.casos, casoDe, { congelar: congelarReaviso });
+        reavisados = reavisos;
+        try {
+          await upsertDP360("ponto_caso", casos);
+        } catch (falha) {
+          alerta =
+            ` ATENÇÃO: o comunicado SAIU, mas o registro em ponto_caso falhou (${falha.message || falha}).` +
+            ` O prazo de 48 h não está correndo para este lote — avise quem cuida do ciclo.`;
+        }
+      }
+      setRecado({
+        tipo: alerta ? "erro" : "ok",
+        texto:
+          `${confirmar ? "Envio" : "Ensaio"} disparado — ${p.itens.length} comunicado(s) do dia ${p.datas[0]}.` +
+          (reavisados.length ? ` ${reavisados.length} já tinham sido avisados antes (o alvo original ficou).` : "") +
+          alerta,
+        painel: r?.painel || "",
+      });
+      if (confirmar && aoConcluir) await aoConcluir();
+    } catch (falha) {
+      setRecado({ tipo: "erro", texto: falha?.message || "Não foi possível disparar o robô." });
+    } finally {
+      setDisparando(false);
+    }
+  };
+
+  const primeira = preparo?.itens?.[0];
+
+  return (
+    <div
+      className="fixed inset-0 flex items-start justify-center overflow-y-auto"
+      style={{ background: "rgba(15,20,32,.5)", padding: 16, zIndex: 60 }}
+    >
+      <div className="dp-card w-full max-w-3xl" style={{ padding: 0 }}>
+        <header
+          className="flex items-start justify-between gap-3"
+          style={{ padding: "14px 18px", borderBottom: "1px solid var(--dp-border)" }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <b style={{ fontSize: 14 }}>{titulo}</b>
+            <div className="dp-muted" style={{ fontSize: 11.5, marginTop: 2 }}>
+              {ajuda} O CSV sai idêntico ao Transnet — <b>uma linha por colaborador, campos entre aspas</b>{" "}
+              (Empresa · Crachá · Comunicado).
+            </div>
+          </div>
+          <button type="button" className="dp-det-x" onClick={aoFechar} aria-label="Fechar">
+            <X size={16} />
+          </button>
+        </header>
+
+        <div style={{ padding: "14px 18px", display: "grid", gap: 12 }}>
+          {erro && <div className="dp-pill warn">{erro}</div>}
+          {!templates && <div className="dp-muted">Carregando os modelos…</div>}
+
+          {templates && templateEditavel && (
+            <div>
+              <label className="dp-muted" style={{ fontSize: 11.5, display: "block", marginBottom: 4 }}>
+                Texto que vai para o colaborador — a edição aqui vale <b>só para este envio</b>. Para mudar o
+                modelo salvo, use a aba <b>Config</b>.
+              </label>
+              <textarea
+                value={templates[templateEditavel] || ""}
+                onChange={(e) => setTemplates({ ...templates, [templateEditavel]: e.target.value })}
+                rows={7}
+                style={{ ...ESTILO_INPUT, width: "100%", minHeight: 120, resize: "vertical" }}
+              />
+            </div>
+          )}
+
+          {primeira && (
+            <div className="dp-card" style={{ fontSize: 12 }}>
+              <b>Prévia ({primeira.nome || primeira.cracha}) — como vai no CSV:</b>
+              <div style={{ marginTop: 4 }}>&quot;{primeira.mensagem}&quot;</div>
+            </div>
+          )}
+
+          {!!pendentes.length && (
+            <div className="dp-pill danger">
+              Não enviar: variável sem preencher ({pendentes.join(", ")}).
+            </div>
+          )}
+
+          {!!preparo?.itens?.length && (
+            <div>
+              <b style={{ fontSize: 12.5 }}>{preparo.itens.length} vão receber</b>
+              <ListaPessoas itens={preparo.itens} />
+            </div>
+          )}
+
+          {/* OS BARRADOS APARECEM. A pessoa não some da lista em silêncio: quem não recebe
+              e POR QUE fica escrito, senão o DP conta 40 marcados e vê 31 enviados sem
+              nunca saber o que aconteceu com os outros nove. */}
+          {!!preparo?.barrados?.length && (
+            <div className="dp-card" style={{ borderColor: "var(--dp-danger-ink)" }}>
+              <span className="dp-pill danger">⚠ {preparo.barrados.length} não recebem</span>{" "}
+              <span className="dp-muted" style={{ fontSize: 11.5 }}>
+                O aviso não sai para estes — o motivo está ao lado do nome. Nada é enviado e nenhum caso é
+                aberto para eles.
+              </span>
+              <ListaPessoas itens={preparo.barrados} />
+            </div>
+          )}
+
+          {nota && (
+            <p className="dp-muted" style={{ margin: 0, fontSize: 11.5 }}>
+              {nota}
+            </p>
+          )}
+        </div>
+
+        <footer
+          className="flex flex-wrap items-center justify-between gap-3"
+          style={{
+            padding: "12px 18px",
+            borderTop: "1px solid var(--dp-border)",
+            background: "var(--dp-surface-2)",
+            borderRadius: "0 0 var(--dp-radius) var(--dp-radius)",
+          }}
+        >
+          <div className="dp-det-bot-linha" style={{ minWidth: 0 }}>
+            {disparando && <span className="dp-pill accent">disparando…</span>}
+            {recado && (
+              <>
+                <span className={`dp-pill ${recado.tipo === "ok" ? "ok" : "danger"}`}>{recado.texto}</span>
+                {recado.painel && (
+                  <>
+                    {" "}
+                    <a className="dp-btn" href={recado.painel} target="_blank" rel="noreferrer">
+                      ver o robô rodando
+                    </a>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+          <div className="dp-det-bot-acoes">
+            <button
+              type="button"
+              className="dp-btn"
+              disabled={disparando || !preparo?.itens?.length}
+              onClick={() => disparar(false)}
+              title="O robô anexa o arquivo no Envio via CSV e NÃO confirma — serve para conferir o lote. Nenhum caso é aberto."
+            >
+              🤖 Ensaio
+            </button>
+            <button
+              type="button"
+              className="dp-btn"
+              style={{ color: "var(--dp-danger-ink)" }}
+              disabled={disparando || !preparo?.itens?.length}
+              onClick={() => disparar(true)}
+              title="Publica o comunicado na ficha de cada colaborador, no Transnet."
+            >
+              ⚠ Enviar de verdade
+            </button>
+            <button type="button" className="dp-btn" onClick={aoFechar} disabled={disparando}>
               Fechar
             </button>
           </div>
@@ -1875,6 +2265,192 @@ export default function Revisao() {
     setAberta((a) => (a && chaveDia(a.cracha, a.date_ref) === chave ? nova : a));
   }, []);
 
+  /* ═══════════════════ AVISO AO TRABALHADOR (o robô do Transnet) ═══════════════════
+     Três rotas, as mesmas do app antigo (app.js `avisarMotoristas`, `avisarInternos`,
+     `avisarFora`). O que muda entre elas é QUEM entra, QUAL modelo e QUE caso abre —
+     as regras estão em `../comunicadoTransnet`; aqui só se escolhe o escopo.        */
+
+  const casoDe = useCallback((cracha, dia) => casos[chaveDia(cracha, dia)] || null, [casos]);
+
+  // main.py `sc.tem_coluna("ponto_caso", "ponto_antes")`: a coluna existe em algumas
+  // instalações e não em outras. Mandar coluna inexistente no upsert derruba o lote
+  // inteiro, então a gente só a inclui quando VÊ a coluna numa linha já lida.
+  const comPontoAntes = useMemo(
+    () => Object.values(casos).some((c) => c && Object.prototype.hasOwnProperty.call(c, "ponto_antes")),
+    [casos],
+  );
+
+  // Interno/aprendiz não tem operação (GPS/SST/bilhetagem) e a escala do cadastro é
+  // lixo — o "normal" dele sai do PRÓPRIO histórico de batidas (main.py
+  // `_jornada_normal`). Só o modelo "jornada curta" depende disso, então a leitura é
+  // preguiçosa: só quando a aba está numa categoria de interno, e uma vez por sessão.
+  const [medianas, setMedianas] = useState(null);
+  const [carregandoMedianas, setCarregandoMedianas] = useState(false);
+  const ehInterno = categoria !== "MOTORISTA";
+  useEffect(() => {
+    if (!ehInterno || medianas || carregandoMedianas) return undefined;
+    let ativo = true;
+    setCarregandoMedianas(true);
+    lerTudoDP360(
+      "ponto_diario",
+      {
+        colunas: "cracha,todas_batidas,categoria",
+        filtros: { categoria: "in.(INTERNO,APRENDIZ)" },
+        ordem: "date_ref.desc",
+      },
+      12,
+    )
+      .then((historico) => {
+        if (ativo) setMedianas(medianasJornada(historico));
+      })
+      .catch(() => {
+        // Sem histórico o aviso continua funcionando: os modelos "almoço curto" e
+        // "registro incompleto" não dependem da mediana. Só a "jornada curta" fica de
+        // fora — melhor não avisar do que avisar contra uma régua que não existe.
+        if (ativo) setMedianas(new Map());
+      })
+      .finally(() => {
+        if (ativo) setCarregandoMedianas(false);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [ehInterno, medianas, carregandoMedianas]);
+
+  const [envio, setEnvio] = useState(null);
+
+  /* ---- rota 1: motorista com marcação faltando (app.js `avisarMotoristas`) ----
+     Ponto invertido fica FORA: é defeito do cartão, não comunicado ao colaborador.
+     Dia já conferido pelo DP também: ele decidiu que está certo. */
+  const podeAvisarMotorista = useCallback(
+    (l) =>
+      String(l.status_ponto ?? "").toUpperCase() !== "OK" &&
+      !pontoConferido(casos[chaveDia(l.cracha, l.date_ref)]) &&
+      !ehPontoInvertido(l) &&
+      !!marcacaoAusente(l),
+    [casos],
+  );
+  const alvoMotoristas = useMemo(
+    () => (ehInterno ? [] : visiveis.filter(podeAvisarMotorista)),
+    [ehInterno, visiveis, podeAvisarMotorista],
+  );
+  // O ALVO CONGELADO do aviso. `sugBloqueio` é o porte de `_sug_bloqueio` e já é a
+  // frase que a tela mostra quando o dia não pode ser usado ("não dá para avisar nem
+  // lançar") — é ela que entra como motivo do barrado.
+  const contratoDe = useCallback(
+    (l) => contratoDaRevisao(l, bloqueios[chaveDia(l.cracha, l.date_ref)] ?? sugBloqueio(l)),
+    [bloqueios],
+  );
+  const mensagemDeMotorista = useCallback(
+    (l, tpls) => mensagemRevisaoMotorista(tpls.ocorrencia_motorista, l, marcacaoAusente(l)),
+    [],
+  );
+  const abrirMotoristas = (alvo) =>
+    setEnvio({
+      rota: TIPO.REVMOT,
+      titulo: `📣 Enviar ocorrência — ${alvo.length} motorista(s)`,
+      ajuda:
+        "A ferramenta identifica a marcação faltante. Com alvo confiável, a mensagem pede o ajuste no " +
+        "horário; sem alvo, pede apenas o registro de ENTRADA, SAÍDA ou ambos.",
+      linhas: alvo,
+      chavesTemplate: ["ocorrencia_motorista"],
+      templateEditavel: "ocorrencia_motorista",
+      mensagemDe: mensagemDeMotorista,
+      alvoDe: contratoDe,
+      congelarReaviso: true,
+    });
+
+  /* ---- rota 2: interno/aprendiz, três modelos num envio só (`avisarInternos`) ---- */
+  const rotasInternos = useMemo(() => {
+    if (!ehInterno) return { alvo: [], pulados: 0 };
+    const alvo = [];
+    let pulados = 0;
+    for (const l of visiveis) {
+      if (pontoConferido(casos[chaveDia(l.cracha, l.date_ref)])) continue;
+      const { modelo, divergencia } = rotaAvisoInterno(l, medianas);
+      if (!modelo) {
+        if (String(l.status_ponto ?? "").toUpperCase() === "REVISAR") pulados += 1;
+        continue;
+      }
+      alvo.push({ ...l, __modelo: modelo, __divergencia: divergencia });
+    }
+    return { alvo, pulados };
+  }, [ehInterno, visiveis, casos, medianas]);
+  const mensagemDeInterno = useCallback((l, tpls) => mensagemInterno(tpls[`interno_${l.__modelo}`], l, l.__divergencia), []);
+  const abrirInternos = (alvo) => {
+    const conta = (m) => alvo.filter((l) => l.__modelo === m).length;
+    setEnvio({
+      rota: TIPO.INTERNO,
+      titulo: `📣 Enviar ocorrência — ${alvo.length} interno(s)/aprendiz(es)`,
+      ajuda:
+        `${conta("almoco")} almoço curto (só comunica) · ${conta("incompleto")} registro incompleto ` +
+        `(pede ajuste em 24 h) · ${conta("curta")} jornada curta (pede verificação). ` +
+        "Cada linha já leva a mensagem do seu modelo.",
+      linhas: alvo,
+      chavesTemplate: ["interno_almoco", "interno_incompleto", "interno_curta"],
+      templateEditavel: null, // são três modelos num envio só: editar um só confundiria
+      mensagemDe: mensagemDeInterno,
+      casoTipoDe: (l) => l.__modelo,
+      // main.py `enviar_aviso_interno` NÃO congela o caso do interno, de propósito: é o
+      // TIPO (almoco/incompleto/curta) que decide se o ciclo de 48 h corre. Travá-lo no
+      // primeiro aviso deixaria um "incompleto" registrado como "almoço curto" e sem prazo.
+      congelarReaviso: false,
+      nota: rotasInternos.pulados
+        ? `${rotasInternos.pulados} pendente(s) do dia não se encaixam em nenhum modelo e não recebem aviso.`
+        : "",
+    });
+  };
+
+  /* ---- rota 3: bateu ponto FORA de local conhecido (GPS) (`avisarFora`) ----
+     JUSTIFICATIVA, não ajuste: este envio NÃO abre `ponto_caso` (ver
+     comunicadoTransnet). Abrir poria a pessoa em "Meus avisos" como ajuste e ainda
+     sobrescreveria o caso de gordura do mesmo dia. */
+  const alvoFora = useMemo(
+    () => visiveis.filter((l) => (gpsPorCracha[cra8(l.cracha)]?.fora || 0) > 0),
+    [visiveis, gpsPorCracha],
+  );
+  const mensagemDeFora = useCallback(
+    (l, tpls) => mensagemBateuFora(tpls.aviso_fora, l, gpsPorCracha[cra8(l.cracha)]),
+    [gpsPorCracha],
+  );
+  const abrirFora = (alvo) =>
+    setEnvio({
+      rota: TIPO.FORA,
+      titulo: `📍 Avisar quem bateu fora — ${alvo.length}`,
+      ajuda:
+        "Batida FORA de local conhecido (garagem/terminal), pelo GPS do app. A mensagem pede JUSTIFICATIVA, " +
+        "não ajuste de horário — e por isso este envio não abre caso nem inicia prazo.",
+      linhas: alvo,
+      chavesTemplate: ["aviso_fora"],
+      templateEditavel: "aviso_fora",
+      mensagemDe: mensagemDeFora,
+    });
+
+  /* ---- o mesmo aviso, para UMA linha (botão do rodapé do cartão) ---- */
+  const impedimentoAviso = useMemo(() => {
+    if (!aberta) return "";
+    if (pontoConferido(casos[chaveDia(aberta.cracha, aberta.date_ref)]))
+      return "Este dia já foi marcado como conferido pelo DP — não há o que pedir.";
+    if (ehInterno) {
+      if (carregandoMedianas) return "Carregando o histórico de jornada do interno…";
+      const { modelo } = rotaAvisoInterno(aberta, medianas);
+      if (!modelo) return "Este dia não se encaixa em nenhum dos modelos de aviso de interno/aprendiz.";
+      return "";
+    }
+    if (String(aberta.status_ponto ?? "").toUpperCase() === "OK") return "O dia está OK — não há o que pedir.";
+    if (ehPontoInvertido(aberta))
+      return "Ponto invertido é defeito do cartão: exige decisão manual do DP, não comunicado ao colaborador.";
+    if (!marcacaoAusente(aberta))
+      return "A ferramenta não identificou marcação de entrada ou saída faltando neste dia.";
+    return contratoDe(aberta).erro;
+  }, [aberta, casos, ehInterno, carregandoMedianas, medianas, contratoDe]);
+
+  const avisarUmaLinha = (linha) => {
+    if (!ehInterno) return abrirMotoristas([linha]);
+    const { modelo, divergencia } = rotaAvisoInterno(linha, medianas);
+    return abrirInternos([{ ...linha, __modelo: modelo, __divergencia: divergencia }]);
+  };
+
   const chips = [
     ["TODOS", "TODOS"],
     ["REVISAR", "REVISAR"],
@@ -1939,12 +2515,58 @@ export default function Revisao() {
             placeholder="Buscar por nome ou crachá…"
             style={{ width: 230 }}
           />
-          {/* TODO(fase do robô): avisarMotoristas / avisarInternos / avisarFora — gravam
-              ponto_caso e SOBEM O COMUNICADO ao trabalhador pelo robô do Transnet. Não
-              ligar antes do robô: o alvo do aviso é congelado (nunca reescrito por um
-              segundo aviso) e recusar ≠ advertir. */}
-          <BotaoTravado titulo={TRAVA_AVISO}>📣 Enviar ocorrência</BotaoTravado>
-          <BotaoTravado titulo={TRAVA_AVISO}>📍 Avisar quem bateu fora</BotaoTravado>
+          {/* O aviso vai para as linhas VISÍVEIS (o filtro e a busca da barra são a
+              seleção). Quem não se encaixa na rota nem entra na conta; quem entra mas
+              é barrado aparece no modal, com o motivo. */}
+          {ehInterno ? (
+            rotasInternos.alvo.length ? (
+              <button
+                type="button"
+                className="dp-btn"
+                onClick={() => abrirInternos(rotasInternos.alvo)}
+                title="Almoço curto (comunica), registro incompleto (pede ajuste em 24 h) e jornada curta — os três num envio só."
+              >
+                📣 Enviar ocorrência ({rotasInternos.alvo.length})
+              </button>
+            ) : (
+              <BotaoSemAlvo
+                titulo={
+                  carregandoMedianas
+                    ? "Carregando o histórico de jornada do interno para decidir os modelos…"
+                    : "Nenhum interno/aprendiz visível se encaixa nos modelos de aviso."
+                }
+              >
+                📣 Enviar ocorrência
+              </BotaoSemAlvo>
+            )
+          ) : alvoMotoristas.length ? (
+            <button
+              type="button"
+              className="dp-btn"
+              onClick={() => abrirMotoristas(alvoMotoristas)}
+              title="Motoristas com marcação de entrada ou saída faltando. Com alvo, a mensagem pede o horário; sem alvo, pede o registro."
+            >
+              📣 Enviar ocorrência ({alvoMotoristas.length})
+            </button>
+          ) : (
+            <BotaoSemAlvo titulo="Nenhum motorista visível com marcação de entrada ou saída faltando identificada.">
+              📣 Enviar ocorrência
+            </BotaoSemAlvo>
+          )}
+          {alvoFora.length ? (
+            <button
+              type="button"
+              className="dp-btn"
+              onClick={() => abrirFora(alvoFora)}
+              title="Quem bateu ponto FORA de local conhecido (garagem/terminal), pelo GPS do app. Pede justificativa — não abre caso."
+            >
+              📍 Avisar quem bateu fora ({alvoFora.length})
+            </button>
+          ) : (
+            <BotaoSemAlvo titulo="Ninguém com batida fora de local conhecido nas linhas visíveis.">
+              📍 Avisar quem bateu fora
+            </BotaoSemAlvo>
+          )}
           <button type="button" onClick={() => carregarDia()} className="dp-btn">
             <RefreshCw size={13} style={{ display: "inline", verticalAlign: "-2px" }} /> Atualizar
           </button>
@@ -1957,9 +2579,12 @@ export default function Revisao() {
         <span className="dp-pill ok">✓ grava</span> <b>Real manual do DP</b> (ponto_real_manual) e{" "}
         <b>ponto conferido</b> (ponto_caso) — abra o cartão da linha. Os dois ficam na base do DP e
         podem ser desfeitos.{" "}
-        <span className="dp-pill warn">⚠ ainda não</span> <b>Enviar ocorrência</b> e{" "}
-        <b>avisar quem bateu fora</b>: essas ações mandam comunicado ao trabalhador e dependem do robô
-        do Transnet — seguem desabilitadas.
+        <span className="dp-pill danger">📣 fala com o trabalhador</span> <b>Enviar ocorrência</b> e{" "}
+        <b>avisar quem bateu fora</b> montam o CSV do Transnet e disparam o robô — sempre com{" "}
+        <b>Ensaio</b> antes do envio de verdade. O envio de verdade abre/atualiza o caso do dia (e
+        com ele o prazo de 48 h); o ensaio não abre nada. <b>Bateu fora</b> abre caso com
+        origem <span className="dp-mono">fora</span> — é justificativa, não ajuste, e é a origem
+        que mantém essa diferença.
       </div>
 
       {/* ---- legenda das cores da linha + contagem de sugestões ---- */}
@@ -2010,6 +2635,20 @@ export default function Revisao() {
           gps={gpsPorCracha[cra8(aberta.cracha)]}
           aoFechar={() => setAberta(null)}
           aoRecarregar={recarregarLinha}
+          aoAvisar={avisarUmaLinha}
+          impedimentoAviso={impedimentoAviso}
+        />
+      )}
+
+      {/* O comunicado fica POR CIMA do cartão (z-index maior) em vez de fechá-lo: quem
+          clicou em "Enviar ocorrência" continua vendo o dia que está cobrando. */}
+      {envio && (
+        <ModalComunicado
+          {...envio}
+          casoDe={casoDe}
+          comPontoAntes={comPontoAntes}
+          aoFechar={() => setEnvio(null)}
+          aoConcluir={carregarDia}
         />
       )}
     </AbaShell>

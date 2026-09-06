@@ -1025,3 +1025,40 @@
 .dp360 .rv-sug-marca { font-size: 11px; color: var(--dp-warn-ink); line-height: 1; }
 .dp360 .rv-sug-marca.ok { color: var(--dp-ok-ink); }
 .dp360 .rv-sug-marca.erro { color: var(--dp-danger-ink); }
+
+/* ═════════ OCORRÊNCIAS — barra de leitura do lake (prefixo `oc-`) ═════════
+ * ACRÉSCIMO: nada aqui reescreve regra existente. O prefixo `oc-` é de Ocorrências.
+ *
+ * A aba lê o lake DIA A DIA (ver `lerLakePorPares` em abas/Ocorrencias.jsx), e o
+ * total de dias em cena é sabido ANTES de a leitura começar. Então a barra é
+ * honesta: ela conta dias lidos sobre dias em cena, não uma animação que finge
+ * progresso. Só a primeira fase — as três tabelas do estado do DP, antes de existir
+ * lista de dias — é indeterminada, e aí a listra anda sozinha sem prometer número.
+ */
+.dp360 .oc-prog {
+  position: relative;
+  width: 180px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--dp-surface-2);
+  border: 1px solid var(--dp-border);
+  overflow: hidden;
+}
+.dp360 .oc-prog-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--dp-accent);
+  transition: width 0.2s linear;
+}
+.dp360 .oc-prog.indeterminada .oc-prog-fill {
+  width: 40%;
+  animation: oc-prog-anda 1.1s ease-in-out infinite;
+}
+@keyframes oc-prog-anda {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(260%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dp360 .oc-prog.indeterminada .oc-prog-fill { animation: none; width: 100%; opacity: 0.5; }
+}

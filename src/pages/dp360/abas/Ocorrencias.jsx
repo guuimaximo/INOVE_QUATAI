@@ -48,7 +48,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowRight, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import TabelaDP from "../TabelaDP";
-import { dispararRoboDP360, lerTudoDP360, upsertDP360 } from "../../../services/dp360Api";
+import { dispararRoboDP360, lerDP360, lerTudoDP360, upsertDP360 } from "../../../services/dp360Api";
 import {
   CONSTANTES,
   batidasDoCartao,
@@ -82,17 +82,73 @@ const PRAZO_HORAS = 48;
  * bot/bot_ajustes_app.py), e ele tem exatamente TRÊS modos, nem um a mais —
  * dp360-api ROBOS.ajustes recusa qualquer outro valor:
  *   "conferir (so leitura)" · "capturar a grade" · "executar decisoes"
- * É por isso que só o passo de EXECUTAR A DECISÃO ligou aqui: os outros três
- * botões desta tela pedem robôs/modos que não existem no caminho da nuvem.
+ *
+ * OS TRÊS EXISTEM NO CAMINHO DA NUVEM, e os três estão ligados aqui. (Um
+ * comentário anterior deste arquivo dizia que conferir e capturar "não existem
+ * no caminho da nuvem" — está ERRADO e foi corrigido: `main.py:970-978`
+ * (`_nuvem_traduz`) traduz `--conferir` e `--capturar` para o mesmo workflow, e
+ * `ajustes.yml:16-19` expõe os três no `workflow_dispatch`.)
+ *
+ * O que continua fora do caminho da nuvem é outra coisa, e por outro motivo:
+ * `--cancelar-enviadas`, `--listar-enviadas` e `--ao-vivo`, que `_nuvem_traduz`
+ * deixa locais de propósito (devolve None e o trabalho roda na máquina), e os
+ * robôs `comunicado` (advertência) e `ponto` (correção do cartão), que não são
+ * o robô `ajustes`.
  * ───────────────────────────────────────────────────────────────────────── */
 
-// dp360-api ROBOS.ajustes.inputs.modo — string exata, não montar por concatenação.
+// dp360-api ROBOS.ajustes.inputs.modo — strings EXATAS, nunca montadas por
+// concatenação: o gateway compara com a lista e devolve 400 em qualquer variação.
 const MODO_EXECUTAR = "executar decisoes";
+const MODO_CONFERIR = "conferir (so leitura)";
+const MODO_CAPTURAR = "capturar a grade";
 
 // O que o disparo desta tela faz, em uma frase (rodapé e selo do cabeçalho).
 const AVISO_EXEC =
-  "O robô executa só o que JÁ FOI DECIDIDO e gravado, um crachá+dia por vez. " +
+  "O robô executa só o que JÁ FOI DECIDIDO e gravado, um crachá+dia por vez; confere ao vivo " +
+  "(só leitura) o que já foi executado; e captura a grade do Transnet para a base. " +
   "Advertência, correção do cartão e cancelamento continuam fora desta tela.";
+
+// ── O QUE A CONFERÊNCIA É, E POR QUE ELA IMPORTA ──────────────────────────
+// main.py:2204 (conferir_transnet) → bot_ajustes_app.py:622 (conferir_pendentes).
+// Ela LÊ o cartão ao vivo e NÃO MUDA NADA NO TRANSNET — nem com `confirmar`.
+// Com `confirmar` ela fecha no NOSSO banco o que bateu com o combinado:
+// `bot_ajustes_app.py:718-728` grava conferido_em, aviso_conferido_em e o veredito;
+// `:739-752` grava correcao_status='ponto_fechado' quando o Transnet não aceita o dia.
+// É o CAMINHO DE VOLTA do resultado — sem ela o caso fica preso em "Execução
+// pendente" para sempre, porque quem carimba `conferido_em` é o bot, não a tela.
+// A razão de existir, na frase do original: "EFETUADO na grade não prova que os
+// horários foram alterados no cartão" (PEDRO 30060491, 06/08).
+const AVISO_CONFERIR =
+  "Lê o cartão ao vivo e compara com o contrato. NÃO muda nada no Transnet — nem no ensaio, " +
+  "nem valendo. Valendo, fecha só no NOSSO banco (conferido_em) o que bateu.";
+
+// ── O QUE A CAPTURA É, E O BURACO QUE ELA TEM AQUI ────────────────────────
+// main.py:1540 (capturar_ocorrencias) → bot_ajustes_app.py:810 (capturar).
+// Varre a grade do Transnet e grava as ocorrências no Supabase (:543 e :827).
+// SEM ESCOPO de propósito: a grade inteira é o objeto, não um crachá+dia.
+//
+// O QUE NÃO DÁ PARA PORTAR — e por isso está escrito na tela, não só aqui:
+// o original tem um PÓS-PROCESSO na máquina (main.py:1550 `_pos_captura`) que
+//   (a) carimba `app_config.ultima_captura` (main.py:1565) e
+//   (b) roda `congelar_antes()` (main.py:8923), que tira a foto antes/depois/
+//       veredito ANTES de qualquer aceite.
+// Os dois rodam DEPOIS que o run termina, na máquina que disparou. O INOVE
+// dispara e não espera o run (não lê resultado de run nenhum — é a mesma razão
+// pela qual advertir/corrigir continuam fora). Então:
+//   · esta tela NÃO carimba `ultima_captura` no disparo — seria mentira, a
+//     captura ainda nem começou quando o botão volta;
+//   · ela LÊ `app_config.ultima_captura` e mostra, para o DP saber o quanto a
+//     grade está velha (e o carimbo só se move quando alguém roda a ferramenta
+//     desktop — está dito na tela);
+//   · o CONGELAMENTO DA PROVA não acontece por este caminho. No INOVE a prova é
+//     congelada em `gravaContrato`, na hora da DECISÃO — que é depois, e só para
+//     o que o DP decidiu. Consequência real: a ocorrência que chega pela nuvem
+//     entra sem antes/depois congelado, e o "antes" que vier a ser congelado é o
+//     cartão de quando se decidiu, não o de quando se capturou.
+const AVISO_CAPTURA =
+  "Varre a grade inteira do Transnet e grava as ocorrências novas na base (sem escopo — não é " +
+  "por crachá+dia). NÃO carimba a última captura e NÃO congela a prova: o congelamento do " +
+  "original roda na máquina depois do run, e aqui a prova só é congelada na hora da decisão.";
 
 // ── POR QUE "Advertir e corrigir" CONTINUA DESLIGADO ──────────────────────
 // No DP360 esse botão é uma CORRENTE DE TRÊS ELOS (app.js:1719 rejeitarCompleto):
@@ -287,12 +343,6 @@ function tempoHoras(h) {
   return r ? `${d}d ${r}h` : `${d}d`;
 }
 
-function pedacos(lista, tamanho) {
-  const out = [];
-  for (let i = 0; i < lista.length; i += tamanho) out.push(lista.slice(i, i + tamanho));
-  return out;
-}
-
 function confirmar(texto) {
   if (typeof window === "undefined" || typeof window.confirm !== "function") return false;
   return window.confirm(texto);
@@ -429,27 +479,150 @@ const COLS_INTERVALO =
   "cracha,data_ref,sugestao_inicio,sugestao_fim,sugestao_duracao_min," +
   "sugestao_sst_inicio,sugestao_sst_fim,transnet_almoco_inicio,transnet_almoco_fim,status_almoco";
 
-// Lê uma tabela do lake só nas chaves em cena. Sem o recorte, ponto_diario de 70
-// dias traz a operação inteira (dezenas de milhares de linhas) para nada.
-async function lerPorChaves(tabela, colCracha, colData, crachas, datas, colunas) {
-  if (!crachas.length || !datas.length) return [];
-  const listaDatas = datas.join(",");
-  const out = [];
-  for (const bloco of pedacos(crachas, 60)) {
-    const linhas = await lerTudoDP360(tabela, {
-      colunas,
-      ordem: `${colCracha}.asc`,
-      filtros: { [colCracha]: `in.(${bloco.join(",")})`, [colData]: `in.(${listaDatas})` },
-    });
-    out.push(...linhas);
+/**
+ * Lê uma tabela do lake SÓ NOS PARES (crachá, dia) que estão em cena.
+ *
+ * POR QUE POR DIA, E NÃO POR BLOCO DE CRACHÁS (medido na base, janela de 70 dias):
+ * eram 345 crachás × 159 datas = ~55 mil linhas por tabela para os ~6 mil pares que
+ * interessam — nove vezes mais dado do que o necessário, em QUATRO tabelas, e a aba
+ * ficava dezenas de segundos em "carregando". O produto cartesiano é o problema:
+ * `cracha in (…) AND data in (…)` traz o cruzamento inteiro, não os pares.
+ *
+ * (São 159 datas e não 70 porque o filtro dos pedidos é por `capturado_em`: um
+ * pedido capturado esta semana pode falar de um dia bem mais antigo. Isso está
+ * certo e não se mexe.)
+ *
+ * Agrupando POR DIA, cada requisição leva só os crachás que têm pedido NAQUELE dia:
+ * algumas dezenas de linhas — UMA página, sempre (o paginador para na primeira, que
+ * já vem com menos que o limite).
+ *
+ * A CONTA, sem enfeitar: antes eram ~240 requisições de mil linhas (~55 mil linhas
+ * por tabela); agora são ~159 por tabela, ~636 no total, de algumas dezenas de
+ * linhas (~6 mil por tabela). O volume cai 9×; o número de chamadas SOBE ~2,5×. Vale
+ * porque o que estava doendo era o volume, mas é por isso que o teto de chamadas
+ * simultâneas existe e é compartilhado — e é o primeiro número a mexer se ainda
+ * estiver lento. O passo seguinte, se precisar, é o gateway aceitar par exato
+ * (`or=(and(cracha.eq,data.eq),…)`), que hoje ele não expõe.
+ *
+ * `pares` = Map "cra8|dia" → { crachas: Set(variantes cru e cra8), iso }. As DUAS
+ * variantes do crachá viajam porque a chave da montagem casa por `cra8`, mas a
+ * linha do lake pode estar gravada com o crachá cru — perder isso faz a conferência
+ * perder par em silêncio.
+ */
+// O TETO DE CHAMADAS SIMULTÂNEAS é do CONJUNTO das quatro tabelas, não de cada uma:
+// a Edge Function `dp360-api` é a mesma de todas as telas do DP360, e quatro pools de
+// 6 seriam 24 chamadas em voo — trocar o problema de lugar.
+const LIMITE_CHAMADAS = 8;
+
+// As quatro tabelas do lake que a conferência precisa, com a coluna de data de cada
+// uma (o lake não padronizou: umas são `date_ref`, outras `data_ref`). Crachá é
+// `cracha` nas quatro.
+const TABELAS_LAKE = [
+  { chave: "diario", tabela: "ponto_diario", colData: "date_ref", colunas: COLS_DIARIO },
+  { chave: "gordura", tabela: "ponto_gordura", colData: "data_ref", colunas: COLS_GORDURA },
+  { chave: "intervalo", tabela: "ponto_intervalo", colData: "data_ref", colunas: COLS_INTERVALO },
+  // sem recorte de colunas: o real manual é a régua do DP e a tela usa a linha inteira
+  { chave: "realManual", tabela: "ponto_real_manual", colData: "date_ref", colunas: undefined },
+];
+
+// Roda `tarefa` sobre `itens` com no máximo `limite` em voo ao mesmo tempo.
+async function emPool(itens, limite, tarefa) {
+  const fila = [...itens];
+  const trabalhador = async () => {
+    for (;;) {
+      const item = fila.shift();
+      if (item === undefined) return;
+      await tarefa(item);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limite, fila.length) }, trabalhador));
+}
+
+async function lerLakePorPares(pares, aoAvancar) {
+  // um dia → os crachás que têm pedido NAQUELE dia (as duas variantes)
+  const porDia = new Map();
+  pares.forEach(({ crachas, iso }) => {
+    if (!iso || !crachas.size) return;
+    if (!porDia.has(iso)) porDia.set(iso, new Set());
+    const alvo = porDia.get(iso);
+    crachas.forEach((c) => alvo.add(c));
+  });
+
+  const vazio = { diario: [], gordura: [], intervalo: [], realManual: [] };
+  if (!porDia.size) {
+    aoAvancar?.(0, 0);
+    return vazio;
   }
+
+  // um único pool para as quatro tabelas × os dias em cena
+  const trabalhos = [];
+  porDia.forEach((crachas, iso) => {
+    const lista = [...crachas].join(",");
+    TABELAS_LAKE.forEach((t) => trabalhos.push({ t, iso, lista }));
+  });
+
+  // PROGRESSO HONESTO: o total de dias é sabido AQUI, antes de qualquer chamada — a
+  // barra conta dia lido / dia em cena, não uma animação que finge avanço. Um dia só
+  // conta como lido quando as QUATRO tabelas dele voltaram; contar leitura solta faria
+  // a barra correr quatro vezes mais rápido do que o trabalho.
+  const totalDias = porDia.size;
+  const faltamNoDia = new Map([...porDia.keys()].map((iso) => [iso, TABELAS_LAKE.length]));
+  let diasFeitos = 0;
+  aoAvancar?.(0, totalDias);
+
+  const out = { diario: [], gordura: [], intervalo: [], realManual: [] };
+  await emPool(trabalhos, LIMITE_CHAMADAS, async ({ t, iso, lista }) => {
+    try {
+      const linhas = await lerTudoDP360(t.tabela, {
+        colunas: t.colunas,
+        ordem: "cracha.asc",
+        filtros: { cracha: `in.(${lista})`, [t.colData]: `eq.${iso}` },
+      });
+      out[t.chave].push(...linhas);
+    } finally {
+      // o dia conta como lido mesmo se a leitura falhou: a barra mede o AVANÇO da
+      // varredura, e o erro sobe pelo `emPool` para a tela mostrar do jeito de sempre
+      const resta = (faltamNoDia.get(iso) ?? 1) - 1;
+      faltamNoDia.set(iso, resta);
+      if (resta === 0) {
+        diasFeitos += 1;
+        aoAvancar?.(diasFeitos, totalDias);
+      }
+    }
+  });
   return out;
 }
 
-async function carregarOcorrencias() {
+/**
+ * `app_config.ultima_captura` — QUANDO A GRADE FOI CAPTURADA PELA ÚLTIMA VEZ.
+ *
+ * Quem carimba é `main.py:1565` (_marcar_captura), na MÁQUINA, depois que o run
+ * termina. O disparo daqui não carimba (ver AVISO_CAPTURA), então este valor diz
+ * "a última vez que alguém capturou pela ferramenta desktop" — e é exatamente por
+ * isso que ele é útil: mostra o quanto a grade pode estar velha.
+ *
+ * Falhar aqui NÃO pode derrubar a tela: é um dado de contexto, não a conferência.
+ */
+async function lerUltimaCaptura() {
+  try {
+    const linhas = await lerDP360("app_config", {
+      colunas: "chave,valor",
+      filtros: { chave: "eq.ultima_captura" },
+      limite: 1,
+    });
+    const bruto = linhas?.[0]?.valor;
+    // a coluna é jsonb e o valor foi gravado como string — pode voltar com aspas
+    return txt(typeof bruto === "string" ? bruto : bruto == null ? "" : JSON.stringify(bruto))
+      .replace(/^"|"$/g, "");
+  } catch {
+    return "";
+  }
+}
+
+async function carregarOcorrencias(aoAvancar) {
   const inicio = isoDiasAtras(JANELA_DIAS);
 
-  const [casos, ajustesBrutos, ocorrencias] = await Promise.all([
+  const [casos, ajustesBrutos, ocorrencias, ultimaCaptura] = await Promise.all([
     lerTudoDP360("ponto_caso", {
       ordem: "date_ref.desc",
       filtros: { date_ref: `gte.${inicio}` },
@@ -464,6 +637,7 @@ async function carregarOcorrencias() {
       ordem: "date_ref.desc",
       filtros: { date_ref: `gte.${inicio}` },
     }),
+    lerUltimaCaptura(),
   ]);
 
   // ── PEDIDO VÁLIDO vs LIXO (obrigatório, supabase_client.ler_ajustes_app) ──
@@ -473,18 +647,27 @@ async function carregarOcorrencias() {
   const pedidos = ajustesBrutos.filter((o) => txt(o.tipo_ajuste));
   const descartados = ajustesBrutos.length - pedidos.length;
 
-  // chaves em cena = crachá × dia dos pedidos + dos casos. O dia ALTERNATIVO do
-  // pedido entra na lista de datas: sem o cartão do outro dia a realocação do
-  // motor (realocaDia) não tem contra o que casar a batida.
-  const crachasBrutos = new Set();
-  const datas = new Set();
+  // PARES em cena = crachá × dia dos pedidos + dos casos. NÃO é "os crachás" ×
+  // "as datas": é o par, e é essa diferença que faz a leitura do lake caber em ~6 mil
+  // linhas em vez de ~55 mil (ver lerLakePorPares).
+  //
+  // O dia ALTERNATIVO do pedido entra como par próprio: sem o cartão do outro dia a
+  // realocação do motor (realocaDia) não tem contra o que casar a batida.
+  //
+  // A chave do par é `cra8|dia` — a MESMA forma que a montagem usa. As duas variantes
+  // do crachá (cru e cra8) ficam juntas no par porque a linha do lake pode estar
+  // gravada de qualquer um dos dois jeitos; perder uma faz a conferência perder par
+  // em silêncio.
+  const pares = new Map();
   const anota = (cracha, data) => {
     const c = txt(cracha);
     const iso = normData(data);
     if (!c || !iso) return;
-    crachasBrutos.add(c);
-    crachasBrutos.add(cra8(c));
-    datas.add(iso);
+    const k = `${cra8(c)}|${iso}`;
+    if (!pares.has(k)) pares.set(k, { crachas: new Set(), iso });
+    const par = pares.get(k);
+    par.crachas.add(c);
+    par.crachas.add(cra8(c));
   };
   pedidos.forEach((o) => {
     anota(o.cracha, o.date_ref);
@@ -492,15 +675,16 @@ async function carregarOcorrencias() {
   });
   casos.forEach((c) => anota(c.cracha, c.date_ref));
 
-  const listaCrachas = [...crachasBrutos];
-  const listaDatas = [...datas];
+  const { diario, gordura, intervalo, realManual } = await lerLakePorPares(pares, aoAvancar);
 
-  const [diario, gordura, intervalo, realManual] = await Promise.all([
-    lerPorChaves("ponto_diario", "cracha", "date_ref", listaCrachas, listaDatas, COLS_DIARIO),
-    lerPorChaves("ponto_gordura", "cracha", "data_ref", listaCrachas, listaDatas, COLS_GORDURA),
-    lerPorChaves("ponto_intervalo", "cracha", "data_ref", listaCrachas, listaDatas, COLS_INTERVALO),
-    lerPorChaves("ponto_real_manual", "cracha", "date_ref", listaCrachas, listaDatas, undefined),
-  ]);
+  // A ocorrência mais nova que ESTÁ na base. Diferente de `ultimaCaptura`: este
+  // carimbo se move quando a captura roda pela nuvem (o bot grava `capturado_em` em
+  // cada linha — bot_ajustes_app.py:1601), o outro só quando roda pela ferramenta.
+  let capturaMaisNova = "";
+  ajustesBrutos.forEach((o) => {
+    const q = txt(o.capturado_em);
+    if (q > capturaMaisNova) capturaMaisNova = q;
+  });
 
   return {
     casos,
@@ -511,6 +695,8 @@ async function carregarOcorrencias() {
     intervalo,
     realManual,
     descartados,
+    ultimaCaptura,
+    capturaMaisNova,
     lidoEm: agoraISOLocal(),
   };
 }
@@ -807,6 +993,10 @@ function montarRegistros(base) {
     const situacao = situacaoDoCaso(veredito, ciclo, temAviso);
     const rot = rotuloCaso(caso.origem, caso.tipo);
 
+    // os quatro compartimentos do cartão (só a porta do aviso desenha assim)
+    const slotsAntes = quatroSlots(lim);
+    const slotsAlvo = alvoQuatroSlots(caso);
+
     // ── monitor de avisos (main.py:4283-4361) ─────────────────────────────
     // ids ainda PENDENTES no Transnet que a nossa decisão NÃO cobre
     const idsDecididos = new Set(
@@ -892,6 +1082,15 @@ function montarRegistros(base) {
       bloqueio,
       escala: [txt(cp.esc_entrada) || txt(g.esc_inicio), txt(cp.esc_saida) || txt(g.esc_fim)],
       alvo: [txt(caso.alvo_entrada), txt(caso.alvo_saida)],
+      // ── os quatro compartimentos (porta "Enviamos para ajuste") ─────────────
+      // `slotsAntes` sai do MESMO cartão limpo que o motor julga (`lim`), não de uma
+      // segunda leitura do lake: duas fontes para o mesmo cartão é como se cria a
+      // divergência entre o que a tela mostra e o que o veredito usou.
+      slotsAntes,
+      slotsDepois: quatroSlots(sim),
+      slotsAlvo,
+      // slot destacado = o alvo é diferente do que está no cartão hoje
+      slotsAlvoMudou: slotsAlvo.map((v, i) => Boolean(v) && v !== slotsAntes[i]),
       baseE: refE.rotulo,
       baseS: refS.rotulo,
       refE: refE.ref == null ? "" : min2hm(refE.ref),
@@ -1184,21 +1383,45 @@ function motivoForaDoLote(reg, acao) {
  * decidir primeiro, na mesma tela, com a confirmação que nomeia a pessoa.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-// Por que ESTE dia não pode ir para o robô. Espelho do filtro que o próprio bot
-// aplica (bot_ajustes_app.executar_decisoes: `aceite` ∈ (aceito, rejeitado) e
-// `conferido_em` vazio) — se a tela oferecesse o que o bot descarta, o disparo
-// gastaria um run para não fazer nada e o DP acharia que o robô falhou.
-function motivoSemExecucao(reg) {
+/**
+ * A FILA DO BOT, que é a MESMA para executar e para conferir.
+ *
+ * `bot_ajustes_app.executar_decisoes` (:1203) e `conferir_pendentes` (:640) filtram
+ * `ponto_caso` com a MESMA condição, palavra por palavra: `aceite` ∈ (aceito,
+ * rejeitado) e `conferido_em` vazio. Por isso a trava é uma só — se a tela
+ * oferecesse o que o bot descarta, o disparo gastaria um run para não fazer nada e
+ * o DP acharia que o robô falhou.
+ *
+ * `qual` muda só o TEXTO do motivo, NUNCA o filtro: as três perguntas abaixo são as
+ * mesmas nos dois modos.
+ */
+function motivoForaDaFilaDoBot(reg, qual) {
   if (!reg) return "sem caso";
   const bruto = reg.caso || {};
   const ciclo = reg.ciclo || {};
   // CICLO REABERTO: o `aceite` guardado é do ciclo VELHO e o bot lê a linha crua —
-  // ele executaria a decisão anterior contra um pedido novo. A tela não manda.
+  // ele executaria a decisão anterior contra um pedido novo. E na conferência seria
+  // pior ainda: `--confirmar` carimbaria `conferido_em` = agora, que passa a ser
+  // MAIOR que `aviso_enviado_em`, e `_reaberto` (que compara os dois como texto)
+  // deixaria de ver o ciclo novo — o pedido novo sumiria fechado sem ninguém julgar.
   if (reg.reaberto)
     return "ciclo reaberto — chegou aviso novo depois da decisão: decida de novo antes de mandar o robô";
   if (!["aceito", "rejeitado"].includes(txt(ciclo.aceite)))
-    return "nenhuma decisão gravada — decidir e executar são dois passos: aceite ou recuse primeiro";
-  if (txt(bruto.conferido_em)) return "o robô já executou este dia no Transnet — não se repete";
+    return qual === "conferir"
+      ? "nenhuma decisão gravada — o bot só confere o que foi decidido: aceite ou recuse primeiro"
+      : "nenhuma decisão gravada — decidir e executar são dois passos: aceite ou recuse primeiro";
+  if (txt(bruto.conferido_em))
+    return qual === "conferir"
+      ? "este dia já foi conferido e fechado (conferido_em) — o bot só olha o que continua aberto"
+      : "o robô já executou este dia no Transnet — não se repete";
+  return "";
+}
+
+// Por que ESTE dia não pode ir para o robô EXECUTAR.
+function motivoSemExecucao(reg) {
+  const base = motivoForaDaFilaDoBot(reg, "executar");
+  if (base) return base;
+  const bruto = reg.caso || {};
   // main.py/bot: dia já provado FECHADO no Transnet só gera escrita recusada
   // (o ALLAN 30060284 levou nove antes de alguém perceber).
   if (txt(bruto.correcao_status) === "ponto_fechado")
@@ -1206,6 +1429,26 @@ function motivoSemExecucao(reg) {
   const p = planoDaExecucao(reg);
   if (!p.aceitar.length && !p.rejeitar.length && !p.jaResolvidos.length)
     return "nenhuma ocorrência do Transnet ligada a este dia — o robô não teria o que clicar";
+  return "";
+}
+
+/**
+ * Por que ESTE dia não pode ir para o robô CONFERIR.
+ *
+ * A conferência NÃO clica em ocorrência nenhuma — ela abre o CARTÃO do dia e
+ * compara com o contrato congelado. Por isso não tem a última trava da execução
+ * ("nenhuma ocorrência ligada a este dia"): não existe clique para faltar.
+ *
+ * O que ela ganha por cima é o dia FECHADO: num dia de competência encerrada o
+ * cartão nunca vai bater com o contrato, o bot já não rebaixa mais o caso
+ * (bot_ajustes_app.py:748) e conferir de novo só gasta run. Foi esse laço que levou
+ * o ALLAN 30060284 a NOVE escritas recusadas.
+ */
+function motivoSemConferencia(reg) {
+  const base = motivoForaDaFilaDoBot(reg, "conferir");
+  if (base) return base;
+  if (txt(reg.caso?.correcao_status) === "ponto_fechado")
+    return "dia já provado FECHADO no Transnet — a leitura nunca vai bater e o bot não rebaixa mais o caso";
   return "";
 }
 
@@ -1250,18 +1493,31 @@ function planoDaExecucao(reg) {
 /**
  * O ESCOPO DO DISPARO — o input `casos` do workflow.
  *
- * `ajustes.yml` compara o input com "[]" e, se for vazio, roda `--executar` SEM
- * `--casos`: a FILA INTEIRA. Por isso esta função devolve "" (e o disparo é
- * recusado) em vez de devolver "[]" quando não dá para montar a chave — mandar
- * escopo vazio não é "não filtrar", é executar tudo.
+ * `ajustes.yml` compara o input com "[]" e, se for vazio, roda `--executar` (ou
+ * `--conferir`) SEM `--casos`: a FILA INTEIRA. Nos DOIS modos — as duas ramificações
+ * do yml (:58-65 e :69-79) têm exatamente o mesmo `if`. Por isso esta função devolve
+ * "" (e o disparo é recusado lá em cima) em vez de devolver "[]" quando não dá para
+ * montar a chave: mandar escopo vazio não é "não filtrar", é rodar tudo.
+ *
+ * E se UMA das linhas não tiver chave, o escopo inteiro é recusado — não se manda a
+ * lista "quase certa". Descartar em silêncio esconderia de quem clicou que uma das
+ * pessoas marcadas não vai ser tocada.
  */
-function casosDoRegistro(reg) {
-  const { cracha, date_ref } = chaveDoCaso(reg);
-  const c = txt(cracha);
-  const d = normData(date_ref) || txt(date_ref).slice(0, 10);
-  if (!c || !d) return "";
-  return JSON.stringify([{ cracha: c, date_ref: d }]);
+function casosDeRegistros(regs) {
+  const lista = [];
+  for (const reg of regs || []) {
+    const { cracha, date_ref } = chaveDoCaso(reg);
+    const c = txt(cracha);
+    const d = normData(date_ref) || txt(date_ref).slice(0, 10);
+    if (!c || !d) return "";
+    lista.push({ cracha: c, date_ref: d });
+  }
+  if (!lista.length) return "";
+  return JSON.stringify(lista);
 }
+
+// O escopo de UM caso — o da execução, que nunca é em lote.
+const casosDoRegistro = (reg) => casosDeRegistros([reg]);
 
 // O rótulo honesto do que o robô vai fazer com ESTA decisão — nunca promete a
 // carta de advertência nem a correção do cartão, que são outros dois robôs.
@@ -1365,9 +1621,10 @@ function BotaoExecucao({ children, tom = "neutro", motivo = AVISO_EXEC }) {
 // em Folgas. Um checkbox "confirmar" marcado por engano vira decisão de verdade na
 // ficha de um trabalhador; dois botões obrigam a escolher, e cada confirmação diz
 // qual dos dois é. O escopo (1 crachá+dia) fica escrito na cara, não implícito.
-function RodapeRobo({ reg, disparando, aoExecutar, resultado }) {
+function RodapeRobo({ reg, disparando, aoExecutar, aoConferir, resultado }) {
   const trava = motivoSemExecucao(reg);
   const plano = trava ? null : planoDaExecucao(reg);
+  const travaConf = motivoSemConferencia(reg);
   return (
     <div className="dp-det-bot">
       <div className="dp-det-bot-linha">
@@ -1421,6 +1678,71 @@ function RodapeRobo({ reg, disparando, aoExecutar, resultado }) {
           </div>
         </>
       )}
+      {/* ── CONFERIR (SÓ LEITURA) — o CAMINHO DE VOLTA do resultado ─────────────
+          Bloco separado do de cima porque é OUTRO ato: executar ESCREVE no Transnet,
+          conferir só LÊ. E é este que fecha o ciclo — enquanto ninguém confere, o
+          caso fica em "Execução pendente" para sempre, porque quem carimba
+          `conferido_em` é o bot, nunca o navegador. */}
+      <div
+        className="dp-det-bot-linha"
+        title={AVISO_CONFERIR}
+        style={{ borderTop: "1px solid var(--dp-border)", paddingTop: 8, marginTop: 2 }}
+      >
+        <b>Conferir no Transnet — robô `ajustes`, modo “{MODO_CONFERIR}”</b>
+        <span className="dp-faint">
+          {" "}
+          · escopo: só {reg.nome} · {reg.dataBR} (1 crachá+dia — `casos` nunca vai vazio, senão o
+          workflow confere a fila inteira)
+        </span>
+      </div>
+      {travaConf ? (
+        <div className="dp-det-bot-linha">
+          <Selo
+            cor="alerta"
+            quebra
+            titulo="O bot confere a MESMA fila que executa: decisão gravada e conferido_em vazio."
+          >
+            conferência indisponível para este caso: {travaConf}
+          </Selo>
+        </div>
+      ) : (
+        <>
+          <div className="dp-det-bot-linha">
+            Abre o <b>cartão ao vivo</b> e compara com o contrato congelado.{" "}
+            <b>Não muda nada no Transnet</b> — nem no ensaio, nem valendo. Valendo, fecha só no{" "}
+            <b>nosso banco</b>: <span className="dp-mono">conferido_em</span>,{" "}
+            <span className="dp-mono">aviso_conferido_em</span> e o veredito; e{" "}
+            <span className="dp-mono">correcao_status='ponto_fechado'</span> quando o Transnet não
+            aceita o dia.
+          </div>
+          <div className="dp-det-bot-acoes">
+            <button
+              type="button"
+              className="dp-btn"
+              disabled={disparando}
+              onClick={() => aoConferir([reg], false, true)}
+              title="Lê o cartão e mostra o resultado no run. Não grava nada — nem no Transnet, nem aqui."
+            >
+              🔍 Ensaio — só ler e mostrar
+            </button>
+            <button
+              type="button"
+              className="dp-btn"
+              style={{ color: "var(--dp-ok-ink)" }}
+              disabled={disparando}
+              onClick={() => aoConferir([reg], true, true)}
+              title="Lê o cartão e, no que bater com o combinado, carimba conferido_em no NOSSO banco. O Transnet continua intocado."
+            >
+              🔒 Conferir e fechar no nosso banco
+            </button>
+          </div>
+          <div className="dp-det-bot-linha dp-faint">
+            Por que existe: “EFETUADO na grade não prova que os horários foram alterados no cartão”
+            (PEDRO 30060491, 06/08).
+          </div>
+        </>
+      )}
+
       {/* SÓ NA PORTA DO AVISO. Advertir e cancelar o aviso pressupõem que existe aviso
           registrado neste crachá+dia; num pedido do colaborador nem desligados eles
           deveriam aparecer — botão morto ainda ensina que aquilo seria possível, e
@@ -1552,6 +1874,58 @@ function Cartao({ batidas, vazio = "—", contra = null }) {
           +{b.length - 2}
         </span>
       ) : null}
+    </span>
+  );
+}
+
+/* ─────────────────── o cartão em QUATRO COMPARTIMENTOS ─────────────────────
+ * A MESMA apresentação da Gordura (abas/Gordura.jsx `LinhaCartao`, ~528), e de
+ * propósito: entrada · saída almoço · volta almoço · saída, cada slot um `.dp-chip`
+ * com a marca E/S, slot vazio como `.dp-chip.none`, slot que o alvo mudou com `.new`.
+ * Não é uma terceira maneira de desenhar cartão — é a de lá, reusada.
+ *
+ * ONDE ELA VALE: na porta "Enviamos para ajuste". Ali o ajuste é RESPOSTA a um aviso
+ * nosso, e o que interessa é o cartão INTEIRO — o que estava e o que fica —, não só a
+ * ponta que o pedido tocou. Na porta "Pedido do colaborador" o `Cartao` continua como
+ * está: lá o assunto é a ponta que ele mexeu.
+ */
+const SLOT_ES = ["E", "S", "E", "S"];
+
+// Minutos do motor → os quatro slots, com a MESMA regra de forma da Gordura:
+// duas batidas são as PONTAS (nunca almoço); quatro ou mais, os quatro primeiros da
+// sequência. Uma ou três batidas é cartão incompleto — preenche na ordem e deixa o
+// resto vazio, que é exatamente o que ele é (a nota do motor explica o porquê).
+function quatroSlots(minutos) {
+  const b = (minutos || []).filter((t) => t != null);
+  if (!b.length) return ["", "", "", ""];
+  if (b.length === 2) return [min2hm(b[0]), "", "", min2hm(b[1])];
+  const quatro = b.slice(0, 4).map(min2hm);
+  while (quatro.length < 4) quatro.push("");
+  return quatro;
+}
+
+// Alvo do caso nos mesmos quatro slots. É o que PEDIMOS naquele crachá+dia — os
+// campos congelados do `ponto_caso`, não um alvo recalculado agora.
+const alvoQuatroSlots = (caso) =>
+  [caso?.alvo_entrada, caso?.alvo_alm_saida, caso?.alvo_alm_volta, caso?.alvo_saida].map((v) =>
+    txt(v),
+  );
+
+function LinhaCartao({ horas, mudou }) {
+  return (
+    <span style={FILA}>
+      {(horas || ["", "", "", ""]).map((h, i) =>
+        h ? (
+          <span key={`slot-${i}`} className={`dp-chip${mudou && mudou[i] ? " new" : ""}`}>
+            <span className="es">{SLOT_ES[i]}</span>
+            {h}
+          </span>
+        ) : (
+          <span key={`slot-${i}`} className="dp-chip none">
+            —
+          </span>
+        ),
+      )}
     </span>
   );
 }
@@ -1869,6 +2243,7 @@ function Detalhe({
   aoMarcar,
   disparando,
   aoExecutar,
+  aoConferir,
   resultadoRobo,
 }) {
   // ENQUANTO O DISPARO ESTÁ NO AR, A DECISÃO NÃO MUDA. O robô já levou a decisão que
@@ -2042,11 +2417,25 @@ function Detalhe({
                 {reg.escala[0] || "—"} – {reg.escala[1] || "—"}
               </span>
             </Linha>
+            {/* Na porta do aviso o assunto é o DIA todo, então o alvo aparece nos
+                quatro compartimentos, como na Gordura. Fora dela o alvo continua
+                sendo lido por ponta — que é o que o pedido do colaborador toca. */}
             <Linha rotulo="Pedimos (alvo)">
-              <span className="dp-mono dp-num">
-                E {reg.alvo[0] || (reg.cobrEntrada ? "—" : "não pedido")} · S{" "}
-                {reg.alvo[1] || (reg.cobrSaida ? "—" : "não pedido")}
-              </span>
+              {reg.temAviso ? (
+                <span style={PILHA}>
+                  <LinhaCartao horas={reg.slotsAlvo} mudou={reg.slotsAlvoMudou} />
+                  <span className="dp-faint" style={MINI}>
+                    {reg.slotsAlvo.some(Boolean)
+                      ? "entrada · saída almoço · volta almoço · saída (destacado = diferente do cartão de hoje)"
+                      : "o aviso deste dia não congelou alvo nenhum no caso"}
+                  </span>
+                </span>
+              ) : (
+                <span className="dp-mono dp-num">
+                  E {reg.alvo[0] || (reg.cobrEntrada ? "—" : "não pedido")} · S{" "}
+                  {reg.alvo[1] || (reg.cobrSaida ? "—" : "não pedido")}
+                </span>
+              )}
             </Linha>
             <Linha rotulo="Régua usada">
               <span className="dp-muted">
@@ -2206,6 +2595,7 @@ function Detalhe({
           reg={reg}
           disparando={disparando}
           aoExecutar={aoExecutar}
+          aoConferir={aoConferir}
           resultado={resultadoRobo}
         />
       </div>
@@ -2230,23 +2620,36 @@ export default function Ocorrencias() {
   const [versao, setVersao] = useState(0);
   const [disparando, setDisparando] = useState(false);
   const [resultadoRobo, setResultadoRobo] = useState(null);
+  // A leitura do lake é por dia e o total de dias é sabido antes de começar: dá para
+  // mostrar avanço de verdade. `null` = ainda na primeira fase (o estado do DP), que
+  // é indeterminada — e barra indeterminada é honesta, barra que finge não é.
+  const [progresso, setProgresso] = useState(null);
+  // O texto grande das regras vive RECOLHIDO. Ele não some (é onde as travas do
+  // trabalhador estão explicadas); fica atrás do botão, fechado por padrão.
+  const [explica, setExplica] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
+    setProgresso(null);
     try {
-      const dados = await carregarOcorrencias();
+      const dados = await carregarOcorrencias((feitos, total) =>
+        setProgresso({ feitos, total }),
+      );
       setBase(dados);
       setErro("");
     } catch (falha) {
       setErro(falha?.message || "Falha ao consultar a base DP360.");
     } finally {
       setCarregando(false);
+      setProgresso(null);
     }
   }, []);
 
   useEffect(() => {
     let ativo = true;
-    carregarOcorrencias()
+    carregarOcorrencias((feitos, total) => {
+      if (ativo) setProgresso({ feitos, total });
+    })
       .then((dados) => {
         if (ativo) setBase(dados);
       })
@@ -2254,7 +2657,9 @@ export default function Ocorrencias() {
         if (ativo) setErro(falha?.message || "Falha ao consultar a base DP360.");
       })
       .finally(() => {
-        if (ativo) setCarregando(false);
+        if (!ativo) return;
+        setCarregando(false);
+        setProgresso(null);
       });
     return () => {
       ativo = false;
@@ -2497,6 +2902,166 @@ export default function Ocorrencias() {
     [carregar],
   );
 
+  /* ── CONFERÊNCIA: lê o cartão ao vivo, NÃO mexe no Transnet ────────────────
+   *
+   * Porte de main.py:2204 (conferir_transnet). Dois escopos, um handler: as linhas
+   * MARCADAS na grade e o CASO ABERTO — em ambos o escopo viaja explícito, porque
+   * `ajustes.yml` roda a fila inteira com `casos` vazio (é o mesmo `if` da execução).
+   *
+   * A diferença para a execução, e é ela que muda o texto da confirmação: nenhum
+   * dos dois botões escreve no Transnet. O que o `confirmar` liga é a escrita no
+   * NOSSO banco — conferido_em / aviso_conferido_em / veredito, e ponto_fechado
+   * quando o dia não aceita lançamento.
+   */
+  const aoConferirRobo = useCallback(
+    async (regs, valendo, noCasoAberto = false) => {
+      const lista = (regs || []).filter(Boolean);
+      // ONDE O RECADO APARECE é dito pelo CHAMADOR, não deduzido do tamanho da lista:
+      // marcar uma linha só na grade e ver o resultado brotar no rodapé de OUTRO caso
+      // aberto é o tipo de confusão que faz alguém achar que conferiu quem não conferiu.
+      const avisar = (texto) => {
+        if (noCasoAberto) setResultadoRobo({ tipo: "erro", texto });
+        setRecado(texto);
+      };
+      if (!lista.length) {
+        avisar("Nenhuma linha marcada para conferir.");
+        return;
+      }
+      const bloqueados = lista
+        .map((r) => ({ r, motivo: motivoSemConferencia(r) }))
+        .filter((x) => x.motivo);
+      if (bloqueados.length) {
+        avisar(
+          `Não dá para conferir — ${bloqueados.length} caso(s) fora da fila do bot: ` +
+            bloqueados
+              .slice(0, 6)
+              .map((x) => `${x.r.nome} ${x.r.dataBR} (${x.motivo})`)
+              .join(" · ") +
+            (bloqueados.length > 6 ? " …" : "") +
+            ".",
+        );
+        return;
+      }
+      const casos = casosDeRegistros(lista);
+      if (!casos) {
+        // NUNCA cair para "[]": ajustes.yml trata escopo vazio como fila inteira, e
+        // no modo conferir com `--confirmar` isso fecharia casos que ninguém olhou.
+        avisar(
+          "Sem crachá+dia para escopar o robô — disparo cancelado. Escopo vazio faria o workflow conferir a fila inteira.",
+        );
+        return;
+      }
+      const nomes =
+        lista
+          .slice(0, 12)
+          .map((r) => `· ${r.nome} ${r.dataBR}`)
+          .join("\n") + (lista.length > 12 ? `\n… e mais ${lista.length - 12}` : "");
+      const ok = confirmar(
+        `${valendo ? "CONFERIR E FECHAR NO NOSSO BANCO" : "CONFERIR — ENSAIO (só lê e mostra)"}: ` +
+          `${lista.length} crachá+dia.\n\n${nomes}\n\n` +
+          `O robô abre o CARTÃO ao vivo e compara com o contrato congelado.\n` +
+          `EM NENHUM DOS DOIS BOTÕES ele muda alguma coisa no Transnet.\n\n` +
+          `${
+            valendo
+              ? "Valendo, o que bater com o combinado é fechado NO NOSSO BANCO: conferido_em, " +
+                "aviso_conferido_em e o veredito em ponto_caso — e o dia que o Transnet não aceita " +
+                "vira correcao_status='ponto_fechado'. É esse carimbo que tira o caso de \"Execução pendente\"."
+              : "No ensaio nada é gravado: nem no Transnet, nem no nosso banco. Só o retrato, no run."
+          }\n\n` +
+          `Por que isto existe: EFETUADO na grade não prova que os horários foram alterados no ` +
+          `cartão (PEDRO 30060491, 06/08).\n` +
+          `Robô: ajustes · modo "${MODO_CONFERIR}" · casos = ${lista.length} crachá+dia (só estes).`,
+      );
+      if (!ok) return;
+
+      setDisparando(true);
+      if (noCasoAberto) setResultadoRobo(null);
+      setRecado("");
+      try {
+        const r = await dispararRoboDP360("ajustes", {
+          modo: MODO_CONFERIR,
+          casos,
+          confirmar: valendo ? "true" : "false",
+        });
+        const texto =
+          `Conferência ${valendo ? "valendo" : "em ensaio"} disparada — ${lista.length} crachá+dia.` +
+          ` O resultado não volta sozinho: ${
+            valendo
+              ? "o bot carimba conferido_em no nosso banco durante o run — recarregue daqui a pouco."
+              : "a leitura fica no log do run."
+          }`;
+        if (noCasoAberto) setResultadoRobo({ tipo: "ok", texto, painel: r?.painel || "" });
+        setRecado(texto);
+        await carregar();
+      } catch (e) {
+        const motivo = e?.message || "Não foi possível disparar o robô.";
+        if (noCasoAberto) setResultadoRobo({ tipo: "erro", texto: `Falhou: ${motivo}` });
+        setRecado(`Falhou: ${motivo}`);
+      } finally {
+        setDisparando(false);
+      }
+    },
+    [carregar],
+  );
+
+  /* ── CAPTURA DA GRADE: sem escopo, e sem o pós-processo do original ────────
+   *
+   * Porte de main.py:1540 (capturar_ocorrencias). Varre a grade inteira do Transnet
+   * e grava as ocorrências no Supabase (bot_ajustes_app.py:543 e :827). Hoje uma
+   * ocorrência nova só entra na base quando alguém abre a ferramenta desktop — é o
+   * buraco que este botão fecha.
+   *
+   * UM BOTÃO SÓ, E É DE PROPÓSITO. `ajustes.yml:66-68` roda a captura SEM `$CONF`:
+   *   "capturar a grade") python bot_ajustes_app.py --capturar --headless ;;
+   * O `confirmar` não chega ao bot neste modo, e `capturar()` grava no Supabase
+   * sempre. Ou seja: NÃO EXISTE ENSAIO DE CAPTURA. Botar aqui um botão "Ensaio" que
+   * na verdade escreve a grade inteira na base seria exatamente a mentira que o
+   * resto desta tela evita — então o disparo vai com `confirmar:"true"`, que é o que
+   * mantém a trilha (dp360_auditoria) honesta sobre um run que escreve de verdade.
+   * (Ensaio × valendo continua valendo como DOIS BOTÕES onde existem dois
+   * comportamentos: executar e conferir.)
+   *
+   * O escopo é "[]" porque a captura não tem escopo — a grade inteira é o objeto, e
+   * o yml nem lê `casos` neste modo. É a única vez em que "[]" é a resposta certa.
+   */
+  const aoCapturar = useCallback(async () => {
+    const ok = confirmar(
+      `CAPTURAR A GRADE do Transnet — de verdade.\n\n` +
+        `Varre a tela "Ocorrências APP" inteira e grava as ocorrências novas na base ` +
+        `(ponto_ajustes_app). NÃO aceita, NÃO rejeita e NÃO decide nada.\n\n` +
+        `SEM ESCOPO: não é por crachá+dia — é a grade toda. É assim no original ` +
+        `(bot_ajustes_app.py --capturar) e o workflow nem lê o filtro neste modo.\n\n` +
+        `NÃO EXISTE ENSAIO desta ação: ajustes.yml roda a captura sem --confirmar, e a ` +
+        `captura sempre grava. Por isso há um botão só.\n\n` +
+        `DUAS COISAS QUE ESTE CAMINHO NÃO FAZ (e o original faz na máquina, depois do run):\n` +
+        `· não carimba a "última captura" — ela continua marcando a última vez que a ` +
+        `ferramenta desktop capturou;\n` +
+        `· não congela a prova (antes/depois/veredito). Aqui a prova só é congelada na ` +
+        `hora da DECISÃO, que é depois.\n\n` +
+        `O INOVE dispara e não espera o run: o resultado aparece na base aos poucos, ` +
+        `então recarregue daqui a pouco.`,
+    );
+    if (!ok) return;
+    setDisparando(true);
+    setRecado("");
+    try {
+      await dispararRoboDP360("ajustes", {
+        modo: MODO_CAPTURAR,
+        casos: "[]", // a captura não tem escopo — ver o comentário acima
+        confirmar: "true",
+      });
+      setRecado(
+        "Captura da grade disparada. O bot grava as ocorrências durante o run — recarregue daqui a " +
+          "pouco. A “última captura” não se move por aqui, e a prova não é congelada neste caminho.",
+      );
+      await carregar();
+    } catch (e) {
+      setRecado(`Falhou: ${e?.message || "Não foi possível disparar o robô."}`);
+    } finally {
+      setDisparando(false);
+    }
+  }, [carregar]);
+
   /* ── decisão em LOTE — com as travas do trabalhador ── */
 
   const emLote = useCallback(
@@ -2634,36 +3199,29 @@ export default function Ocorrencias() {
     colChapa,
     { id: "data", titulo: "Data", largura: 90, classe: "dp-num", valor: (r) => r.dataBR },
     { id: "oq", titulo: "O que", largura: 160, valor: (r) => r.tipoLabel, render: (r) => <Selo>{r.tipoLabel}</Selo> },
+    // ── O CARTÃO INTEIRO, EM QUATRO COMPARTIMENTOS (como na Gordura) ─────────
+    // Nesta porta o ajuste é RESPOSTA a um aviso nosso: o assunto é o dia todo, não
+    // a ponta. Por isso as duas colunas mostram os quatro slots — o que estava
+    // (`Ponto (bateu)`) e o que fica (`Alvo`), com o slot que muda destacado.
     {
       id: "atual",
-      titulo: "Ponto atual",
-      largura: 150,
-      valor: (r) => textoBatidas(r.antes),
-      render: (r) => <Cartao batidas={r.antes} />,
+      titulo: "Ponto (bateu)",
+      largura: 230,
+      valor: (r) => r.slotsAntes.filter(Boolean).join(" "),
+      render: (r) => <LinhaCartao horas={r.slotsAntes} />,
     },
     {
       id: "alvo",
-      titulo: "Pedimos (alvo)",
-      largura: 140,
-      valor: (r) => `${r.alvo[0] || ""} ${r.alvo[1] || ""}`.trim(),
+      titulo: "Alvo (o que pedimos)",
+      largura: 230,
+      valor: (r) => r.slotsAlvo.filter(Boolean).join(" "),
       render: (r) =>
-        r.alvo[0] || r.alvo[1] ? (
-          <span style={FILA}>
-            {r.alvo[0] || r.cobrEntrada ? (
-              <span className="dp-chip">
-                <span className="es">E</span>
-                {r.alvo[0] || "—"}
-              </span>
-            ) : null}
-            {r.alvo[1] || r.cobrSaida ? (
-              <span className="dp-chip">
-                <span className="es">S</span>
-                {r.alvo[1] || "—"}
-              </span>
-            ) : null}
-          </span>
+        r.slotsAlvo.some(Boolean) ? (
+          <LinhaCartao horas={r.slotsAlvo} mudou={r.slotsAlvoMudou} />
         ) : (
-          <span className="dp-faint">—</span>
+          <span className="dp-faint" title="O aviso deste dia não congelou alvo nenhum no caso.">
+            sem alvo congelado
+          </span>
         ),
     },
     colAjustes,
@@ -2789,19 +3347,27 @@ export default function Ocorrencias() {
 
   // Uma CHAVE por grade: as colunas mudam por porta/aba, e a preferência de
   // coluna é por tela (app_config `tbl_p5_conf`, `tbl_p5_env`…).
+  //
+  // O QUE CADA GRADE DEIXA FAZER EM LOTE é diferente, e não por gosto:
+  //  · `loteDecisao` (A decidir / Meus avisos) — grava aceite/recusa. Nada de robô.
+  //  · `loteConferir` (Execução pendente) — a fila do bot é ESTA: decisão gravada e
+  //    `conferido_em` vazio é a definição de exec_pendente. Conferir em lote aqui é
+  //    o caminho de volta do resultado, e não decide nada.
+  // Não existe EXECUÇÃO em lote em nenhuma delas: executar escreve no Transnet, e
+  // isso continua sendo um caso por vez, no caso aberto.
   const GRADE = {
-    conf: { chave: "p5_conf", colunas: COLS_PEDIDO, selecionavel: true },
-    aguard: { chave: "p5_env", colunas: COLS_AVISO, selecionavel: true },
+    conf: { chave: "p5_conf", colunas: COLS_PEDIDO, selecionavel: true, loteDecisao: true },
+    aguard: { chave: "p5_env", colunas: COLS_AVISO, selecionavel: true, loteDecisao: true },
     coment: { chave: "p5_com", colunas: COLS_COMENT, selecionavel: false },
     cancel: { chave: "p5_cancel", colunas: COLS_CANCEL, selecionavel: false },
-    exec: { chave: "p5_exec", colunas: COLS_EXEC, selecionavel: false },
+    exec: { chave: "p5_exec", colunas: COLS_EXEC, selecionavel: true, loteConferir: true },
   };
   const grade = GRADE[abaAtiva] || { chave: "p5_lista", colunas: COLS_LISTA, selecionavel: false };
 
   const VAZIOS = {
     conf: "Nenhum pedido aguardando decisão. Aguarde a captura do Transnet.",
     aguard: "Nenhum aviso esperando você — quem recebeu o aviso já foi tratado.",
-    exec: "Nenhuma decisão aguardando execução do robô. (É aqui que mora a fila do robô: abra o caso e dispare no rodapé.)",
+    exec: "Nenhuma decisão aguardando o robô. (É aqui que mora a fila dele: abra o caso para EXECUTAR no Transnet, ou marque linhas para CONFERIR ao vivo — é a conferência que fecha o caso no nosso banco.)",
     ok: "Nenhum dia fechado como OK nesta porta.",
     recusados: "Nenhuma recusa nesta porta.",
     disc: "Nenhuma advertência ou correção — e isso pode estar certo: só adverte quem recebeu aviso.",
@@ -2810,29 +3376,64 @@ export default function Ocorrencias() {
     coment: "Nenhum comunicado no período.",
   };
 
-  const portaAtual = PORTAS.find((p) => p.id === porta) || PORTAS[0];
+  const marcados = linhas.filter((r) => selIds.includes(r.k));
 
   const barraLote = grade.selecionavel ? (
     <div style={{ ...FILA, gap: 8 }}>
-      <span className="dp-muted dp-num" style={MINI}>
-        {selIds.length ? `${selIds.length} marcada(s)` : "marque linhas para decidir em lote"}
+      <span
+        className="dp-muted dp-num"
+        style={MINI}
+        title={grade.loteConferir ? AVISO_CONFERIR : undefined}
+      >
+        {selIds.length
+          ? `${selIds.length} marcada(s)`
+          : grade.loteConferir
+            ? "marque linhas para conferir no Transnet (só leitura)"
+            : "marque linhas para decidir em lote"}
       </span>
-      <BotaoAcao
-        tom="ok"
-        titulo="Aceita cada dia marcado (grava aceite=aceito). Dia misto, aviso vencido e dia sem simulação confiável são recusados pelo lote."
-        disabled={!selIds.length || gravando}
-        onClick={() => emLote("aceitar")}
-      >
-        ✓ Aceitar marcados
-      </BotaoAcao>
-      <BotaoAcao
-        tom="erro"
-        titulo="Só entra no lote o dia SEM aviso registrado: a recusa encerra (dispensada) e nunca vira advertência. Dia com aviso tem de ser aberto."
-        disabled={!selIds.length || gravando}
-        onClick={() => emLote("rejeitar")}
-      >
-        ✗ Rejeitar marcados (sem aviso)
-      </BotaoAcao>
+      {grade.loteDecisao ? (
+        <>
+          <BotaoAcao
+            tom="ok"
+            titulo="Aceita cada dia marcado (grava aceite=aceito). Dia misto, aviso vencido e dia sem simulação confiável são recusados pelo lote."
+            disabled={!selIds.length || gravando}
+            onClick={() => emLote("aceitar")}
+          >
+            ✓ Aceitar marcados
+          </BotaoAcao>
+          <BotaoAcao
+            tom="erro"
+            titulo="Só entra no lote o dia SEM aviso registrado: a recusa encerra (dispensada) e nunca vira advertência. Dia com aviso tem de ser aberto."
+            disabled={!selIds.length || gravando}
+            onClick={() => emLote("rejeitar")}
+          >
+            ✗ Rejeitar marcados (sem aviso)
+          </BotaoAcao>
+        </>
+      ) : null}
+      {/* CONFERIR EM LOTE — pode, e por um motivo simples: não decide nada e não
+          escreve no Transnet. O escopo continua viajando (um par crachá+dia por
+          linha marcada) e o disparo é recusado inteiro se alguma linha não tiver
+          chave — nunca vai "[]", que o workflow leria como a fila toda. */}
+      {grade.loteConferir ? (
+        <>
+          <BotaoAcao
+            titulo="Lê o cartão ao vivo de cada dia marcado e mostra o resultado no run. Não grava nada — nem no Transnet, nem aqui."
+            disabled={!selIds.length || gravando || disparando}
+            onClick={() => aoConferirRobo(marcados, false)}
+          >
+            🔍 Conferir marcados — ensaio
+          </BotaoAcao>
+          <BotaoAcao
+            tom="ok"
+            titulo="Lê o cartão ao vivo e, no que bater com o combinado, carimba conferido_em no NOSSO banco. O Transnet continua intocado."
+            disabled={!selIds.length || gravando || disparando}
+            onClick={() => aoConferirRobo(marcados, true)}
+          >
+            🔒 Conferir marcados e fechar no nosso banco
+          </BotaoAcao>
+        </>
+      ) : null}
     </div>
   ) : null;
 
@@ -2859,9 +3460,40 @@ export default function Ocorrencias() {
             placeholder="Buscar por nome ou chapa…"
             style={{ width: 230 }}
           />
-          <span className="dp-muted dp-num">
-            {linhas.length} {linhas.length === 1 ? "caso" : "casos"} · janela de {JANELA_DIAS} dias
-          </span>
+          {/* ENQUANTO CARREGA NÃO SE DIZ "0 casos". "0 casos" numa tela que ainda
+              está lendo é afirmação falsa sobre o trabalho do DP — parece fila vazia,
+              é fila desconhecida. No lugar vai a barra, e ela CONTA DIA LIDO SOBRE DIA
+              EM CENA (a leitura do lake é por dia): número de verdade, não animação. */}
+          {carregando ? (
+            <span style={{ ...FILA, gap: 8 }}>
+              <span
+                className={`oc-prog${progresso ? "" : " indeterminada"}`}
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={progresso?.total || undefined}
+                aria-valuenow={progresso?.feitos}
+                aria-label="Lendo a base DP360"
+              >
+                <span
+                  className="oc-prog-fill"
+                  style={
+                    progresso?.total
+                      ? { width: `${Math.round((progresso.feitos / progresso.total) * 100)}%` }
+                      : undefined
+                  }
+                />
+              </span>
+              <span className="dp-muted dp-num" style={MINI}>
+                {progresso?.total
+                  ? `lendo o cartão de cada dia — ${progresso.feitos} de ${progresso.total}`
+                  : "lendo o estado do DP…"}
+              </span>
+            </span>
+          ) : (
+            <span className="dp-muted dp-num">
+              {linhas.length} {linhas.length === 1 ? "caso" : "casos"} · janela de {JANELA_DIAS} dias
+            </span>
+          )}
           {base?.descartados ? (
             <span
               className="dp-faint dp-num"
@@ -2901,27 +3533,26 @@ export default function Ocorrencias() {
         </>
       }
       resumo={
-        /* A regra que manda na tela — sempre visível, no topo (PORTE.md §5). */
+        /* AS REGRAS DA TELA — RECOLHIDAS, NÃO APAGADAS (PORTE.md §5).
+         *
+         * Este texto é onde as travas do trabalhador estão explicadas: recusar ≠
+         * advertir, o que a tela grava, o que ela executa e o que continua fora.
+         * Apagar deixaria a tela sem o porquê, e o porquê é o que impede alguém de
+         * "consertar" uma trava achando que é chatice. Mas ele também estava comendo
+         * o topo de quem já sabe — então mora atrás do botão, fechado por padrão.
+         *
+         * O RECADO (resultado de gravação/disparo) fica SEMPRE visível: ele é a
+         * resposta ao último clique, não explicação de tela. */
         <>
-          <Selo cor="erro" quebra>
-            Recusar não é advertir — advertência só existe depois de aviso registrado.
-          </Selo>{" "}
-          <strong>O que esta tela GRAVA</strong> (em <span className="dp-mono">ponto_caso</span>, e o
-          contrato antes/depois em <span className="dp-mono">ponto_ajustes_app</span>): aceite,
-          recusa, marcação por ocorrência e desfazer.{" "}
-          <strong>O que ela EXECUTA</strong> (robô <span className="dp-mono">ajustes</span>, no caso
-          aberto, um crachá+dia por disparo): leva ao Transnet uma decisão que <em>já</em> está
-          gravada — decidir e executar continuam sendo dois passos, e o botão do robô não decide
-          nada.{" "}
-          <strong>O que ela NÃO faz:</strong> enviar a advertência, corrigir o cartão ou cancelar a
-          ocorrência — esses são os robôs <span className="dp-mono">comunicado</span> e{" "}
-          <span className="dp-mono">ponto</span>, e um modo que o workflow nem expõe; os botões
-          estão desligados e dizem por quê. Recusa sem aviso encerra o
-          caso (<span className="dp-mono">dispensada</span>) e nunca vira advertência. Entrada e
-          saída são julgadas separadamente: uma nunca anula a outra; dia misto e aviso vencido não
-          entram em decisão em lote. Veredito, régua e simulação vêm do motor validado
-          (<span className="dp-mono">regrasPonto.js</span>) — tolerância {TOLERANCIA_MIN} min ·
-          prazo do colaborador {PRAZO_HORAS} h.
+          <button
+            type="button"
+            className="dp-btn"
+            aria-expanded={explica}
+            onClick={() => setExplica((v) => !v)}
+            title="As regras que mandam nesta tela: recusar ≠ advertir, o que ela grava, o que ela executa e o que continua fora."
+          >
+            {explica ? "▾" : "▸"} entenda esta tela
+          </button>
           {recado ? (
             <>
               {" "}
@@ -2929,6 +3560,33 @@ export default function Ocorrencias() {
                 {recado}
               </Selo>
             </>
+          ) : null}
+          {explica ? (
+          <div style={{ marginTop: 8, lineHeight: 1.55 }}>
+            <Selo cor="erro" quebra>
+              Recusar não é advertir — advertência só existe depois de aviso registrado.
+            </Selo>{" "}
+            <strong>O que esta tela GRAVA</strong> (em <span className="dp-mono">ponto_caso</span>, e o
+            contrato antes/depois em <span className="dp-mono">ponto_ajustes_app</span>): aceite,
+            recusa, marcação por ocorrência e desfazer.{" "}
+            <strong>O que ela EXECUTA</strong> (robô <span className="dp-mono">ajustes</span>, nos
+            três modos que o workflow expõe): <em>executar</em> leva ao Transnet uma decisão que já
+            está gravada — no caso aberto, um crachá+dia por disparo; <em>conferir</em> lê o cartão ao
+            vivo, não muda nada no Transnet e, valendo, fecha no nosso banco o que bateu (é o que tira
+            o caso de “Execução pendente”) — nas linhas marcadas ou no caso aberto; <em>capturar</em>{" "}
+            varre a grade e traz as ocorrências novas para a base, sem escopo. Decidir e executar
+            continuam sendo dois passos, e nenhum botão de robô decide nada.{" "}
+            <strong>O que ela NÃO faz:</strong> enviar a advertência, corrigir o cartão ou cancelar a
+            ocorrência — esses são os robôs <span className="dp-mono">comunicado</span> e{" "}
+            <span className="dp-mono">ponto</span>, e um modo que o workflow nem expõe; os botões
+            estão desligados e dizem por quê. Também não congela a prova na captura: isso só acontece
+            na decisão. Recusa sem aviso encerra o
+            caso (<span className="dp-mono">dispensada</span>) e nunca vira advertência. Entrada e
+            saída são julgadas separadamente: uma nunca anula a outra; dia misto e aviso vencido não
+            entram em decisão em lote. Veredito, régua e simulação vêm do motor validado
+            (<span className="dp-mono">regrasPonto.js</span>) — tolerância {TOLERANCIA_MIN} min ·
+            prazo do colaborador {PRAZO_HORAS} h.
+          </div>
           ) : null}
         </>
       }
@@ -3012,8 +3670,56 @@ export default function Ocorrencias() {
         })}
       </div>
 
-      <div className="dp-resumo" style={{ paddingTop: 10 }}>
-        {portaAtual.ajuda}
+      {/* A ajuda da porta ativa NÃO se repete aqui: ela já está escrita dentro do
+          cartão da porta, dois blocos acima, e a repetição só apertava o topo. */}
+
+      {/* ── CAPTURA DA GRADE — ação de TELA, não de linha ───────────────────────
+          Fica fora das grades de propósito: ela não tem escopo (é a grade inteira do
+          Transnet) e não decide nada. E ao lado dela vai escrito o que este caminho
+          NÃO faz — o carimbo e o congelamento do original, que rodam na máquina
+          depois do run. Deixar isso só no comentário faria a tela prometer o que ela
+          não entrega. */}
+      <div className="dp-card" style={{ margin: "8px 20px 0" }}>
+        <div style={{ ...FILA, gap: 10 }}>
+          <button
+            type="button"
+            className="dp-btn"
+            onClick={aoCapturar}
+            disabled={gravando || disparando}
+            title={AVISO_CAPTURA}
+          >
+            🤖 Capturar a grade do Transnet
+          </button>
+          <span className="dp-muted" style={MINI}>
+            Robô <span className="dp-mono">ajustes</span> · modo “{MODO_CAPTURAR}” · sem escopo (a
+            grade inteira). Só LÊ a grade e grava as ocorrências novas na base — não aceita, não
+            rejeita, não decide. Hoje, sem isto, ocorrência nova só entra quando alguém abre a
+            ferramenta desktop.
+          </span>
+        </div>
+        <div style={{ ...FILA, gap: 10, marginTop: 6 }}>
+          <Selo
+            titulo="app_config.ultima_captura — carimbado por main.py:1565, na máquina, DEPOIS do run. Um disparo daqui não move este carimbo."
+            quebra
+          >
+            última captura carimbada: {fmtDataHora(base?.ultimaCaptura)}
+          </Selo>
+          <Selo
+            cor={base?.capturaMaisNova ? "accent" : "neutro"}
+            titulo="O maior `capturado_em` de ponto_ajustes_app. ESTE se move quando a captura roda pela nuvem, porque o bot carimba cada linha que grava."
+            quebra
+          >
+            ocorrência mais nova na base: {fmtDataHora(base?.capturaMaisNova)}
+          </Selo>
+          <span className="dp-faint" style={MINI}>
+            O carimbo da esquerda só se move pela ferramenta desktop — o disparo daqui não o toca,
+            porque quando o botão volta a captura ainda nem começou. E o{" "}
+            <b>congelamento da prova não acontece por este caminho</b>: no original ele roda na
+            máquina depois do run (<span className="dp-mono">congelar_antes</span>); aqui a prova
+            (antes/depois) é congelada só na hora da <b>decisão</b>, que é depois — então a
+            ocorrência capturada pela nuvem entra sem prova congelada.
+          </span>
+        </div>
       </div>
 
       <TabelaDP
@@ -3042,6 +3748,7 @@ export default function Ocorrencias() {
         aoMarcar={aoMarcar}
         disparando={disparando}
         aoExecutar={aoExecutarRobo}
+        aoConferir={aoConferirRobo}
         resultadoRobo={resultadoRobo}
       />
     </AbaShell>
@@ -3058,6 +3765,23 @@ export default function Ocorrencias() {
  *   escopo já processou 34 casos indevidos (24/08). Não existe execução em lote
  *   nesta tela, e o `confirmar` nasce falso no gateway: sem "true", é ensaio.
  *   Quem carimba `conferido_em` é o robô, não o navegador.
+ * · CONFERÊNCIA (LIGADA). Modo "conferir (so leitura)", dois escopos: as LINHAS
+ *   MARCADAS da aba "Execução pendente" e o CASO ABERTO. Lê o cartão ao vivo e não
+ *   muda NADA no Transnet em nenhum dos dois botões; o `confirmar` liga a escrita no
+ *   NOSSO banco (conferido_em / aviso_conferido_em / veredito, e ponto_fechado no dia
+ *   que o Transnet recusa). É o caminho de VOLTA do resultado — sem ele o caso mora
+ *   em "Execução pendente" para sempre. O escopo viaja igual, e a regra do "[]" vale
+ *   igual: as duas ramificações do yml têm o mesmo `if`.
+ * · CAPTURA (LIGADA, com um buraco declarado). Modo "capturar a grade", SEM escopo
+ *   (`casos:"[]"` — a única vez em que "[]" é a resposta certa, porque o yml nem lê o
+ *   filtro nesse modo). UM BOTÃO SÓ: `ajustes.yml:66-68` roda a captura sem `$CONF`,
+ *   então não existe ensaio de captura — ela sempre grava, e um botão "Ensaio" que
+ *   escreve a grade inteira seria mentira. O BURACO: o pós-processo do original
+ *   (`main.py:1550 _pos_captura`) carimba `ultima_captura` e roda `congelar_antes()`
+ *   NA MÁQUINA, depois do run. Aqui o disparo não espera o run, então esta tela LÊ e
+ *   mostra `app_config.ultima_captura` mas NÃO o carimba, e o congelamento da prova
+ *   não acontece por este caminho — a prova é congelada em `gravaContrato`, na hora
+ *   da decisão, que é depois. Está escrito na tela, não só aqui.
  * · ADVERTIR e CORRIGIR (FORA — ver MOTIVO_ADVERTIR). São outros dois robôs
  *   (`comunicado` motivo 103 e `ponto`) e outros dois carimbos
  *   (advertencia_enviada_em / correcao_final_em), gravados por quem LÊ o resultado

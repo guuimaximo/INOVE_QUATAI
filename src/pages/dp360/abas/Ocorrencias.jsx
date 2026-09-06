@@ -7,37 +7,65 @@
 //                     diaStatus (~1586), jaTratado (~117), decJa (~222)
 //   app/main.py     → get_conferencia (~8959), get_todas_ocorrencias (~4050),
 //                     _situacao (~7834), _reaberto (~7822),
-//                     _pendentes_advertencia (~8204), _ref_ponta (~7885),
-//                     _julga_ref (~7926), _rotulo_caso (~2905)
+//                     _pendentes_advertencia (~8204), _rotulo_caso (~2905),
+//                     _grava_contrato (~9467), confirmar_certos (~9498),
+//                     desfazer_decisao (~9519), marcar_ajustes (~9542),
+//                     confirmar_errados (~9664)
+//   src/pages/dp360/regrasPonto.js → O MOTOR DE REGRAS (porte 1:1 do Python,
+//                     validado a 100% contra ele: julgaRef 518/518, julgaAcoes
+//                     1090/1090, simulaCartao 1316/1316, refPonta 1616/1616).
+//                     NENHUM veredito é calculado à mão neste arquivo.
 //   docs/dp360/PORTE.md (constantes e as regras que não podem ser reinventadas)
 //
-// ⚠ ESCOPO DESTA FASE — SOMENTE LEITURA.
-// A tela monta a mesa de decisão inteira, mas NÃO GRAVA nada: os botões de
-// aceitar / rejeitar / advertir / cancelar nascem DESABILITADOS. Motivo: uma
-// decisão errada aqui vira advertência indevida em cima de trabalhador. As
-// chamadas de gravação ficam em TODO, prontas, no fim do arquivo.
+// ⚠ ESCOPO DESTA FASE — GRAVA A DECISÃO, NÃO EXECUTA.
+// Aceitar / rejeitar / marcar por ocorrência / desfazer GRAVAM em `ponto_caso`
+// (e o contrato antes/depois em `ponto_ajustes_app`). O que mexe no Transnet —
+// rodar o bot, advertir, corrigir, cancelar a ocorrência — continua DESLIGADO:
+// decidir e executar são dois passos, e o disparo exige escopo explícito (um
+// clique sem escopo já processou 34 casos indevidos).
 //
 // A REGRA QUE MANDA NA TELA (PORTE.md §5): recusar ≠ advertir. Advertência só
 // existe depois de aviso registrado. É por isso que a navegação é em DOIS
-// NÍVEIS — primeiro a PORTA (de onde o dia veio), depois a aba.
+// NÍVEIS — primeiro a PORTA (de onde o dia veio), depois a aba. E é por isso
+// que a recusa de um dia COM aviso não tem botão na grade: ela só acontece
+// dentro do caso aberto, com o desfecho escolhido à mão.
 // ============================================================================
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowRight, X } from "lucide-react";
 import AbaShell from "./AbaShell";
-import { lerTudoDP360 } from "../../../services/dp360Api";
+import TabelaDP from "../TabelaDP";
+import { lerTudoDP360, upsertDP360 } from "../../../services/dp360Api";
+import {
+  CONSTANTES,
+  batidasDoCartao,
+  bloqueioSimulacao,
+  difRelogio,
+  hm2min,
+  julgaAcoes,
+  julgaRef,
+  min2hm,
+  normData,
+  realocaDia,
+  refDaPonta,
+  refPonta,
+  removeFantasmas,
+  resumoAcoes,
+  simulaCartao,
+  textoBatidas,
+} from "../regrasPonto";
 
 /* ─────────────────────────── constantes do domínio ───────────────────────── */
 
 // PORTE.md §4 — janela de dados de quase todas as leituras do DP360.
 const JANELA_DIAS = 70;
-// PORTE.md §4 / main.py:9959 (tol=10) — tolerância do veredito.
-const TOLERANCIA_MIN = 10;
+// main.py:9959 (tol=10) — a tolerância do veredito é a do MOTOR, não uma cópia.
+const TOLERANCIA_MIN = CONSTANTES.TOL_AJUSTE_MIN;
 // PORTE.md §4 / main.py PRAZO_HORAS = 48.
 const PRAZO_HORAS = 48;
-// main.py DELTA_FONTE = 20 — margem de concordância entre fontes (CANON 6.5).
-const DELTA_FONTE = 20;
 
-const AVISO_FASE = "Gravação liberada na próxima fase (validação pendente)";
+// O que continua desligado nesta fase (só o que MEXE no Transnet).
+const AVISO_EXEC =
+  "Execução desligada: decidir e executar são dois passos. Gravar aqui não roda o bot.";
 
 // app.js:133 — as duas portas + comunicados. A porta define a CONSEQUÊNCIA.
 const PORTAS = [
@@ -131,16 +159,6 @@ function cra8(c) {
   return /^\d+$/.test(s) && s.length > 0 && s.length < 8 ? s.padStart(8, "0") : s;
 }
 
-// main.py:7658 — dd/mm/aaaa ou aaaa-mm-dd → aaaa-mm-dd (chave de join).
-function paraISO(valor) {
-  const s = txt(valor);
-  if (s.includes("/")) {
-    const p = s.split("/");
-    if (p.length === 3) return `${p[2]}-${p[1].padStart(2, "0")}-${p[0].padStart(2, "0")}`;
-  }
-  return s.slice(0, 10);
-}
-
 // main.py:48 — '2026-07-14' → '14/07/2026'.
 function paraBR(iso) {
   const s = txt(iso);
@@ -165,39 +183,18 @@ function isoDiasAtras(dias) {
   return isoDataLocal(d);
 }
 
-function hm2m(valor) {
-  const m = /(\d{1,2}):(\d{2})/.exec(txt(valor));
-  if (!m) return null;
-  return Number(m[1]) * 60 + Number(m[2]);
-}
-
-function m2hm(min) {
-  if (min == null) return "";
-  const v = Math.round(min);
-  return `${String(Math.floor(v / 60)).padStart(2, "0")}:${String(v % 60).padStart(2, "0")}`;
-}
-
-// simulador.var — variante de t (t-24h, t, t+24h) mais perto de ref. É o que faz
-// 02:08 casar com a batida 26:08 do cartão em vez de cair na madrugada errada.
-function variante(t, ref) {
-  if (t == null || ref == null) return t;
-  return [t - 1440, t, t + 1440].reduce((a, b) => (Math.abs(b - ref) < Math.abs(a - ref) ? b : a));
-}
-
-// "E13:36 | S18:27 | ..." ou "13:36,18:27" → ["13:36", "18:27"]
-function parseBatidas(valor) {
-  return txt(valor)
-    .split(/[|,]/)
-    .map((x) => x.trim().replace(/^[ES]\s*/i, "").trim())
-    .filter((x) => /^\d{1,2}:\d{2}$/.test(x));
-}
-
-// main.py:7731 — o cartão vem de `todas_batidas`; `batidas_limpas` derruba a
-// entrada em ~400 dias da base e não serve como "antes".
-function batidasDoCartao(pd) {
-  if (!pd) return [];
-  const t = parseBatidas(pd.todas_batidas);
-  return t.length ? t : parseBatidas(pd.batidas_limpas);
+// CARIMBO DE GRAVAÇÃO. É o `datetime.now().isoformat()` do Python: hora LOCAL, sem
+// fuso no texto. Não pode ser toISOString(): além da regra do projeto, `_reaberto`
+// compara `aviso_enviado_em > conferido_em` COMO TEXTO — misturar um carimbo em UTC
+// com os carimbos locais que já estão na tabela desloca a comparação em 3 horas e o
+// ciclo reaberto passa a mentir.
+function agoraISOLocal() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` +
+    `T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  );
 }
 
 function fmtDataHora(valor) {
@@ -231,6 +228,11 @@ function pedacos(lista, tamanho) {
   const out = [];
   for (let i = 0; i < lista.length; i += tamanho) out.push(lista.slice(i, i + tamanho));
   return out;
+}
+
+function confirmar(texto) {
+  if (typeof window === "undefined" || typeof window.confirm !== "function") return false;
+  return window.confirm(texto);
 }
 
 /* ─────────────────────────── regras portadas do DP ───────────────────────── */
@@ -302,26 +304,6 @@ function situacaoDoCaso(veredito, caso, temAviso) {
   return { certo: "conf_certo", errado: "conf_errado" }[veredito] || "conf";
 }
 
-// main.py:7885 (_ref_ponta) — a escada do CANON para achar a referência de UMA ponta.
-function refDaPonta(sst, val, ct, esc) {
-  const s = hm2m(sst);
-  const v = hm2m(val);
-  const c = hm2m(ct);
-  const e = hm2m(esc);
-  if (s != null && v != null && Math.abs(s - v) <= DELTA_FONTE)
-    return [(s + v) / 2, "real (SST+bilhetagem)"];
-  if (v != null && c != null && Math.abs(v - c) <= DELTA_FONTE)
-    return [v, "real (bilhetagem+Citatti)"];
-  if (v != null && c != null) return [v, `bilhetagem (Citatti divergiu ${Math.abs(v - c)} min)`];
-  if (s != null && c != null && Math.abs(s - c) <= DELTA_FONTE)
-    return [c, "Citatti (confirmado pelo SST)"];
-  if (c != null && v == null)
-    return [c, `Citatti${s != null ? " (SST divergiu — desconexão?)" : ""}`];
-  if (s != null) return [s, "SST"];
-  if (v != null) return [v, "bilhetagem"];
-  return e != null ? [e, "escala"] : [null, ""];
-}
-
 // app.js:1586 (diaStatus) — o status do DIA a partir das pontas cobradas.
 // PONTA INDEPENDENTE (PORTE.md §5): uma nunca anula a outra; misto obriga abrir o caso.
 function statusDoDia(reg) {
@@ -362,10 +344,13 @@ function jaTratado(reg) {
 
 /* ─────────────────────────────── carga de dados ──────────────────────────── */
 
+// `dt_referencia_ponto` é o SEGUNDO dia de referência do lake — é ele que alimenta
+// a realocação de dia do motor (main.py:6445). Sem a coluna, 71 pedidos eram
+// julgados contra o cartão do dia errado.
 const COLS_AJUSTES =
   "id_ocorrencia,cracha,nome,date_ref,escala,tipo_ajuste,dia_posterior,ponto_antes," +
   "ponto_depois,horario_ajuste,alvo_etapa2,verdict,situacao_ajuste,respondido_por," +
-  "origem,abertura,capturado_em,aceito_em,batida_atual,batida_nova";
+  "origem,abertura,capturado_em,aceito_em,batida_atual,batida_nova,dt_referencia_ponto";
 
 const COLS_DIARIO =
   "cracha,date_ref,todas_batidas,batidas_limpas,jornada_liquida_min,entrada,saida," +
@@ -425,24 +410,25 @@ async function carregarOcorrencias() {
   const pedidos = ajustesBrutos.filter((o) => txt(o.tipo_ajuste));
   const descartados = ajustesBrutos.length - pedidos.length;
 
-  // chaves em cena = crachá × dia dos pedidos + dos casos
-  const chaves = new Map();
-  const anota = (cracha, data) => {
-    const c = txt(cracha);
-    const iso = paraISO(data);
-    if (!c || !iso) return;
-    chaves.set(`${cra8(c)}|${iso}`, { cracha: c, iso });
-  };
-  pedidos.forEach((o) => anota(o.cracha, o.date_ref));
-  casos.forEach((c) => anota(c.cracha, c.date_ref));
-
+  // chaves em cena = crachá × dia dos pedidos + dos casos. O dia ALTERNATIVO do
+  // pedido entra na lista de datas: sem o cartão do outro dia a realocação do
+  // motor (realocaDia) não tem contra o que casar a batida.
   const crachasBrutos = new Set();
   const datas = new Set();
-  chaves.forEach(({ cracha, iso }) => {
-    crachasBrutos.add(cracha);
-    crachasBrutos.add(cra8(cracha));
+  const anota = (cracha, data) => {
+    const c = txt(cracha);
+    const iso = normData(data);
+    if (!c || !iso) return;
+    crachasBrutos.add(c);
+    crachasBrutos.add(cra8(c));
     datas.add(iso);
+  };
+  pedidos.forEach((o) => {
+    anota(o.cracha, o.date_ref);
+    anota(o.cracha, o.dt_referencia_ponto);
   });
+  casos.forEach((c) => anota(c.cracha, c.date_ref));
+
   const listaCrachas = [...crachasBrutos];
   const listaDatas = [...datas];
 
@@ -462,18 +448,42 @@ async function carregarOcorrencias() {
     intervalo,
     realManual,
     descartados,
-    chaves,
-    lidoEm: new Date().toISOString(),
+    lidoEm: agoraISOLocal(),
   };
 }
 
 /* ────────────────────── montagem das linhas (a conferência) ──────────────── */
 
+// O pedido do lake no formato que o MOTOR entende (regrasPonto: {tipo, hora, id}).
+const pedidoDoMotor = (o) => ({
+  tipo: txt(o.tipo_ajuste),
+  hora: txt(o.horario_ajuste),
+  ajuste: txt(o.horario_ajuste),
+  id: txt(o.id_ocorrencia),
+});
+
+// main.py:9070-9082 (_prev) — a prévia simula CADA pedido uma vez, e só os que ainda
+// estão abertos. Reenvio do mesmo pedido (17% do volume) quebrava a simulação, e
+// EFETUADO/RECUSADO é história, não prévia (o efetuado já está dentro do cartão).
+function pedidosDaPrevia(grupo) {
+  const vistos = new Set();
+  const prev = [];
+  grupo.forEach((o) => {
+    const st = txt(o.situacao_ajuste).toUpperCase();
+    if (st === "EFETUADO" || st === "RECUSADO") return;
+    const chave = `${txt(o.tipo_ajuste).toLowerCase().slice(0, 5)}\u0000${txt(o.horario_ajuste)}`;
+    if (vistos.has(chave)) return;
+    vistos.add(chave);
+    prev.push(o);
+  });
+  return prev;
+}
+
 function montarRegistros(base) {
   if (!base) return [];
-  const { casos, pedidos, ocorrencias, diario, gordura, intervalo, realManual, chaves } = base;
+  const { casos, pedidos, ocorrencias, diario, gordura, intervalo, realManual } = base;
 
-  const chave = (cracha, data) => `${cra8(cracha)}|${paraISO(data)}`;
+  const chave = (cracha, data) => `${cra8(cracha)}|${normData(data)}`;
   const indexar = (linhas, colData) => {
     const m = new Map();
     (linhas || []).forEach((r) => m.set(chave(r.cracha, r[colData]), r));
@@ -486,10 +496,46 @@ function montarRegistros(base) {
   const mapaIntervalo = indexar(intervalo, "data_ref");
   const mapaReal = indexar(realManual, "date_ref");
 
+  // ── REALOCAÇÃO DE DIA (motor: realocaDia — porte de main.py:6445) ─────────
+  // O lake traz DOIS dias de referência e eles divergem em 79% dos pedidos.
+  // Quando a batida que ele quer mexer não está no cartão do nosso dia e está no
+  // do outro, o dia é o outro. Roda ANTES de agrupar: o grupo do dia errado
+  // julgava contra o cartão errado.
+  let realocados = 0;
+  const pedidosNoDia = (pedidos || []).map((o) => {
+    const d0 = normData(o.date_ref);
+    const alt = normData(o.dt_referencia_ponto);
+    const r = realocaDia({
+      pedido: {
+        tipo: o.tipo_ajuste,
+        batida_atual: o.batida_atual,
+        ajuste: o.horario_ajuste,
+        date_ref: d0,
+        date_ref_alt: alt,
+      },
+      cartaoDoDia: mapaDiario.get(`${cra8(o.cracha)}|${d0}`) || {},
+      cartaoDoDiaAlt: mapaDiario.get(`${cra8(o.cracha)}|${alt}`) || {},
+    });
+    if (!r.realocou) return { ...o, _iso: d0, _realocadoDe: "" };
+    realocados += 1;
+    return { ...o, _iso: r.dateRef, _realocadoDe: r.diaRealocado };
+  });
+
+  // chaves em cena = crachá × dia (já realocado) dos pedidos + dos casos
+  const chaves = new Map();
+  const anota = (cracha, iso) => {
+    const c = txt(cracha);
+    if (!c || !iso) return;
+    chaves.set(`${cra8(c)}|${iso}`, { cracha: c, iso });
+  };
+  pedidosNoDia.forEach((o) => anota(o.cracha, o._iso));
+  (casos || []).forEach((c) => anota(c.cracha, normData(c.date_ref)));
+
   // main.py:8190 (_dias_com_aviso) — houve aviso no dia? DUAS fontes: o carimbo do
   // caso e a ocorrência lançada. Ler só uma fazia a advertência nunca sair da fila.
+  // É o mesmo separador que decide se uma RECUSA pode virar advertência.
   const diasComAviso = new Set();
-  casos.forEach((c) => {
+  (casos || []).forEach((c) => {
     if (txt(c.aviso_enviado_em)) diasComAviso.add(chave(c.cracha, c.date_ref));
   });
   (ocorrencias || []).forEach((o) => {
@@ -506,8 +552,8 @@ function montarRegistros(base) {
 
   // pedidos agrupados por crachá × dia (1 dia = N ocorrências no Transnet)
   const grupos = new Map();
-  pedidos.forEach((o) => {
-    const k = chave(o.cracha, o.date_ref);
+  pedidosNoDia.forEach((o) => {
+    const k = `${cra8(o.cracha)}|${o._iso}`;
     if (!grupos.has(k)) grupos.set(k, []);
     grupos.get(k).push(o);
   });
@@ -535,81 +581,157 @@ function montarRegistros(base) {
 
     const primeiro = grupo[0] || {};
     const ultimo = grupo[grupo.length - 1] || {};
+    const cat = categoriaPorCracha.get(cra8(cracha)) || "MOTORISTA";
 
-    // ── cartão: antes fiel (ponto_diario) e o "depois" congelado nos pedidos ──
-    // O merge por slot é o mesmo de consolidaDia (app.js:483): o estado final é o
-    // último não-vazio de cada posição. O simulador do backend (_simula) NÃO foi
-    // portado — aqui a prova é o `ponto_depois` que o lake já congelou.
+    // ── O CARTÃO ANTES (main.py:9057) ────────────────────────────────────────
+    // Fonte = `todas_batidas` do nosso ponto_diario; a grade do Transnet distorce
+    // (inclui batida que não existe e perde a notação >24h). Sem cartão, o
+    // `ponto_antes` congelado no pedido. Tudo em MINUTOS, como o motor trabalha.
     const antesCartao = batidasDoCartao(cp);
-    const antesGrade = parseBatidas(primeiro.ponto_antes);
-    const antes = antesCartao.length ? antesCartao : antesGrade;
-    const depois = [];
-    grupo.forEach((o) =>
-      parseBatidas(o.ponto_depois).forEach((t, i) => {
-        if (t) depois[i] = t;
-      }),
-    );
-    const depoisLimpo = depois.filter(Boolean);
+    const antesMin = antesCartao.length ? antesCartao : batidasDoCartao(primeiro.ponto_antes);
 
-    // ── a régua do veredito, na ordem do get_conferencia (main.py:9130-9147):
+    // main.py:9124 — `lim` = o cartão ANTES com os FANTASMAS REMOVIDOS. É contra
+    // ele que o veredito mede "que ponta ele mexeu" (batida duplicada em <=6 min é
+    // o MESMO evento; sem colapsar, um cartão de 3 batidas reais parece ter 4).
+    // `desenrolar:false` reproduz a chamada crua do Python (lá o desenrolo é feito
+    // dentro do simulador, não aqui).
+    const { limpas: lim, fora: fantasmas } = removeFantasmas(antesMin, { desenrolar: false });
+
+    // ── O CARTÃO DEPOIS = SIMULAÇÃO (motor: simulaCartao) ────────────────────
+    // Não é mais o `ponto_depois` congelado lido do lake: o motor aplica os pedidos
+    // sobre o cartão real, com as regras que o congelado não tem (ponta nova em vez
+    // de substituição, encaixe da inserção, AM/PM, teto de 4 campos).
+    const refsEscala = [hm2min(cp.esc_entrada), hm2min(cp.esc_saida)].filter((v) => v != null);
+    const fechado = txt(cp.status_ponto).toUpperCase() === "SEM_PONTO";
+    const prev = pedidosDaPrevia(grupo);
+    const previa = simulaCartao({
+      batidas: antesMin,
+      pedidos: prev.map(pedidoDoMotor),
+      refs: refsEscala,
+      cartaoFechado: fechado,
+    });
+    let notas = previa.notas.filter((n) => !String(n).startsWith("_fantasma"));
+    // "sem cartão" tem DUAS causas e a nota do simulador só conhece uma (main.py:9088).
+    if (fechado) {
+      notas = notas.map((n) =>
+        String(n).includes("aguardando o dia fechar")
+          ? "não bateu ponto no dia — nada a conferir"
+          : n,
+      );
+    }
+    let sim = previa.batidas;
+
+    // main.py:9098-9122 — O "DEPOIS" TEM QUE RESPEITAR A DECISÃO. Enquanto aberto,
+    // ele é a PRÉVIA de aceitar tudo; depois de decidido vira EVIDÊNCIA, e evidência
+    // que ignora a decisão mente. Com decisão: simula SÓ o que foi aceito; e o
+    // contrato congelado (ponto_depois) manda por cima.
+    const decidido = ["aceito", "rejeitado"].includes(txt(ciclo.aceite));
+    if (decidido) {
+      const ids = txt(ciclo.ajuste_ids)
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean);
+      const temPrefixo = ids.some((x) => x.slice(0, 2) === "A:" || x.slice(0, 2) === "R:");
+      const aceitos = temPrefixo
+        ? new Set(ids.filter((x) => x.slice(0, 2) === "A:").map((x) => x.slice(2)))
+        : new Set(txt(ciclo.aceite) === "aceito" ? grupo.map((o) => txt(o.id_ocorrencia)) : []);
+      const oks = prev.filter((o) => aceitos.has(txt(o.id_ocorrencia)));
+      sim = oks.length
+        ? simulaCartao({
+            batidas: antesMin,
+            pedidos: oks.map(pedidoDoMotor),
+            refs: refsEscala,
+            cartaoFechado: fechado,
+          }).batidas
+        : antesMin;
+      const contratos = grupo.map((o) => txt(o.ponto_depois)).filter(Boolean);
+      const contrato = contratos.length ? batidasDoCartao(contratos[contratos.length - 1]) : [];
+      if (contrato.length === 2 || contrato.length === 4) sim = contrato;
+    }
+
+    // main.py:6702 (_bloqueio_simulacao) — por que este dia NÃO pode ser julgado.
+    const bloqueio = bloqueioSimulacao(notas);
+
+    // ── A RÉGUA (motor: refDaPonta) — main.py:9132-9147 ──────────────────────
     // Real manual do DP > ALVO congelado no caso > sugestão do dia > escada do canon.
-    const alvoE = hm2m(caso.alvo_entrada);
-    const alvoS = hm2m(caso.alvo_saida);
-    const rmE = hm2m(rm.entrada);
-    const rmS = hm2m(rm.saida);
-    const sugE = hm2m(cp.entrada_sug);
-    const sugS = hm2m(cp.saida_sug);
-    const refE =
-      rmE != null
-        ? [rmE, "Real (você)"]
-        : alvoE != null
-          ? [alvoE, "régua do aviso"]
-          : sugE != null
-            ? [sugE, "sugestão do aviso"]
-            : refDaPonta(g.sst_vinculo, g.val_inicio, g.op_inicio, cp.esc_entrada);
-    const refS =
-      rmS != null
-        ? [rmS, "Real (você)"]
-        : alvoS != null
-          ? [alvoS, "régua do aviso"]
-          : sugS != null
-            ? [sugS, "sugestão do aviso"]
-            : refDaPonta(g.sst_desvinculo, g.val_fim, g.op_fim, cp.esc_saida);
+    const fontesE = {
+      sst: g.sst_vinculo,
+      val: g.val_inicio,
+      citatti: g.op_inicio,
+      escala: cp.esc_entrada,
+    };
+    const fontesS = {
+      sst: g.sst_desvinculo,
+      val: g.val_fim,
+      citatti: g.op_fim,
+      escala: cp.esc_saida,
+    };
+    const refE = refDaPonta({
+      ponta: "entrada",
+      realManual: { entrada: rm.entrada },
+      alvoCongelado: { entrada: caso.alvo_entrada },
+      sugestaoDia: { entrada: cp.entrada_sug },
+      fontes: fontesE,
+    });
+    const refS = refDaPonta({
+      ponta: "saida",
+      realManual: { saida: rm.saida },
+      alvoCongelado: { saida: caso.alvo_saida },
+      sugestaoDia: { saida: cp.saida_sug },
+      fontes: fontesS,
+    });
+    // o que o CANON sozinho diria (sem a cascata) — só para explicar a régua na tela
+    const canonE = refPonta({ ponta: "entrada", fontes: fontesE });
+    const canonS = refPonta({ ponta: "saida", fontes: fontesS });
+
+    // ── O VEREDITO (motor: julgaRef) — main.py:7926 ──────────────────────────
+    // Mede o cartão simulado contra a régua, POR PONTA, e só a ponta que o pedido
+    // mexeu. `refs` pré-resolvido = a assinatura crua do Python
+    // (_julga_ref(lim, sim, ref_e, ref_s, tol)).
+    const jr = julgaRef({
+      cartaoAntes: lim,
+      cartaoDepois: sim,
+      refs: { entrada: refE, saida: refS },
+      tol: TOLERANCIA_MIN,
+    });
+    if (!jr.combinado && jr.motivo) notas = [...notas, jr.motivo]; // main.py:9160
 
     // cobrado = o aviso pediu essa ponta (main.py:9151-9153)
     const pontaCaso = txt(caso.ponta).toLowerCase();
     const cobrEntrada = Boolean(txt(caso.alvo_entrada)) || ["entrada", "ambos"].includes(pontaCaso);
     const cobrSaida = Boolean(txt(caso.alvo_saida)) || ["saida", "ambos"].includes(pontaCaso);
 
-    // main.py:7926 (_julga_ref) — só entra na conta a ponta que o pedido MEXEU.
-    // Quem só ajustou a saída não pode ser reprovado pela entrada.
-    const julga = (valor, ref) => {
-      const b = hm2m(valor);
-      if (b == null || ref == null || ref[0] == null) return "";
-      return Math.abs(variante(ref[0], b) - b) <= TOLERANCIA_MIN ? "certo" : "errado";
-    };
-    const mexeuEntrada = depoisLimpo.length > 0 && (!antes.length || depoisLimpo[0] !== antes[0]);
-    const mexeuSaida =
-      depoisLimpo.length > 0 &&
-      (!antes.length || depoisLimpo[depoisLimpo.length - 1] !== antes[antes.length - 1]);
     // main.py:9155 (_pst): cobrado e não mexeu = pendente; não pedido = fora.
     const pst = (st, cobr) => (st === "certo" || st === "errado" ? st : cobr ? "pendente" : "");
-    const verEntrada = pst(mexeuEntrada ? julga(depoisLimpo[0], refE) : "", cobrEntrada);
-    const verSaida = pst(
-      mexeuSaida ? julga(depoisLimpo[depoisLimpo.length - 1], refS) : "",
-      cobrSaida,
-    );
+    const verEntrada = pst(jr.entrada, cobrEntrada);
+    const verSaida = pst(jr.saida, cobrSaida);
+    const veredito = jr.combinado || "";
 
-    // veredito combinado: o congelado do lake manda (é o canônico); sem ele, o AND.
-    const congelado = txt([...grupo].reverse().find((o) => txt(o.verdict))?.verdict).toLowerCase();
-    const pontas = [verEntrada, verSaida].filter((x) => x === "certo" || x === "errado");
-    const veredito = ["certo", "errado"].includes(congelado)
-      ? congelado
-      : pontas.length
-        ? pontas.every((x) => x === "certo")
-          ? "certo"
-          : "errado"
-        : "";
+    // ── VEREDITO POR OCORRÊNCIA (motor: julgaAcoes / resumoAcoes) ────────────
+    // É o que permite decidir um dia MISTO sem "rejeitar tudo" (eram 124 casos).
+    const acoes = julgaAcoes({
+      pedidos: grupo.map(pedidoDoMotor),
+      alvo: {
+        entrada: caso.alvo_entrada,
+        saida: caso.alvo_saida,
+        almSaida: caso.alvo_alm_saida,
+        almVolta: caso.alvo_alm_volta,
+        origem: caso.origem,
+      },
+      gordura: g,
+      sugestao: {
+        entrada_sug: cp.entrada_sug,
+        saida_sug: cp.saida_sug,
+        almoco_saida_sug: cp.almoco_saida_sug,
+        almoco_volta_sug: cp.almoco_volta_sug,
+      },
+      escala: { entrada: cp.esc_entrada, saida: cp.esc_saida },
+      cartao: cp,
+    });
+    const resumo = resumoAcoes(acoes, {
+      categoria: cat,
+      temGordura: Boolean(g && Object.keys(g).length),
+    });
 
     // desfecho no Transnet (lake): recusado > pendente > efetuado (main.py:9032)
     const peso = { RECUSADO: 3, PENDENTE: 2, EFETUADO: 1 };
@@ -677,8 +799,6 @@ function montarRegistros(base) {
       situacaoAviso = "aguardando";
     }
 
-    const cat = categoriaPorCracha.get(cra8(cracha)) || "MOTORISTA";
-
     registros.push({
       k,
       cracha,
@@ -696,21 +816,36 @@ function montarRegistros(base) {
       realManual: rm,
       ajustes: grupo,
       nAjustes: grupo.length,
+      realocado: txt(primeiro._realocadoDe),
       capturadoEm: txt(ultimo.capturado_em),
-      antes,
+      antes: lim,
+      antesBruto: antesMin,
       antesFonte: antesCartao.length ? "cartão" : "grade",
-      depois: depoisLimpo,
+      antesTexto: textoBatidas(lim),
+      fantasmas,
+      depois: sim,
+      depoisTexto: textoBatidas(sim),
+      notas,
+      bloqueio,
       escala: [txt(cp.esc_entrada) || txt(g.esc_inicio), txt(cp.esc_saida) || txt(g.esc_fim)],
       alvo: [txt(caso.alvo_entrada), txt(caso.alvo_saida)],
-      baseE: refE[1],
-      baseS: refS[1],
-      refE: refE[0] == null ? "" : m2hm(refE[0]),
-      refS: refS[0] == null ? "" : m2hm(refS[0]),
+      baseE: refE.rotulo,
+      baseS: refS.rotulo,
+      refE: refE.ref == null ? "" : min2hm(refE.ref),
+      refS: refS.ref == null ? "" : min2hm(refS.ref),
+      canonE,
+      canonS,
+      baseVeredito: jr.base,
+      motivoVeredito: jr.motivo,
       cobrEntrada,
       cobrSaida,
       verEntrada,
       verSaida,
       veredito,
+      acoes: acoes.itens,
+      fonteAlvo: acoes.fonteAlvo,
+      alvoPar: acoes.alvoPar,
+      resumoAcoes: resumo,
       desfecho,
       situacao,
       situacaoAviso,
@@ -730,6 +865,7 @@ function montarRegistros(base) {
 
   registros.forEach((r) => {
     r.diaStatus = statusDoDia(r);
+    r.realocados = realocados;
   });
   registros.sort((a, b) => b.iso.localeCompare(a.iso) || a.nome.localeCompare(b.nome));
   return registros;
@@ -766,8 +902,7 @@ function linhasDaAba(registros, porta, aba) {
   if (aba === "coment") return base;
   if (aba === "cancel")
     return registros.filter(
-      (r) =>
-        txt(r.caso.aviso_cancelado_em) || txt(r.caso.aceite).toLowerCase() === "cancelado",
+      (r) => txt(r.caso.aviso_cancelado_em) || txt(r.caso.aceite).toLowerCase() === "cancelado",
     );
   const cfg = {
     ok: ["ok"],
@@ -801,8 +936,7 @@ function contagens(registros) {
   ).length;
   const execDe = (porta) =>
     registros.filter(
-      (r) =>
-        daPorta(porta)(r) && ["exec_pendente", "recusa_exec_pendente"].includes(r.situacao),
+      (r) => daPorta(porta)(r) && ["exec_pendente", "recusa_exec_pendente"].includes(r.situacao),
     ).length;
   return {
     porta: { pedido: pedidoConf, aviso: avisoConf, coment: 0 },
@@ -813,6 +947,172 @@ function contagens(registros) {
       "aviso:exec": execDe("aviso"),
     },
   };
+}
+
+/* ═══════════════════════════ GRAVAÇÃO DA DECISÃO ═════════════════════════════
+ * Campos: os de main.py, um a um. Nada inventado.
+ *   confirmar_certos  (9498) · confirmar_errados (9664) · marcar_ajustes (9542)
+ *   desfazer_decisao  (9519) · _grava_contrato   (9467)
+ *
+ * O QUE ESTA TELA NÃO FAZ: rodar o bot, advertir, corrigir, cancelar a ocorrência
+ * no Transnet. Decidir ≠ executar.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+// A CHAVE DA LINHA EXISTENTE MANDA. O upsert casa por (cracha, date_ref); se a
+// linha do caso guarda '030061089' e a gente grava '30061089', nasce uma linha
+// irmã e a decisão fica invisível para o resto do fluxo.
+function chaveDoCaso(reg) {
+  const c = reg.caso || {};
+  if (txt(c.cracha) && txt(c.date_ref)) return { cracha: c.cracha, date_ref: c.date_ref };
+  return { cracha: reg.cracha, date_ref: reg.iso };
+}
+
+const idsDoDia = (reg) => (reg.ajustes || []).map((o) => txt(o.id_ocorrencia)).filter(Boolean);
+
+/**
+ * main.py:9467 (_grava_contrato) — o CONTRATO da decisão: como o cartão estava e
+ * como tem que ficar. CONGELAMENTO: nunca reescreve um contrato que já existe —
+ * o primeiro é o que o DP aprovou, o resto é ruído. Falhar aqui não pode derrubar
+ * a decisão (no Python o except é mudo); aqui devolvemos o aviso para a tela.
+ */
+async function gravaContrato(reg, ids, antes, depois) {
+  const alvo = new Set((ids || []).map(txt).filter(Boolean));
+  const dep = txt(depois);
+  if (!alvo.size) return "";
+  const linhas = [];
+  (reg.ajustes || []).forEach((o) => {
+    const id = txt(o.id_ocorrencia);
+    if (!alvo.has(id)) return;
+    if (txt(o.ponto_depois)) return; // já tem contrato — CONGELADO, não mexe
+    const linha = { id_ocorrencia: id };
+    if (txt(antes)) linha.ponto_antes = txt(antes);
+    if (dep) linha.ponto_depois = dep;
+    if (Object.keys(linha).length > 1) linhas.push(linha);
+  });
+  if (!linhas.length) return "";
+  try {
+    await upsertDP360("ponto_ajustes_app", linhas);
+    return "";
+  } catch (e) {
+    return `decisão gravada, mas o contrato antes/depois falhou: ${e?.message || e}`;
+  }
+}
+
+/** main.py:9498 (confirmar_certos) — aceite do DIA. */
+async function gravarAceite(reg) {
+  const agora = agoraISOLocal();
+  const ids = idsDoDia(reg);
+  // o "depois" só é congelado quando dá para confiar nele (sem nota grave)
+  const aviso = await gravaContrato(reg, ids, reg.antesTexto, reg.bloqueio ? "" : reg.depoisTexto);
+  await upsertDP360("ponto_caso", {
+    ...chaveDoCaso(reg),
+    aceite: "aceito",
+    ajuste: "certo",
+    aceito_em: agora,
+    ajuste_ids: ids.join(","),
+    atualizado_em: agora,
+  });
+  return aviso;
+}
+
+/**
+ * main.py:9664 (confirmar_errados) — recusa do DIA.
+ *   modo 'completo' → segue para Advertências e Correções (só existe COM aviso).
+ *   modo 'rejeitar' → correcao_status='dispensada': encerra, não adverte.
+ * O `depois` NÃO é congelado numa recusa: o ponto fica como estava, e um contrato
+ * de "depois" numa recusa viraria plano de execução de um cartão que ninguém
+ * aprovou (mesma escolha de main.py:decidir_ajustes, `antes and not depois`).
+ */
+async function gravarRecusa(reg, modo) {
+  const agora = agoraISOLocal();
+  const ids = idsDoDia(reg);
+  const aviso = await gravaContrato(reg, ids, reg.antesTexto, "");
+  await upsertDP360("ponto_caso", {
+    ...chaveDoCaso(reg),
+    aceite: "rejeitado",
+    ajuste: "errado",
+    ajuste_ids: ids.join(","),
+    correcao_status: modo === "rejeitar" ? "dispensada" : "",
+    atualizado_em: agora,
+  });
+  return aviso;
+}
+
+/** main.py:9519 (desfazer_decisao) — o caso volta para a fila. */
+async function gravarDesfazer(reg) {
+  await upsertDP360("ponto_caso", {
+    ...chaveDoCaso(reg),
+    aceite: "pendente",
+    ajuste: null,
+    aceito_em: null,
+    atualizado_em: agoraISOLocal(),
+  });
+  return "";
+}
+
+/**
+ * main.py:9542 (marcar_ajustes) — veredito POR OCORRÊNCIA (A:/R: em ajuste_ids).
+ * `aceite` fica PENDENTE de propósito: marcar é decisão, lançar é ação posterior.
+ * É o caminho do dia MISTO — que não cabe em decisão de dia inteiro.
+ */
+async function gravarMarcacao(reg, aceitar, rejeitar) {
+  const ace = (aceitar || []).map(txt).filter(Boolean);
+  const rej = (rejeitar || []).map(txt).filter(Boolean);
+  if (!ace.length && !rej.length) throw new Error("Nenhuma marcação.");
+  await upsertDP360("ponto_caso", {
+    ...chaveDoCaso(reg),
+    aceite: "pendente",
+    ajuste: rej.length ? "errado" : "certo",
+    ajuste_ids: [...ace.map((i) => `A:${i}`), ...rej.map((i) => `R:${i}`)].join(","),
+    aceito_em: null,
+    atualizado_em: agoraISOLocal(),
+  });
+  // o contrato guarda o cartão como ele fica ACEITANDO SÓ O QUE FOI MARCADO
+  let depois = "";
+  if (ace.length && !reg.bloqueio) {
+    const aceitos = (reg.ajustes || []).filter((o) => ace.includes(txt(o.id_ocorrencia)));
+    const sim = simulaCartao({
+      batidas: reg.antesBruto,
+      pedidos: aceitos.map(pedidoDoMotor),
+      refs: [hm2min(reg.escala[0]), hm2min(reg.escala[1])].filter((v) => v != null),
+      cartaoFechado: txt(reg.cartao?.status_ponto).toUpperCase() === "SEM_PONTO",
+    });
+    if (!bloqueioSimulacao(sim.notas)) depois = textoBatidas(sim.batidas);
+  }
+  return gravaContrato(reg, [...ace, ...rej], reg.antesTexto, depois);
+}
+
+/* ───────── as travas que protegem o trabalhador (não são conveniência de tela) ───────── */
+
+// Este dia não comporta decisão NENHUMA — nem em lote, nem no caso aberto.
+function motivoSemDecisao(reg) {
+  if (reg.decJa) return "já decidido";
+  if (resolvidoNoTransnet(reg)) return "o Transnet já resolveu";
+  // NÃO EXISTE DECISÃO SOBRE O NADA. Dia sem pedido nenhum (ele não mexeu depois
+  // do aviso) não se aceita nem se recusa: gravaria aceite com ajuste_ids vazio e
+  // tiraria o caso da fila de advertência em silêncio — o oposto do que o dia pede.
+  if (!reg.nAjustes) return "ele não mexeu no ponto — não há pedido para decidir";
+  // VENCIDO: segue só a cadeia advertência → correção. Nunca aceite/recusa, nunca lote.
+  if (reg.situacaoAviso === "vencido")
+    return "aviso vencido — segue só a cadeia advertência → correção";
+  return "";
+}
+
+// Por que este dia não pode entrar em decisão em MASSA (ou em aceite de dia inteiro).
+function motivoForaDoLote(reg, acao) {
+  const base = motivoSemDecisao(reg);
+  if (base) return base;
+  // DIA MISTO: uma ponta certa e outra errada obriga abrir o caso — a decisão
+  // correta é por OCORRÊNCIA, não do dia inteiro.
+  if (reg.diaStatus === "misto") return "dia misto — decidir por ocorrência, no caso aberto";
+  // Sem simulação confiável não há cartão para prometer ao robô. (Recusar continua
+  // podendo: main.py — "recusa não precisa de cartão nem de contrato".)
+  if (reg.bloqueio) return reg.bloqueio;
+  // Recusa de um dia COM aviso pode virar ADVERTÊNCIA: só no caso aberto, com o
+  // desfecho escolhido à mão.
+  if (acao === "rejeitar" && reg.temAviso)
+    return "tem aviso no dia — a recusa pode virar advertência: abra o caso";
+  return "";
 }
 
 /* ─────────────────────────── peças visuais reusáveis ─────────────────────── */
@@ -874,17 +1174,28 @@ function Contador({ n }) {
   return <span className="n">{n}</span>;
 }
 
-// Todo botão que GRAVA nasce assim nesta fase.
-function BotaoBloqueado({ children, tom = "neutro" }) {
+// Botão que GRAVA. `tom` só pinta; quem decide se pode é o chamador.
+function BotaoAcao({ children, tom = "neutro", titulo, onClick, disabled }) {
   const cor = { ok: "var(--dp-ok-ink)", erro: "var(--dp-danger-ink)" }[tom];
   return (
     <button
       type="button"
-      disabled
-      title={AVISO_FASE}
+      title={titulo}
+      onClick={onClick}
+      disabled={disabled}
       className="dp-btn"
-      style={cor ? { color: cor } : undefined}
+      style={cor && !disabled ? { color: cor } : undefined}
     >
+      {children}
+    </button>
+  );
+}
+
+// O que MEXE NO TRANSNET continua travado nesta fase.
+function BotaoExecucao({ children, tom = "neutro" }) {
+  const cor = { ok: "var(--dp-ok-ink)", erro: "var(--dp-danger-ink)" }[tom];
+  return (
+    <button type="button" disabled title={AVISO_EXEC} className="dp-btn" style={cor ? { color: cor } : undefined}>
       {children}
     </button>
   );
@@ -922,59 +1233,71 @@ function PontasES({ reg }) {
   ].filter(Boolean);
 
   if (!chips.length) {
+    if (reg.bloqueio)
+      return (
+        <Selo cor="alerta" quebra titulo={reg.bloqueio}>
+          • não dá para julgar
+        </Selo>
+      );
     if (reg.veredito === "certo")
       return (
-        <Selo cor="ok" titulo={reg.baseE || reg.baseS}>
+        <Selo cor="ok" titulo={reg.baseVeredito}>
           ✓ certo
         </Selo>
       );
     if (reg.veredito === "errado")
       return (
-        <Selo cor="erro" titulo={reg.baseE || reg.baseS}>
+        <Selo cor="erro" titulo={reg.baseVeredito}>
           ✗ errado
         </Selo>
       );
-    return <Selo titulo="Sem referência para comparar — não force veredito">• sem base</Selo>;
+    return (
+      <Selo titulo={reg.motivoVeredito || "Sem referência para comparar — não force veredito"}>
+        • sem base
+      </Selo>
+    );
   }
   return (
     <div style={PILHA}>
       <div style={FILA}>{chips}</div>
       {reg.diaStatus === "misto" ? (
-        <Selo cor="alerta" titulo="Pontas divergem — decidir por ponta">
+        <Selo cor="alerta" titulo="Pontas divergem — decidir por ocorrência, no caso aberto">
           ⚠ conferir · misto
         </Selo>
       ) : (
         <span className="dp-faint" style={MINI} title={`${reg.baseE} · ${reg.baseS}`}>
-          {reg.baseE || reg.baseS || ""}
+          {reg.baseVeredito || reg.baseE || reg.baseS || ""}
         </span>
       )}
     </div>
   );
 }
 
-// O cartão em chips mono, como no original (styles.css .chip). `contra` = o cartão
-// anterior: a batida que não existia lá aparece marcada (.new).
+// O cartão em chips mono, como no original (styles.css .chip). Batidas em MINUTOS
+// (é assim que o motor trabalha); `contra` = o cartão anterior, e a batida que não
+// existia lá aparece marcada (.new).
 function Cartao({ batidas, vazio = "—", contra = null }) {
-  if (!batidas || !batidas.length) return <span className="dp-chip none">{vazio}</span>;
+  const b = (batidas || []).filter((t) => t != null);
+  if (!b.length) return <span className="dp-chip none">{vazio}</span>;
   const conhecidas = contra && contra.length ? new Set(contra) : null;
   const classe = (t) => `dp-chip${conhecidas && !conhecidas.has(t) ? " new" : ""}`;
-  const primeira = batidas[0];
-  const ultima = batidas[batidas.length - 1];
+  const primeira = b[0];
+  const ultima = b[b.length - 1];
   return (
     <span style={FILA}>
       <span className={classe(primeira)}>
         <span className="es">E</span>
-        {primeira}
+        {min2hm(primeira)}
       </span>
-      {batidas.length > 1 ? (
+      {b.length > 1 ? (
         <span className={classe(ultima)}>
           <span className="es">S</span>
-          {ultima}
+          {min2hm(ultima)}
         </span>
       ) : null}
-      {batidas.length > 2 ? (
-        <span className="dp-chip none" title={`Almoço: ${batidas.slice(1, -1).join(" · ")}`}>
-          +{batidas.length - 2}
+      {b.length > 2 ? (
+        <span className="dp-chip none" title={`Almoço: ${b.slice(1, -1).map(min2hm).join(" · ")}`}>
+          +{b.length - 2}
         </span>
       ) : null}
     </span>
@@ -990,7 +1313,7 @@ function Removidas({ antes, depois }) {
     <span style={FILA}>
       {fora.map((t, i) => (
         <span key={`${t}-${i}`} className="dp-chip del" title="batida removida pelo ajuste">
-          {t}
+          {min2hm(t)}
         </span>
       ))}
     </span>
@@ -999,31 +1322,85 @@ function Removidas({ antes, depois }) {
 
 /* ────────────────────────── células das grades ───────────────────────────── */
 
-// A "Decisão" da porta Pedido. Nesta fase os dois lados são botões travados: a
-// UI existe, a gravação não. O selo aparece quando a decisão já foi tomada.
-function CelulaDecisao({ reg }) {
+// A "Decisão" da porta Pedido / do monitor de avisos.
+// REGRA DE OURO DESTA CÉLULA: aqui só se recusa o que NÃO PODE virar advertência.
+// Dia com aviso, dia misto, aviso vencido e dia sem simulação confiável não têm
+// botão de recusa na grade — abrem o caso.
+function CelulaDecisao({ reg, gravando, aoAceitar, aoRejeitar, aoDesfazer, aoAbrir }) {
   if (reg.decJa) {
-    return reg.decJa.subiu ? (
-      <Selo cor="ok" titulo={`Executado no Transnet em ${reg.decJa.quando} — o dia está travado.`}>
-        🔒 enviado · {reg.decJa.aceito ? "aceito" : "recusado"}
-      </Selo>
-    ) : (
-      <Selo titulo={`Marcado em ${reg.decJa.quando}. Ainda não subiu: falta rodar o bot.`}>
-        ✓ decidido · {reg.decJa.aceito ? "aceito" : "recusado"} — aguardando bot
-      </Selo>
+    return (
+      <div style={PILHA}>
+        {reg.decJa.subiu ? (
+          <Selo cor="ok" titulo={`Executado no Transnet em ${reg.decJa.quando} — o dia está travado.`}>
+            🔒 enviado · {reg.decJa.aceito ? "aceito" : "recusado"}
+          </Selo>
+        ) : (
+          <>
+            <Selo titulo={`Marcado em ${reg.decJa.quando}. Ainda não subiu: falta rodar o bot.`}>
+              ✓ decidido · {reg.decJa.aceito ? "aceito" : "recusado"} — aguardando bot
+            </Selo>
+            <BotaoAcao
+              titulo="Desfaz a decisão e devolve o caso para a fila (main.py:desfazer_decisao). Só vale enquanto o bot não executou."
+              onClick={(e) => {
+                e.stopPropagation();
+                aoDesfazer(reg);
+              }}
+              disabled={gravando}
+            >
+              ↩ Desfazer decisão
+            </BotaoAcao>
+          </>
+        )}
+      </div>
     );
   }
-  const misto = reg.diaStatus === "misto";
+  const trava = motivoForaDoLote(reg, "aceitar");
+  const travaRecusa = motivoForaDoLote(reg, "rejeitar");
   return (
     <div style={PILHA}>
       <div style={FILA}>
-        <BotaoBloqueado tom="ok">Aceitar</BotaoBloqueado>
-        <BotaoBloqueado tom="erro">Rejeitar</BotaoBloqueado>
+        <BotaoAcao
+          tom="ok"
+          titulo={trava || "Grava aceite=aceito no caso (não roda o bot)"}
+          disabled={Boolean(trava) || gravando}
+          onClick={(e) => {
+            e.stopPropagation();
+            aoAceitar(reg);
+          }}
+        >
+          Aceitar
+        </BotaoAcao>
+        {travaRecusa ? (
+          <BotaoAcao
+            titulo={`${travaRecusa} — abrir o caso`}
+            onClick={(e) => {
+              e.stopPropagation();
+              aoAbrir(reg);
+            }}
+            disabled={gravando}
+          >
+            Rejeitar…
+          </BotaoAcao>
+        ) : (
+          <BotaoAcao
+            tom="erro"
+            titulo="Sem aviso no dia: a recusa ENCERRA o caso (correcao_status=dispensada) e nunca vira advertência."
+            disabled={gravando}
+            onClick={(e) => {
+              e.stopPropagation();
+              aoRejeitar(reg, "rejeitar");
+            }}
+          >
+            Rejeitar
+          </BotaoAcao>
+        )}
       </div>
-      {misto ? (
+      {reg.diaStatus === "misto" ? (
         <span style={{ ...MINI, color: "var(--dp-warn-ink)" }}>
-          não entra em lote — abra o caso
+          não entra em lote — abra o caso e decida por ocorrência
         </span>
+      ) : reg.bloqueio ? (
+        <span style={{ ...MINI, color: "var(--dp-warn-ink)" }}>{reg.bloqueio}</span>
       ) : reg.diaStatus === "certo" ? (
         <span style={{ ...MINI, color: "var(--dp-ok-ink)" }}>sugestão: aceitar</span>
       ) : reg.diaStatus === "errado" ? (
@@ -1091,10 +1468,9 @@ function CelulaAjustes({ reg, aoAbrir }) {
         não mexeu
       </button>
     );
-  const cor = {
-    certo: "var(--dp-ok-ink)",
-    errado: "var(--dp-danger-ink)",
-  }[reg.diaStatus] || "var(--dp-warn-ink)";
+  const cor =
+    { certo: "var(--dp-ok-ink)", errado: "var(--dp-danger-ink)" }[reg.diaStatus] ||
+    "var(--dp-warn-ink)";
   return (
     <button
       type="button"
@@ -1114,48 +1490,13 @@ function CelulaSituacao({ reg, campo = "situacao" }) {
     <div style={PILHA}>
       <Selo cor={s.cor}>{s.rotulo}</Selo>
       {reg.reaberto ? (
-        <Selo cor="accent" titulo="Um aviso mais novo abriu outro ciclo: a decisão anterior não decide este.">
+        <Selo
+          cor="accent"
+          titulo="Um aviso mais novo abriu outro ciclo: a decisão anterior não decide este."
+        >
           ↻ reaberto
         </Selo>
       ) : null}
-    </div>
-  );
-}
-
-/* ─────────────────────────────── grade genérica ──────────────────────────── */
-
-function Grade({ colunas, linhas, aoAbrir, vazio, porta }) {
-  if (!linhas.length)
-    return (
-      <div className="dp-card" style={{ margin: "8px 20px 20px", textAlign: "center" }}>
-        <span className="dp-muted">{vazio}</span>
-      </div>
-    );
-  return (
-    <div className="dp-tabela-wrap">
-      <table className="dp-tabela">
-        <thead>
-          <tr>
-            {colunas.map((c) => (
-              <th key={c.chave}>{c.label}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {linhas.map((reg) => (
-            <tr
-              key={reg.k}
-              onClick={() => aoAbrir(reg)}
-              className={classeDaLinha(reg, porta)}
-              style={{ cursor: "pointer" }}
-            >
-              {colunas.map((c) => (
-                <td key={c.chave}>{c.render(reg)}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }
@@ -1182,7 +1523,89 @@ function Linha({ rotulo, children }) {
   );
 }
 
-function Detalhe({ reg, aoFechar }) {
+// Um item do julgaAcoes (motor) — o veredito daquele pedido contra o alvo da ponta.
+function ItemAcao({ item, marca, aoMarcar, travado }) {
+  const cor = item.ok === true ? "ok" : item.ok === false ? "erro" : "alerta";
+  const rotulo =
+    item.ok === true ? "bate com o alvo" : item.ok === false ? "não bate" : "não dá para julgar";
+  return (
+    <li
+      style={{
+        background: "var(--dp-surface-2)",
+        borderRadius: 8,
+        padding: "7px 10px",
+        marginBottom: 6,
+      }}
+    >
+      <div style={FILA}>
+        <Selo>{item.tipo || "—"}</Selo>
+        <span className="dp-mono dp-num" style={{ fontWeight: 600 }}>
+          {item.hora || "—"}
+        </span>
+        {item.n > 1 ? <Selo titulo="pedido reenviado">×{item.n}</Selo> : null}
+        {item.ponta ? (
+          <span className="dp-muted" style={MINI}>
+            {item.ponta}
+            {item.alvo ? ` · alvo ${item.alvo}` : ""}
+            {item.dif != null ? ` · ${item.dif} min` : ""}
+          </span>
+        ) : null}
+        <Selo cor={cor}>{rotulo}</Selo>
+        {item.menos ? <Selo cor="ok" titulo="pediu MENOS: abriu mão de tempo">pediu menos</Selo> : null}
+        {item.excl ? <Selo titulo="exclusão: a régua é invertida">exclusão</Selo> : null}
+        {item.redundante ? (
+          <Selo cor="alerta" titulo={`já existe ${item.redundante} no cartão`}>
+            redundante
+          </Selo>
+        ) : null}
+        {item.viraAlteracao ? (
+          <Selo cor="alerta" titulo={`o certo seria ALTERAR a batida ${item.viraAlteracao}`}>
+            era alteração
+          </Selo>
+        ) : null}
+        {item.orfao ? (
+          <Selo cor="erro" titulo="a batida de origem não está no cartão — aceitar não faz nada">
+            órfã
+          </Selo>
+        ) : null}
+        {item.semAlvoPonta ? (
+          <Selo cor="alerta" titulo="a ponta que ele mirou não tem alvo — não se julga contra a outra">
+            sem alvo nesta ponta
+          </Selo>
+        ) : null}
+      </div>
+      <div style={{ ...FILA, marginTop: 5 }}>
+        {["A", "R", ""].map((v) => (
+          <label key={v || "nada"} style={{ ...MINI, ...FILA, gap: 3, cursor: travado ? "default" : "pointer" }}>
+            <input
+              type="radio"
+              disabled={travado}
+              checked={marca === v}
+              onChange={() => aoMarcar(v)}
+            />
+            {v === "A" ? "aceitar" : v === "R" ? "rejeitar" : "não marcar"}
+          </label>
+        ))}
+        <span className="dp-faint" style={MINI}>
+          {item.ids.length ? `ocorrência ${item.ids.join(", ")}` : "sem id de ocorrência"}
+        </span>
+      </div>
+    </li>
+  );
+}
+
+function Detalhe({ reg, aoFechar, gravando, aoAceitar, aoRejeitar, aoDesfazer, aoMarcar }) {
+  // marcação por ocorrência: começa com o que o MOTOR julgou (julgaAcoes.ok)
+  const inicial = useMemo(() => {
+    const m = {};
+    (reg?.acoes || []).forEach((it, i) => {
+      m[i] = it.ok === true ? "A" : it.ok === false ? "R" : "";
+    });
+    return m;
+  }, [reg?.acoes]);
+  const [marcas, setMarcas] = useState(inicial);
+  useEffect(() => setMarcas(inicial), [inicial]);
+
   if (!reg) return null;
   const c = reg.caso;
   const etapas = [
@@ -1196,12 +1619,19 @@ function Detalhe({ reg, aoFechar }) {
     ["Aviso cancelado", c.aviso_cancelado_em],
   ].filter(([, v]) => txt(v));
 
+  const idsMarcados = (letra) =>
+    (reg.acoes || []).flatMap((it, i) => (marcas[i] === letra ? it.ids : []));
+  const aceitarIds = idsMarcados("A");
+  const rejeitarIds = idsMarcados("R");
+  // aceitar precisa de cartão simulável e de dia não-misto; recusar, não (main.py).
+  const travaAceite = motivoForaDoLote(reg, "aceitar");
+  const travaRecusa = motivoSemDecisao(reg);
+
   return (
-    <div
-      className="dp-card"
-      style={{ margin: "0 20px 20px", borderColor: "var(--dp-accent)" }}
-    >
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+    <div className="dp-card" style={{ margin: "0 20px 20px", borderColor: "var(--dp-accent)" }}>
+      <div
+        style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}
+      >
         <div>
           <div style={{ ...ROTULO_CARD, color: "var(--dp-accent)" }}>
             Caso · {reg.temAviso ? "Enviamos para ajuste" : "Pedido do colaborador"}
@@ -1212,6 +1642,7 @@ function Detalhe({ reg, aoFechar }) {
           <div className="dp-muted dp-num">
             {reg.dataBR} · {reg.categoria}
             {reg.funcao ? ` · ${reg.funcao}` : ""}
+            {reg.realocado ? ` · pedido veio do dia ${paraBR(reg.realocado)}` : ""}
           </div>
         </div>
         <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar detalhe">
@@ -1229,25 +1660,42 @@ function Detalhe({ reg, aoFechar }) {
       >
         <div className="dp-card">
           <div className="dp-muted" style={ROTULO_CARD}>
-            O pedido do colaborador
+            O pedido do colaborador — veredito por ocorrência
           </div>
           {reg.ajustes.length ? (
-            <ul style={{ listStyle: "none", margin: "8px 0 0", padding: 0 }}>
-              {reg.ajustes.map((o, i) => (
-                <li
-                  key={txt(o.id_ocorrencia) || i}
-                  style={{
-                    background: "var(--dp-surface-2)",
-                    borderRadius: 8,
-                    padding: "7px 10px",
-                    marginBottom: 6,
-                  }}
+            <>
+              <div className="dp-faint" style={{ ...MINI, margin: "6px 0" }}>
+                alvo: {reg.alvoPar?.[0] || "—"} / {reg.alvoPar?.[1] || "—"} (fonte:{" "}
+                {reg.fonteAlvo || "sem alvo"}) · resumo do motor:{" "}
+                {reg.resumoAcoes?.resumo || "—"}
+              </div>
+              <ul style={{ listStyle: "none", margin: "8px 0 0", padding: 0 }}>
+                {reg.acoes.map((it, i) => (
+                  <ItemAcao
+                    key={`${it.tipo}-${it.hora}-${i}`}
+                    item={it}
+                    marca={marcas[i] ?? ""}
+                    travado={Boolean(reg.decJa) || gravando}
+                    aoMarcar={(v) => setMarcas((m) => ({ ...m, [i]: v }))}
+                  />
+                ))}
+              </ul>
+              <div style={{ ...FILA, marginTop: 8 }}>
+                <BotaoAcao
+                  titulo="Grava A:/R: por ocorrência em ajuste_ids (main.py:marcar_ajustes). O aceite do dia continua PENDENTE: marcar é decidir, lançar é outro passo."
+                  disabled={Boolean(reg.decJa) || gravando || (!aceitarIds.length && !rejeitarIds.length)}
+                  onClick={() => aoMarcar(reg, aceitarIds, rejeitarIds)}
                 >
-                  <div style={FILA}>
-                    <Selo>{txt(o.tipo_ajuste) || "—"}</Selo>
-                    <span className="dp-mono dp-num" style={{ fontWeight: 600 }}>
-                      {txt(o.horario_ajuste) || "—"}
-                    </span>
+                  Gravar marcação por ocorrência ({aceitarIds.length}A / {rejeitarIds.length}R)
+                </BotaoAcao>
+                <span className="dp-faint" style={MINI}>
+                  é por aqui que o dia MISTO se decide
+                </span>
+              </div>
+              <ul style={{ listStyle: "none", margin: "10px 0 0", padding: 0 }}>
+                {reg.ajustes.map((o, i) => (
+                  <li key={txt(o.id_ocorrencia) || i} className="dp-faint" style={{ ...MINI, ...FILA }}>
+                    <span className="dp-mono">{txt(o.id_ocorrencia) || "—"}</span>
                     {txt(o.batida_atual) || txt(o.batida_nova) ? (
                       <span style={FILA}>
                         <span className="dp-chip del">{txt(o.batida_atual) || "—"}</span>
@@ -1268,14 +1716,15 @@ function Detalhe({ reg, aoFechar }) {
                         Transnet: {txt(o.situacao_ajuste).toLowerCase()}
                       </Selo>
                     ) : null}
-                  </div>
-                  <div className="dp-faint" style={{ ...MINI, marginTop: 4 }}>
-                    capturado em {fmtDataHora(o.capturado_em)}
-                    {ehVerdadeiro(o.dia_posterior) ? " · dia posterior" : ""}
-                  </div>
-                </li>
-              ))}
-            </ul>
+                    <span>capturado em {fmtDataHora(o.capturado_em)}</span>
+                    {ehVerdadeiro(o.dia_posterior) ? <span>· dia posterior</span> : null}
+                    {txt(o.ponto_depois) ? (
+                      <span title="contrato já congelado — não será reescrito">· contrato congelado</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </>
           ) : (
             <p className="dp-muted" style={{ margin: "8px 0 0" }}>
               Nenhum pedido neste crachá+dia — ele não mexeu no ponto depois do aviso.
@@ -1289,9 +1738,20 @@ function Detalhe({ reg, aoFechar }) {
           </div>
           <div style={{ marginTop: 8 }}>
             <Linha rotulo={`Antes (${reg.antesFonte})`}>
-              <Cartao batidas={reg.antes} vazio="sem cartão" />
+              <span style={FILA}>
+                <Cartao batidas={reg.antes} vazio="sem cartão" />
+                {reg.fantasmas?.length ? (
+                  <span
+                    className="dp-faint"
+                    style={MINI}
+                    title="batidas duplicadas em ≤6 min — o mesmo evento registrado duas vezes"
+                  >
+                    fantasmas: {reg.fantasmas.map(min2hm).join(" · ")}
+                  </span>
+                ) : null}
+              </span>
             </Linha>
-            <Linha rotulo="Depois (congelado)">
+            <Linha rotulo="Depois (simulado)">
               <span style={FILA}>
                 <Cartao batidas={reg.depois} vazio="não mexeu" contra={reg.antes} />
                 <Removidas antes={reg.antes} depois={reg.depois} />
@@ -1310,10 +1770,24 @@ function Detalhe({ reg, aoFechar }) {
             </Linha>
             <Linha rotulo="Régua usada">
               <span className="dp-muted">
-                E <span className="dp-mono dp-num">{reg.refE || "—"}</span> (
-                {reg.baseE || "sem base"}) · S{" "}
-                <span className="dp-mono dp-num">{reg.refS || "—"}</span> (
+                E <span className="dp-mono dp-num">{reg.refE || "—"}</span> ({reg.baseE || "sem base"}
+                ) · S <span className="dp-mono dp-num">{reg.refS || "—"}</span> (
                 {reg.baseS || "sem base"}) · tolerância {TOLERANCIA_MIN} min
+              </span>
+            </Linha>
+            <Linha rotulo="O canon sozinho">
+              <span className="dp-faint" style={MINI}>
+                E {reg.canonE?.ref == null ? "—" : min2hm(reg.canonE.ref)} (
+                {reg.canonE?.rotulo || "sem fonte"})
+                {reg.canonE?.ref != null && reg.refE
+                  ? ` · ${difRelogio(reg.canonE.ref, hm2min(reg.refE))} min da régua`
+                  : ""}{" "}
+                · S {reg.canonS?.ref == null ? "—" : min2hm(reg.canonS.ref)} (
+                {reg.canonS?.rotulo || "sem fonte"})
+                {reg.canonS?.ref != null && reg.refS
+                  ? ` · ${difRelogio(reg.canonS.ref, hm2min(reg.refS))} min da régua`
+                  : ""}{" "}
+                · concordância entre fontes: {CONSTANTES.DELTA_FONTE} min
               </span>
             </Linha>
             <Linha rotulo="Veredito por ponta">
@@ -1322,6 +1796,13 @@ function Detalhe({ reg, aoFechar }) {
             <Linha rotulo="Situação">
               <CelulaSituacao reg={reg} />
             </Linha>
+            {reg.notas?.length ? (
+              <Linha rotulo="O que o motor viu">
+                <span className="dp-muted" style={MINI}>
+                  {reg.notas.join(" · ")}
+                </span>
+              </Linha>
+            ) : null}
           </div>
         </div>
       </div>
@@ -1352,23 +1833,94 @@ function Detalhe({ reg, aoFechar }) {
         ) : null}
       </div>
 
+      {/* DECISÃO DO DIA. As duas recusas são botões DIFERENTES de propósito:
+          "recusar" e "advertir" nunca podem sair do mesmo clique. */}
       <div
         className="dp-card"
-        style={{
-          ...FILA,
-          marginTop: 12,
-          background: "var(--dp-warn-bg)",
-          borderColor: "var(--dp-warn-bg)",
-        }}
+        style={{ marginTop: 12, background: "var(--dp-surface-2)" }}
       >
-        <Selo cor="alerta" quebra titulo={AVISO_FASE}>
-          Somente leitura nesta fase — {AVISO_FASE.toLowerCase()}.
-        </Selo>
-        <span style={{ flex: 1 }} />
-        <BotaoBloqueado tom="ok">Aceitar</BotaoBloqueado>
-        <BotaoBloqueado tom="erro">Rejeitar</BotaoBloqueado>
-        {reg.temAviso ? <BotaoBloqueado tom="erro">Advertir e corrigir</BotaoBloqueado> : null}
-        <BotaoBloqueado>Cancelar aviso</BotaoBloqueado>
+        <div className="dp-muted" style={ROTULO_CARD}>
+          Decisão do DP — grava em ponto_caso, não roda o bot
+        </div>
+        <div style={{ ...FILA, marginTop: 8 }}>
+          {reg.decJa ? (
+            <>
+              <Selo cor={reg.decJa.aceito ? "ok" : "erro"}>
+                já decidido · {reg.decJa.aceito ? "aceito" : "recusado"} em {reg.decJa.quando}
+              </Selo>
+              {reg.decJa.subiu ? (
+                <span className="dp-muted" style={MINI}>
+                  o bot já executou no Transnet — não dá mais para desfazer por aqui.
+                </span>
+              ) : (
+                <BotaoAcao
+                  titulo="main.py:desfazer_decisao — aceite volta a 'pendente'"
+                  disabled={gravando}
+                  onClick={() => aoDesfazer(reg)}
+                >
+                  ↩ Desfazer decisão
+                </BotaoAcao>
+              )}
+            </>
+          ) : (
+            <>
+              <BotaoAcao
+                tom="ok"
+                titulo={travaAceite || "Grava aceite=aceito, ajuste=certo e o contrato antes/depois"}
+                disabled={Boolean(travaAceite) || gravando}
+                onClick={() => aoAceitar(reg)}
+              >
+                Aceitar o dia
+              </BotaoAcao>
+              {reg.temAviso ? (
+                <>
+                  <BotaoAcao
+                    tom="erro"
+                    titulo={
+                      travaRecusa ||
+                      "Rejeita E MANTÉM o caso na cadeia de advertência/correção (correcao_status vazio). Só é possível porque existe aviso registrado neste crachá+dia."
+                    }
+                    disabled={Boolean(travaRecusa) || gravando}
+                    onClick={() => aoRejeitar(reg, "completo")}
+                  >
+                    Rejeitar → advertência e correção
+                  </BotaoAcao>
+                  <BotaoAcao
+                    titulo={
+                      travaRecusa ||
+                      "Rejeita e ENCERRA: correcao_status='dispensada' tira o caso da fila de advertência para sempre."
+                    }
+                    disabled={Boolean(travaRecusa) || gravando}
+                    onClick={() => aoRejeitar(reg, "rejeitar")}
+                  >
+                    Só rejeitar (dispensa advertência)
+                  </BotaoAcao>
+                </>
+              ) : (
+                <BotaoAcao
+                  tom="erro"
+                  titulo={
+                    travaRecusa ||
+                    "Sem aviso no dia: a recusa encerra o caso (dispensada) e NUNCA vira advertência."
+                  }
+                  disabled={Boolean(travaRecusa) || gravando}
+                  onClick={() => aoRejeitar(reg, "rejeitar")}
+                >
+                  Rejeitar (encerra — sem advertência)
+                </BotaoAcao>
+              )}
+            </>
+          )}
+          <span style={{ flex: 1 }} />
+          <BotaoExecucao tom="erro">Advertir e corrigir (robô)</BotaoExecucao>
+          <BotaoExecucao>Cancelar aviso no Transnet</BotaoExecucao>
+        </div>
+        <p className="dp-faint" style={{ ...MINI, margin: "8px 0 0" }}>
+          {reg.temAviso
+            ? "Existe aviso registrado neste crachá+dia (ponto_caso.aviso_enviado_em ou ponto_ocorrencias.lancado_em): a recusa PODE virar advertência — por isso o desfecho é escolhido à mão."
+            : "Não há aviso registrado neste crachá+dia em nenhuma das duas fontes: a recusa encerra o caso e nunca vira advertência."}{" "}
+          {AVISO_EXEC}
+        </p>
       </div>
     </div>
   );
@@ -1385,6 +1937,23 @@ export default function Ocorrencias() {
   const [funcao, setFuncao] = useState("TODAS");
   const [busca, setBusca] = useState("");
   const [aberto, setAberto] = useState(null);
+  const [gravando, setGravando] = useState(false);
+  const [recado, setRecado] = useState("");
+  const [selIds, setSelIds] = useState([]);
+  const [versao, setVersao] = useState(0);
+
+  const carregar = useCallback(async () => {
+    setCarregando(true);
+    try {
+      const dados = await carregarOcorrencias();
+      setBase(dados);
+      setErro("");
+    } catch (falha) {
+      setErro(falha?.message || "Falha ao consultar a base DP360.");
+    } finally {
+      setCarregando(false);
+    }
+  }, []);
 
   useEffect(() => {
     let ativo = true;
@@ -1429,16 +1998,201 @@ export default function Ocorrencias() {
     setPorta(id);
     setAba((ABAS[id] || ABAS.pedido)[0][0]);
     setAberto(null);
+    setSelIds([]);
   };
 
   const abrir = (reg) => setAberto((atual) => (atual?.k === reg.k ? null : reg));
 
   const regAberto = aberto ? registros.find((r) => r.k === aberto.k) || aberto : null;
 
-  /* ── colunas de cada grade ── */
+  /* ── gravação: sempre no CLIQUE, sempre com confirmação, sempre recarregando ── */
+
+  const executarGravacao = useCallback(
+    async (rotulo, tarefa) => {
+      setGravando(true);
+      setRecado("");
+      try {
+        const aviso = await tarefa();
+        setRecado(aviso ? `${rotulo} — ${aviso}` : `${rotulo} ✓`);
+        setSelIds([]);
+        setVersao((v) => v + 1);
+        await carregar();
+      } catch (e) {
+        // o erro REAL do gateway (o dp360Api já desembrulha o motivo do 4xx)
+        setRecado(`Falhou: ${e?.message || e}`);
+      } finally {
+        setGravando(false);
+      }
+    },
+    [carregar],
+  );
+
+  const aoAceitar = useCallback(
+    (reg) => {
+      const trava = motivoForaDoLote(reg, "aceitar");
+      if (trava) {
+        setRecado(`Não dá para aceitar: ${trava}.`);
+        return;
+      }
+      const ok = confirmar(
+        `ACEITAR o dia ${reg.dataBR} de ${reg.nome} (${reg.cracha}).\n\n` +
+          `Grava em ponto_caso: aceite=aceito, ajuste=certo, aceito_em, ajuste_ids (${reg.nAjustes} ocorrência(s)).\n` +
+          `Contrato antes/depois: ${reg.antesTexto || "—"} → ${reg.depoisTexto || "—"} (só onde ainda não estiver congelado).\n\n` +
+          `NÃO roda o bot: a execução no Transnet continua desligada.`,
+      );
+      if (!ok) return;
+      executarGravacao(`Aceite gravado (${reg.nome} · ${reg.dataBR})`, () => gravarAceite(reg));
+    },
+    [executarGravacao],
+  );
+
+  const aoRejeitar = useCallback(
+    (reg, modo) => {
+      const trava = motivoSemDecisao(reg);
+      if (trava) {
+        setRecado(`Não dá para recusar: ${trava}.`);
+        return;
+      }
+      // TRAVA DA ADVERTÊNCIA INDEVIDA: sem aviso registrado, a recusa é sempre
+      // 'dispensada'. Com aviso, o modo 'completo' é escolha explícita do DP.
+      const modoReal = reg.temAviso ? modo : "rejeitar";
+      if (modo === "completo" && !reg.temAviso) {
+        setRecado(
+          "Sem aviso registrado neste crachá+dia (nem ponto_caso.aviso_enviado_em nem ponto_ocorrencias.lancado_em): recusar aqui não pode virar advertência.",
+        );
+        return;
+      }
+      const texto =
+        modoReal === "completo"
+          ? `REJEITAR o dia ${reg.dataBR} de ${reg.nome} (${reg.cracha}) MANTENDO a cadeia de advertência e correção.\n\n` +
+            `Existe aviso registrado neste crachá+dia, então esta recusa PODE virar ADVERTÊNCIA depois.\n` +
+            `Grava: aceite=rejeitado, ajuste=errado, correcao_status="" (vazio = segue o fluxo).\n\n` +
+            `A advertência e a correção continuam sendo do robô, e o robô NÃO é disparado aqui.`
+          : `REJEITAR o dia ${reg.dataBR} de ${reg.nome} (${reg.cracha}) e ENCERRAR.\n\n` +
+            `Grava: aceite=rejeitado, ajuste=errado, correcao_status="dispensada".\n` +
+            `"dispensada" tira o caso da fila de advertência E de correção — para sempre.\n\n` +
+            `${reg.temAviso ? "Há aviso no dia, mas você está escolhendo NÃO advertir." : "Não há aviso no dia: recusar não é advertir."}`;
+      if (!confirmar(texto)) return;
+      executarGravacao(`Recusa gravada (${reg.nome} · ${reg.dataBR})`, () =>
+        gravarRecusa(reg, modoReal),
+      );
+    },
+    [executarGravacao],
+  );
+
+  const aoDesfazer = useCallback(
+    (reg) => {
+      if (reg.decJa?.subiu) {
+        setRecado("O bot já executou este caso no Transnet: desfazer aqui não desfaz lá.");
+        return;
+      }
+      if (
+        !confirmar(
+          `DESFAZER a decisão do dia ${reg.dataBR} de ${reg.nome}.\n\n` +
+            `Grava: aceite=pendente, ajuste=null, aceito_em=null. O caso volta para a fila.`,
+        )
+      )
+        return;
+      executarGravacao(`Decisão desfeita (${reg.nome} · ${reg.dataBR})`, () => gravarDesfazer(reg));
+    },
+    [executarGravacao],
+  );
+
+  const aoMarcar = useCallback(
+    (reg, aceitarIds, rejeitarIds) => {
+      const trava = motivoSemDecisao(reg);
+      if (trava) {
+        setRecado(`Não dá para marcar: ${trava}.`);
+        return;
+      }
+      if (!aceitarIds.length && !rejeitarIds.length) {
+        setRecado("Nenhuma marcação.");
+        return;
+      }
+      if (
+        !confirmar(
+          `MARCAR POR OCORRÊNCIA o dia ${reg.dataBR} de ${reg.nome}.\n\n` +
+            `Aceitar: ${aceitarIds.join(", ") || "—"}\nRejeitar: ${rejeitarIds.join(", ") || "—"}\n\n` +
+            `Grava ajuste_ids com A:/R: e mantém aceite=pendente — marcar é decidir, lançar é outro passo.`,
+        )
+      )
+        return;
+      executarGravacao(`Marcação gravada (${reg.nome} · ${reg.dataBR})`, () =>
+        gravarMarcacao(reg, aceitarIds, rejeitarIds),
+      );
+    },
+    [executarGravacao],
+  );
+
+  /* ── decisão em LOTE — com as travas do trabalhador ── */
+
+  const emLote = useCallback(
+    (acao) => {
+      const alvo = linhas.filter((r) => selIds.includes(r.k));
+      if (!alvo.length) {
+        setRecado("Nenhuma linha marcada.");
+        return;
+      }
+      const bloqueados = alvo
+        .map((r) => ({ r, motivo: motivoForaDoLote(r, acao) }))
+        .filter((x) => x.motivo);
+      if (bloqueados.length) {
+        setRecado(
+          `Lote recusado — ${bloqueados.length} linha(s) não podem entrar em decisão em massa: ` +
+            bloqueados
+              .slice(0, 6)
+              .map((x) => `${x.r.nome} ${x.r.dataBR} (${x.motivo})`)
+              .join(" · ") +
+            (bloqueados.length > 6 ? " …" : "") +
+            ". Desmarque essas linhas ou abra cada caso.",
+        );
+        return;
+      }
+      const verbo = acao === "aceitar" ? "ACEITAR" : "REJEITAR (encerra, sem advertência)";
+      if (
+        !confirmar(
+          `${verbo} ${alvo.length} dia(s):\n\n` +
+            alvo
+              .slice(0, 12)
+              .map((r) => `· ${r.nome} ${r.dataBR}`)
+              .join("\n") +
+            (alvo.length > 12 ? `\n… e mais ${alvo.length - 12}` : "") +
+            `\n\n${
+              acao === "aceitar"
+                ? "Grava aceite=aceito em cada caso."
+                : 'Grava aceite=rejeitado + correcao_status="dispensada" — nenhum destes dias tem aviso, então nenhum vira advertência.'
+            }\nNÃO roda o bot.`,
+        )
+      )
+        return;
+      executarGravacao(`${alvo.length} caso(s) gravado(s)`, async () => {
+        const avisos = [];
+        for (const reg of alvo) {
+          // um a um: o upsert em lote esconderia qual linha falhou
+          const a = acao === "aceitar" ? await gravarAceite(reg) : await gravarRecusa(reg, "rejeitar");
+          if (a) avisos.push(a);
+        }
+        return avisos.join(" · ");
+      });
+    },
+    [linhas, selIds, executarGravacao],
+  );
+
+  /* ── colunas de cada grade (formato do TabelaDP: id/titulo/valor/render) ── */
+
+  const acoesDecisao = {
+    gravando,
+    aoAceitar,
+    aoRejeitar,
+    aoDesfazer,
+    aoAbrir: abrir,
+  };
+
   const colColaborador = {
-    chave: "nome",
-    label: "Colaborador",
+    id: "nome",
+    titulo: "Colaborador",
+    largura: 190,
+    valor: (r) => r.nome,
     render: (r) => (
       <div>
         <div style={{ fontWeight: 650 }}>{r.nome}</div>
@@ -1449,27 +2203,55 @@ export default function Ocorrencias() {
     ),
   };
   const colDia = {
-    chave: "dia",
-    label: "Dia",
-    render: (r) => <span className="dp-num">{r.dataBR}</span>,
+    id: "dia",
+    titulo: "Dia",
+    largura: 90,
+    classe: "dp-num",
+    valor: (r) => r.dataBR,
   };
   const colChapa = {
-    chave: "cracha",
-    label: "Chapa",
-    render: (r) => <span className="dp-num dp-mono">{r.cracha}</span>,
+    id: "cracha",
+    titulo: "Chapa",
+    largura: 100,
+    classe: "dp-num dp-mono",
+    valor: (r) => r.cracha,
   };
   const colAjustes = {
-    chave: "aj",
-    label: "Ajustes",
+    id: "aj",
+    titulo: "Ajustes",
+    largura: 110,
+    ordenavel: true,
+    valor: (r) => r.nAjustes,
     render: (r) => <CelulaAjustes reg={r} aoAbrir={() => abrir(r)} />,
+  };
+  const colPontas = {
+    id: "pontas",
+    titulo: "Veredito E/S",
+    largura: 190,
+    valor: (r) => r.diaStatus || r.veredito || "",
+    render: (r) => <PontasES reg={r} />,
+  };
+  const colSituacao = {
+    id: "sit",
+    titulo: "Situação",
+    largura: 170,
+    valor: (r) => SIT[r.situacao]?.rotulo || r.situacao,
+    render: (r) => <CelulaSituacao reg={r} />,
   };
 
   // app.js:183 (COLS_CONF) — Pedidos: quem · dia · veredito por ponta · decisão · ajustes.
   const COLS_PEDIDO = [
     colColaborador,
     colDia,
-    { chave: "pontas", label: "Veredito E/S", render: (r) => <PontasES reg={r} /> },
-    { chave: "dec", label: "Decisão", render: (r) => <CelulaDecisao reg={r} /> },
+    colPontas,
+    {
+      id: "dec",
+      titulo: "Decisão",
+      largura: 230,
+      ordenavel: false,
+      valor: (r) => (r.decJa ? (r.decJa.aceito ? "aceito" : "recusado") : "a decidir"),
+      render: (r) => <CelulaDecisao reg={r} {...acoesDecisao} />,
+    },
     colAjustes,
   ];
 
@@ -1477,16 +2259,20 @@ export default function Ocorrencias() {
   const COLS_AVISO = [
     colColaborador,
     colChapa,
-    { chave: "data", label: "Data", render: (r) => <span className="dp-num">{r.dataBR}</span> },
-    { chave: "oq", label: "O que", render: (r) => <Selo>{r.tipoLabel}</Selo> },
+    { id: "data", titulo: "Data", largura: 90, classe: "dp-num", valor: (r) => r.dataBR },
+    { id: "oq", titulo: "O que", largura: 160, valor: (r) => r.tipoLabel, render: (r) => <Selo>{r.tipoLabel}</Selo> },
     {
-      chave: "atual",
-      label: "Ponto atual",
-      render: (r) => <Cartao batidas={batidasDoCartao(r.cartao)} />,
+      id: "atual",
+      titulo: "Ponto atual",
+      largura: 150,
+      valor: (r) => textoBatidas(r.antes),
+      render: (r) => <Cartao batidas={r.antes} />,
     },
     {
-      chave: "alvo",
-      label: "Pedimos (alvo)",
+      id: "alvo",
+      titulo: "Pedimos (alvo)",
+      largura: 140,
+      valor: (r) => `${r.alvo[0] || ""} ${r.alvo[1] || ""}`.trim(),
       render: (r) =>
         r.alvo[0] || r.alvo[1] ? (
           <span style={FILA}>
@@ -1508,18 +2294,29 @@ export default function Ocorrencias() {
         ),
     },
     colAjustes,
-    { chave: "prazo", label: "Prazo (48h)", render: (r) => <CelulaPrazo reg={r} /> },
     {
-      chave: "acao",
-      label: "Ação",
+      id: "prazo",
+      titulo: "Prazo (48h)",
+      largura: 140,
+      valor: (r) => (r.restam == null ? "" : Math.round(r.restam)),
+      render: (r) => <CelulaPrazo reg={r} />,
+    },
+    {
+      id: "acao",
+      titulo: "Ação",
+      largura: 240,
+      ordenavel: false,
+      valor: (r) => r.situacaoAviso,
       render: (r) =>
         r.situacaoAviso === "vencido" ? (
           <div style={PILHA}>
-            <BotaoBloqueado tom="erro">⚠ Vencido — advertir e corrigir</BotaoBloqueado>
-            <span style={{ ...MINI, color: "var(--dp-danger-ink)" }}>não entra em lote</span>
+            <BotaoExecucao tom="erro">⚠ Vencido — advertir e corrigir (robô)</BotaoExecucao>
+            <span style={{ ...MINI, color: "var(--dp-danger-ink)" }}>
+              não entra em lote — só a cadeia advertência → correção
+            </span>
           </div>
         ) : (
-          <CelulaDecisao reg={r} />
+          <CelulaDecisao reg={r} {...acoesDecisao} />
         ),
     },
   ];
@@ -1527,73 +2324,102 @@ export default function Ocorrencias() {
   const COLS_COMENT = [
     colColaborador,
     colChapa,
-    { chave: "data", label: "Data", render: (r) => <span className="dp-num">{r.dataBR}</span> },
-    { chave: "oq", label: "O que", render: (r) => <Selo>{r.tipoLabel}</Selo> },
+    { id: "data", titulo: "Data", largura: 90, classe: "dp-num", valor: (r) => r.dataBR },
+    { id: "oq", titulo: "O que", largura: 180, valor: (r) => r.tipoLabel, render: (r) => <Selo>{r.tipoLabel}</Selo> },
     {
-      chave: "atual",
-      label: "Ponto atual",
-      render: (r) => <Cartao batidas={batidasDoCartao(r.cartao)} />,
+      id: "atual",
+      titulo: "Ponto atual",
+      largura: 150,
+      valor: (r) => textoBatidas(r.antes),
+      render: (r) => <Cartao batidas={r.antes} />,
     },
     {
-      chave: "quando",
-      label: "Enviado em",
-      render: (r) => (
-        <span className="dp-muted dp-num">{fmtDataHora(r.caso.aviso_enviado_em)}</span>
-      ),
+      id: "quando",
+      titulo: "Enviado em",
+      largura: 140,
+      classe: "dp-num",
+      valor: (r) => txt(r.caso.aviso_enviado_em),
+      render: (r) => <span className="dp-muted dp-num">{fmtDataHora(r.caso.aviso_enviado_em)}</span>,
     },
   ];
 
-  const COLS_LISTA = [
+  const colQuando = {
+    id: "quando",
+    titulo: "Quando",
+    largura: 140,
+    classe: "dp-num",
+    valor: (r) =>
+      txt(
+        r.caso.correcao_final_em ||
+          r.caso.advertencia_enviada_em ||
+          r.caso.conferido_em ||
+          r.caso.aceito_em ||
+          r.caso.atualizado_em,
+      ),
+    render: (r) => (
+      <span className="dp-muted dp-num">
+        {fmtDataHora(
+          r.caso.correcao_final_em ||
+            r.caso.advertencia_enviada_em ||
+            r.caso.conferido_em ||
+            r.caso.aceito_em ||
+            r.caso.atualizado_em,
+        )}
+      </span>
+    ),
+  };
+
+  const COLS_LISTA = [colColaborador, colDia, colSituacao, colPontas, colQuando, colAjustes];
+
+  // Execução pendente: é aqui que mora o DESFAZER (o bot ainda não executou).
+  const COLS_EXEC = [
     colColaborador,
     colDia,
-    { chave: "sit", label: "Situação", render: (r) => <CelulaSituacao reg={r} /> },
-    { chave: "pontas", label: "Veredito E/S", render: (r) => <PontasES reg={r} /> },
+    colSituacao,
+    colPontas,
+    colQuando,
     {
-      chave: "quando",
-      label: "Quando",
-      render: (r) => (
-        <span className="dp-muted dp-num">
-          {fmtDataHora(
-            r.caso.correcao_final_em ||
-              r.caso.advertencia_enviada_em ||
-              r.caso.conferido_em ||
-              r.caso.aceito_em ||
-              r.caso.atualizado_em,
-          )}
-        </span>
-      ),
+      id: "dec",
+      titulo: "Decisão",
+      largura: 240,
+      ordenavel: false,
+      valor: (r) => (r.decJa ? (r.decJa.aceito ? "aceito" : "recusado") : ""),
+      render: (r) => <CelulaDecisao reg={r} {...acoesDecisao} />,
     },
-    colAjustes,
   ];
 
   const COLS_CANCEL = [
     colColaborador,
     colDia,
-    { chave: "oq", label: "O que", render: (r) => <Selo>{r.tipoLabel}</Selo> },
+    { id: "oq", titulo: "O que", largura: 180, valor: (r) => r.tipoLabel, render: (r) => <Selo>{r.tipoLabel}</Selo> },
     {
-      chave: "quando",
-      label: "Cancelado em",
-      render: (r) => (
-        <span className="dp-muted dp-num">{fmtDataHora(r.caso.aviso_cancelado_em)}</span>
-      ),
+      id: "quando",
+      titulo: "Cancelado em",
+      largura: 150,
+      classe: "dp-num",
+      valor: (r) => txt(r.caso.aviso_cancelado_em),
+      render: (r) => <span className="dp-muted dp-num">{fmtDataHora(r.caso.aviso_cancelado_em)}</span>,
     },
     {
-      chave: "acao",
-      label: "Ação",
-      render: () => <BotaoBloqueado>🗑 Cancelar no Transnet</BotaoBloqueado>,
+      id: "acao",
+      titulo: "Ação",
+      largura: 220,
+      ordenavel: false,
+      valor: () => "",
+      render: () => <BotaoExecucao>🗑 Cancelar no Transnet (robô)</BotaoExecucao>,
     },
   ];
 
-  const colunas =
-    abaAtiva === "conf"
-      ? COLS_PEDIDO
-      : abaAtiva === "aguard"
-        ? COLS_AVISO
-        : abaAtiva === "coment"
-          ? COLS_COMENT
-          : abaAtiva === "cancel"
-            ? COLS_CANCEL
-            : COLS_LISTA;
+  // Uma CHAVE por grade: as colunas mudam por porta/aba, e a preferência de
+  // coluna é por tela (app_config `tbl_p5_conf`, `tbl_p5_env`…).
+  const GRADE = {
+    conf: { chave: "p5_conf", colunas: COLS_PEDIDO, selecionavel: true },
+    aguard: { chave: "p5_env", colunas: COLS_AVISO, selecionavel: true },
+    coment: { chave: "p5_com", colunas: COLS_COMENT, selecionavel: false },
+    cancel: { chave: "p5_cancel", colunas: COLS_CANCEL, selecionavel: false },
+    exec: { chave: "p5_exec", colunas: COLS_EXEC, selecionavel: false },
+  };
+  const grade = GRADE[abaAtiva] || { chave: "p5_lista", colunas: COLS_LISTA, selecionavel: false };
 
   const VAZIOS = {
     conf: "Nenhum pedido aguardando decisão. Aguarde a captura do Transnet.",
@@ -1608,6 +2434,30 @@ export default function Ocorrencias() {
   };
 
   const portaAtual = PORTAS.find((p) => p.id === porta) || PORTAS[0];
+
+  const barraLote = grade.selecionavel ? (
+    <div style={{ ...FILA, gap: 8 }}>
+      <span className="dp-muted dp-num" style={MINI}>
+        {selIds.length ? `${selIds.length} marcada(s)` : "marque linhas para decidir em lote"}
+      </span>
+      <BotaoAcao
+        tom="ok"
+        titulo="Aceita cada dia marcado (grava aceite=aceito). Dia misto, aviso vencido e dia sem simulação confiável são recusados pelo lote."
+        disabled={!selIds.length || gravando}
+        onClick={() => emLote("aceitar")}
+      >
+        ✓ Aceitar marcados
+      </BotaoAcao>
+      <BotaoAcao
+        tom="erro"
+        titulo="Só entra no lote o dia SEM aviso registrado: a recusa encerra (dispensada) e nunca vira advertência. Dia com aviso tem de ser aberto."
+        disabled={!selIds.length || gravando}
+        onClick={() => emLote("rejeitar")}
+      >
+        ✗ Rejeitar marcados (sem aviso)
+      </BotaoAcao>
+    </div>
+  ) : null;
 
   return (
     <AbaShell
@@ -1643,10 +2493,21 @@ export default function Ocorrencias() {
               · {base.descartados} linha(s) descartada(s) por não serem pedido
             </span>
           ) : null}
+          {registros[0]?.realocados ? (
+            <span
+              className="dp-faint dp-num"
+              title="A batida que o pedido aponta não estava no cartão do dia declarado e estava no do outro dia de referência (motor: realocaDia)."
+            >
+              · {registros[0].realocados} pedido(s) realocado(s) de dia
+            </span>
+          ) : null}
           <span style={{ flex: 1 }} />
           <span className="dp-faint dp-num">lido em {fmtDataHora(base?.lidoEm)}</span>
-          <Selo cor="alerta" titulo={AVISO_FASE}>
-            somente leitura
+          <button type="button" className="dp-btn" onClick={carregar} disabled={gravando}>
+            ↻ Recarregar
+          </button>
+          <Selo cor={gravando ? "alerta" : "accent"} titulo={AVISO_EXEC}>
+            {gravando ? "gravando…" : "grava decisão · não executa"}
           </Selo>
         </>
       }
@@ -1656,9 +2517,24 @@ export default function Ocorrencias() {
           <Selo cor="erro" quebra>
             Recusar não é advertir — advertência só existe depois de aviso registrado.
           </Selo>{" "}
-          Recusa sem aviso encerra o caso. Entrada e saída são julgadas separadamente: uma nunca
-          anula a outra, e dia misto obriga abrir o caso. Tolerância de julgamento: {TOLERANCIA_MIN}{" "}
-          min · prazo do colaborador: {PRAZO_HORAS} h.
+          <strong>O que esta tela GRAVA</strong> (em <span className="dp-mono">ponto_caso</span>, e o
+          contrato antes/depois em <span className="dp-mono">ponto_ajustes_app</span>): aceite,
+          recusa, marcação por ocorrência e desfazer.{" "}
+          <strong>O que ela NÃO faz:</strong> rodar o robô, advertir, corrigir ou cancelar a
+          ocorrência no Transnet — decidir e executar são dois passos. Recusa sem aviso encerra o
+          caso (<span className="dp-mono">dispensada</span>) e nunca vira advertência. Entrada e
+          saída são julgadas separadamente: uma nunca anula a outra; dia misto e aviso vencido não
+          entram em decisão em lote. Veredito, régua e simulação vêm do motor validado
+          (<span className="dp-mono">regrasPonto.js</span>) — tolerância {TOLERANCIA_MIN} min ·
+          prazo do colaborador {PRAZO_HORAS} h.
+          {recado ? (
+            <>
+              {" "}
+              <Selo cor={recado.startsWith("Falhou") ? "erro" : "ok"} quebra>
+                {recado}
+              </Selo>
+            </>
+          ) : null}
         </>
       }
     >
@@ -1694,13 +2570,23 @@ export default function Ocorrencias() {
                   : null),
               }}
             >
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  justifyContent: "space-between",
+                  gap: 8,
+                }}
+              >
                 <span style={{ fontSize: 14, fontWeight: 650 }}>{p.label}</span>
                 {cont.porta[p.id] ? (
                   <span className="dp-pill danger n">{cont.porta[p.id]}</span>
                 ) : null}
               </div>
-              <p className={ativa ? "" : "dp-muted"} style={{ ...MINI, margin: "5px 0 0", lineHeight: 1.4 }}>
+              <p
+                className={ativa ? "" : "dp-muted"}
+                style={{ ...MINI, margin: "5px 0 0", lineHeight: 1.4 }}
+              >
                 {p.ajuda}
               </p>
             </button>
@@ -1720,6 +2606,7 @@ export default function Ocorrencias() {
               onClick={() => {
                 setAba(id);
                 setAberto(null);
+                setSelIds([]);
               }}
               className={`dp-chip-f${ativa ? " on" : ""}`}
             >
@@ -1734,61 +2621,50 @@ export default function Ocorrencias() {
         {portaAtual.ajuda}
       </div>
 
-      <Grade
-        colunas={colunas}
+      <TabelaDP
+        key={`${grade.chave}-${versao}`}
+        chave={grade.chave}
+        colunas={grade.colunas}
         linhas={linhas}
-        aoAbrir={abrir}
+        classeLinha={(l) => classeDaLinha(l, porta)}
+        aoClicarLinha={(l) => abrir(l)}
+        idLinha={(l) => l.k}
+        selecionavel={grade.selecionavel}
+        aoSelecionar={(ids) => setSelIds(ids)}
+        acoes={barraLote}
+        nomeCsv={`dp360_ocorrencias_${porta}_${abaAtiva}`}
         vazio={VAZIOS[abaAtiva] || "Nada por aqui."}
-        porta={porta}
+        pinPadrao={2}
       />
 
-      <Detalhe reg={regAberto} aoFechar={() => setAberto(null)} />
+      <Detalhe
+        reg={regAberto}
+        aoFechar={() => setAberto(null)}
+        gravando={gravando}
+        aoAceitar={aoAceitar}
+        aoRejeitar={aoRejeitar}
+        aoDesfazer={aoDesfazer}
+        aoMarcar={aoMarcar}
+      />
     </AbaShell>
   );
 }
 
 /* ============================================================================
- * TODO — FASE SEGUINTE: LIGAR A GRAVAÇÃO
+ * O QUE CONTINUA FORA DESTA TELA (de propósito)
  *
- * Nada abaixo roda. As chamadas ficam escritas para que a próxima fase só
- * precise validar a régua contra o app antigo e destravar os botões.
- * Regras que a gravação NÃO pode violar (PORTE.md §5, main.py:_situacao):
- *   · recusa SEM aviso registrado nunca vira advertência — só "recusado";
- *   · decidir ≠ executar: gravar a decisão e disparar o robô são dois passos,
- *     e o disparo exige escopo explícito (um clique sem escopo já processou
- *     34 casos indevidos);
- *   · dia MISTO e aviso VENCIDO não entram em decisão em lote;
- *   · o antes/depois e o alvo do aviso são congelados: nunca reescrever.
- *
- * import { upsertDP360 } from "../../../services/dp360Api";
- *
- * // Aceitar / rejeitar UM dia (porta Pedido e porta Aviso):
- * // await upsertDP360("ponto_caso", {
- * //   cracha: reg.cracha,
- * //   date_ref: reg.iso,
- * //   aceite: aceitar ? "aceito" : "rejeitado",
- * //   aceito_em: new Date().toISOString(),
- * //   // ajuste_ids: "A:<id>,R:<id>"  -> a decisão POR OCORRÊNCIA do pop-up
- * //   // correcao_status: "dispensada" quando o DP escolher "só rejeitar"
- * //   //   (isso tira o caso da fila de advertência PARA SEMPRE — confirmar antes)
- * // });
- *
- * // Cancelar um aviso (só quando _caso_pode_cancelar_aviso: sem resposta, sem
- * // aceite, sem advertência e sem correção):
- * // await upsertDP360("ponto_caso", {
- * //   cracha: reg.cracha, date_ref: reg.iso,
- * //   aviso_cancelado_em: new Date().toISOString(), aceite: "cancelado",
- * // });
- *
- * // Advertir + corrigir é do ROBÔ, não da tela: a tela grava a decisão e o
- * // disparo do workflow (Edge Function `dispatch-bot`) leva o escopo explícito
- * // [{ cracha, date_ref }]. O robô grava advertencia_enviada_em / correcao_final_em.
- *
- * Pendências conhecidas deste porte:
- *   · o simulador do backend (main.py::_simula / ferramenta/simulador.py) NÃO foi
- *     portado — o "depois" exibido é o `ponto_depois` congelado no lake, e o
- *     veredito por ponta é recalculado sobre ele com a mesma régua (±10 min).
- *     Antes de liberar a gravação, comparar linha a linha com get_conferencia.
- *   · aba Cancelamento lista o que já foi cancelado; a remoção da ocorrência no
- *     Transnet depende do robô (sincronizar_cancelamentos_ocorrencias).
+ * · EXECUÇÃO. Aceitar/rejeitar aqui NÃO aceita nem rejeita no Transnet: quem faz
+ *   isso é o robô, e o disparo (Edge Function `dispatch-bot`) exige escopo
+ *   explícito [{cracha, date_ref}]. Um clique sem escopo já processou 34 casos
+ *   indevidos. O robô é quem grava advertencia_enviada_em / correcao_final_em.
+ * · ADVERTIR e CORRIGIR. A decisão gravada aqui (recusa com aviso, correcao_status
+ *   vazio) apenas MANTÉM o caso na fila da cadeia; nada é enviado a ninguém.
+ * · CANCELAR AVISO (aviso_cancelado_em) e cancelar a ocorrência no Transnet:
+ *   dependem do robô (sincronizar_cancelamentos_ocorrencias).
+ * · ALVO MANUAL da correção (confirmar_errados(alvo=…) → ponto_ajustes_app
+ *   .alvo_etapa2): é a régua de interno, e exige um campo de digitação com
+ *   validação própria. Enquanto não existir, a recusa vai sem alvo — que é o
+ *   mesmo comportamento do Python quando o operador não digita nada.
+ * · ALVO CONGELADO (alvo_entrada/alvo_saida) e ponto_antes/ponto_depois já
+ *   gravados: NUNCA são reescritos por esta tela.
  * ========================================================================== */

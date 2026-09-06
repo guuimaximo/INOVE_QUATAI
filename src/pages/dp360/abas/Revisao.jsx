@@ -1,41 +1,89 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Lock, MapPin, RefreshCw, X } from "lucide-react";
 import AbaShell from "./AbaShell";
+import TabelaDP from "../TabelaDP";
 import MapaBatidas from "../MapaBatidas";
-import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
+import { apagarDP360, lerDP360, lerTudoDP360, upsertDP360 } from "../../../services/dp360Api";
 import { supabase } from "../../../supabase";
+import { getStoredUser } from "../../../utils/auth";
 import { RAIO_LOCAL, RAIO_VEIC, reguaLocal, resumoGps } from "../regrasGps";
+import {
+  CONSTANTES,
+  almocoDaRefeicao,
+  almocoMatrizPorCategoria,
+  batidasDoCartao,
+  bloqueioSimulacao,
+  difRelogio,
+  hm2min,
+  jornadaEntreMin,
+  min2hm,
+  removeFantasmas,
+  simulaCartao,
+} from "../regrasPonto";
 
 /* =============================================================================
    Revisão (Passo 2) — porte da tela do DP360 (Sistemas/PONTO: app/ui/app.js
    `viewP2`/`COLS_REV`/`p2RowClass`/`fmtCol`/`pontoDetalhe`).
 
-   FASE ATUAL: SOMENTE LEITURA.
-   A tela inteira e a UI de decisão estão montadas, mas nada grava: salvar Real
-   manual, marcar ponto conferido e enviar aviso aparecem DESABILITADOS. Motivo:
-   gravação errada aqui vira advertência indevida em cima de trabalhador. As
-   chamadas ficam anotadas como TODO ao lado de cada botão.
+   O QUE ESTA TELA GRAVA (liberado pelo dono):
+     · Real manual do DP  -> `ponto_real_manual` (upsert; tudo vazio APAGA a linha,
+       igual a main.py `salvar_real_manual` ~392);
+     · Ponto conferido    -> `ponto_caso` com tipo='ponto_ok' (upsert), e o desfazer
+       grava tipo='' / aceite='pendente' (main.py `marcar_ponto_ok` ~415).
+   O QUE AINDA NÃO GRAVA:
+     · Enviar ocorrência / avisar quem bateu fora. Essa ação MANDA COMUNICADO ao
+       trabalhador e depende do robô do Transnet — continua desabilitada, com TODO.
 
    A REGRA DE NEGÓCIO NÃO MORA AQUI. `status_ponto`, `motivo`, `acao_sugerida`,
    `alvo_*`, `*_sug`, `almoco_*`, `pede_entrada/pede_saida`, `requer_alvo_manual`,
    `fonte_alvo` e `alvo_confiavel` já vêm calculados pela view do Athena
    (importador_supabase/sql_catalogo/3_vw_ponto_revisao_motorista.sql) e chegam
-   prontos na `ponto_diario`. Esta tela só EXIBE. O único cálculo local é o de
-   GPS ("bateu fora"), que o app antigo também fazia no cliente.
+   prontos na `ponto_diario`. Esta tela só EXIBE.
+
+   As contas de HORÁRIO são do MOTOR (`../regrasPonto`), porte validado 1:1 contra
+   o Python (2.240 execuções, veredito idêntico). Nada de aritmética de relógio
+   escrita à mão aqui: `hm2min`/`min2hm` (parse/formata, inclusive 25:40),
+   `jornadaEntreMin` (virada de meia-noite), `difRelogio` (distância circular com
+   o módulo que a versão ingênua esquecia), `almocoDaRefeicao` (regra dos 27 min),
+   `almocoMatriz` (quanto de almoço a jornada exige), `removeFantasmas` (batida
+   duplicada do coletor) e `bloqueioSimulacao` (por que o dia não dá pra julgar).
+   O único cálculo local é o de GPS ("bateu fora"), que mora em `../regrasGps`.
    ========================================================================== */
 
-/* ---------- constantes (espelham main.py; mexeu aqui, mexe lá) ---------- */
-const TOL_ENTRADA_MIN = 10; // minutos ANTES do início da operação
-const TOL_SAIDA_MIN = 8; // minutos DEPOIS do fim da operação
-const SUG_JORNADA_MAX_MIN = 13 * 60; // 780 min: acima disso não é jornada, é defeito
-const DIVERGENCIA_BILHETAGEM_MIN = 20; // bilhetagem "fora da curva" na entrada
+/* ---------- constantes: vêm do MOTOR, não são redigitadas aqui ---------- */
+const {
+  TOL_ENTRADA_MIN, // 10 — minutos ANTES do início da operação (main.py:117)
+  TOL_SAIDA_MIN, // 8  — minutos DEPOIS do fim da operação (main.py:118)
+  SUG_JORNADA_MAX_MIN, // 780 — acima disso não é jornada, é defeito (main.py:2745)
+  DELTA_FONTE, // 20 — margem de concordância entre fontes (CANON 6.5)
+} = CONSTANTES;
+
+// Bilhetagem "fora da curva" na entrada é o mesmo conceito do CANON: as duas fontes
+// deixaram de concordar. Mesma margem, uma constante só.
+const DIVERGENCIA_BILHETAGEM_MIN = DELTA_FONTE;
 
 // A régua de GPS (LOCAIS, raios, Haversine, reserva, "não medido") mora em
 // ../regrasGps.js — porte de main.py `_regua_local`. Não duplicar aqui.
 
 const CATEGORIAS_PADRAO = ["MOTORISTA", "INTERNO", "APRENDIZ"];
 const PAGINAS_POR_LOTE = 6; // 6 × 1000 linhas de ponto_diario ≈ 15 dias de datas
-const TRAVA_GRAVACAO = "Gravação liberada na próxima fase (validação pendente)";
+
+// Só o AVISO continua trancado: ele dispara comunicado ao trabalhador e depende do
+// robô do Transnet. Real manual e ponto conferido gravam.
+const TRAVA_AVISO =
+  "O aviso ao trabalhador ainda não está ligado — depende do robô do Transnet (fase seguinte)";
+
+/** Quem está cravando. Porte de main.py `_quem_esta_usando` (lá é a conta do Windows;
+ *  aqui o INOVE tem login de verdade, então vale o usuário da sessão). */
+function quemEstaUsando() {
+  const u = getStoredUser();
+  return String(u?.nome_completo || u?.nome || u?.login || u?.email || "").trim();
+}
+
+/** Carimbo UTC dos campos `*_em`. São TIMESTAMP, não data local — é exatamente o
+ *  `datetime.now(timezone.utc).isoformat()` do Python. (O `date_ref`, esse sim data
+ *  local, NUNCA sai de `new Date()`: vem pronto da linha do banco.) */
+const agoraUtc = () => new Date().toISOString();
 
 /* ---------- helpers de formato ---------- */
 // Booleano do PostgREST/Athena chega como STRING. Mesma lista do app antigo.
@@ -56,12 +104,9 @@ const fmtHora = (v) => {
   return `${m[1].padStart(2, "0")}:${m[2]}`;
 };
 
-const hm2m = (v) => {
-  const s = fmtHora(v);
-  if (!s) return null;
-  const [h, m] = s.split(":").map(Number);
-  return Number.isNaN(h) || Number.isNaN(m) ? null : h * 60 + m;
-};
+// `hm2m` local morreu: era um parse de HH:MM feito à mão, mais pobre que o do motor
+// (o dele lê "1420" sem dois-pontos, que é o que a tela do Cartão de Ponto devolve, e
+// preserva a notação >24h). Todo mundo aqui usa `hm2min` de ../regrasPonto.
 
 const fmtMin = (v) => {
   const n = parseInt(v, 10);
@@ -84,31 +129,25 @@ const fmtDataHora = (v) => {
 
 const fmtDist = (d) => (d == null ? "—" : d >= 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d)} m`);
 
-// Jornada entre duas pontas, com virada de meia-noite e desconto opcional do almoço.
+// Jornada entre duas pontas, com desconto opcional do almoço. A virada de meia-noite
+// é do motor (`jornadaEntreMin`); aqui só sobrou a FORMATAÇÃO "10h09".
 function durHM(ini, fim, descontar = 0) {
-  const a = hm2m(ini);
-  const b = hm2m(fim);
-  if (a == null || b == null) return "—";
-  let bruta = b - a;
-  if (bruta < 0) bruta += 1440;
+  const bruta = jornadaEntreMin(ini, fim);
+  if (bruta == null) return "—";
   const liq = bruta - (descontar || 0);
   if (liq <= 0) return "—";
   return `${Math.floor(liq / 60)}h${String(liq % 60).padStart(2, "0")}`;
 }
 
-const difCircularMin = (a, b) => {
-  const d = Math.abs(a - b);
-  return Math.min(d, 1440 - d);
-};
+// `difCircularMin` local morreu: era `min(d, 1440-d)` SEM o módulo, e o motor documenta
+// que essa versão devolve NEGATIVO quando a diferença passa de 24h (notação 25:14 do
+// cartão) — o caso RONALDO, em que "-14 <= 10" dava BATE numa divergência de 14 min.
+// Quem faz distância de relógio agora é `difRelogio` (main.py:6439).
 
 /* ---------- GPS: batida fora de lugar ---------- */
 // A conta em si é do módulo `../regrasGps` (porte de main.py `_regua_local`,
 // linhas 191-299). Aqui ficou só o que é de TELA.
 
-const numero = (v) => {
-  const n = parseFloat(v);
-  return Number.isNaN(n) ? null : n;
-};
 
 /**
  * Roda a régua completa de um crachá/dia e devolve o pacote que a grade e o
@@ -165,13 +204,12 @@ function sugBloqueio(r) {
     if (acao === "LANCAR_ALMOCO_AUTOMATICO" && !ehVerdadeiro(r.almoco_confiavel))
       return "almoço sem base confiável";
   }
-  const e = hm2m(r.entrada_sug);
-  const s = hm2m(r.saida_sug);
+  const e = hm2min(r.entrada_sug);
+  const s = hm2min(r.saida_sug);
   if (e == null || s == null) return "";
-  let bruta = s - e;
-  if (bruta < 0) bruta += 1440;
-  const a1 = hm2m(r.almoco_saida_sug);
-  const a2 = hm2m(r.almoco_volta_sug);
+  const bruta = jornadaEntreMin(e, s); // virada de meia-noite é do motor
+  const a1 = hm2min(r.almoco_saida_sug);
+  const a2 = hm2min(r.almoco_volta_sug);
   const alm = a1 != null && a2 != null ? Math.max(0, a2 - a1) : 0;
   const liq = bruta - alm;
   if (liq <= 0) return "sugestão com jornada zero ou negativa";
@@ -278,9 +316,22 @@ function Pilula({ texto, tom = "mute", titulo }) {
 
 function BotaoTravado({ children, titulo, className = "" }) {
   return (
-    <button type="button" disabled title={titulo || TRAVA_GRAVACAO} className={`dp-btn ${className}`}>
+    <button type="button" disabled title={titulo || TRAVA_AVISO} className={`dp-btn ${className}`}>
       {children}
     </button>
+  );
+}
+
+// Retorno das gravações: sucesso some sozinho da leitura ("gravou"), erro fica com o
+// MOTIVO REAL que o `dp360Api` extraiu do gateway (o supabase-js engole o corpo e
+// devolve sempre "non-2xx status code" — sem isso o DP fica adivinhando).
+function Recado({ recado }) {
+  if (!recado?.texto) return null;
+  return (
+    <span className={`dp-pill ${recado.tipo === "erro" ? "danger" : "ok"}`} title={recado.texto}>
+      {recado.tipo === "erro" ? "✕ " : "✓ "}
+      {recado.texto}
+    </span>
   );
 }
 
@@ -315,7 +366,7 @@ const ESTILO_LEGENDA = { width: 12, height: 12, borderRadius: 3, display: "inlin
 // Rótulo da coluna esquerda dos blocos do pop-up.
 const ESTILO_ROTULO = { width: 118, flex: "none", fontWeight: 600, fontSize: 12 };
 
-// Campo desabilitado do Real manual — mesma paleta da ferramenta.
+// Campo do Real manual — mesma paleta da ferramenta.
 const ESTILO_INPUT = {
   width: "100%",
   marginTop: 3,
@@ -325,6 +376,14 @@ const ESTILO_INPUT = {
   padding: "5px 8px",
   border: "1px solid var(--dp-border-strong)",
   borderRadius: 8,
+  background: "var(--dp-surface)",
+  color: "var(--dp-ink)",
+};
+
+// Miolo travado pela regra da Revisão: continua VISÍVEL (o DP precisa ver o que está
+// lá), mas não digitável — e não vai no payload (main.py:400-402 recusa).
+const ESTILO_INPUT_TRAVADO = {
+  ...ESTILO_INPUT,
   background: "var(--dp-surface-2)",
   color: "var(--dp-muted)",
   cursor: "not-allowed",
@@ -333,26 +392,45 @@ const ESTILO_INPUT = {
 // Coluna "Avisado?" — porte de app.js `fmtCol("rv_enviado")`. O aviso da Revisão
 // já era gravado em ponto_caso, mas a tela antiga nunca mostrou: não dava pra
 // saber se o colaborador já tinha recebido a mensagem.
-function Avisado({ caso }) {
+// O ESTADO é calculado fora do componente porque a grade precisa dele DUAS vezes:
+// como pílula (`render`) e como texto ordenável/exportável (`valor` da coluna).
+function estadoAviso(caso) {
   const enviado = String(caso?.aviso_enviado_em ?? "").trim();
-  if (!enviado) return <Pilula texto="não" tom="mute" titulo="Nenhum aviso registrado para este dia" />;
+  if (!enviado) return { texto: "não", tom: "mute", titulo: "Nenhum aviso registrado para este dia" };
   const quando = fmtData(enviado.slice(0, 10));
   if (String(caso.correcao_final_em ?? "").trim())
-    return <Pilula texto="🔧 corrigido" tom="ok" titulo={`Aviso em ${quando} — ponto já corrigido`} />;
+    return { texto: "🔧 corrigido", tom: "ok", titulo: `Aviso em ${quando} — ponto já corrigido` };
   if (String(caso.advertencia_enviada_em ?? "").trim())
-    return <Pilula texto="⚠ advertido" tom="danger" titulo={`Aviso em ${quando} — depois virou advertência`} />;
+    return { texto: "⚠ advertido", tom: "danger", titulo: `Aviso em ${quando} — depois virou advertência` };
   if (String(caso.aceite ?? "").trim() === "aceito")
-    return <Pilula texto="✓ resolvido" tom="ok" titulo={`Aviso em ${quando} — ele ajustou e você aceitou`} />;
+    return { texto: "✓ resolvido", tom: "ok", titulo: `Aviso em ${quando} — ele ajustou e você aceitou` };
   const visto = String(caso.aviso_conferido_em ?? "").trim();
   if (visto)
-    return (
-      <Pilula
-        texto={`👁 leu · ${quando}`}
-        tom="mute"
-        titulo={`Enviado em ${quando} · aberto no app em ${fmtData(visto.slice(0, 10))}`}
-      />
-    );
-  return <Pilula texto={`📤 ${quando}`} tom="warn" titulo={`Enviado em ${quando} — ainda não abriu no app`} />;
+    return {
+      texto: `👁 leu · ${quando}`,
+      tom: "mute",
+      titulo: `Enviado em ${quando} · aberto no app em ${fmtData(visto.slice(0, 10))}`,
+    };
+  return { texto: `📤 ${quando}`, tom: "warn", titulo: `Enviado em ${quando} — ainda não abriu no app` };
+}
+
+function Avisado({ caso }) {
+  const { texto, tom, titulo } = estadoAviso(caso);
+  return <Pilula texto={texto} tom={tom} titulo={titulo} />;
+}
+
+/** Este dia já foi marcado como conferido pelo DP? (main.py `get_pontos_ok`) */
+const pontoConferido = (caso) => String(caso?.tipo ?? "").trim() === "ponto_ok";
+
+// Versão TEXTO do mesmo veredito, para ordenar e exportar a coluna 📍 (a grade ordena
+// pelo `valor`, nunca pelo JSX). Os três baldes começam com letras que já ordenam do
+// pior pro melhor em pt-BR: fora < junto < não medido.
+function textoGps(gps) {
+  if (!gps || !gps.total) return "";
+  const nm = gps.naoMedido ? ` · n/m ${gps.naoMedido}` : "";
+  if (gps.fora) return `fora ${gps.fora}/${gps.total} · ${fmtDist(gps.maiorDistancia)}${nm}`;
+  if (!gps.junto) return `não medido (${gps.total})`;
+  return `junto ${gps.junto}/${gps.total}${nm}`;
 }
 
 // TRÊS estados, nunca dois. "Não medido" (âncora do veículo sem coordenada)
@@ -452,7 +530,7 @@ function AvisoTrava({ motivo }) {
 
 /* ---------- pop-up do cartão ---------- */
 function LinhaFonte({ rotulo, ini, fim, cor, marca, titulo }) {
-  if (hm2m(ini) == null && hm2m(fim) == null) return null;
+  if (hm2min(ini) == null && hm2min(fim) == null) return null;
   return (
     <tr title={titulo} style={{ borderTop: "1px solid var(--dp-border)" }}>
       <td className="dp-muted" style={{ padding: "6px 8px 6px 0" }}>
@@ -508,8 +586,8 @@ function Cartao4({ valores, tom = "" }) {
 }
 
 function BlocoAlmoco({ titulo, ini, fim, travado, tom }) {
-  const a = hm2m(ini);
-  const b = hm2m(fim);
+  const a = hm2min(ini);
+  const b = hm2min(fim);
   const dur = a != null && b != null ? Math.max(0, b - a) : null;
   return (
     <div
@@ -532,10 +610,51 @@ function BlocoAlmoco({ titulo, ini, fim, travado, tom }) {
   );
 }
 
-function CartaoModal({ linha, caso, gps, aoFechar }) {
+/* ---------- gravação do Real manual (porte de main.py `salvar_real_manual`) ------- */
+
+const CAMPOS_RM = ["entrada", "alm_saida", "alm_volta", "saida"];
+const ROTULO_RM = {
+  entrada: "Entrada",
+  alm_saida: "Saída almoço",
+  alm_volta: "Volta almoço",
+  saida: "Saída",
+};
+
+/**
+ * Normaliza os campos digitados usando o MOTOR: `hm2min` aceita "1420" (o que a tela do
+ * Cartão de Ponto devolve) e a notação >24h; `min2hm` devolve sempre "HH:MM" (inclusive
+ * "25:40", que é o turno que vira o dia). Campo com lixo dentro vira ERRO em vez de
+ * virar `null` calado — gravar vazio no lugar de um horário que a pessoa digitou é pior
+ * do que recusar. Só os campos de `campos` são olhados: com o almoço travado o miolo não
+ * é gravável, e não faz sentido reprovar a gravação por um valor que nem vai no payload.
+ * Devolve { limpos, erro }.
+ */
+function normalizarRealManual(form, campos = CAMPOS_RM) {
+  const limpos = {};
+  for (const k of campos) {
+    const bruto = String(form?.[k] ?? "").trim();
+    if (!bruto) {
+      limpos[k] = "";
+      continue;
+    }
+    const m = hm2min(bruto);
+    if (m === null || m < 0) {
+      return { limpos: null, erro: `Horário inválido em "${ROTULO_RM[k] || k}": ${bruto}` };
+    }
+    limpos[k] = min2hm(m);
+  }
+  return { limpos, erro: "" };
+}
+
+function CartaoModal({ linha, caso, gps, aoFechar, aoRecarregar }) {
   const [extra, setExtra] = useState({ gordura: null, intervalo: null, ajustes: [] });
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
+
+  // Gravação: um recado por bloco, para o sucesso/erro aparecer ONDE a pessoa clicou.
+  const [salvando, setSalvando] = useState("");
+  const [recadoRm, setRecadoRm] = useState(null);
+  const [recadoOk, setRecadoOk] = useState(null);
 
   const dia = String(linha.date_ref ?? "").slice(0, 10);
   const cracha = linha.cracha;
@@ -578,25 +697,187 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
   const iv = extra.intervalo || {};
   const bloqueio = sugBloqueio(linha);
   const travado = ehVerdadeiro(linha.almoco_travado);
+  const jaConferido = pontoConferido(caso);
+
+  /* ---- formulário do Real manual ---- */
+  // Prefill: o que o DP já cravou; sem isso, a SUGESTÃO da ferramenta — é o que a tela
+  // sempre mostrou nesses campos, e salvar é justamente "aceito, crava isto".
+  // Reinicia quando muda o crachá/dia OU quando o Real do banco muda (pós-gravação).
+  const rmDoBanco = useMemo(
+    () => ({
+      entrada: fmtHora(linha.rm_entrada),
+      alm_saida: fmtHora(linha.rm_alm_saida),
+      alm_volta: fmtHora(linha.rm_alm_volta),
+      saida: fmtHora(linha.rm_saida),
+    }),
+    [linha.rm_entrada, linha.rm_alm_saida, linha.rm_alm_volta, linha.rm_saida],
+  );
+  const [form, setForm] = useState(null);
+  const semente = useMemo(
+    () => ({
+      entrada: rmDoBanco.entrada || fmtHora(linha.entrada_sug),
+      alm_saida: rmDoBanco.alm_saida || fmtHora(linha.almoco_saida_sug),
+      alm_volta: rmDoBanco.alm_volta || fmtHora(linha.almoco_volta_sug),
+      saida: rmDoBanco.saida || fmtHora(linha.saida_sug),
+    }),
+    [rmDoBanco, linha.entrada_sug, linha.almoco_saida_sug, linha.almoco_volta_sug, linha.saida_sug],
+  );
+  useEffect(() => setForm(null), [cracha, dia, rmDoBanco]);
+  const valores = form || semente;
+  const mudarCampo = (k, v) => setForm({ ...valores, [k]: v });
 
   // Bilhetagem "fora da curva": longe da operação real na entrada. É o outlier
-  // que não pode reger a correção sozinho.
-  const opIni = hm2m(g.op_inicio) != null ? hm2m(g.op_inicio) : hm2m(g.sst_vinculo);
-  const valIni = hm2m(g.val_inicio);
-  const divergencia = opIni != null && valIni != null ? difCircularMin(opIni, valIni) : null;
+  // que não pode reger a correção sozinho. Distância de relógio é do motor
+  // (`difRelogio`), que aguenta a notação 25:14 do cartão.
+  const opIni = hm2min(g.op_inicio) != null ? hm2min(g.op_inicio) : hm2min(g.sst_vinculo);
+  const valIni = hm2min(g.val_inicio);
+  const divergencia = opIni != null && valIni != null ? difRelogio(opIni, valIni) : null;
   const bilhetagemFora = divergencia != null && divergencia > DIVERGENCIA_BILHETAGEM_MIN;
 
   const alvo4 = [linha.alvo_entrada, linha.alvo_saida_almoco, linha.alvo_volta_almoco, linha.alvo_saida];
   const sug4 = [linha.entrada_sug, linha.almoco_saida_sug, linha.almoco_volta_sug, linha.saida_sug];
   const real4 = [linha.entrada, linha.saida_almoco, linha.volta_almoco, linha.saida];
 
-  // Almoço sugerido: Citatti manda; abaixo de 27 min ele pegou uma parada, não a
-  // refeição — aí vale o SST (regra do Passo 1, `almocoRef`).
-  const citattiMin = numero(iv.sugestao_duracao_min);
-  const sstMin = numero(iv.sugestao_sst_duracao_min);
-  const usaSst = (citattiMin == null || citattiMin < 27) && sstMin != null && sstMin >= 27;
-  const almSugIni = usaSst ? iv.sugestao_sst_inicio : iv.sugestao_inicio || linha.almoco_saida_sug;
-  const almSugFim = usaSst ? iv.sugestao_sst_fim : iv.sugestao_fim || linha.almoco_volta_sug;
+  // Almoço sugerido: a REGRA DOS 27 MIN é do motor (`almocoDaRefeicao`, porte de
+  // simulador.py:335) — Citatti manda; abaixo de 27 min ele pegou uma parada, não a
+  // refeição, e aí vale o SST. A escada estava redigitada aqui e agora sai de lá,
+  // inclusive o rótulo da fonte.
+  const almRef = almocoDaRefeicao(iv);
+  const almSugIni = almRef.inicio || linha.almoco_saida_sug;
+  const almSugFim = almRef.fim || linha.almoco_volta_sug;
+
+  // Cartão do dia pelo motor: `removeFantasmas` colapsa a batida duplicada do coletor
+  // (<= 6 min) e `bloqueioSimulacao` diz, na língua do DP, POR QUE este dia não dá pra
+  // julgar (não bateu ponto, cartão com 1 batida, ponto ainda aberto).
+  const diagnostico = useMemo(() => {
+    const fonte = linha.todas_batidas || linha.batidas_limpas || "";
+    const mins = batidasDoCartao(fonte);
+    const { fora } = removeFantasmas(mins);
+    return {
+      fantasmas: fora.map(min2hm),
+      motivo: bloqueioSimulacao(simulaCartao({ batidas: fonte }).notas),
+    };
+  }, [linha.todas_batidas, linha.batidas_limpas]);
+
+  // Quanto de almoço a jornada CRAVADA exige (main.py `_almoco_matriz`): < 4h nada,
+  // 4h–6h 15 min, 6h+ 30 min. Vale a versão POR CATEGORIA, que é o porte literal: só
+  // motorista entra na matriz — interno/aprendiz seguem o alvo de 60 min da view 4, e
+  // dizer "30 min" pra eles seria régua errada. É informativo; quem decide é o DP.
+  const almocoExigido = useMemo(() => {
+    if (travado) return null;
+    const jor = jornadaEntreMin(valores.entrada, valores.saida);
+    if (jor == null) return null;
+    return { exige: almocoMatrizPorCategoria(valores.entrada, valores.saida, linha.categoria), jornada: jor };
+  }, [travado, valores.entrada, valores.saida, linha.categoria]);
+
+  /* ═══════════════════════ GRAVAÇÃO ═══════════════════════
+     Grava SÓ no clique. Depois de gravar, a linha é RELIDA do banco (`aoRecarregar`)
+     em vez de a tela pintar o estado otimista — se o gateway recusou uma coluna, ou
+     se um trigger mexeu no que foi gravado, a pessoa tem de ver o que ficou LÁ.
+     `date_ref` nunca sai de `new Date()`: vem pronto da linha (`dia`). Os `*_em` são
+     TIMESTAMP UTC, e aí `toISOString()` é o certo — é o mesmo do Python.            */
+
+  const recarregar = useCallback(async () => {
+    if (!aoRecarregar) return;
+    try {
+      await aoRecarregar(cracha, dia);
+    } catch {
+      /* a gravação já foi; falhar a releitura não desfaz nada — o botão Atualizar resolve */
+    }
+  }, [aoRecarregar, cracha, dia]);
+
+  // main.py `salvar_real_manual` (~392). Tudo vazio APAGA a linha, igual ao Python.
+  const salvarRealManual = async () => {
+    setRecadoRm(null);
+    // ALMOÇO TRAVADO (main.py:400-402): o servidor RECUSA o dia inteiro se o payload
+    // trouxer almoço. A trava do cliente é esta — as duas pontas do miolo saem do jogo
+    // ANTES de qualquer coisa: os campos continuam visíveis (o DP precisa ver o que
+    // está lá, e vêm preenchidos com a sugestão), mas não são editáveis, não contam
+    // para o "tudo vazio limpa" e não vão no payload. Coluna ausente no upsert não é
+    // tocada, então o que já estiver gravado também não é apagado.
+    const gravaveis = travado ? ["entrada", "saida"] : CAMPOS_RM;
+    const { limpos, erro: falhaFormato } = normalizarRealManual(valores, gravaveis);
+    if (!limpos) {
+      setRecadoRm({ tipo: "erro", texto: falhaFormato });
+      return;
+    }
+    const preenchidos = gravaveis.filter((k) => limpos[k]);
+    setSalvando("rm");
+    try {
+      if (!preenchidos.length) {
+        // "Tudo vazio limpa" — o mesmo caminho do `deletar_real_manual` do Python.
+        await apagarDP360("ponto_real_manual", { cracha: `eq.${cra8(cracha)}`, date_ref: `eq.${dia}` });
+        setRecadoRm({ tipo: "ok", texto: "Real manual apagado — o dia volta para a sugestão." });
+      } else {
+        const payload = {
+          cracha: cra8(cracha),
+          date_ref: dia,
+          entrada: limpos.entrada || null,
+          saida: limpos.saida || null,
+          definido_por: quemEstaUsando(),
+          definido_em: agoraUtc(),
+        };
+        if (!travado) {
+          payload.alm_saida = limpos.alm_saida || null;
+          payload.alm_volta = limpos.alm_volta || null;
+        }
+        await upsertDP360("ponto_real_manual", payload);
+        setRecadoRm({ tipo: "ok", texto: "Real cravado." });
+      }
+      setForm(null);
+      await recarregar();
+    } catch (falha) {
+      setRecadoRm({ tipo: "erro", texto: falha.message || "Não foi possível gravar o Real manual." });
+    } finally {
+      setSalvando("");
+    }
+  };
+
+  const limparRealManual = async () => {
+    setRecadoRm(null);
+    setSalvando("rm-limpar");
+    try {
+      await apagarDP360("ponto_real_manual", { cracha: `eq.${cra8(cracha)}`, date_ref: `eq.${dia}` });
+      setRecadoRm({ tipo: "ok", texto: "Real manual apagado — o dia volta para a sugestão." });
+      setForm(null);
+      await recarregar();
+    } catch (falha) {
+      setRecadoRm({ tipo: "erro", texto: falha.message || "Não foi possível apagar o Real manual." });
+    } finally {
+      setSalvando("");
+    }
+  };
+
+  // main.py `marcar_ponto_ok` (~415). Um registro em ponto_caso alimenta a Revisão (o
+  // dia sai da lista) e as Folgas (o dia conta como certo). Desfazer LIMPA a marca.
+  // O crachá vai como `str(cracha).strip()`, igual ao Python — a chave do upsert é
+  // (cracha, date_ref) e mudar a forma criaria uma segunda linha para o mesmo dia.
+  const marcarPontoOk = async (ligar) => {
+    setRecadoOk(null);
+    setSalvando("ok");
+    const agora = agoraUtc();
+    const payload = {
+      cracha: String(cracha ?? "").trim(),
+      date_ref: dia,
+      nm_funcionario: linha.nm_funcionario || "",
+      atualizado_em: agora,
+      ...(ligar
+        ? { origem: "revisao", tipo: "ponto_ok", aceite: "aceito", ajuste: "certo", conferido_em: agora }
+        : { tipo: "", aceite: "pendente", ajuste: null, conferido_em: null }),
+    };
+    try {
+      await upsertDP360("ponto_caso", payload);
+      setRecadoOk({
+        tipo: "ok",
+        texto: ligar ? "Dia marcado como conferido." : "Marca desfeita — o dia volta para a Revisão.",
+      });
+      await recarregar();
+    } catch (falha) {
+      setRecadoOk({ tipo: "erro", texto: falha.message || "Não foi possível gravar o ponto conferido." });
+    } finally {
+      setSalvando("");
+    }
+  };
 
   const passos = [
     {
@@ -820,7 +1101,26 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
                 <div className="flex flex-wrap items-start gap-2">
                   <span className="dp-muted" style={ESTILO_ROTULO}>Batidas limpas</span>
                   <span className="dp-num dp-mono">{linha.batidas_limpas || "—"}</span>
+                  {!!diagnostico.fantasmas.length && (
+                    <span
+                      className="dp-pill mute"
+                      title="Batidas a 6 min ou menos uma da outra são o MESMO evento registrado duas vezes (bug do coletor). O motor fica com a última."
+                    >
+                      👻 {diagnostico.fantasmas.join(" · ")}
+                    </span>
+                  )}
                 </div>
+                {!!diagnostico.motivo && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="dp-muted" style={ESTILO_ROTULO}>Dá para julgar?</span>
+                    <span
+                      className="dp-pill warn"
+                      title="Veredito do motor (bloqueioSimulacao): sem cartão utilizável, nem a régua automática nem o aviso valem — o DP tem de cravar o Real na mão."
+                    >
+                      ⚠ {diagnostico.motivo}
+                    </span>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -844,12 +1144,12 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
                 </p>
                 <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {[
-                    ["Entrada", linha.rm_entrada || linha.entrada_sug, false],
-                    ["Saída almoço", linha.rm_alm_saida || linha.almoco_saida_sug, travado],
-                    ["Volta almoço", linha.rm_alm_volta || linha.almoco_volta_sug, travado],
-                    ["Saída", linha.rm_saida || linha.saida_sug, false],
-                  ].map(([rot, valor, cadeado]) => (
-                    <label key={rot} className="block">
+                    ["Entrada", "entrada", false],
+                    ["Saída almoço", "alm_saida", travado],
+                    ["Volta almoço", "alm_volta", travado],
+                    ["Saída", "saida", false],
+                  ].map(([rot, campo, cadeado]) => (
+                    <label key={campo} className="block">
                       <span
                         className="dp-muted flex items-center gap-1"
                         style={{ ...ESTILO_TITULO, margin: 0, fontSize: 10 }}
@@ -859,25 +1159,49 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
                       </span>
                       <input
                         type="text"
-                        readOnly
-                        disabled
-                        value={fmtHora(valor)}
+                        inputMode="numeric"
+                        readOnly={cadeado}
+                        disabled={cadeado || salvando === "rm"}
+                        value={valores[campo] || ""}
+                        onChange={(e) => mudarCampo(campo, e.target.value)}
                         placeholder="HH:MM"
-                        title={cadeado ? "Almoço travado pela regra da Revisão." : TRAVA_GRAVACAO}
-                        style={ESTILO_INPUT}
+                        title={
+                          cadeado
+                            ? "Almoço travado pela regra da Revisão — não entra na gravação."
+                            : "HH:MM (aceita 25:40 para o turno que vira o dia). Vazio nas quatro pontas apaga o Real manual."
+                        }
+                        style={cadeado ? ESTILO_INPUT_TRAVADO : ESTILO_INPUT}
                       />
                     </label>
                   ))}
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {/* TODO(fase de gravação): upsertDP360("ponto_real_manual", {
-                        cracha: cra8(linha.cracha), date_ref: dia, entrada, alm_saida,
-                        alm_volta, saida, definido_por: user.nome, definido_em: agora })
-                      — respeitando almoco_travado (miolo não editável). */}
-                  <BotaoTravado titulo={TRAVA_GRAVACAO}>✓ Salvar Real</BotaoTravado>
-                  {/* TODO(fase de gravação): apagarDP360("ponto_real_manual",
-                        { cracha: `eq.${cra8(linha.cracha)}`, date_ref: `eq.${dia}` }) */}
-                  <BotaoTravado titulo={TRAVA_GRAVACAO}>Limpar</BotaoTravado>
+                {!!almocoExigido && almocoExigido.exige > 0 && (
+                  <p className="dp-faint" style={{ margin: "6px 0 0", fontSize: 11.5 }}>
+                    Jornada de {Math.floor(almocoExigido.jornada / 60)}h
+                    {String(almocoExigido.jornada % 60).padStart(2, "0")}: a matriz da Revisão pede{" "}
+                    <b>{almocoExigido.exige} min</b> de almoço. Quem decide é você — isto é só a régua.
+                  </p>
+                )}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="dp-btn primary"
+                    disabled={salvando === "rm" || salvando === "rm-limpar"}
+                    onClick={salvarRealManual}
+                    title="Grava em ponto_real_manual. Com as quatro pontas vazias, apaga o Real deste dia."
+                  >
+                    {salvando === "rm" ? "gravando…" : "✓ Salvar Real"}
+                  </button>
+                  <button
+                    type="button"
+                    className="dp-btn"
+                    disabled={salvando === "rm" || salvando === "rm-limpar" || !(linha.rm_entrada || linha.rm_saida || linha.rm_alm_saida || linha.rm_alm_volta)}
+                    onClick={limparRealManual}
+                    title="Apaga a linha de ponto_real_manual deste crachá/dia — o dia volta para a sugestão."
+                  >
+                    {salvando === "rm-limpar" ? "apagando…" : "Limpar"}
+                  </button>
+                  <Recado recado={recadoRm} />
                 </div>
               </div>
             </section>
@@ -906,7 +1230,7 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
                   fim={iv.programado_fim}
                 />
                 <BlocoAlmoco
-                  titulo={`Sugestão${usaSst ? " · SST" : " · Citatti"}`}
+                  titulo={`Sugestão${almRef.origem ? ` · ${almRef.origem}` : ""}`}
                   ini={almSugIni}
                   fim={almSugFim}
                   travado={travado}
@@ -914,6 +1238,7 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
                 />
               </div>
               <div className="dp-faint mt-2 flex flex-wrap gap-x-4 gap-y-1" style={{ fontSize: 11.5 }}>
+                {!!almRef.detalhe && <span title="Regra dos 27 min (simulador.py:335)">{almRef.detalhe}</span>}
                 <span>Fonte do almoço: {linha.fonte_almoco || "—"}</span>
                 <span>Faixa: {linha.almoco_faixa || "—"}</span>
                 <span>Confiável: {ehVerdadeiro(linha.almoco_confiavel) ? "sim" : "não"}</span>
@@ -1028,17 +1353,39 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
           }}
         >
           <p className="dp-muted" style={{ margin: 0, fontSize: 11.5 }}>
-            Fase de leitura: nenhuma ação desta tela grava na base DP360.
+            {jaConferido ? (
+              <>
+                ✓ <b>Conferido pelo DP</b>
+                {caso?.conferido_em ? ` · ${fmtDataHora(caso.conferido_em)}` : ""} — o dia sai da Revisão e
+                conta como certo nas Folgas.
+              </>
+            ) : (
+              <>Real manual e ponto conferido gravam. O aviso ao trabalhador ainda não.</>
+            )}
           </p>
-          <div className="flex flex-wrap gap-2">
-            {/* TODO(fase de gravação): upsertDP360("ponto_conferido", {
-                  cracha: cra8(linha.cracha), date_ref: dia, nome, marcado_por, marcado_em })
-                — o dia conferido sai da Revisão e conta como certo nas Folgas. */}
-            <BotaoTravado titulo={TRAVA_GRAVACAO}>✓ Ponto conferido</BotaoTravado>
-            {/* TODO(fase de gravação): upsertDP360("ponto_caso", { cracha, date_ref,
-                  origem: "revisao", tipo, aviso_enviado_em, alvo_* congelado }) e disparo
-                  do workflow do robô. Recusar ≠ advertir: advertência só depois de aviso. */}
-            <BotaoTravado titulo={TRAVA_GRAVACAO}>📣 Enviar ocorrência</BotaoTravado>
+          <div className="flex flex-wrap items-center gap-2">
+            <Recado recado={recadoOk} />
+            {/* main.py `marcar_ponto_ok`: um registro em ponto_caso (tipo='ponto_ok') tira o
+                dia da Revisão E o conta como certo nas Folgas. Desfazer limpa a marca. */}
+            <button
+              type="button"
+              className={`dp-btn ${jaConferido ? "" : "primary"}`}
+              disabled={salvando === "ok"}
+              onClick={() => marcarPontoOk(!jaConferido)}
+              title={
+                jaConferido
+                  ? "Desfaz a marca: o dia volta para a lista da Revisão."
+                  : "O dia está certo do jeito que está, mesmo que a régua automática ainda peça revisão."
+              }
+            >
+              {salvando === "ok" ? "gravando…" : jaConferido ? "↩ Desfazer conferido" : "✓ Ponto conferido"}
+            </button>
+            {/* TODO(fase do robô): upsertDP360("ponto_caso", { cracha, date_ref,
+                  origem: "revisao", tipo, aviso_enviado_em, alvo_* congelado }) e disparo do
+                  workflow do Transnet. NÃO ligar sem o robô: isto MANDA MENSAGEM para o
+                  trabalhador, e o alvo do aviso é congelado (nunca reescrito por um segundo
+                  aviso). Recusar ≠ advertir: advertência só depois de aviso. */}
+            <BotaoTravado titulo={TRAVA_AVISO}>📣 Enviar ocorrência</BotaoTravado>
             <button type="button" onClick={aoFechar} className="dp-btn">
               Fechar
             </button>
@@ -1049,37 +1396,44 @@ function CartaoModal({ linha, caso, gps, aoFechar }) {
   );
 }
 
-/* ---------- colunas da grade (ordem do COLS_REV do app antigo) ---------- */
+/* ---------- colunas da grade (ordem do COLS_REV do app antigo) ----------
+   A grade é a `TabelaDP` compartilhada: ela entrega ordenar, ocultar coluna (⚙),
+   fixar, redimensionar, CSV e preferência salva por tela (`tbl_p2` no app_config).
+   Contrato dela: `valor` é o que ORDENA e EXPORTA, `render` só EXIBE. Coluna cujo
+   `render` devolve pílula/chip PRECISA de `valor` em texto — senão o CSV sai vazio
+   e a ordenação compara `[object Object]`.
+   As colunas que dependem de estado da aba (Avisado?, 📍 Local, Motivo, e os chips
+   de sugestão bloqueada) recebem `render`/`valor` dentro do componente. */
 const COLUNAS = [
-  { id: "cracha", rotulo: "Crachá", classe: "dp-num dp-mono" },
-  { id: "nm_funcionario", rotulo: "Nome", estilo: { fontWeight: 600 } },
-  { id: "nm_funcao", rotulo: "Função", classe: "dp-muted" },
-  { id: "date_ref", rotulo: "Data", classe: "dp-num dp-mono" },
-  { id: "status_ponto", rotulo: "Status" },
-  { id: "_avisado", rotulo: "Avisado?" },
-  { id: "_gps", rotulo: "📍 Local" },
-  { id: "motivo", rotulo: "Motivo" },
-  { id: "sugestao_fonte", rotulo: "Fonte SUG", classe: "dp-muted" },
-  { id: "qtd_batidas", rotulo: "Qtd batidas", classe: "dp-num", alinhar: "center" },
-  { id: "todas_batidas", rotulo: "Todas as batidas", classe: "dp-num dp-mono" },
-  { id: "batidas_limpas", rotulo: "Batidas limpas", classe: "dp-num dp-mono" },
-  { id: "entrada", rotulo: "Entrada", classe: "dp-num dp-mono", hora: true },
-  { id: "saida_almoco", rotulo: "Saída almoço", classe: "dp-num dp-mono", hora: true },
-  { id: "volta_almoco", rotulo: "Volta almoço", classe: "dp-num dp-mono", hora: true },
-  { id: "saida", rotulo: "Saída", classe: "dp-num dp-mono", hora: true },
-  { id: "_jornada", rotulo: "Jornada", classe: "dp-num dp-mono" },
-  { id: "esc_entrada", rotulo: "Esc. apresentação", classe: "dp-num dp-mono", hora: true },
-  { id: "programado_entrada", rotulo: "Esc. início", classe: "dp-num dp-mono", hora: true },
-  { id: "programado_saida", rotulo: "Esc. fim", classe: "dp-num dp-mono", hora: true },
-  { id: "esc_saida", rotulo: "Esc. saída", classe: "dp-num dp-mono", hora: true },
+  { id: "cracha", rotulo: "Crachá", classe: "dp-num dp-mono", largura: 92 },
+  { id: "nm_funcionario", rotulo: "Nome", estilo: { fontWeight: 600 }, largura: 210 },
+  { id: "nm_funcao", rotulo: "Função", classe: "dp-muted", largura: 150 },
+  { id: "date_ref", rotulo: "Data", classe: "dp-num dp-mono", largura: 100 },
+  { id: "status_ponto", rotulo: "Status", largura: 175 }, // cabe status + "✓ conferido"
+  { id: "_avisado", rotulo: "Avisado?", largura: 120 },
+  { id: "_gps", rotulo: "📍 Local", largura: 170 },
+  { id: "motivo", rotulo: "Motivo", largura: 200 },
+  { id: "sugestao_fonte", rotulo: "Fonte SUG", classe: "dp-muted", largura: 130 },
+  { id: "qtd_batidas", rotulo: "Qtd batidas", classe: "dp-num", alinhar: "center", largura: 90 },
+  { id: "todas_batidas", rotulo: "Todas as batidas", classe: "dp-num dp-mono", largura: 210 },
+  { id: "batidas_limpas", rotulo: "Batidas limpas", classe: "dp-num dp-mono", largura: 180 },
+  { id: "entrada", rotulo: "Entrada", classe: "dp-num dp-mono", hora: true, largura: 88 },
+  { id: "saida_almoco", rotulo: "Saída almoço", classe: "dp-num dp-mono", hora: true, largura: 105 },
+  { id: "volta_almoco", rotulo: "Volta almoço", classe: "dp-num dp-mono", hora: true, largura: 105 },
+  { id: "saida", rotulo: "Saída", classe: "dp-num dp-mono", hora: true, largura: 88 },
+  { id: "_jornada", rotulo: "Jornada", classe: "dp-num dp-mono", largura: 92 },
+  { id: "esc_entrada", rotulo: "Esc. apresentação", classe: "dp-num dp-mono", hora: true, largura: 125 },
+  { id: "programado_entrada", rotulo: "Esc. início", classe: "dp-num dp-mono", hora: true, largura: 95 },
+  { id: "programado_saida", rotulo: "Esc. fim", classe: "dp-num dp-mono", hora: true, largura: 95 },
+  { id: "esc_saida", rotulo: "Esc. saída", classe: "dp-num dp-mono", hora: true, largura: 95 },
   { id: "_sep", rotulo: "│" },
-  { id: "entrada_sug", rotulo: "Entrada SUG", hora: true, sug: true },
-  { id: "almoco_saida_sug", rotulo: "S. almoço SUG", hora: true, sug: true },
-  { id: "almoco_volta_sug", rotulo: "V. almoço SUG", hora: true, sug: true },
-  { id: "saida_sug", rotulo: "Saída SUG", hora: true, sug: true },
-  { id: "duracao_total_sug", rotulo: "Dur. total SUG", classe: "dp-num dp-mono", sug: true },
-  { id: "atraso_min", rotulo: "Atraso (min)", classe: "dp-num", alinhar: "right" },
-  { id: "he_min", rotulo: "HE (min)", classe: "dp-num", alinhar: "right" },
+  { id: "entrada_sug", rotulo: "Entrada SUG", hora: true, sug: true, largura: 105 },
+  { id: "almoco_saida_sug", rotulo: "S. almoço SUG", hora: true, sug: true, largura: 118 },
+  { id: "almoco_volta_sug", rotulo: "V. almoço SUG", hora: true, sug: true, largura: 118 },
+  { id: "saida_sug", rotulo: "Saída SUG", hora: true, sug: true, largura: 105 },
+  { id: "duracao_total_sug", rotulo: "Dur. total SUG", classe: "dp-num dp-mono", sug: true, largura: 115 },
+  { id: "atraso_min", rotulo: "Atraso (min)", classe: "dp-num", alinhar: "right", largura: 95 },
+  { id: "he_min", rotulo: "HE (min)", classe: "dp-num", alinhar: "right", largura: 85 },
 ];
 
 // Colunas pedidas da ponto_diario. Lista explícita (em vez de `*`) porque a
@@ -1387,36 +1741,139 @@ export default function Revisao() {
     [linhas, bloqueios],
   );
 
-  const celula = (col, linha, bloqueio) => {
-    if (col.id === "_sep") return <span className="dp-faint">│</span>;
-    if (col.id === "status_ponto")
-      return (
-        <Pilula
-          texto={linha.status_ponto || "—"}
-          tom={String(linha.status_ponto ?? "").toUpperCase() === "OK" ? "ok" : "warn"}
-        />
-      );
-    if (col.id === "_avisado") return <Avisado caso={casos[chaveDia(linha.cracha, linha.date_ref)]} />;
-    if (col.id === "_gps") return <LocalGps gps={gpsPorCracha[cra8(linha.cracha)]} />;
-    if (col.id === "motivo") return <Motivo linha={linha} />;
-    if (col.id === "date_ref") return fmtData(linha.date_ref);
-    if (col.id === "_jornada") return fmtMin(linha.jornada_liquida_min ?? linha.jornada_total_min);
-    const bruto = linha[col.id];
-    const texto = col.hora ? fmtHora(bruto) : String(bruto ?? "").trim();
-    if (!texto) return <span className="dp-faint">—</span>;
-    // Sugestão bloqueada não é sugestão: o valor continua visível (o DP precisa
-    // ver o que a view propôs), mas marcado — não dá pra avisar nem lançar.
-    if (col.sug && bloqueio)
-      return (
-        <span className="dp-chip dp-num new" title={`⚠ ${bloqueio}`}>
-          {texto}
-          <span className="es">⚠</span>
-        </span>
-      );
-    // Horário sugerido utilizável: chip mono, como as batidas da ferramenta.
-    if (col.sug && col.hora) return <span className="dp-chip dp-num">{texto}</span>;
-    return texto;
-  };
+  /* ---- colunas da TabelaDP: mesma ordem/cor/render de antes, agora com `valor` ----
+     `render` continua sendo o que a tela mostra (pílulas, chips, "—"); `valor` é a
+     versão TEXTO/NÚMERO que a grade usa para ordenar e para o CSV. Sem os dois, ou o
+     CSV sai com JSX ou a ordenação compara string com objeto. */
+  const colunas = useMemo(
+    () =>
+      COLUNAS.map((col) => {
+        const bloqueioDe = (l) => bloqueios[chaveDia(l.cracha, l.date_ref)];
+
+        if (col.id === "_sep") return { ...col, render: () => <span className="dp-faint">│</span> };
+
+        // O "conferido pelo DP" mora em ponto_caso, não em ponto_diario — a régua
+        // automática continua marcando REVISAR. Sem mostrar a marca aqui, o DP clica,
+        // fecha o cartão e a grade fica exatamente igual (main.py `get_pontos_ok`).
+        if (col.id === "status_ponto")
+          return {
+            ...col,
+            valor: (l) => {
+              const s = String(l.status_ponto ?? "").trim();
+              return pontoConferido(casos[chaveDia(l.cracha, l.date_ref)]) ? `${s} · conferido` : s;
+            },
+            render: (l) => (
+              <>
+                <Pilula
+                  texto={l.status_ponto || "—"}
+                  tom={String(l.status_ponto ?? "").toUpperCase() === "OK" ? "ok" : "warn"}
+                />
+                {pontoConferido(casos[chaveDia(l.cracha, l.date_ref)]) && (
+                  <>
+                    {" "}
+                    <Pilula
+                      texto="✓ conferido"
+                      tom="ok"
+                      titulo="O DP marcou este dia como certo — ele conta como OK nas Folgas."
+                    />
+                  </>
+                )}
+              </>
+            ),
+          };
+
+        if (col.id === "_avisado")
+          return {
+            ...col,
+            valor: (l) => estadoAviso(casos[chaveDia(l.cracha, l.date_ref)]).texto,
+            render: (l) => <Avisado caso={casos[chaveDia(l.cracha, l.date_ref)]} />,
+          };
+
+        if (col.id === "_gps")
+          return {
+            ...col,
+            valor: (l) => textoGps(gpsPorCracha[cra8(l.cracha)]),
+            render: (l) => <LocalGps gps={gpsPorCracha[cra8(l.cracha)]} />,
+          };
+
+        if (col.id === "motivo")
+          return { ...col, valor: (l) => String(l.motivo ?? "").trim(), render: (l) => <Motivo linha={l} /> };
+
+        // Data em dd/mm/aaaa: a `chaveOrd` da grade entende esse formato e ordena por
+        // ano/mês/dia — foi justamente aqui que a ferramenta ordenava pelo DIA DO MÊS.
+        if (col.id === "date_ref") return { ...col, valor: (l) => fmtData(l.date_ref) };
+
+        // Jornada ordena/exporta em MINUTOS (número) e exibe "8h02".
+        if (col.id === "_jornada")
+          return {
+            ...col,
+            valor: (l) => {
+              const n = parseInt(l.jornada_liquida_min, 10);
+              return Number.isNaN(n) ? null : n;
+            },
+            render: (l) => fmtMin(l.jornada_liquida_min),
+          };
+
+        const valor = col.hora ? (l) => fmtHora(l[col.id]) : (l) => String(l[col.id] ?? "").trim();
+
+        return {
+          ...col,
+          valor,
+          render: (l) => {
+            const texto = valor(l);
+            if (!texto) return <span className="dp-faint">—</span>;
+            // Sugestão bloqueada não é sugestão: o valor continua visível (o DP precisa
+            // ver o que a view propôs), mas marcado — não dá pra avisar nem lançar.
+            const bloqueio = col.sug ? bloqueioDe(l) : "";
+            if (col.sug && bloqueio)
+              return (
+                <span className="dp-chip dp-num new" title={`⚠ ${bloqueio}`}>
+                  {texto}
+                  <span className="es">⚠</span>
+                </span>
+              );
+            // Horário sugerido utilizável: chip mono, como as batidas da ferramenta.
+            if (col.sug && col.hora) return <span className="dp-chip dp-num">{texto}</span>;
+            return texto;
+          },
+        };
+      }),
+    [bloqueios, casos, gpsPorCracha],
+  );
+
+  /* ---- releitura de UMA linha depois de gravar ----
+     A tela nunca pinta o estado otimista: relê `ponto_diario` (cru), `ponto_real_manual`
+     e `ponto_caso` do crachá/dia e reaplica o overlay do Real. O `ponto_diario` cru é o
+     que permite DESFAZER o overlay quando o Real manual é apagado — reaproveitar a linha
+     já sobrescrita deixaria `entrada_sug`/`alvo_*` com o valor antigo do DP.
+     `in.(...)` com as variantes do crachá porque as tabelas do lake divergem no zero à
+     esquerda (é o mesmo truque do pop-up). */
+  const recarregarLinha = useCallback(async (cracha, dia) => {
+    const cr = String(cracha ?? "").trim();
+    const variantes = [...new Set([cr, cr.replace(/^0+/, ""), cra8(cr)].filter(Boolean))].join(",");
+    const filtros = { cracha: `in.(${variantes})`, date_ref: `eq.${dia}` };
+    const [diario, reaisManuais, listaCasos] = await Promise.all([
+      lerDP360("ponto_diario", { colunas: COLUNAS_PONTO_DIARIO, filtros, limite: 5 }),
+      lerDP360("ponto_real_manual", { filtros, limite: 5 }),
+      lerDP360("ponto_caso", { filtros, limite: 5 }),
+    ]);
+    const chave = chaveDia(cr, dia);
+    const rm = reaisManuais?.[0] || null;
+    const caso = listaCasos?.[0] || null;
+    const nova = diario?.[0] ? aplicarRealManual(diario[0], rm) : null;
+
+    setCasos((mapa) => {
+      const novo = { ...mapa };
+      if (caso) novo[chave] = caso;
+      else delete novo[chave];
+      return novo;
+    });
+    if (!nova) return;
+    setLinhas((ls) => ls.map((l) => (chaveDia(l.cracha, l.date_ref) === chave ? nova : l)));
+    // O pop-up aberto recebe a MESMA linha nova: sem isto ele continuaria mostrando o
+    // Real antigo enquanto a grade atrás dele já mostra o novo.
+    setAberta((a) => (a && chaveDia(a.cracha, a.date_ref) === chave ? nova : a));
+  }, []);
 
   const chips = [
     ["TODOS", "TODOS"],
@@ -1482,22 +1939,27 @@ export default function Revisao() {
             placeholder="Buscar por nome ou crachá…"
             style={{ width: 230 }}
           />
-          {/* TODO(fase de gravação): avisarMotoristas / avisarInternos / avisarFora —
-              gravam ponto_caso e sobem o comunicado. Recusar ≠ advertir, e o alvo do
-              aviso é congelado (nunca reescrito por um segundo aviso). */}
-          <BotaoTravado titulo={TRAVA_GRAVACAO}>📣 Enviar ocorrência</BotaoTravado>
-          <BotaoTravado titulo={TRAVA_GRAVACAO}>📍 Avisar quem bateu fora</BotaoTravado>
+          {/* TODO(fase do robô): avisarMotoristas / avisarInternos / avisarFora — gravam
+              ponto_caso e SOBEM O COMUNICADO ao trabalhador pelo robô do Transnet. Não
+              ligar antes do robô: o alvo do aviso é congelado (nunca reescrito por um
+              segundo aviso) e recusar ≠ advertir. */}
+          <BotaoTravado titulo={TRAVA_AVISO}>📣 Enviar ocorrência</BotaoTravado>
+          <BotaoTravado titulo={TRAVA_AVISO}>📍 Avisar quem bateu fora</BotaoTravado>
           <button type="button" onClick={() => carregarDia()} className="dp-btn">
             <RefreshCw size={13} style={{ display: "inline", verticalAlign: "-2px" }} /> Atualizar
           </button>
         </>
       }
     >
-      {/* Trava da fase de leitura — fica visível, mas discreta. */}
+      {/* O que grava e o que ainda não — a distinção que importa é: nada aqui FALA com o
+          trabalhador. Real manual e ponto conferido mexem só na base do DP. */}
       <div className="dp-resumo">
-        <span className="dp-pill warn">⚠ fase de leitura</span> Salvar Real manual, marcar ponto conferido e
-        enviar aviso estão desabilitados até a validação — gravação errada aqui vira advertência indevida em cima
-        de trabalhador.
+        <span className="dp-pill ok">✓ grava</span> <b>Real manual do DP</b> (ponto_real_manual) e{" "}
+        <b>ponto conferido</b> (ponto_caso) — abra o cartão da linha. Os dois ficam na base do DP e
+        podem ser desfeitos.{" "}
+        <span className="dp-pill warn">⚠ ainda não</span> <b>Enviar ocorrência</b> e{" "}
+        <b>avisar quem bateu fora</b>: essas ações mandam comunicado ao trabalhador e dependem do robô
+        do Transnet — seguem desabilitadas.
       </div>
 
       {/* ---- legenda das cores da linha + contagem de sugestões ---- */}
@@ -1518,60 +1980,20 @@ export default function Revisao() {
         {!!comSugestao && <span style={{ marginLeft: "auto" }}>{comSugestao} com sugestão utilizável</span>}
       </div>
 
-      {/* ---- grade ---- */}
-      <div className="dp-tabela-wrap">
-        <table className="dp-tabela">
-          <thead>
-            <tr>
-              {COLUNAS.map((col) => (
-                <th key={col.id} style={col.alinhar ? { textAlign: col.alinhar } : undefined}>
-                  {col.rotulo}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {carregando && (
-              <tr>
-                <td colSpan={COLUNAS.length} className="dp-muted" style={{ textAlign: "center", padding: 32 }}>
-                  Carregando a revisão de {fmtData(data)}…
-                </td>
-              </tr>
-            )}
-            {!carregando && !visiveis.length && (
-              <tr>
-                <td colSpan={COLUNAS.length} className="dp-muted" style={{ textAlign: "center", padding: 32 }}>
-                  {linhas.length ? "Nada neste filtro." : "Nenhum cartão para esta categoria e data."}
-                </td>
-              </tr>
-            )}
-            {!carregando &&
-              visiveis.map((linha) => {
-                const chave = chaveDia(linha.cracha, linha.date_ref);
-                const bloqueio = bloqueios[chave];
-                return (
-                  <tr
-                    key={chave}
-                    onClick={() => setAberta(linha)}
-                    className={classeLinha(linha, bloqueio)}
-                    style={{ cursor: "pointer" }}
-                    title="Abrir o cartão deste dia"
-                  >
-                    {COLUNAS.map((col) => (
-                      <td
-                        key={col.id}
-                        className={col.classe || ""}
-                        style={{ ...(col.alinhar ? { textAlign: col.alinhar } : null), ...col.estilo }}
-                      >
-                        {celula(col, linha, bloqueio)}
-                      </td>
-                    ))}
-                  </tr>
-                );
-              })}
-          </tbody>
-        </table>
-      </div>
+      {/* ---- grade (a compartilhada: ⚙ colunas, fixar, redimensionar, CSV, preferência
+              salva em `tbl_p2`). O filtro é da aba; a grade só ordena o que recebe. ---- */}
+      <TabelaDP
+        chave="p2"
+        colunas={colunas}
+        linhas={visiveis}
+        classeLinha={(l) => classeLinha(l, bloqueios[chaveDia(l.cracha, l.date_ref)])}
+        idLinha={(l) => chaveDia(l.cracha, l.date_ref)}
+        aoClicarLinha={(l) => setAberta(l)}
+        carregando={carregando}
+        mensagemCarregando={`Carregando a revisão de ${fmtData(data)}…`}
+        vazio={linhas.length ? "Nada neste filtro." : "Nenhum cartão para esta categoria e data."}
+        nomeCsv={`revisao_${String(categoria).toLowerCase()}_${data}`}
+      />
 
       <p className="dp-resumo flex items-center gap-1.5" style={{ margin: 0, paddingBottom: 20 }}>
         <MapPin size={12} />
@@ -1587,6 +2009,7 @@ export default function Revisao() {
           caso={casos[chaveDia(aberta.cracha, aberta.date_ref)]}
           gps={gpsPorCracha[cra8(aberta.cracha)]}
           aoFechar={() => setAberta(null)}
+          aoRecarregar={recarregarLinha}
         />
       )}
     </AbaShell>

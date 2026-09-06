@@ -4,6 +4,9 @@ export const APP_ACCESS_PAGES = [
   { key: "painel", label: "Painel Executivo", category: "Portal", path: "/painel", patterns: ["/painel"] },
   { key: "cadastros_hub", label: "Cadastros (central)", category: "Cadastros", path: "/cadastros", patterns: ["/cadastros"] },
   { key: "dp360", label: "DP360 · Gestão de Ponto", category: "DP360", path: "/dp360", patterns: ["/dp360", "/dp360/:aba"] },
+  { key: "dp360_abandonos", label: "DP360 · Abandonos", category: "DP360", path: "/dp360-abandonos", patterns: ["/dp360-abandonos"] },
+  { key: "dp360_banco_horas", label: "DP360 · Banco de Horas", category: "DP360", path: "/dp360-banco-horas", patterns: ["/dp360-banco-horas"] },
+  { key: "dp360_resumo", label: "DP360 · Resumo", category: "DP360", path: "/dp360-resumo", patterns: ["/dp360-resumo"] },
 
   { key: "tratativas_resumo", label: "Tratativas Resumo", category: "Tratativas", path: "/tratativas-resumo", patterns: ["/tratativas-resumo"] },
   { key: "tratativas_solicitacao", label: "Tratativas Solicitacao", category: "Tratativas", path: "/solicitar", patterns: ["/solicitar"] },
@@ -92,7 +95,12 @@ export const APP_ACCESS_PAGES = [
   { key: "pessoas_vagas", label: "Vagas", category: "Pessoas", path: "/vagas", patterns: ["/vagas"] },
   { key: "config_niveis", label: "Configuracoes Niveis", category: "Configuracoes", path: "/niveis-acesso", patterns: ["/niveis-acesso"] },
   { key: "config_controle_dados", label: "Controle de Dados", category: "Configuracoes", path: "/controle-dados", patterns: ["/controle-dados"] },
-  { key: "monitoramento", label: "Monitoramento Vision", category: "Monitoramento", path: "/monitoramento", patterns: ["/monitoramento", "/monitoramento/dashboard", "/monitoramento/veiculos", "/monitoramento/veiculos/:prefixo", "/monitoramento/dia/:dia", "/monitoramento/prompt-gemini", "/monitoramento/:id"] },
+  // INOVE Guard e um CLUSTER: o Monitoramento Vision (que ja existia) mais a
+  // tela de Fraudes. A CHAVE e o PATH do monitoramento NAO mudam — so a
+  // categoria; mudar o path quebraria links salvos e o gating de quem ja tem a
+  // pagina liberada no perfil.
+  { key: "monitoramento", label: "Monitoramento Vision", category: "INOVE Guard", path: "/monitoramento", patterns: ["/monitoramento", "/monitoramento/dashboard", "/monitoramento/veiculos", "/monitoramento/veiculos/:prefixo", "/monitoramento/dia/:dia", "/monitoramento/prompt-gemini", "/monitoramento/:id"] },
+  { key: "guard_fraudes", label: "INOVE Guard · Fraudes", category: "INOVE Guard", path: "/guard-fraudes", patterns: ["/guard-fraudes"] },
 ];
 
 export const MOBILE_NAV_PRIORITY = [
@@ -265,7 +273,11 @@ export const DEFAULT_LEVEL_PROFILES = [
     nome: "Gestor",
     descricao: "Gestao operacional ampliada.",
     ativo: true,
-    paginas: APP_ACCESS_PAGES.map((page) => page.key).filter((key) => key !== "config_niveis" && key !== "monitoramento"),
+    // O cluster INOVE Guard inteiro fica fora do Gestor, como o Monitoramento ja
+    // estava: a tela de Fraudes le a base pelo gateway `dp360-api`, que so
+    // responde a Administrador — deixar o item no menu do Gestor daria um menu
+    // com uma tela que sempre devolve 403.
+    paginas: APP_ACCESS_PAGES.map((page) => page.key).filter((key) => key !== "config_niveis" && key !== "monitoramento" && key !== "guard_fraudes"),
     farol_liberado: true,
   },
   {

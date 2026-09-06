@@ -1,0 +1,167 @@
+/* INOVE Guard — extras visuais.
+ *
+ * O TEMA continua sendo o do DP360 (`../dp360/dp360.css`): mesmas variáveis,
+ * mesma tabela densa, mesmas pílulas. Aqui só entra o que o Guard tem e o DP360
+ * não: o painel do caso, o mapa das passagens e os cartões de "o que a regra
+ * pega / não pega".
+ *
+ * Tudo escopado em `.dp360` (o wrapper da tela) para não vazar no resto do app.
+ */
+
+/* ── faixa de cartões explicativos (o que a regra é, o que ela não pega) ── */
+.dp360 .gd-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  padding: 10px 20px 4px;
+}
+.dp360 .gd-card {
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-border);
+  border-radius: var(--dp-radius);
+  padding: 12px 14px;
+  box-shadow: var(--dp-shadow);
+}
+.dp360 .gd-card h4 {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+.dp360 .gd-card ul {
+  margin: 0;
+  padding-left: 16px;
+  color: var(--dp-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.dp360 .gd-card.gd-limites { border-color: var(--dp-danger-line); }
+.dp360 .gd-card.gd-limites h4 { color: var(--dp-danger-ink); }
+
+/* ── barra de filtros: rótulo antes de cada grupo de chips ── */
+.dp360 .gd-fgroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.dp360 .gd-flabel {
+  font-size: 11.5px;
+  color: var(--dp-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.dp360 .gd-hint {
+  padding: 2px 20px 8px;
+  font-size: 11.5px;
+  color: var(--dp-faint);
+  line-height: 1.5;
+}
+
+/* ── painel do caso aberto ── */
+.dp360 .gd-detalhe {
+  margin: 12px 20px 20px;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-border-strong);
+  border-radius: var(--dp-radius);
+  box-shadow: var(--dp-shadow);
+  overflow: hidden;
+}
+.dp360 .gd-det-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--dp-border);
+  background: var(--dp-surface-2);
+  flex-wrap: wrap;
+}
+.dp360 .gd-det-head b { font-size: 14px; font-weight: 650; }
+.dp360 .gd-det-head .sub { color: var(--dp-muted); font-size: 12px; margin-top: 3px; line-height: 1.5; }
+.dp360 .gd-det-acoes { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dp360 .gd-det-corpo { padding: 4px 0 12px; }
+.dp360 .gd-det-corpo .dp-tabela-wrap { margin-left: 14px; margin-right: 14px; }
+.dp360 .gd-det-corpo .dp-tbl-tools { margin-left: 14px; margin-right: 14px; }
+.dp360 .gd-secao {
+  padding: 10px 14px 4px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--dp-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── mapa das passagens ── */
+.dp360 .gd-map { padding: 0 14px 4px; }
+.dp360 .gd-map-box {
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  /* os panes do Leaflet vão a z-index 800; soltos, passam por cima do resto */
+  position: relative;
+  isolation: isolate;
+  z-index: 0;
+  border: 1px solid var(--dp-border);
+  background: var(--dp-surface-2);
+}
+.dp360 .gd-map-box .leaflet-container {
+  height: 100%;
+  width: 100%;
+  font: inherit;
+  background: var(--dp-surface-2);
+}
+.dp360 .gd-map-off {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px dashed var(--dp-border);
+  color: var(--dp-muted);
+  font-size: 12.5px;
+}
+.dp360 .gd-map-leg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 6px;
+  font-size: 10.5px;
+  color: var(--dp-muted);
+}
+
+/* pino numerado: o número é a ORDEM da passagem no bloco */
+.gd-pin {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+}
+.gd-pin.foco {
+  outline: 3px solid #3d6ae0;
+  outline-offset: 2px;
+  transform: scale(1.12);
+}
+.leaflet-tooltip.gd-tip {
+  background: #fff;
+  border: 1px solid #d3d9e4;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  font-size: 11.5px;
+  color: #1a2233;
+  padding: 4px 8px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.leaflet-tooltip.gd-tip::before { display: none; }
+
+/* linha da passagem em foco, dentro da grade de passagens */
+.dp360 table.dp-tabela tbody tr.gd-foco td { background: var(--dp-accent-soft); }
+.dp360 table.dp-tabela tbody tr.gd-foco:hover td { filter: brightness(0.97); }

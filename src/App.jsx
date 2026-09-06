@@ -71,6 +71,9 @@ const MonitoramentoVeiculoDetalhe = lazy(() => import("./pages/monitoramento/Mon
 const MonitoramentoPrompt = lazy(() => import("./pages/monitoramento/MonitoramentoPrompt"));
 const MonitoramentoDetalhe = lazy(() => import("./pages/monitoramento/MonitoramentoDetalhe"));
 
+// INOVE Guard — o Monitoramento (acima) mais a tela de Fraudes de cartao.
+const GuardFraudes = lazy(() => import("./pages/guard/GuardFraudes"));
+
 const PCMInicio = lazy(() => import("./pages/pcm/PCMInicio"));
 const PCMDiario = lazy(() => import("./pages/pcm/PCMDiario"));
 const PCMResumo = lazy(() => import("./pages/pcm/PCMResumo"));
@@ -90,6 +93,9 @@ const ControleReservas = lazy(() => import("./pages/pessoas/ControleReservas"));
 const OrganogramaCanvas = lazy(() => import("./pages/pessoas/OrganogramaCanvas"));
 const VagasCentral = lazy(() => import("./pages/pessoas/VagasCentral"));
 const DP360Cluster = lazy(() => import("./pages/dp360/DP360Cluster"));
+const DP360Abandonos = lazy(() => import("./pages/dp360/DP360Abandonos"));
+const DP360BancoHoras = lazy(() => import("./pages/dp360/DP360BancoHoras"));
+const DP360Resumo = lazy(() => import("./pages/dp360/DP360Resumo"));
 
 const DesempenhoLancamento = lazy(() => import("./pages/desempenho-diesel/DesempenhoLancamento"));
 const DesempenhoDieselResumo = lazy(() => import("./pages/desempenho-diesel/DesempenhoDieselResumo"));
@@ -235,6 +241,12 @@ export default function App() {
               <Route path="/inove" element={<HomeDecider />} />
               <Route path="/painel" element={<Dashboard />} />
               <Route path="/dp360" element={<DP360Cluster />} />
+              {/* Paginas irmas do cluster ANTES da rota com :aba — senao
+                  "/dp360-abandonos" nao colide, mas manter juntas deixa claro
+                  que sao o mesmo cluster (mesma categoria, mesmo gate de admin). */}
+              <Route path="/dp360-abandonos" element={<DP360Abandonos />} />
+              <Route path="/dp360-banco-horas" element={<DP360BancoHoras />} />
+              <Route path="/dp360-resumo" element={<DP360Resumo />} />
               <Route path="/dp360/:aba" element={<DP360Cluster />} />
               <Route path="/controle-especial" element={<Navigate to="/controle-especial/central" replace />} />
               <Route path="/controle-especial/central" element={<ControleEspecialCentral />} />
@@ -368,6 +380,10 @@ export default function App() {
               <Route path="/acidentes/imagens" element={<AcidentesImagens />} />
               <Route path="/acidentes/central" element={<AcidentesCentral />} />
               <Route path="/acidentes" element={<Navigate to="/acidentes/central" replace />} />
+
+              {/* INOVE Guard — Fraudes (o Monitoramento, logo abaixo, e a outra
+                  metade do cluster; o path dele nao mudou de proposito). */}
+              <Route path="/guard-fraudes" element={<GuardFraudes />} />
 
               {/* Monitoramento Vision */}
               <Route path="/monitoramento" element={<MonitoramentoCentral />} />

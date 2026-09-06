@@ -107,6 +107,8 @@ const FAROL_URL = "https://faroldemetas.onrender.com/?from=inove";
 export default function Sidebar() {
   const location = useLocation();
   const [pcmOpen, setPcmOpen] = useState(false);
+  const [dp360Open, setDp360Open] = useState(false);
+  const [guardOpen, setGuardOpen] = useState(false);
   const [desempenhoDieselOpen, setDesempenhoDieselOpen] = useState(false);
   const [estoqueDieselOpen, setEstoqueDieselOpen] = useState(false);
   const [tratativasOpen, setTratativasOpen] = useState(false);
@@ -133,7 +135,10 @@ export default function Sidebar() {
   );
   const showInicioExecutivo = canSee("/painel");
   const showInicioBasico = !showInicioExecutivo;
-  const showDP360 = canSee("/dp360");
+  // `showDP360` vivia AQUI, mas `links` so e declarado (const) mais abaixo: ler
+  // antes cai na TDZ e derruba a sidebar inteira com "Cannot access 'links'
+  // before initialization". Foi para junto dos outros `show*`, depois do
+  // `links` — nao mudou nada da regra.
   const podeVerFarol = useMemo(() => canUserSeeFarol(user, profileMap), [profileMap, user]);
 
   function abrirFarol() {
@@ -162,7 +167,31 @@ export default function Sidebar() {
     () => ({
       inicioExecutivo: { path: "/", label: "Início", icon: <FaHome /> },
       inicioBasico: { path: "/inicio-rapido", label: "Início", icon: <FaHome /> },
-      dp360: { path: "/dp360", label: "DP360 · Gestão de Ponto", icon: <FaUserClock /> },
+      // DP360 e um CLUSTER: a pagina principal (as abas do ponto) mais as telas
+      // irmas. Config vive dentro da principal, nao como item separado.
+      dp360: {
+        label: "DP360 · Gestão de Ponto",
+        icon: <FaUserClock />,
+        tabs: [
+          { path: "/dp360", label: "DP360" },
+          { path: "/dp360-abandonos", label: "Abandonos" },
+          { path: "/dp360-banco-horas", label: "Banco de Horas" },
+          { path: "/dp360-resumo", label: "Resumo" },
+        ],
+      },
+      // INOVE Guard e um CLUSTER: o Monitoramento Vision, que ja existia (path
+      // /monitoramento, inalterado), mais a tela de Fraudes de cartao. Antes o
+      // Monitoramento era um link SOLTO no menu; virou aba daqui para nao
+      // aparecer duas vezes.
+      guard: {
+        label: "INOVE Guard",
+        icon: <FaShieldAlt />,
+        tabs: [
+          { path: "/monitoramento", label: "Monitoramento", icon: <FaCamera /> },
+          { path: "/guard-fraudes", label: "Fraudes", icon: <FaMoneyBill /> },
+        ],
+      },
+
       pessoas: {
         label: "Pessoas",
         icon: <FaUsers />,
@@ -315,6 +344,8 @@ export default function Sidebar() {
   useEffect(() => {
     const path = location.pathname;
     if (path.startsWith("/pcm")) setPcmOpen(true);
+    if (path.startsWith("/dp360")) setDp360Open(true);
+    if (path.startsWith("/monitoramento") || path.startsWith("/guard-")) setGuardOpen(true);
     if (path.startsWith("/desempenho") || path.startsWith("/diesel")) setDesempenhoDieselOpen(true);
     if (path.startsWith("/estoque-diesel")) setEstoqueDieselOpen(true);
     if (path.startsWith("/tratativas") || path.startsWith("/central") || path.startsWith("/solicitar")) setTratativasOpen(true);
@@ -340,6 +371,8 @@ export default function Sidebar() {
       isActive ? "bg-blue-500 shadow-sm" : "hover:bg-blue-600"
     }`;
 
+  const showDP360 = links.dp360.tabs.some((t) => canSee(t.path));
+  const showGuard = links.guard.tabs.some((t) => canSee(t.path));
   const showPCM = links.pcm.tabs.some((t) => canSee(t.path));
   const showEmbarcados = links.embarcados.tabs.some((t) => canSee(t.path));
   const showDesempenhoDiesel = links.desempenhoDiesel.tabs.some((t) => canSee(t.path));
@@ -414,10 +447,31 @@ export default function Sidebar() {
         )}
 
         {showDP360 && (
-          <NavLink to={links.dp360.path} className={navLinkClass}>
-            {links.dp360.icon}
-            <span className="whitespace-nowrap">{links.dp360.label}</span>
-          </NavLink>
+          <>
+            <button
+              onClick={() => setDp360Open(!dp360Open)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                {links.dp360.icon}
+                <span className="whitespace-nowrap truncate">{links.dp360.label}</span>
+              </div>
+              {dp360Open ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
+            </button>
+
+            {dp360Open && (
+              <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
+                {links.dp360.tabs.map((t) =>
+                  canSee(t.path) ? (
+                    <NavLink key={t.path} to={t.path} end={t.path === "/dp360"} className={subNavLinkClass}>
+                      <span className="whitespace-nowrap">{t.label}</span>
+                    </NavLink>
+                  ) : null
+                )}
+              </div>
+            )}
+          </>
         )}
 
         {showPessoas && (
@@ -820,15 +874,35 @@ export default function Sidebar() {
           </>
         )}
 
-        {canSee("/monitoramento") && (
-          <NavLink
-            to="/monitoramento"
-            className={({ isActive }) =>
-              `w-full flex items-center gap-3 px-3 py-2 rounded-lg mb-2 ${isActive ? "bg-blue-500 shadow-sm" : "hover:bg-blue-600"}`
-            }
-          >
-            <FaCamera /> <span>Monitoramento</span>
-          </NavLink>
+        {/* INOVE Guard: o Monitoramento deixou de ser link solto e virou aba
+            daqui — sem isto ele apareceria duas vezes no menu. */}
+        {showGuard && (
+          <>
+            <button
+              onClick={() => setGuardOpen(!guardOpen)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              type="button"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                {links.guard.icon}
+                <span className="whitespace-nowrap truncate">{links.guard.label}</span>
+              </div>
+              {guardOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
+            </button>
+
+            {guardOpen && (
+              <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
+                {links.guard.tabs.map((t) =>
+                  canSee(t.path) ? (
+                    <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
+                      {t.icon}
+                      <span className="whitespace-nowrap">{t.label}</span>
+                    </NavLink>
+                  ) : null
+                )}
+              </div>
+            )}
+          </>
         )}
 
         {showConfig && (

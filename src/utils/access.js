@@ -139,6 +139,15 @@ export function canUserAccessPageKey(user, pageKey, accessProfileMap = {}) {
     return nivelNorm === "administrador" || nivelNorm === "admin";
   }
 
+  // INOVE Guard (guard_fraudes...): mesma regra, e pelo mesmo motivo. A tela de
+  // fraudes le pelo gateway dp360-api, que so responde a Administrador — sem esta
+  // trava o Gestor veria o item no menu e levaria 403 ao clicar. O `monitoramento`
+  // fica de fora de proposito: e chave antiga, com regra propria, e mudar o gate
+  // dele aqui tiraria acesso de quem ja usa.
+  if (key.startsWith("guard_")) {
+    return nivelNorm === "administrador" || nivelNorm === "admin";
+  }
+
   // Administrador sempre vê tudo — não depende de profileMap nem DB.
   if (nivelNorm === "administrador" || nivelNorm === "admin") return true;
 

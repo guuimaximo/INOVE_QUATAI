@@ -46,6 +46,7 @@ import { AuthContext } from "../../context/AuthContext";
 import { useAccessGovernance } from "../../context/AccessContext";
 import { canUserAccessPath } from "../../utils/access";
 import { lerDP360, lerTudoDP360, upsertDP360 } from "../../services/dp360Api";
+import { COM_PONTO, FRACAO_CONSOLIDADO, balde } from "./regrasDia";
 import { supabase } from "../../supabase";
 import AbaShell from "./abas/AbaShell";
 import "./dp360.css";
@@ -56,9 +57,6 @@ import "./dp360.css";
 // lista inteira: mudar isto muda quem é chamado para dar satisfação.
 const MIN_DIAS = 4;
 
-// main.py:7580 — `cp >= 0.3 * tot`. O dia só é consolidado quando pelo menos
-// 30% de quem tem linha nele já bateu ponto.
-const FRACAO_CONSOLIDADO = 0.3;
 
 // app.js:6657 — `const grave = x.dias_sem_ponto >= 8`. Só muda a cor da linha.
 const DIAS_GRAVE = 8;
@@ -78,15 +76,11 @@ const LINHAS_POR_PAGINA = 1000;
 // não há update nem delete, nem para quem foi marcado.
 const TABELA_AUDITORIA = "dp360_auditoria";
 
-// main.py:7455 — `_DASH_CATS`. Quem está fora destas três é ignorado por
-// `_bucket` (devolve None): não conta para consolidar o dia nem vira linha.
-const CATEGORIAS_DASH = new Set(["MOTORISTA", "INTERNO", "APRENDIZ"]);
-
-// main.py:7601 — os três baldes que provam que a pessoa APARECEU no dia.
-// Nota: para esta tela `incorreto` e `sem_operacao` são intercambiáveis (os
-// dois só dizem "bateu"); a distinção é mantida porque `_bucket` é o
-// classificador compartilhado do DP360, e torto aqui fica torto em toda parte.
-const COM_PONTO = new Set(["ok", "incorreto", "sem_operacao"]);
+// O balde e a régua do dia consolidado moram em `regrasDia.js`: a Revisão
+// precisa da MESMA conta para não abrir num dia que ainda não chegou, e
+// classificador duplicado fica torto em um dos dois lados mais cedo ou mais tarde.
+// (`incorreto` e `sem_operacao` são intercambiáveis para esta tela — os dois só
+// dizem "bateu" — mas a distinção é do classificador, não daqui.)
 
 // app.js:6655 — rótulo da categoria embaixo do nome.
 const ROTULO_CATEGORIA = {
@@ -118,10 +112,6 @@ const COLUNAS = [
 /* ────────────────────────────── utilidades puras ─────────────────────────── */
 
 const txt = (valor) => String(valor ?? "").trim();
-
-// ATENÇÃO (convenção do lake, ver Folgas.jsx): booleanos da `ponto_diario`
-// chegam como STRING "true"/"false". `=== false` derruba a regra sem erro.
-const ehFalso = (valor) => valor === false || txt(valor).toLowerCase() === "false";
 
 // NUNCA `new Date().toISOString()` para uma data local (CLAUDE.md): depois das
 // 21h BRT devolve o dia seguinte e a janela abriria no lugar errado.
@@ -229,34 +219,6 @@ async function registrarAuditoria({ acao, alvo, detalhe, user }) {
 //   justificado = SEM ponto MAS com lançamento no Transnet (atestado, férias,
 //                 afastamento, DSR, falta…) → QUEBRA a streak, e é justamente
 //                 por isso que quem está de atestado nunca vira abandono.
-function balde(linha) {
-  const categoria = txt(linha.categoria).toUpperCase();
-  if (!CATEGORIAS_DASH.has(categoria)) return null;
-
-  const status = txt(linha.status_ponto);
-  if (status === "OK") return "ok";
-
-  if (status === "SEM_PONTO") {
-    const lancado = txt(linha.te_descricao_dia);
-    const classificacao = txt(linha.classificacao).toUpperCase();
-    return lancado || classificacao === "AFASTADO" ? "justificado" : "sem_ponto";
-  }
-
-  if (status === "REVISAR") {
-    // Motorista que bateu ponto mas não operou (sem Citatti/bilhetagem).
-    if (
-      categoria === "MOTORISTA" &&
-      txt(linha.jornada_transnet) &&
-      ehFalso(linha.teve_operacao)
-    ) {
-      return "sem_operacao";
-    }
-    return "incorreto";
-  }
-
-  return null;
-}
-
 // PORTE FIEL de main.py:7559 (`get_abandonos`). Roda em memória sobre as linhas
 // cruas da `ponto_diario` — exatamente como o original, que recebe
 // `_res()["linhas"]` (= a lista devolvida por `ler_ponto_diario()`, sem

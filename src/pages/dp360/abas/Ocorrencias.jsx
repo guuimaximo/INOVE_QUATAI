@@ -100,12 +100,13 @@ const PRAZO_HORAS = 48;
 // concatenação: o gateway compara com a lista e devolve 400 em qualquer variação.
 const MODO_EXECUTAR = "executar decisoes";
 const MODO_CONFERIR = "conferir (so leitura)";
-const MODO_CAPTURAR = "capturar a grade";
+// O terceiro modo do robô, "capturar a grade", NÃO tem botão aqui — ver o bloco
+// "POR QUE A CAPTURA NÃO ESTÁ NESTA TELA", abaixo.
 
 // O que o disparo desta tela faz, em uma frase (rodapé e selo do cabeçalho).
 const AVISO_EXEC =
-  "O robô executa só o que JÁ FOI DECIDIDO e gravado, um crachá+dia por vez; confere ao vivo " +
-  "(só leitura) o que já foi executado; e captura a grade do Transnet para a base. " +
+  "O robô executa só o que JÁ FOI DECIDIDO e gravado, um crachá+dia por vez, e confere ao vivo " +
+  "(só leitura) o que já foi executado. " +
   "Advertência, correção do cartão e cancelamento continuam fora desta tela.";
 
 // ── O QUE A CONFERÊNCIA É, E POR QUE ELA IMPORTA ──────────────────────────
@@ -122,33 +123,25 @@ const AVISO_CONFERIR =
   "Lê o cartão ao vivo e compara com o contrato. NÃO muda nada no Transnet — nem no ensaio, " +
   "nem valendo. Valendo, fecha só no NOSSO banco (conferido_em) o que bateu.";
 
-// ── O QUE A CAPTURA É, E O BURACO QUE ELA TEM AQUI ────────────────────────
-// main.py:1540 (capturar_ocorrencias) → bot_ajustes_app.py:810 (capturar).
-// Varre a grade do Transnet e grava as ocorrências no Supabase (:543 e :827).
-// SEM ESCOPO de propósito: a grade inteira é o objeto, não um crachá+dia.
+// ── POR QUE A CAPTURA NÃO ESTÁ NESTA TELA ─────────────────────────────────
+// O robô tem um terceiro modo, `capturar a grade` (main.py:1540 →
+// bot_ajustes_app.py:810), que varre a grade do Transnet e grava as ocorrências
+// no Supabase. Ele CHEGOU a ter botão aqui, e saiu a pedido do dono.
 //
-// O QUE NÃO DÁ PARA PORTAR — e por isso está escrito na tela, não só aqui:
-// o original tem um PÓS-PROCESSO na máquina (main.py:1550 `_pos_captura`) que
-//   (a) carimba `app_config.ultima_captura` (main.py:1565) e
-//   (b) roda `congelar_antes()` (main.py:8923), que tira a foto antes/depois/
-//       veredito ANTES de qualquer aceite.
-// Os dois rodam DEPOIS que o run termina, na máquina que disparou. O INOVE
-// dispara e não espera o run (não lê resultado de run nenhum — é a mesma razão
-// pela qual advertir/corrigir continuam fora). Então:
-//   · esta tela NÃO carimba `ultima_captura` no disparo — seria mentira, a
-//     captura ainda nem começou quando o botão volta;
-//   · ela LÊ `app_config.ultima_captura` e mostra, para o DP saber o quanto a
-//     grade está velha (e o carimbo só se move quando alguém roda a ferramenta
-//     desktop — está dito na tela);
-//   · o CONGELAMENTO DA PROVA não acontece por este caminho. No INOVE a prova é
-//     congelada em `gravaContrato`, na hora da DECISÃO — que é depois, e só para
-//     o que o DP decidiu. Consequência real: a ocorrência que chega pela nuvem
-//     entra sem antes/depois congelado, e o "antes" que vier a ser congelado é o
-//     cartão de quando se decidiu, não o de quando se capturou.
-const AVISO_CAPTURA =
-  "Varre a grade inteira do Transnet e grava as ocorrências novas na base (sem escopo — não é " +
-  "por crachá+dia). NÃO carimba a última captura e NÃO congela a prova: o congelamento do " +
-  "original roda na máquina depois do run, e aqui a prova só é congelada na hora da decisão.";
+// A razão de fundo é que a premissa que justificava o botão era falsa. A
+// `ponto_ajustes_app` é alimentada pelo IMPORTADOR DIÁRIO, da view
+// `7_vw_ponto_ajustes_app_046`, cujo cabeçalho diz em maiúsculas "SUBSTITUI A
+// CAPTURA AO VIVO": antes um bot lia a grade a cada 10 min porque a ocorrência
+// não estava no lake e evaporava no aceite; hoje ela persiste
+// (`importador_supabase.py:234`, upsert por `id_ocorrencia`). Ou seja, a
+// ocorrência entra sozinha — o botão só adiantaria o dia de hoje.
+//
+// E ele tinha dois defeitos próprios: o `ajustes.yml` roda a captura sem
+// `--confirmar`, então NÃO existe ensaio (ela sempre escreve); e o pós-processo
+// do original (`main.py:1550 _pos_captura`), que congela a prova antes/depois
+// ANTES de qualquer aceite, roda na máquina depois do run — o INOVE dispara e
+// não espera, então a ocorrência capturada pela nuvem entraria sem prova
+// congelada. Se um dia isso voltar, é com essas três coisas resolvidas.
 
 // ── POR QUE "Advertir e corrigir" CONTINUA DESLIGADO ──────────────────────
 // No DP360 esse botão é uma CORRENTE DE TRÊS ELOS (app.js:1719 rejeitarCompleto):
@@ -593,36 +586,10 @@ async function lerLakePorPares(pares, aoAvancar) {
   return out;
 }
 
-/**
- * `app_config.ultima_captura` — QUANDO A GRADE FOI CAPTURADA PELA ÚLTIMA VEZ.
- *
- * Quem carimba é `main.py:1565` (_marcar_captura), na MÁQUINA, depois que o run
- * termina. O disparo daqui não carimba (ver AVISO_CAPTURA), então este valor diz
- * "a última vez que alguém capturou pela ferramenta desktop" — e é exatamente por
- * isso que ele é útil: mostra o quanto a grade pode estar velha.
- *
- * Falhar aqui NÃO pode derrubar a tela: é um dado de contexto, não a conferência.
- */
-async function lerUltimaCaptura() {
-  try {
-    const linhas = await lerDP360("app_config", {
-      colunas: "chave,valor",
-      filtros: { chave: "eq.ultima_captura" },
-      limite: 1,
-    });
-    const bruto = linhas?.[0]?.valor;
-    // a coluna é jsonb e o valor foi gravado como string — pode voltar com aspas
-    return txt(typeof bruto === "string" ? bruto : bruto == null ? "" : JSON.stringify(bruto))
-      .replace(/^"|"$/g, "");
-  } catch {
-    return "";
-  }
-}
-
 async function carregarOcorrencias(aoAvancar) {
   const inicio = isoDiasAtras(JANELA_DIAS);
 
-  const [casos, ajustesBrutos, ocorrencias, ultimaCaptura] = await Promise.all([
+  const [casos, ajustesBrutos, ocorrencias] = await Promise.all([
     lerTudoDP360("ponto_caso", {
       ordem: "date_ref.desc",
       filtros: { date_ref: `gte.${inicio}` },
@@ -637,7 +604,6 @@ async function carregarOcorrencias(aoAvancar) {
       ordem: "date_ref.desc",
       filtros: { date_ref: `gte.${inicio}` },
     }),
-    lerUltimaCaptura(),
   ]);
 
   // ── PEDIDO VÁLIDO vs LIXO (obrigatório, supabase_client.ler_ajustes_app) ──
@@ -677,14 +643,6 @@ async function carregarOcorrencias(aoAvancar) {
 
   const { diario, gordura, intervalo, realManual } = await lerLakePorPares(pares, aoAvancar);
 
-  // A ocorrência mais nova que ESTÁ na base. Diferente de `ultimaCaptura`: este
-  // carimbo se move quando a captura roda pela nuvem (o bot grava `capturado_em` em
-  // cada linha — bot_ajustes_app.py:1601), o outro só quando roda pela ferramenta.
-  let capturaMaisNova = "";
-  ajustesBrutos.forEach((o) => {
-    const q = txt(o.capturado_em);
-    if (q > capturaMaisNova) capturaMaisNova = q;
-  });
 
   return {
     casos,
@@ -695,8 +653,6 @@ async function carregarOcorrencias(aoAvancar) {
     intervalo,
     realManual,
     descartados,
-    ultimaCaptura,
-    capturaMaisNova,
     lidoEm: agoraISOLocal(),
   };
 }
@@ -2759,9 +2715,6 @@ export default function Ocorrencias() {
   // O texto grande das regras vive RECOLHIDO. Ele não some (é onde as travas do
   // trabalhador estão explicadas); fica atrás do botão, fechado por padrão.
   const [explica, setExplica] = useState(false);
-  // O cartão da captura também: é ação RARA (o importador diário traz tudo sozinho),
-  // e ele ocupava a mesma altura em toda visita. Fechado por padrão, a um clique.
-  const [verCaptura, setVerCaptura] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -3186,74 +3139,6 @@ export default function Ocorrencias() {
     },
     [carregar],
   );
-
-  /* ── CAPTURA DA GRADE: sem escopo, e sem o pós-processo do original ────────
-   *
-   * Porte de main.py:1540 (capturar_ocorrencias). Varre a grade inteira do Transnet
-   * e grava as ocorrências no Supabase (bot_ajustes_app.py:543 e :827).
-   *
-   * ATENÇÃO AO QUE ELE **NÃO** É. Este botão não é o caminho normal de entrada da
-   * ocorrência, e eu escrevi o contrário aqui antes. A `ponto_ajustes_app` é
-   * alimentada pelo IMPORTADOR DIÁRIO, da view `7_vw_ponto_ajustes_app_046`, e o
-   * comentário dela é literal: "SUBSTITUI A CAPTURA AO VIVO … antes um bot lia a
-   * grade viva a cada 10 min (a ocorrência não estava no lake, evaporava no
-   * aceite); agora `app_ocorrencia` está no datalake e PERSISTE".
-   * (`importador_supabase.py:234-241` faz o upsert por `id_ocorrencia`.)
-   *
-   * Ou seja: ocorrência nova entra sozinha, com latência de D-1, sem ninguém abrir
-   * nada. O que este botão dá é o DIA DE HOJE — a grade viva, antes de o importador
-   * passar. Use quando o caso é de hoje; para o resto, esperar sai mais barato.
-   *
-   * UM BOTÃO SÓ, E É DE PROPÓSITO. `ajustes.yml:66-68` roda a captura SEM `$CONF`:
-   *   "capturar a grade") python bot_ajustes_app.py --capturar --headless ;;
-   * O `confirmar` não chega ao bot neste modo, e `capturar()` grava no Supabase
-   * sempre. Ou seja: NÃO EXISTE ENSAIO DE CAPTURA. Botar aqui um botão "Ensaio" que
-   * na verdade escreve a grade inteira na base seria exatamente a mentira que o
-   * resto desta tela evita — então o disparo vai com `confirmar:"true"`, que é o que
-   * mantém a trilha (dp360_auditoria) honesta sobre um run que escreve de verdade.
-   * (Ensaio × valendo continua valendo como DOIS BOTÕES onde existem dois
-   * comportamentos: executar e conferir.)
-   *
-   * O escopo é "[]" porque a captura não tem escopo — a grade inteira é o objeto, e
-   * o yml nem lê `casos` neste modo. É a única vez em que "[]" é a resposta certa.
-   */
-  const aoCapturar = useCallback(async () => {
-    const ok = confirmar(
-      `CAPTURAR A GRADE do Transnet — de verdade.\n\n` +
-        `Varre a tela "Ocorrências APP" inteira e grava as ocorrências novas na base ` +
-        `(ponto_ajustes_app). NÃO aceita, NÃO rejeita e NÃO decide nada.\n\n` +
-        `SEM ESCOPO: não é por crachá+dia — é a grade toda. É assim no original ` +
-        `(bot_ajustes_app.py --capturar) e o workflow nem lê o filtro neste modo.\n\n` +
-        `NÃO EXISTE ENSAIO desta ação: ajustes.yml roda a captura sem --confirmar, e a ` +
-        `captura sempre grava. Por isso há um botão só.\n\n` +
-        `DUAS COISAS QUE ESTE CAMINHO NÃO FAZ (e o original faz na máquina, depois do run):\n` +
-        `· não carimba a "última captura" — ela continua marcando a última vez que a ` +
-        `ferramenta desktop capturou;\n` +
-        `· não congela a prova (antes/depois/veredito). Aqui a prova só é congelada na ` +
-        `hora da DECISÃO, que é depois.\n\n` +
-        `O INOVE dispara e não espera o run: o resultado aparece na base aos poucos, ` +
-        `então recarregue daqui a pouco.`,
-    );
-    if (!ok) return;
-    setDisparando(true);
-    setRecado("");
-    try {
-      await dispararRoboDP360("ajustes", {
-        modo: MODO_CAPTURAR,
-        casos: "[]", // a captura não tem escopo — ver o comentário acima
-        confirmar: "true",
-      });
-      setRecado(
-        "Captura da grade disparada. O bot grava as ocorrências durante o run — recarregue daqui a " +
-          "pouco. A “última captura” não se move por aqui, e a prova não é congelada neste caminho.",
-      );
-      await carregar();
-    } catch (e) {
-      setRecado(`Falhou: ${e?.message || "Não foi possível disparar o robô."}`);
-    } finally {
-      setDisparando(false);
-    }
-  }, [carregar]);
 
   /* ── decisão em LOTE — com as travas do trabalhador ── */
 
@@ -3909,65 +3794,10 @@ export default function Ocorrencias() {
             de vez em quando. Agora é um botão que ABRE o cartão; nada foi apagado, e
             o que este caminho NÃO faz (o carimbo e o congelamento da prova, que no
             original rodam na máquina depois do run) continua escrito lá dentro. */}
-        <button
-          type="button"
-          className={`dp-chip-f${verCaptura ? " on" : ""}`}
-          aria-expanded={verCaptura}
-          onClick={() => setVerCaptura((v) => !v)}
-          title={AVISO_CAPTURA}
-        >
-          {verCaptura ? "▾" : "▸"} 🤖 Captura da grade
-        </button>
       </div>
 
       {/* A ajuda da porta ativa NÃO se repete aqui: ela já está escrita dentro do
           cartão da porta, dois blocos acima, e a repetição só apertava o topo. */}
-
-      {verCaptura ? (
-        <div className="dp-card oc-captura">
-          <div style={{ ...FILA, gap: 10 }}>
-            <button
-              type="button"
-              className="dp-btn"
-              onClick={aoCapturar}
-              disabled={gravando || disparando}
-              title={AVISO_CAPTURA}
-            >
-              🤖 Capturar a grade do Transnet
-            </button>
-            <span className="dp-muted" style={MINI}>
-              Robô <span className="dp-mono">ajustes</span> · modo “{MODO_CAPTURAR}” · sem escopo (a
-              grade inteira). Só LÊ a grade e grava as ocorrências novas na base — não aceita, não
-              rejeita, não decide. <b>Não é o caminho normal:</b> a ocorrência entra sozinha pelo
-              importador diário (latência de um dia). Isto aqui serve para trazer <b>o dia de
-              hoje</b>, antes de o importador passar.
-            </span>
-          </div>
-          <div style={{ ...FILA, gap: 10, marginTop: 6 }}>
-            <Selo
-              titulo="app_config.ultima_captura — carimbado por main.py:1565, na máquina, DEPOIS do run. Um disparo daqui não move este carimbo."
-              quebra
-            >
-              última captura carimbada: {fmtDataHora(base?.ultimaCaptura)}
-            </Selo>
-            <Selo
-              cor={base?.capturaMaisNova ? "accent" : "neutro"}
-              titulo="O maior `capturado_em` de ponto_ajustes_app. ESTE se move quando a captura roda pela nuvem, porque o bot carimba cada linha que grava."
-              quebra
-            >
-              ocorrência mais nova na base: {fmtDataHora(base?.capturaMaisNova)}
-            </Selo>
-            <span className="dp-faint" style={MINI}>
-              O carimbo da esquerda só se move pela ferramenta desktop — o disparo daqui não o toca,
-              porque quando o botão volta a captura ainda nem começou. E o{" "}
-              <b>congelamento da prova não acontece por este caminho</b>: no original ele roda na
-              máquina depois do run (<span className="dp-mono">congelar_antes</span>); aqui a prova
-              (antes/depois) é congelada só na hora da <b>decisão</b>, que é depois — então a
-              ocorrência capturada pela nuvem entra sem prova congelada.
-            </span>
-          </div>
-        </div>
-      ) : null}
 
       <TabelaDP
         key={`${grade.chave}-${versao}`}

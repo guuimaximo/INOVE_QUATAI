@@ -40,7 +40,7 @@
 //     chamada está em TODO no fim do arquivo.
 // ============================================================================
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw, Search } from "lucide-react";
+import { RefreshCw, Search, X } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { AuthContext } from "../../context/AuthContext";
@@ -75,9 +75,30 @@ const PADRAO_RECENCIA = 30;
 // Teto de paginação do gateway (1000 linhas/página). Sem folga a leitura seria
 // truncada em silêncio e sumiriam casos sem ninguém perceber.
 const LINHAS_POR_PAGINA = 1000;
-const TETO_PAGINAS_CASOS = 20;
-const TETO_PAGINAS_BLOQUEADOS = 10;
+const TETO_PAGINAS_CASOS = 6;
+const TETO_PAGINAS_BLOQUEADOS = 3;
 const LIMITE_GIROS = 500;
+const LIMITE_HISTORICO = 300;
+
+// PISO DE PASSAGENS NO SERVIDOR — e a armadilha que ele evita.
+//
+// No lake essas colunas sao TEXTO, nao numero (o PostgREST devolve "10", com
+// aspas). Entao `usos_dentro_da_janela=gte.5` vira comparacao de TEXTO, e em
+// texto '10' < '5': o filtro jogaria fora justamente os casos de 10+ passagens,
+// que sao os piores. Medido na base: `gte.5` devolve 3.010 linhas e o corte por
+// EXCLUSAO devolve 3.277 — as 267 que sumiriam sao as de 10+.
+//
+// Por isso o piso vai como "nao esta entre 0..4", que e exato em texto. So o
+// PISO (a opcao mais frouxa) vai ao servidor; 6+, 8+ e 10+ continuam no cliente,
+// sobre estas linhas — assim o contador de cada chip continua certo, que e o que
+// impede a tela de abrir vazia sem explicar por que.
+const PISO_PASSAGENS = OPCOES_PASSAGENS[0];
+const FILTRO_PISO_PASSAGENS = `not.in.(${Array.from({ length: PISO_PASSAGENS }, (_, i) => i).join(",")})`;
+
+// Teto do que a grade DESENHA. Filtro frouxo em "tudo" da ~3,3 mil linhas, e
+// pintar tudo isso trava a rolagem por nada: ninguem audita 3 mil casos de uma
+// vez. O rodape diz quantos ficaram de fora para o numero nao mentir.
+const MAX_LINHAS_GRADE = 400;
 
 // SÓ as colunas que EXISTEM. Coluna inexistente devolve HTTP 400 no gateway e
 // derruba a tela inteira — nunca pedir `*` nem chutar nome.
@@ -685,16 +706,22 @@ export default function GuardFraudes() {
   const [minPassagens, setMinPassagens] = useState(PADRAO_PASSAGENS);
   const [janela, setJanela] = useState(PADRAO_JANELA);
   const [recencia, setRecencia] = useState(PADRAO_RECENCIA);
+  const [semTeto, setSemTeto] = useState(false);
   const [semPedidos, setSemPedidos] = useState(false);
   const [soRepetidos, setSoRepetidos] = useState(false);
   const [termo, setTermo] = useState("");
 
   // caso aberto → passagens → passagem em foco no mapa
+  // Pop-up do CARTAO. `caso` e a linha clicada (serve de ancora e de dia
+  // inicial), mas o que o pop-up carrega e a vida do CARTAO: um caso isolado nao
+  // diz nada, e a repeticao em dias diferentes e o proprio sinal de fraude.
   const [caso, setCaso] = useState(null);
   const [giros, setGiros] = useState([]);
+  const [historico, setHistorico] = useState([]);
   const [carregandoGiros, setCarregandoGiros] = useState(false);
   const [erroGiros, setErroGiros] = useState("");
   const [foco, setFoco] = useState(null);
+  const [diaSel, setDiaSel] = useState("");
 
   /* ── casos ── */
   useEffect(() => {
@@ -702,13 +729,17 @@ export default function GuardFraudes() {
     let vivo = true;
     setCarregando(true);
     setErro("");
+    setSemTeto(false);
     setCaso(null);
     setGiros([]);
     setFoco(null);
 
     (async () => {
       try {
-        const filtros = recencia > 0 ? { data_ref: `gte.${isoDiasAtras(recencia)}` } : undefined;
+        // O piso das passagens vai junto do periodo: sozinho, o periodo de 15 d
+        // trazia 1.159 linhas para mostrar 79. Com o piso sao 253.
+        const filtros = { usos_dentro_da_janela: FILTRO_PISO_PASSAGENS };
+        if (recencia > 0) filtros.data_ref = `gte.${isoDiasAtras(recencia)}`;
         const linhas = await lerTudoDP360(
           "fraude_cartao_sequencial",
           { colunas: COLUNAS_CASO, filtros, ordem: "data_ref.desc,id_evento_final" },
@@ -758,9 +789,19 @@ export default function GuardFraudes() {
 
     (async () => {
       try {
+        // `fraude_cartao_bloqueado` NAO e uma lista de casos: sao 126.897 linhas,
+        // o cadastro inteiro de cartoes com a situacao de restricao. O caso e o
+        // cartao restrito que CONTINUOU girando a catraca — 31 linhas hoje. Sem
+        // este filtro a aba baixava dez mil linhas para mostrar trinta.
+        // `not.eq.0` e comparacao de texto de igualdade, entao e exata aqui
+        // (diferente de gte./lte., ver FILTRO_PISO_PASSAGENS).
         const linhas = await lerTudoDP360(
           "fraude_cartao_bloqueado",
-          { colunas: COLUNAS_BLOQUEADO, ordem: "giros_apos_restricao.desc,cru_id" },
+          {
+            colunas: COLUNAS_BLOQUEADO,
+            filtros: { giros_apos_restricao: "not.eq.0" },
+            ordem: "giros_apos_restricao.desc,cru_id",
+          },
           TETO_PAGINAS_BLOQUEADOS,
         );
         if (vivo) setBloqueados(linhas);
@@ -776,10 +817,16 @@ export default function GuardFraudes() {
     };
   }, [podeAcessar, aba, recarga]);
 
-  /* ── passagens do caso aberto ── */
+  /* ── o que o pop-up carrega: passagens e casos DO CARTAO ── */
+  // Depende do CARTAO, nao da linha: clicar em outro caso do mesmo cartao nao
+  // rebusca nada. Sao duas leituras pequenas (medido: 31 passagens e 8 casos num
+  // cartao com historico), por isso vao juntas quando o pop-up abre.
+  const cartaoAberto = caso ? txt(caso.cru_id) : "";
+
   useEffect(() => {
-    if (!caso) {
+    if (!cartaoAberto) {
       setGiros([]);
+      setHistorico([]);
       return undefined;
     }
     let vivo = true;
@@ -789,15 +836,25 @@ export default function GuardFraudes() {
 
     (async () => {
       try {
-        const linhas = await lerDP360("fraude_cartao_giros", {
-          colunas: COLUNAS_GIRO,
-          filtros: { id_evento_final: `eq.${txt(caso.id_evento_final)}` },
-          ordem: "ordem,giro_dthora",
-          limite: LIMITE_GIROS,
-        });
-        if (vivo) setGiros(linhas);
+        const [passagens, casosDoCartao] = await Promise.all([
+          lerDP360("fraude_cartao_giros", {
+            colunas: COLUNAS_GIRO,
+            filtros: { cru_id: `eq.${cartaoAberto}` },
+            ordem: "giro_dthora,ordem",
+            limite: LIMITE_GIROS,
+          }),
+          lerDP360("fraude_cartao_sequencial", {
+            colunas: COLUNAS_CASO,
+            filtros: { cru_id: `eq.${cartaoAberto}` },
+            ordem: "data_ref.desc",
+            limite: LIMITE_HISTORICO,
+          }),
+        ]);
+        if (!vivo) return;
+        setGiros(passagens);
+        setHistorico(casosDoCartao);
       } catch (falha) {
-        if (vivo) setErroGiros(falha?.message || "Não foi possível ler as passagens deste caso.");
+        if (vivo) setErroGiros(falha?.message || "Não foi possível ler o histórico deste cartão.");
       } finally {
         if (vivo) setCarregandoGiros(false);
       }
@@ -806,6 +863,22 @@ export default function GuardFraudes() {
     return () => {
       vivo = false;
     };
+  }, [cartaoAberto]);
+
+  // Abre no dia da linha clicada — e o dia que a pessoa estava olhando.
+  useEffect(() => {
+    setDiaSel(caso ? txt(caso.data_ref).slice(0, 10) : "");
+    setFoco(null);
+  }, [caso]);
+
+  // Esc fecha, como qualquer pop-up. Sem isto o unico jeito de sair e achar o X.
+  useEffect(() => {
+    if (!caso) return undefined;
+    const aoTeclar = (e) => {
+      if (e.key === "Escape") setCaso(null);
+    };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
   }, [caso]);
 
   const recarregar = useCallback(() => setRecarga((n) => n + 1), []);
@@ -838,10 +911,23 @@ export default function GuardFraudes() {
     [],
   );
 
-  const visiveis = useMemo(
+  const filtrados = useMemo(
     () => base.filter((l) => l.passagens >= minPassagens && cabeNaJanela(l, janela)),
     [base, minPassagens, janela, cabeNaJanela],
   );
+
+  // A grade desenha ate MAX_LINHAS_GRADE — mas o teto e LIFTAVEL, e isso nao e
+  // detalhe: o CSV da TabelaDP exporta as linhas que estao em cena. Um teto que
+  // a pessoa nao pudesse levantar faria o CSV sair capado sem avisar, numa tela
+  // de auditoria. Com o botao, o numero na tela e o numero no arquivo.
+  const visiveis = useMemo(
+    () =>
+      semTeto || filtrados.length <= MAX_LINHAS_GRADE
+        ? filtrados
+        : filtrados.slice(0, MAX_LINHAS_GRADE),
+    [filtrados, semTeto],
+  );
+  const ocultos = filtrados.length - visiveis.length;
 
   // Contadores dos chips: quantos casos sobram em cada opção, mantendo o resto.
   const contaPassagens = useMemo(() => {
@@ -863,8 +949,8 @@ export default function GuardFraudes() {
   const nPedidos = useMemo(() => casos.filter(jaPedido).length, [casos, jaPedido]);
 
   const totalDebitado = useMemo(
-    () => visiveis.reduce((soma, l) => soma + (numero(l.valor_total_debitado) || 0), 0),
-    [visiveis],
+    () => filtrados.reduce((soma, l) => soma + (numero(l.valor_total_debitado) || 0), 0),
+    [filtrados],
   );
 
   /* ── passagens: pontos do mapa ── */
@@ -877,9 +963,62 @@ export default function GuardFraudes() {
     [],
   );
 
+  // O dia escolhido manda no mapa e na tabela de passagens. Sem dia (o cartao
+  // aberto pelo botao "ver tudo"), mostra a vida inteira do cartao.
+  const girosDoDia = useMemo(
+    () => (diaSel ? giros.filter((g) => txt(g.data_ref).slice(0, 10) === diaSel) : giros),
+    [giros, diaSel],
+  );
+
+  // USOS DIARIOS. Cuidado com o que isto e: `fraude_cartao_giros` guarda as
+  // passagens DOS BLOCOS DETECTADOS, nao todo uso do cartao. Entao a coluna diz
+  // "passagens em bloco", nao "viagens do dia" — chamar de uso total do cartao
+  // seria inventar um numero que a base nao tem.
+  const usosPorDia = useMemo(() => {
+    const mapa = new Map();
+    const pega = (dia) => {
+      if (!mapa.has(dia))
+        mapa.set(dia, {
+          dia,
+          passagens: 0,
+          doCaso: 0,
+          efetivas: 0,
+          valor: 0,
+          locais: new Set(),
+          blocos: new Set(),
+        });
+      return mapa.get(dia);
+    };
+    for (const g of giros) {
+      const dia = txt(g.data_ref).slice(0, 10);
+      if (!dia) continue;
+      const d = pega(dia);
+      d.passagens += 1;
+      if (girou(g)) d.efetivas += 1;
+      d.valor += numero(g.valor) || 0;
+      if (txt(g.local_fraude)) d.locais.add(txt(g.local_fraude));
+      if (txt(g.id_evento_final)) d.blocos.add(txt(g.id_evento_final));
+    }
+    for (const c of historico) {
+      const dia = txt(c.data_ref).slice(0, 10);
+      if (!dia) continue;
+      const d = pega(dia);
+      d.doCaso += passagensDoCaso(c);
+      if (txt(c.id_evento_final)) d.blocos.add(txt(c.id_evento_final));
+      if (txt(c.local_fraude)) d.locais.add(txt(c.local_fraude));
+    }
+    return [...mapa.values()].sort((a, b) => (a.dia < b.dia ? 1 : a.dia > b.dia ? -1 : 0));
+  }, [giros, historico]);
+
+  const resumoCartao = useMemo(() => {
+    const debitado = historico.reduce((soma, c) => soma + (numero(c.valor_total_debitado) || 0), 0);
+    const pior = historico.reduce((max, c) => Math.max(max, passagensDoCaso(c)), 0);
+    return { casos: historico.length, dias: usosPorDia.length, debitado, pior };
+  }, [historico, usosPorDia]);
+
   const pontos = useMemo(
     () =>
-      giros
+      girosDoDia
         .map((g, i) => ({
           id: idDoGiro(g),
           rotulo: txt(g.ordem) || String(i + 1),
@@ -892,11 +1031,11 @@ export default function GuardFraudes() {
           efetiva: girou(g),
         }))
         .filter((p) => p.lat != null && p.lon != null),
-    [giros, idDoGiro],
+    [girosDoDia, idDoGiro],
   );
 
-  const semGps = giros.length - pontos.length;
-  const efetivas = useMemo(() => giros.filter(girou).length, [giros]);
+  const semGps = girosDoDia.length - pontos.length;
+  const efetivas = useMemo(() => girosDoDia.filter(girou).length, [girosDoDia]);
 
   /* ── acesso ── */
   if (!podeAcessar) {
@@ -1051,13 +1190,26 @@ export default function GuardFraudes() {
 
           {!erro && (
             <div className="dp-resumo">
-              <b className="dp-num">{visiveis.length}</b> caso(s) ·{" "}
-              <b className="dp-num">{new Set(visiveis.map((l) => txt(l.cru_id))).size}</b> cartão(ões)
+              <b className="dp-num">{filtrados.length}</b> caso(s) ·{" "}
+              <b className="dp-num">{new Set(filtrados.map((l) => txt(l.cru_id))).size}</b> cartão(ões)
               distinto(s) · debitado <b className="dp-num">{moeda(totalDebitado)}</b>{" "}
               <span className="dp-faint">
                 · regra calculada na origem (3+ débitos em 60 min, mesmo endereço) — esta tela só
                 apresenta e filtra · somente leitura.
               </span>
+              {ocultos > 0 && (
+                <>
+                  {" "}
+                  <button
+                    type="button"
+                    className="dp-pill warn gd-pill-btn"
+                    onClick={() => setSemTeto(true)}
+                    title="Desenhar todas as linhas (e levar todas para o CSV)"
+                  >
+                    desenhando {MAX_LINHAS_GRADE} de {filtrados.length} — mostrar todas
+                  </button>
+                </>
+              )}
               {truncado && (
                 <>
                   {" "}
@@ -1074,7 +1226,8 @@ export default function GuardFraudes() {
             a origem usou no gatilho; sem ela, o total do bloco). <b>Janela</b> ={" "}
             <span className="dp-mono">duracao_total_min</span> — o bloco inteiro fechou em até X
             minutos. É a CONTAGEM que prova, não a velocidade: numa fila normal as pessoas embarcam a
-            cada 4-8 s.
+            cada 4-8 s. A tela lê do servidor só os casos de <b>{PISO_PASSAGENS}+ passagens</b> — os
+            cortes maiores afinam essa mesma lista, sem ir ao banco de novo.
           </div>
 
           <TabelaDP
@@ -1085,7 +1238,7 @@ export default function GuardFraudes() {
             mensagemCarregando="Carregando casos do INOVE Guard…"
             idLinha={(l) => txt(l.id_evento_final)}
             classeLinha={(l) => (l.passagens >= 10 ? "row-p1" : l.passagens >= 8 ? "row-p2" : "")}
-            aoClicarLinha={(l) => setCaso((atual) => (atual?.id_evento_final === l.id_evento_final ? null : l))}
+            aoClicarLinha={(l) => setCaso(l)}
             nomeCsv={`inove_guard_fraudes_${isoDataLocal(new Date())}`}
             vazio={
               casos.length
@@ -1095,90 +1248,171 @@ export default function GuardFraudes() {
             pinPadrao={2}
           />
 
-          {/* ── caso aberto: passagens + mapa ── */}
+          {/* ── POP-UP DO CARTÃO: usos por dia + mapa + passagens ──────────
+              Vive fora da grade de propósito. Enquanto era painel embaixo da
+              tabela, abrir um caso empurrava a lista para fora da tela e a
+              pessoa perdia o lugar onde estava. */}
           {caso && (
-            <div className="gd-detalhe">
-              <div className="gd-det-head">
-                <div>
-                  <b>
-                    Cartão <span className="dp-mono">{txt(caso.cru_id) || "—"}</span> ·{" "}
-                    {paraBR(caso.data_ref)}
-                  </b>
-                  <div className="sub">
-                    {txt(caso.local_fraude) || "local não informado"} · placa{" "}
-                    <span className="dp-mono">{txt(caso.vei_placa) || "—"}</span> ·{" "}
-                    <b className="dp-num">{caso.passagens}</b> passagem(ns) em{" "}
-                    <b className="dp-num">{inteiro(caso.duracao_total_min)}</b> min · menor intervalo{" "}
-                    <b className="dp-num">{inteiro(caso.menor_intervalo_seg)}</b> s · debitado{" "}
-                    <b>{moeda(caso.valor_total_debitado)}</b> · saldo {moeda(caso.saldo)}
-                    <br />
-                    de {dataHoraBR(caso.primeira_transacao)} até{" "}
-                    {dataHoraBR(caso.ultima_utilizacao_da_sequencia)} ·{" "}
-                    {inteiro(caso.qtd_veiculos)} veículo(s) · GPS ±
-                    {inteiro(caso.defasagem_telemetria_seg)} s
-                    {txt(caso.status) ? ` · status: ${txt(caso.status)}` : ""}
+            <div
+              className="gd-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Cartão ${cartaoAberto}`}
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) setCaso(null);
+              }}
+            >
+              <div className="gd-modal-box">
+                <div className="gd-modal-head">
+                  <div>
+                    <b>
+                      Cartão <span className="dp-mono">{cartaoAberto || "—"}</span>
+                    </b>
+                    <div className="sub">
+                      usuário <span className="dp-mono">{txt(caso.id_usuario) || "—"}</span> ·{" "}
+                      <b className="dp-num">{resumoCartao.casos}</b> caso(s) em{" "}
+                      <b className="dp-num">{resumoCartao.dias}</b> dia(s) · pior bloco com{" "}
+                      <b className="dp-num">{resumoCartao.pior}</b> passagens · debitado{" "}
+                      <b>{moeda(resumoCartao.debitado)}</b>
+                      {txt(caso.status) ? ` · status: ${txt(caso.status)}` : ""}
+                      <br />
+                      histórico do cartão inteiro — não só o dia que você clicou.
+                    </div>
+                  </div>
+
+                  <div className="gd-det-acoes">
+                    {txt(caso.link_maps) && (
+                      <a
+                        className="dp-btn"
+                        href={caso.link_maps}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="Abrir o endereço do bloco no Google Maps"
+                      >
+                        Maps
+                      </a>
+                    )}
+                    {/* Nasce DESABILITADO: nesta fase a tela não grava nada. */}
+                    <button type="button" className="dp-btn" disabled title={AVISO_FASE}>
+                      Marcar analisado
+                    </button>
+                    <button type="button" className="dp-btn" disabled title={AVISO_FASE}>
+                      Pedir bloqueio
+                    </button>
+                    <button
+                      type="button"
+                      className="dp-btn"
+                      onClick={() => setCaso(null)}
+                      aria-label="Fechar"
+                      title="Fechar (Esc)"
+                    >
+                      <X size={14} />
+                    </button>
                   </div>
                 </div>
 
-                <div className="gd-det-acoes">
-                  {txt(caso.link_maps) && (
-                    <a
-                      className="dp-btn"
-                      href={caso.link_maps}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="Abrir o endereço do bloco no Google Maps"
-                    >
-                      Maps
-                    </a>
-                  )}
-                  {/* Nasce DESABILITADO: nesta fase a tela não grava nada. */}
-                  <button type="button" className="dp-btn" disabled title={AVISO_FASE}>
-                    Marcar analisado
-                  </button>
-                  <button type="button" className="dp-btn" disabled title={AVISO_FASE}>
-                    Pedir bloqueio
-                  </button>
-                  <button type="button" className="dp-btn" onClick={() => setCaso(null)}>
-                    Fechar
-                  </button>
-                </div>
-              </div>
-
-              <div className="gd-det-corpo">
-                <div className="gd-secao">
-                  Passagens do caso — clique numa linha para mostrar no mapa
-                  {giros.length > 0 && (
-                    <span className="dp-faint" style={{ textTransform: "none", fontWeight: 400 }}>
-                      {" "}
-                      · {efetivas} efetiva(s) de {giros.length}
-                      {semGps > 0 ? ` · ${semGps} sem GPS` : ""}
-                    </span>
-                  )}
-                </div>
-
-                {erroGiros ? (
-                  <div className="dp-resumo">
+                {erroGiros && (
+                  <div className="gd-modal-erro">
                     <span className="dp-pill danger">{erroGiros}</span>
                   </div>
-                ) : (
-                  <TabelaDP
-                    chave="guard_giros"
-                    colunas={COLS_GIROS}
-                    linhas={giros}
-                    carregando={carregandoGiros}
-                    mensagemCarregando="Carregando as passagens deste caso…"
-                    idLinha={idDoGiro}
-                    classeLinha={(g) => (idDoGiro(g) === foco ? "gd-foco" : "")}
-                    aoClicarLinha={(g) => setFoco(idDoGiro(g))}
-                    nomeCsv={`inove_guard_passagens_${txt(caso.id_evento_final)}`}
-                    vazio="Nenhuma passagem gravada para este caso."
-                    pinPadrao={2}
-                  />
                 )}
 
-                <div className="gd-secao">Onde aconteceu</div>
-                <MapaPassagens pontos={pontos} foco={foco} altura={300} />
+                <div className="gd-modal-corpo">
+                  <div className="gd-modal-dias">
+                    <div className="gd-secao">
+                      Usos por dia
+                      <span className="dp-faint" style={{ textTransform: "none", fontWeight: 400 }}>
+                        {" "}
+                        · passagens dentro de bloco detectado
+                      </span>
+                      {giros.length >= LIMITE_GIROS && (
+                        <>
+                          {" "}
+                          <span className="dp-pill danger" title="Leitura das passagens truncada">
+                            só as {LIMITE_GIROS} primeiras
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {carregandoGiros ? (
+                      <div className="dp-vazio">Carregando o histórico do cartão…</div>
+                    ) : (
+                      <div className="gd-dias">
+                        <button
+                          type="button"
+                          className={`gd-dia${diaSel === "" ? " on" : ""}`}
+                          onClick={() => {
+                            setDiaSel("");
+                            setFoco(null);
+                          }}
+                        >
+                          <span className="d">todos os dias</span>
+                          <span className="n">
+                            <b className="dp-num">{giros.length}</b> passagem(ns)
+                          </span>
+                        </button>
+
+                        {usosPorDia.map((d) => (
+                          <button
+                            key={d.dia}
+                            type="button"
+                            className={`gd-dia${d.dia === diaSel ? " on" : ""}`}
+                            onClick={() => {
+                              setDiaSel(d.dia);
+                              setFoco(null);
+                            }}
+                          >
+                            <span className="d">{paraBR(d.dia)}</span>
+                            <span className="n">
+                              <b className="dp-num">{d.passagens || d.doCaso}</b> passagem(ns)
+                              {d.blocos.size > 1 ? ` · ${d.blocos.size} blocos` : ""}
+                              {d.passagens && d.efetivas !== d.passagens
+                                ? ` · ${d.passagens - d.efetivas} sem giro`
+                                : ""}
+                            </span>
+                            <span className="v">{moeda(d.valor)}</span>
+                            <span className="l" title={[...d.locais].join(" · ")}>
+                              {[...d.locais][0] || "—"}
+                              {d.locais.size > 1 ? ` +${d.locais.size - 1}` : ""}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="gd-modal-mapa">
+                    <div className="gd-secao">
+                      Onde aconteceu
+                      <span className="dp-faint" style={{ textTransform: "none", fontWeight: 400 }}>
+                        {" "}
+                        · {diaSel ? paraBR(diaSel) : "todos os dias"}
+                        {girosDoDia.length > 0
+                          ? ` · ${efetivas} efetiva(s) de ${girosDoDia.length}`
+                          : ""}
+                        {semGps > 0 ? ` · ${semGps} sem GPS` : ""}
+                      </span>
+                    </div>
+
+                    <MapaPassagens pontos={pontos} foco={foco} altura={240} />
+
+                    <div className="gd-secao">Passagens — clique numa linha para focar no mapa</div>
+                    <TabelaDP
+                      chave="guard_giros"
+                      colunas={COLS_GIROS}
+                      linhas={girosDoDia}
+                      carregando={carregandoGiros}
+                      mensagemCarregando="Carregando as passagens…"
+                      idLinha={idDoGiro}
+                      classeLinha={(g) => (idDoGiro(g) === foco ? "gd-foco" : "")}
+                      aoClicarLinha={(g) => setFoco(idDoGiro(g))}
+                      nomeCsv={`inove_guard_passagens_${cartaoAberto}${diaSel ? `_${diaSel}` : ""}`}
+                      vazio="Nenhuma passagem gravada."
+                      pinPadrao={2}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}

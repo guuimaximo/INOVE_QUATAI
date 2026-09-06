@@ -58,31 +58,8 @@
   line-height: 1.5;
 }
 
-/* ── painel do caso aberto ── */
-.dp360 .gd-detalhe {
-  margin: 12px 20px 20px;
-  background: var(--dp-surface);
-  border: 1px solid var(--dp-border-strong);
-  border-radius: var(--dp-radius);
-  box-shadow: var(--dp-shadow);
-  overflow: hidden;
-}
-.dp360 .gd-det-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--dp-border);
-  background: var(--dp-surface-2);
-  flex-wrap: wrap;
-}
-.dp360 .gd-det-head b { font-size: 14px; font-weight: 650; }
-.dp360 .gd-det-head .sub { color: var(--dp-muted); font-size: 12px; margin-top: 3px; line-height: 1.5; }
+/* Botoes do cabecalho do pop-up (o painel embaixo da grade saiu; ver gd-modal). */
 .dp360 .gd-det-acoes { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.dp360 .gd-det-corpo { padding: 4px 0 12px; }
-.dp360 .gd-det-corpo .dp-tabela-wrap { margin-left: 14px; margin-right: 14px; }
-.dp360 .gd-det-corpo .dp-tbl-tools { margin-left: 14px; margin-right: 14px; }
 .dp360 .gd-secao {
   padding: 10px 14px 4px;
   font-size: 11.5px;
@@ -165,3 +142,121 @@
 /* linha da passagem em foco, dentro da grade de passagens */
 .dp360 table.dp-tabela tbody tr.gd-foco td { background: var(--dp-accent-soft); }
 .dp360 table.dp-tabela tbody tr.gd-foco:hover td { filter: brightness(0.97); }
+
+/* ── pop-up do cartão ────────────────────────────────────────────────────
+ * O detalhe saiu de baixo da grade e virou pop-up: como painel, abrir um caso
+ * empurrava a lista para fora da tela e a pessoa perdia o lugar. O box é o
+ * dono da rolagem (não a página), e a coluna do mapa leva `min-width: 0` —
+ * sem isso a tabela densa estica a grade e o pop-up ganha rolagem lateral.
+ */
+.dp360 .gd-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(16, 22, 38, 0.44);
+  backdrop-filter: blur(2px);
+}
+.dp360 .gd-modal-box {
+  display: flex;
+  flex-direction: column;
+  width: min(1240px, 100%);
+  max-height: 92vh;
+  overflow: hidden;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-border-strong);
+  border-radius: var(--dp-radius);
+  box-shadow: 0 18px 50px rgba(16, 22, 38, 0.28);
+}
+.dp360 .gd-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--dp-border);
+  background: var(--dp-surface-2);
+}
+.dp360 .gd-modal-head b { font-size: 14px; font-weight: 650; }
+.dp360 .gd-modal-head .sub {
+  color: var(--dp-muted);
+  font-size: 12px;
+  margin-top: 3px;
+  line-height: 1.5;
+}
+.dp360 .gd-modal-erro { padding: 8px 16px 0; }
+
+.dp360 .gd-modal-corpo {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 4px 14px;
+  overflow: auto;
+  padding: 4px 6px 12px;
+}
+.dp360 .gd-modal-dias { min-width: 0; }
+.dp360 .gd-modal-mapa { min-width: 0; }
+.dp360 .gd-modal-corpo .dp-tabela-wrap,
+.dp360 .gd-modal-corpo .dp-tbl-tools { margin-left: 14px; margin-right: 14px; }
+
+/* Um dia por linha: data, quantas passagens, quanto debitou e onde. É a
+ * repetição em dias diferentes que denuncia o cartão — por isso a lista abre
+ * junto com o mapa, e não escondida atrás de outra aba. */
+.dp360 .gd-dias {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 14px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.dp360 .gd-dia {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1px 8px;
+  width: 100%;
+  padding: 7px 9px;
+  text-align: left;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-border);
+  border-radius: 10px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.dp360 .gd-dia:hover { background: var(--dp-surface-2); }
+.dp360 .gd-dia.on {
+  background: var(--dp-accent-soft);
+  border-color: var(--dp-accent);
+}
+.dp360 .gd-dia .d { font-size: 12.5px; font-weight: 650; }
+.dp360 .gd-dia .v { font-size: 12px; font-weight: 650; text-align: right; }
+.dp360 .gd-dia .n { grid-column: 1; font-size: 11.5px; color: var(--dp-muted); }
+.dp360 .gd-dia .l {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--dp-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1000px) {
+  .dp360 .gd-modal { padding: 10px; }
+  .dp360 .gd-modal-corpo { grid-template-columns: minmax(0, 1fr); }
+  .dp360 .gd-dias { max-height: 30vh; }
+}
+
+/* Pílula que é botão: levanta o teto de linhas desenhadas. */
+.dp360 .gd-pill-btn {
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  /* borda explicita: o <button> traz a do navegador, e so trocar o estilo para
+     tracejado deixaria a moldura grossa e cinza do UA. */
+  border: 1px dashed currentColor;
+}
+.dp360 .gd-pill-btn:hover { filter: brightness(0.96); }

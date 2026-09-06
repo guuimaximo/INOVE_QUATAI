@@ -361,6 +361,10 @@ export default function Sidebar() {
     if (path.startsWith("/usuarios") || path.startsWith("/niveis-acesso") || path.startsWith("/controle-dados")) setConfigOpen(true);
   }, [location.pathname]);
 
+  // Os tres tamanhos do menu tem de bater: link solto, cabecalho de grupo e
+  // sub-link, todos `text-sm`. O cabecalho de grupo nao trazia tamanho nenhum e
+  // herdava o do body (16px) — enquanto DP360 e Monitoramento eram links soltos
+  // ninguem via; virando grupo, a diferenca apareceu no meio do menu.
   const navLinkClass = ({ isActive }) =>
     `mb-2 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 ${
       isActive ? "bg-blue-500 shadow-sm" : "hover:bg-blue-600"
@@ -450,7 +454,7 @@ export default function Sidebar() {
           <>
             <button
               onClick={() => setDp360Open(!dp360Open)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -478,7 +482,7 @@ export default function Sidebar() {
           <>
             <button
               onClick={() => setPessoasOpen(!pessoasOpen)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -507,7 +511,7 @@ export default function Sidebar() {
           <>
             <button
               onClick={() => setPcmOpen(!pcmOpen)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -536,7 +540,7 @@ export default function Sidebar() {
           <>
             <button
               onClick={() => setEmbarcadosOpen(!embarcadosOpen)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -565,7 +569,7 @@ export default function Sidebar() {
           <>
             <button
               onClick={() => setDesempenhoDieselOpen(!desempenhoDieselOpen)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -594,7 +598,7 @@ export default function Sidebar() {
           <>
             <button
               onClick={() => setEstoqueDieselOpen(!estoqueDieselOpen)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -623,7 +627,7 @@ export default function Sidebar() {
           <>
             <button
               onClick={() => setEstruturaFisicaOpen(!estruturaFisicaOpen)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -652,7 +656,7 @@ export default function Sidebar() {
           <>
             <button
               onClick={() => setSuprimentosOpen(!suprimentosOpen)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -681,7 +685,7 @@ export default function Sidebar() {
           <>
             <button
               onClick={() => setTratativasOpen(!tratativasOpen)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3">
@@ -709,7 +713,7 @@ export default function Sidebar() {
           <>
             <button
               onClick={() => setEspecialOpen(!especialOpen)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3">
@@ -738,7 +742,7 @@ export default function Sidebar() {
           <>
             <button
               onClick={() => setSacOpen(!sacOpen)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3">
@@ -765,7 +769,7 @@ export default function Sidebar() {
           <>
             <button
               onClick={() => setAvariasOpen(!avariasOpen)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3">
@@ -792,7 +796,7 @@ export default function Sidebar() {
           <>
             <button
               onClick={() => setAcidentesOpen(!acidentesOpen)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3">
@@ -824,7 +828,7 @@ export default function Sidebar() {
           <>
             <button
               onClick={() => setChecklistsOpen(!checklistsOpen)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3">
@@ -851,7 +855,7 @@ export default function Sidebar() {
           <>
             <button
               onClick={() => setIntervencoesOpen(!intervencoesOpen)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3">
@@ -880,7 +884,7 @@ export default function Sidebar() {
           <>
             <button
               onClick={() => setGuardOpen(!guardOpen)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -910,7 +914,7 @@ export default function Sidebar() {
             <hr className="my-3 border-blue-500" />
             <button
               onClick={() => setConfigOpen(!configOpen)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 hover:bg-blue-600"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
               type="button"
             >
               <div className="flex items-center gap-3">

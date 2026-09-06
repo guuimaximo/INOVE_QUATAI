@@ -95,41 +95,48 @@ Matriz de refeição do motorista (sobre o cartão corrigido): `<4h` nada ·
 
 1. ~~Gateway com allowlist + cliente~~ **feito**.
 2. ~~Cluster dividido em um componente por aba~~ **feito**.
-3. Portar as abas de **leitura** (Motorista, Gordura, Refeição, Folgas) — só
-   renderizam o que a view já calculou. Menor risco.
-4. Portar o **fluxo de decisão** (Revisão, Ocorrências): pop-up do cartão,
-   congelamento da prova, decisão por ponta.
+3. ~~Abas de leitura (Motorista, Gordura, Refeição, Folgas)~~ **feito**.
+4. ~~Fluxo de decisão (Revisão, Ocorrências): pop-up do cartão, congelamento da
+   prova, decisão por ponta~~ **feito** — grava em `ponto_real_manual`,
+   `ponto_caso` e `ponto_ajustes_app`.
 5. Ligar a **execução** (disparo do workflow do robô + leitura do resultado).
+   **É o que falta.** Hoje todo botão de robô é `disabled` dizendo por quê.
 6. **Lockdown**: revogar `anon` na base de importação e manter só o gateway.
 
-## 7. Pendências conhecidas das telas portadas (fase 3/4)
+## 7. O que já saiu da lista (fases 3/4)
 
-Levantadas pelos próprios agentes durante o porte. Nenhuma bloqueia o uso em
-leitura, mas as duas primeiras precisam sair antes de destravar gravação.
+Ficam registradas porque explicam decisões do código — não são mais pendências.
 
-1. **GPS na Revisão pode dar falso "bateu fora".** A régua real (`_regua_local`,
-   `main.py:191`) trata dois casos que a versão portada não cobre:
-   - âncora do veículo **sem coordenada** → o original marca "não medido", e isso
-     nunca pode contar como "junto";
-   - **dia de reserva** → nesse dia a pessoa não tem carro; batida em local
-     conhecido vale por si.
-   Sem isso, um motorista de reserva aparece como "fora" sem ter batido fora.
-2. **Gordura sem a reserva lançada pelo gestor.** `_aplica_reserva`
-   (`main.py:4844`) depende de `reservas_motoristas`, que fica no **projeto do
-   INOVE** e não na base de importação — por isso não está na allowlist do
-   gateway. Solução: ler direto pelo cliente `supabase` normal (mesma sessão),
-   sem passar pela `dp360-api`. A reserva por GPS e o nível RESERVA já funcionam.
-3. **Ocorrências: o simulador não foi portado.** `ferramenta/simulador.py` /
-   `_simula` (âncora de meia-noite, batida fantasma, projeção do cartão) ficou de
-   fora; o "depois" exibido é o `ponto_depois` congelado no lake. **Conferir
-   linha a linha contra `get_conferencia` antes de liberar a gravação.**
-4. **Gravação desligada de propósito** em Revisão e Ocorrências (botões
-   `disabled` + banner). São as telas que produzem advertência; liberar só depois
-   de validar o veredito contra o app atual.
-5. **Mapa (Leaflet) não portado** — a lista de GPS com distância está lá; falta o
-   mapa com as cercas e a linha pessoa↔ônibus.
-6. **Gateway sem `distinct`** — listar as datas de uma aba pagina milhares de
-   linhas. Vale uma ação `datas` que deduplica no servidor.
+1. ~~GPS na Revisão dava falso "bateu fora"~~ — `regrasGps.js` devolve
+   `fora: true|false|null`, e **null é "não medido"**, nunca "junto". Dia de
+   reserva não desenha ônibus nem cobra distância até ele.
+2. ~~Gordura sem a reserva lançada pelo gestor~~ — `reservas_motoristas` fica no
+   **projeto do INOVE**, então é lida pelo cliente `supabase` normal, fora da
+   `dp360-api`. Crachá com reserva e sem linha de gordura entra no contexto assim
+   mesmo (senão o dia sumia).
+3. ~~O simulador não foi portado~~ — `regrasPonto.js` porta o julgamento inteiro
+   e foi validado por **teste diferencial contra o Python real** (1.120 pares
+   crachá×dia): `julgaRef` 518/518, `julgaAcoes` 1090/1090, `simulaCartao`
+   1316/1316, `refPonta` 1616/1616. Controle negativo: 10 de 11 constantes
+   mutadas foram detectadas. O `verdict` do lake é retrato, não juiz.
+4. ~~Gravação desligada~~ — liberada em Revisão e Ocorrências, com as travas do
+   trabalhador da seção 5 conferidas no código. O que **continua** desligado é a
+   execução (robô), que é outra coisa: decidir não é executar.
+5. ~~Mapa (Leaflet) não portado~~ — `MapaBatidas.jsx`: cercas, pinos por papel,
+   ônibus e a régua pessoa↔ônibus (verde sólida junto, vermelha tracejada fora).
+6. ~~Gateway sem `distinct`~~ — ação `datas` no gateway + cache de 10 min no
+   navegador (isolate de Edge Function não guarda estado entre chamadas: medido,
+   dois misses seguidos).
+
+## 7b. Pendências que sobraram
+
+- **Robô do Transnet** (fase 5) — precisa de decisão sobre credencial, disparo e
+  escopo por execução.
+- **Camadas da gordura** ainda vivem dentro de `Gordura.jsx`; o Resumo repete o
+  cálculo. Extrair para módulo compartilhado.
+- **`viagens_qh`** no pop-up da Revisão.
+- Marcação de "não bate ponto" nos Abandonos é lista JSON em `app_config`, **sem
+  autor nem carimbo** — se virar prova de alguma coisa, precisa de tabela.
 
 ## 8. Pendências de segurança já detectadas
 

@@ -4,13 +4,14 @@
 // FONTE DA VERDADE deste arquivo (não invente regra — tudo aqui tem origem):
 //   app/ui/app.js   → viewP5 (~354), P5PORTAS (~133), P5ABAS (~134), SIT (~166),
 //                     COLS_CONF (~183), COLS_ENV (~2647), pontasChips (~3819),
-//                     diaStatus (~1586), jaTratado (~117), decJa (~222)
+//                     diaStatus (~1586), jaTratado (~117), decJa (~222),
+//                     resolverForaDoRobo (~7308)
 //   app/main.py     → get_conferencia (~8959), get_todas_ocorrencias (~4050),
 //                     _situacao (~7834), _reaberto (~7822),
 //                     _pendentes_advertencia (~8204), _rotulo_caso (~2905),
 //                     _grava_contrato (~9467), confirmar_certos (~9498),
 //                     desfazer_decisao (~9519), marcar_ajustes (~9542),
-//                     confirmar_errados (~9664)
+//                     confirmar_errados (~9664), resolver_fora_do_robo (~8289)
 //   src/pages/dp360/regrasPonto.js → O MOTOR DE REGRAS (porte 1:1 do Python,
 //                     validado a 100% contra ele: julgaRef 518/518, julgaAcoes
 //                     1090/1090, simulaCartao 1316/1316, refPonta 1616/1616).
@@ -1280,6 +1281,74 @@ async function gravarRecusa(reg, modo) {
   return aviso;
 }
 
+/* ── A SAÍDA PARA O QUE O ROBÔ NÃO CONSEGUE (main.py:8289 resolver_fora_do_robo) ──
+ *
+ * Até existir isto, um lançamento recusado não tinha fim: voltava para a fila em
+ * TODA rodada, para sempre. CLAUDINEI 21/08, NELSON 22/08 e SILVANO 21/08 rodaram
+ * TRÊS vezes, com horários diferentes, e o Transnet recusou as três — sempre com o
+ * mesmo alerta, e o diagnóstico de 28/08 provou que a coluna citada nele não carrega
+ * mensagem nenhuma. Sem porta de saída, a única ação possível era tentar de novo e
+ * falhar igual.
+ *
+ * SÃO DOIS DESFECHOS DIFERENTES, e a diferença entre eles é o histórico da pessoa:
+ *   lancado_a_mao → alguém foi ao Transnet e lançou. O dia FECHA como CORRIGIDO, e
+ *                   por isso carimba `correcao_final_em` (é ele que, em
+ *                   `situacaoDoCaso`, faz o caso virar "corrigido").
+ *   nao_da        → a competência está encerrada e o Transnet não aceita este dia.
+ *                   Fecha como PONTO FECHADO. NÃO carimba `correcao_final_em`: o
+ *                   ponto não foi corrigido, e dizer que foi seria mentir no
+ *                   histórico. Quem tira o caso da fila aqui é o próprio
+ *                   `ponto_fechado`, que já é desfecho em toda esta tela.
+ *
+ * Nos DOIS o texto vai para `ponto_caso.usuario` — a nota de histórico do caso, a
+ * mesma que o DP360Resumo já lê como o "detalhe" de um dia fechado. O corte em 200
+ * caracteres é o do Python, não é enfeite.
+ *
+ * POR QUE ISSO ESVAZIA A FILA DESTA TELA (a fila do original era outra — lá era a
+ * da correção, `_pendentes_correcao`): `situacaoDoCaso` lê `correcao_status ===
+ * 'ponto_fechado'` e `correcao_final_em` ANTES de olhar o `aceite`. Então os dois
+ * desfechos tiram o caso de "Execução pendente" na hora, sem ninguém carimbar
+ * `conferido_em` — que é justamente o carimbo que só o robô pode dar.
+ *
+ * O que este caminho NÃO faz, igual ao original: não inventa horário, não toca no
+ * cartão, não mexe em `aceite`/`ajuste`/`conferido_em` e não dispara robô nenhum.
+ * Só registra a decisão de quem olhou. */
+const FORA_DO_ROBO = {
+  lancado_a_mao: {
+    status: "corrigido",
+    nota: "corrigido à mão pelo DP (fora do robô)",
+    // main.py: só este carimba correcao_final_em.
+    fecha: true,
+  },
+  nao_da: {
+    status: "ponto_fechado",
+    nota: "o Transnet não aceita este dia — resolvido fora do robô",
+    fecha: false,
+  },
+};
+
+// Só as duas chaves declaradas acima — nunca o que o Object empresta ("constructor"
+// e companhia devolveriam objeto truthy e gravariam correcao_status=undefined).
+const desfechoForaDoRobo = (como) =>
+  Object.keys(FORA_DO_ROBO).includes(txt(como)) ? FORA_DO_ROBO[txt(como)] : null;
+
+async function gravarForaDoRobo(reg, como, nota) {
+  const cfg = desfechoForaDoRobo(como);
+  // main.py: "Diga o que houve" — desfecho fora da lista não grava nada.
+  if (!cfg) throw new Error("Diga o que houve: 'lancado_a_mao' ou 'nao_da'.");
+  const agora = agoraISOLocal();
+  const obs = txt(nota);
+  const linha = {
+    ...chaveDoCaso(reg),
+    correcao_status: cfg.status,
+    atualizado_em: agora,
+    usuario: `${cfg.nota}${obs ? ` — ${obs}` : ""}`.slice(0, 200),
+  };
+  if (cfg.fecha) linha.correcao_final_em = agora;
+  await upsertDP360("ponto_caso", linha);
+  return "";
+}
+
 /** main.py:9519 (desfazer_decisao) — o caso volta para a fila. */
 async function gravarDesfazer(reg) {
   await upsertDP360("ponto_caso", {
@@ -1373,7 +1442,9 @@ function motivoForaDoLote(reg, acao) {
  * o DP acharia que o robô falhou.
  *
  * `qual` muda só o TEXTO do motivo, NUNCA o filtro: as três perguntas abaixo são as
- * mesmas nos dois modos.
+ * mesmas nos três usos ("executar", "conferir" e "fechar" à mão). O fechamento
+ * manual entra AQUI de propósito: ele é o desfecho de um caso que ESTÁ na fila do
+ * bot — não uma porta paralela por onde um dia sem decisão sairia calado.
  */
 function motivoForaDaFilaDoBot(reg, qual) {
   if (!reg) return "sem caso";
@@ -1387,13 +1458,27 @@ function motivoForaDaFilaDoBot(reg, qual) {
   if (reg.reaberto)
     return "ciclo reaberto — chegou aviso novo depois da decisão: decida de novo antes de mandar o robô";
   if (!["aceito", "rejeitado"].includes(txt(ciclo.aceite)))
-    return qual === "conferir"
-      ? "nenhuma decisão gravada — o bot só confere o que foi decidido: aceite ou recuse primeiro"
-      : "nenhuma decisão gravada — decidir e executar são dois passos: aceite ou recuse primeiro";
+    return (
+      {
+        conferir:
+          "nenhuma decisão gravada — o bot só confere o que foi decidido: aceite ou recuse primeiro",
+        // DECIDIR ≠ EXECUTAR, e fechar à mão não é uma terceira forma de decidir:
+        // é o registro do DESFECHO de uma decisão que já existe. Sem decisão gravada
+        // este caminho seria justamente o atalho que a tela inteira evita.
+        fechar:
+          "nenhuma decisão gravada — fechar à mão registra o DESFECHO de uma decisão, não decide por ela: aceite ou recuse primeiro",
+      }[qual] ||
+      "nenhuma decisão gravada — decidir e executar são dois passos: aceite ou recuse primeiro"
+    );
   if (txt(bruto.conferido_em))
-    return qual === "conferir"
-      ? "este dia já foi conferido e fechado (conferido_em) — o bot só olha o que continua aberto"
-      : "o robô já executou este dia no Transnet — não se repete";
+    return (
+      {
+        conferir:
+          "este dia já foi conferido e fechado (conferido_em) — o bot só olha o que continua aberto",
+        fechar:
+          "o robô já conferiu e fechou este dia (conferido_em) — não sobrou nada para fechar à mão",
+      }[qual] || "o robô já executou este dia no Transnet — não se repete"
+    );
   return "";
 }
 
@@ -1429,6 +1514,36 @@ function motivoSemConferencia(reg) {
   if (base) return base;
   if (txt(reg.caso?.correcao_status) === "ponto_fechado")
     return "dia já provado FECHADO no Transnet — a leitura nunca vai bater e o bot não rebaixa mais o caso";
+  return "";
+}
+
+/**
+ * Por que ESTE dia não pode ser fechado À MÃO (main.py:8289 resolver_fora_do_robo).
+ *
+ * A base é a MESMA fila do bot — e é ela que segura "decidir ≠ executar": só se
+ * registra o desfecho de um caso que já tem decisão gravada e ainda está aberto.
+ *
+ * O que este caminho NÃO herda da execução, e por quê:
+ *  · "nenhuma ocorrência do Transnet ligada a este dia" — essa trava existe porque o
+ *    robô não teria em que clicar. Aqui ninguém clica em nada: a pessoa JÁ resolveu
+ *    fora, e o que falta é registrar. Barrar por isso prenderia na fila exatamente o
+ *    caso que este botão existe para soltar.
+ *  · "competência fechada no Transnet" — pelo contrário: essa é a razão de existir do
+ *    desfecho `nao_da`.
+ *
+ * O que ele GANHA: caso que já tem desfecho gravado não se fecha de novo. Reescrever
+ * apagaria a nota de histórico do primeiro fechamento — que é a única prova de quem
+ * resolveu o quê. Para trocar o desfecho, desfaz-se a decisão e decide-se de novo.
+ */
+function motivoSemFechamentoManual(reg) {
+  const base = motivoForaDaFilaDoBot(reg, "fechar");
+  if (base) return base;
+  const bruto = reg.caso || {};
+  // a mesma precedência de situacaoDoCaso: ponto fechado vem antes de corrigido.
+  if (txt(bruto.correcao_status) === "ponto_fechado")
+    return "este dia já está registrado como ponto fechado — o desfecho já está gravado";
+  if (txt(bruto.correcao_final_em))
+    return "este dia já está registrado como corrigido — o desfecho já está gravado";
   return "";
 }
 
@@ -1597,11 +1712,133 @@ function BotaoExecucao({ children, tom = "neutro", motivo = AVISO_EXEC }) {
   );
 }
 
+/* ── A SAÍDA DE EXCEÇÃO: FECHAR À MÃO O QUE O ROBÔ NÃO CONSEGUE ──────────────
+ * (app.js:7308 resolverForaDoRobo → main.py:8289 resolver_fora_do_robo)
+ *
+ * É o TERCEIRO caminho do rodapé, e o único que não passa por robô nenhum. Por isso
+ * ele é DIFERENTE dos outros dois na tela, de propósito:
+ *  · fica FECHADO até alguém dizer que o robô não deu conta — encostado nos botões do
+ *    robô, aberto, ele seria lido como "o jeito rápido", e o jeito rápido de tirar um
+ *    caso da fila é gravar desfecho sem ninguém ter ido ao Transnet;
+ *  · quando abre, abre com moldura tracejada e cor de alerta: dá para ver de longe
+ *    que se saiu do caminho normal;
+ *  · os dois desfechos são BOTÕES SEPARADOS, nunca um `<select>` com um botão só (o
+ *    original usa select; aqui vale a regra desta tela, a mesma que separa "recusar"
+ *    de "advertir" e "ensaio" de "valendo"): "lancei à mão" e "o Transnet não aceita"
+ *    escrevem histórias diferentes na ficha da pessoa e não podem sair do mesmo
+ *    clique por engano.
+ *
+ * Nada aqui decide: quem não tem decisão gravada nem chega neste bloco (a trava é a
+ * fila do bot, a mesma da execução e da conferência).
+ */
+function ForaDoRobo({ reg, ocupado, aoFecharAMao }) {
+  const [aberto, setAberto] = useState(false);
+  const [nota, setNota] = useState("");
+  const trava = motivoSemFechamentoManual(reg);
+
+  if (!aberto) {
+    return (
+      <div className="dp-det-bot-linha oc-fora-chamada">
+        <button
+          type="button"
+          className="oc-fora-abrir"
+          onClick={() => setAberto(true)}
+          title="Saída de exceção: registrar que este caso foi resolvido FORA do robô, para ele parar de voltar à fila em toda rodada."
+        >
+          O robô não deu conta deste caso?
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="oc-fora">
+      <div className="dp-det-bot-linha oc-fora-tit">
+        {/* o "esconder" vem PRIMEIRO no DOM porque flutua à direita: float só
+            encontra a borda direita da primeira linha se estiver antes do texto. */}
+        <button
+          type="button"
+          className="oc-fora-abrir"
+          onClick={() => setAberto(false)}
+          title="Fecha este bloco. Nada foi gravado."
+        >
+          esconder
+        </button>
+        <b>⚠ Exceção — fechar à mão, sem robô</b>
+        <span className="dp-faint">
+          {" "}
+          · {reg.nome} · {reg.dataBR} · nada é lançado no Transnet por aqui
+        </span>
+      </div>
+      {trava ? (
+        <div className="dp-det-bot-linha">
+          <Selo
+            cor="alerta"
+            quebra
+            titulo="Fechar à mão registra o DESFECHO de uma decisão que já existe — nunca substitui a decisão."
+          >
+            fechamento manual indisponível para este caso: {trava}
+          </Selo>
+        </div>
+      ) : (
+        <>
+          <div className="dp-det-bot-linha">
+            Use isto <b>só depois</b> de o robô ter tentado e não ter conseguido. Um lançamento
+            recusado sem desfecho volta para a fila <b>em toda rodada, para sempre</b> — CLAUDINEI,
+            NELSON e SILVANO rodaram três vezes cada um e o Transnet recusou as três.
+            <b> O cartão não é tocado aqui e nenhum horário é inventado</b>: só fica registrado o
+            que você fez, em <span className="dp-mono">ponto_caso</span>, com nota no histórico (
+            <span className="dp-mono">usuario</span>).
+          </div>
+          <label className="dp-det-bot-linha oc-fora-campo">
+            {/* 140 é o que sobra dentro dos 200 caracteres que o Python guarda em
+                `usuario`, contando o maior dos dois textos fixos: com este teto nada
+                é cortado em silêncio depois de a pessoa ter escrito. */}
+            <span className="dp-faint">
+              Observação (opcional, até 140 caracteres) — vai junto da nota no histórico
+            </span>
+            <input
+              className="oc-fora-nota"
+              value={nota}
+              maxLength={140}
+              disabled={ocupado}
+              placeholder="ex.: lançado pelo DP em 03/09, protocolo do Transnet"
+              onChange={(e) => setNota(e.target.value)}
+            />
+          </label>
+          <div className="dp-det-bot-acoes">
+            <BotaoAcao
+              tom="ok"
+              disabled={ocupado}
+              titulo="Alguém foi ao Transnet e lançou: grava correcao_status='corrigido' E correcao_final_em — o dia fecha como corrigido."
+              onClick={() => aoFecharAMao(reg, "lancado_a_mao", nota)}
+            >
+              ✔ Lancei à mão no Transnet — fechar como corrigido
+            </BotaoAcao>
+            <BotaoAcao
+              tom="erro"
+              disabled={ocupado}
+              titulo="Competência encerrada: grava correcao_status='ponto_fechado' e NÃO carimba correcao_final_em — o ponto não foi corrigido, e o histórico não pode dizer que foi."
+              onClick={() => aoFecharAMao(reg, "nao_da", nota)}
+            >
+              🔒 O Transnet não aceita esse dia — fechar como ponto fechado
+            </BotaoAcao>
+          </div>
+          <div className="dp-det-bot-linha dp-faint">
+            “Ponto fechado” <b>não</b> é o mesmo que corrigido: o dia continua errado no Transnet e
+            fica registrado como tal — não como pendência. Ninguém tenta de novo.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // Rodapé de execução do caso aberto: ENSAIO e VALENDO são botões SEPARADOS, como
 // em Folgas. Um checkbox "confirmar" marcado por engano vira decisão de verdade na
 // ficha de um trabalhador; dois botões obrigam a escolher, e cada confirmação diz
 // qual dos dois é. O escopo (1 crachá+dia) fica escrito na cara, não implícito.
-function RodapeRobo({ reg, disparando, aoExecutar, aoConferir, resultado }) {
+function RodapeRobo({ reg, disparando, gravando, aoExecutar, aoConferir, aoFecharAMao, resultado }) {
   const trava = motivoSemExecucao(reg);
   const plano = trava ? null : planoDaExecucao(reg);
   const travaConf = motivoSemConferencia(reg);
@@ -1751,6 +1988,17 @@ function RodapeRobo({ reg, disparando, aoExecutar, aoConferir, resultado }) {
           ) : null}
         </div>
       ) : null}
+
+      {/* O TERCEIRO CAMINHO, e por último de propósito: vem DEPOIS de tudo que é
+          robô, porque só faz sentido quando o robô já tentou e não conseguiu.
+          `key` = o caso: trocar de caso NUNCA pode carregar a observação digitada
+          para a ficha de outra pessoa. */}
+      <ForaDoRobo
+        key={reg.k}
+        reg={reg}
+        ocupado={disparando || gravando}
+        aoFecharAMao={aoFecharAMao}
+      />
     </div>
   );
 }
@@ -2328,6 +2576,7 @@ function Detalhe({
   disparando,
   aoExecutar,
   aoConferir,
+  aoFecharAMao,
   resultadoRobo,
 }) {
   // ENQUANTO O DISPARO ESTÁ NO AR, A DECISÃO NÃO MUDA. O robô já levou a decisão que
@@ -2582,6 +2831,18 @@ function Detalhe({
         {txt(c.correcao_status) ? (
           <p className="dp-faint" style={{ ...MINI, margin: "8px 0 0" }}>
             correcao_status: {txt(c.correcao_status)}
+            {/* A NOTA DO DESFECHO. É aqui que o fechamento à mão diz o que houve
+                (main.py:8289 grava o texto em `usuario`), e é o que o DP360Resumo já
+                lê como o "detalhe" de um dia fechado. Vai com o NOME CRU da coluna
+                porque `usuario` é terra de ninguém — a conciliação e o bot também
+                escrevem ali, e chamar isso de "nota do fechamento" seria prometer
+                uma origem que o campo não garante. */}
+            {txt(c.usuario) ? (
+              <>
+                {" · "}
+                <span className="dp-mono">usuario</span>: {txt(c.usuario)}
+              </>
+            ) : null}
           </p>
         ) : null}
       </div>
@@ -2678,8 +2939,10 @@ function Detalhe({
         <RodapeRobo
           reg={reg}
           disparando={disparando}
+          gravando={gravando}
           aoExecutar={aoExecutar}
           aoConferir={aoConferir}
+          aoFecharAMao={aoFecharAMao}
           resultado={resultadoRobo}
         />
       </div>
@@ -2930,6 +3193,57 @@ export default function Ocorrencias() {
       )
         return;
       executarGravacao(`Decisão desfeita (${reg.nome} · ${reg.dataBR})`, () => gravarDesfazer(reg));
+    },
+    [executarGravacao],
+  );
+
+  /* ── FECHAR À MÃO o caso que o robô não conseguiu (main.py:8289) ────────────
+   * A confirmação diz os campos EXATOS de cada desfecho, porque os dois gravam
+   * coisas diferentes e a diferença é o histórico da pessoa: um diz que o ponto foi
+   * corrigido, o outro diz que o dia vai ficar errado. Trocar um pelo outro sem
+   * perceber é o único jeito de este botão fazer mal — então o texto separa os dois
+   * antes do clique, e o erro que voltar é o do servidor (executarGravacao). */
+  const aoFecharAMao = useCallback(
+    (reg, como, nota) => {
+      const trava = motivoSemFechamentoManual(reg);
+      if (trava) {
+        setRecado(`Não dá para fechar à mão: ${trava}.`);
+        return;
+      }
+      const cfg = desfechoForaDoRobo(como);
+      if (!cfg) {
+        setRecado("Diga o que houve: 'lancado_a_mao' ou 'nao_da'.");
+        return;
+      }
+      const obs = txt(nota);
+      const notaFinal = `${cfg.nota}${obs ? ` — ${obs}` : ""}`.slice(0, 200);
+      const cabeca =
+        como === "lancado_a_mao"
+          ? `FECHAR À MÃO como CORRIGIDO o dia ${reg.dataBR} de ${reg.nome} (${reg.cracha}).\n\n` +
+            `Você está dizendo que ALGUÉM FOI AO TRANSNET E LANÇOU — o dia está resolvido, só não foi o robô.`
+          : `FECHAR À MÃO como PONTO FECHADO o dia ${reg.dataBR} de ${reg.nome} (${reg.cracha}).\n\n` +
+            `Você está dizendo que O TRANSNET NÃO ACEITA ESSE DIA (competência encerrada). ` +
+            `O dia VAI FICAR ERRADO, e fica registrado como tal — não como pendência.`;
+      const campos =
+        como === "lancado_a_mao"
+          ? `Grava em ponto_caso: correcao_status="corrigido", correcao_final_em=agora (carimbo local), ` +
+            `atualizado_em=agora, usuario="${notaFinal}".`
+          : `Grava em ponto_caso: correcao_status="ponto_fechado", atualizado_em=agora (carimbo local), ` +
+            `usuario="${notaFinal}".\n` +
+            `NÃO grava correcao_final_em: o ponto NÃO foi corrigido, e dizer que foi seria mentir no histórico.`;
+      if (
+        !confirmar(
+          `${cabeca}\n\n${campos}\n\n` +
+            `NÃO muda a decisão já gravada (aceite=${txt(reg.ciclo?.aceite) || "—"}), não toca no cartão, ` +
+            `não inventa horário e NÃO dispara robô nenhum. O que muda é o caso sair da fila em vez de ` +
+            `voltar em toda rodada.`,
+        )
+      )
+        return;
+      executarGravacao(
+        `Caso fechado à mão · ${cfg.status} (${reg.nome} · ${reg.dataBR})`,
+        () => gravarForaDoRobo(reg, como, nota),
+      );
     },
     [executarGravacao],
   );
@@ -3826,6 +4140,7 @@ export default function Ocorrencias() {
         disparando={disparando}
         aoExecutar={aoExecutarRobo}
         aoConferir={aoConferirRobo}
+        aoFecharAMao={aoFecharAMao}
         resultadoRobo={resultadoRobo}
       />
     </AbaShell>
@@ -3859,6 +4174,19 @@ export default function Ocorrencias() {
  *   mostra `app_config.ultima_captura` mas NÃO o carimba, e o congelamento da prova
  *   não acontece por este caminho — a prova é congelada em `gravaContrato`, na hora
  *   da decisão, que é depois. Está escrito na tela, não só aqui.
+ * · FECHAR À MÃO (LIGADO, e é EXCEÇÃO). main.py:8289 (resolver_fora_do_robo). Não
+ *   dispara robô e não escreve no Transnet: grava em `ponto_caso` o DESFECHO de um
+ *   caso que o robô não consegue executar. Dois desfechos, dois botões separados:
+ *   "lancei à mão" → correcao_status='corrigido' + correcao_final_em (o dia fecha
+ *   como corrigido); "o Transnet não aceita esse dia" → correcao_status=
+ *   'ponto_fechado' SEM correcao_final_em (o ponto não foi corrigido — carimbar
+ *   seria mentir no histórico; quem tira da fila é o próprio ponto_fechado). Nos
+ *   dois, a nota do que houve vai em `usuario` (200 caracteres, corte do Python).
+ *   A trava é a MESMA fila do bot da execução e da conferência — sem decisão
+ *   gravada não há desfecho a registrar, e é assim que decidir ≠ executar continua
+ *   de pé: isto registra o fim de uma decisão, não decide no lugar dela. Existe
+ *   porque um lançamento recusado sem desfecho voltava à fila em toda rodada, para
+ *   sempre (CLAUDINEI/NELSON/SILVANO, três runs cada, recusados nos três).
  * · ADVERTIR e CORRIGIR (FORA — ver MOTIVO_ADVERTIR). São outros dois robôs
  *   (`comunicado` motivo 103 e `ponto`) e outros dois carimbos
  *   (advertencia_enviada_em / correcao_final_em), gravados por quem LÊ o resultado

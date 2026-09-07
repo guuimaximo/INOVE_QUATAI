@@ -3,7 +3,7 @@ import { AlertTriangle, ChevronRight, RefreshCw, Search, X } from "lucide-react"
 import { AuthContext } from "../../context/AuthContext";
 import { useAccessGovernance } from "../../context/AccessContext";
 import { canUserAccessPath } from "../../utils/access";
-import { lerDP360, lerTudoDP360 } from "../../services/dp360Api";
+import { lerDP360, upsertDP360 } from "../../services/dp360Api";
 // As QUATRO CAMADAS da gordura (main.py `_gord`) e a trava do aviso (`_ponta_conta`).
 // Mesma régua que a aba Gordura roda — é o que faz o número desta tela ser o mesmo.
 import {
@@ -33,7 +33,10 @@ import "./dp360.css";
       (app/main.py `get_dashboard` / `get_dashboard_itens`: mês × categoria em
       corretos / incorretos / ponto sem operação / justificado / sem ponto).
 
-   FASE ATUAL: SOMENTE LEITURA. Nada nesta tela grava.
+   O QUE ESTA TELA GRAVA: só o VALOR DA HORA do motorista (`app_config.chave =
+   valor_hora_motorista`), porte de main.py `set_valor_hora` (:3814). O comentário do
+   original explica por que ele é editável e não constante: "é número de dissídio, muda
+   por acordo". Nada mais aqui grava — ponto, caso e gordura continuam somente leitura.
 
    A REGRA DE NEGÓCIO NÃO MORA AQUI. `status_ponto`, `motivo`, `classificacao`,
    `teve_operacao`, `jornada_liquida_min` já vêm calculados pela view do Athena e
@@ -48,6 +51,15 @@ import "./dp360.css";
      `get_dashboard`). Duas telas fundidas não podem ter dois seletores de
      período dizendo coisas diferentes — os baldes passam a ser contados na
      mesma janela da competência. É a MESMA métrica (`_bucket`), outra janela.
+   • "TODAS AS COMPETÊNCIAS" (app.js:6335 `<option value="">`, e main.py:3838+ não
+     filtra quando o valor chega vazio) existe aqui, mas SÓ PELA METADE BARATA. O que
+     nasce da `ponto_caso` — esteira, ciclo do aviso, gordura corrigida e o valor
+     gerencial — roda sobre a base inteira sem susto: a tabela é pequena. O que nasce
+     da `ponto_diario` (Gerencial e baldes, ~13 mil linhas POR competência) e da
+     `ponto_gordura` (~10 mil por competência, e ainda as quatro camadas por cima) NÃO
+     é lido nesse modo: seriam centenas de milhares de linhas no navegador. Essas
+     seções somem da tela e a barra diz por quê — em vez de aparecerem zeradas, que é
+     o jeito mais fácil de um painel mentir.
    • KPIs de dias/pessoas: ficaram os do Gerencial (`kpis`), que são exatamente
      os mesmos dias que os baldes "incorreto"/"ponto sem operação" contam por
      outro corte. Não foi duplicado.
@@ -206,7 +218,22 @@ const COLUNAS_GORDURA = [
 // Citatti (DDL em importador_supabase/criar_tabela_ponto_linha99.sql).
 const COLUNAS_LINHA99 = "cracha,data_ref";
 
-const LIMITE_LISTA = 400; // main.py `get_dashboard_detalhe`: `itens[:400]`
+/* Valor "todas as competências" do seletor — o mesmo `<option value="">` do painel
+   original (app.js:6335), que no Python vira o `if competencia and comp != competencia`
+   de main.py:3872 (sem valor, não filtra nada). `null` é outra coisa: é "a tela ainda
+   não escolheu", enquanto a lista de competências não chegou. Sem essa distinção,
+   recarregar com "Todas" aberto jogava a pessoa de volta para a última competência
+   fechada, porque "" é falsy. */
+const TODAS = "";
+
+/* QUANTAS LINHAS O PAINEL DESENHA DE UMA VEZ. Não é o teto do original: lá o
+   `get_dashboard_detalhe` corta a lista NO SERVIDOR (`itens[:400]`, main.py:3806) e o
+   resto some — mas lá havia saída, porque o seletor tinha "Todas as competências" e
+   "refine pela competência" reduzia mesmo o universo. O `get_dashboard_itens`
+   (main.py:7501), que alimenta o drill-down do Resumo do ponto, NÃO TEM TETO NENHUM.
+   Aqui a lista inteira já está no navegador, então este número é só quanto se pinta de
+   saída: o painel tem busca e o botão "mostrar todas as N". Nada é descartado. */
+const LIMITE_LISTA = 400;
 
 // app.js `viewDash`: os níveis aparecem com P3⁻ no lugar de P3_SEM_CONFIRMACAO.
 const NIVEL_ROT = (cod) => cod.replace("_SEM_CONFIRMACAO", "⁻");
@@ -278,6 +305,7 @@ function periodoDaCompetencia(comp) {
 const MESES = ["", "jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 function nomeCompetencia(comp) {
+  if (comp === TODAS) return "Todas as competências";
   const [a, m] = txt(comp).split("-").map(Number);
   if (!a || !m) return comp || "—";
   const [ini, fim] = periodoDaCompetencia(comp);
@@ -313,6 +341,23 @@ function hhmm(minutos) {
 const fmtJornada = (min) => (min == null ? "—" : hhmm(min));
 const brl = (v) => (num(v)).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const pct = (parte, total) => (total ? Math.round((parte / total) * 100) : 0);
+
+/* O VALOR DA HORA, do jeito que o Python lê e grava (main.py `set_valor_hora`, :3814).
+ * Mesmo saneamento do original — tira "R$", tira o ponto de MILHAR e troca a vírgula
+ * decimal —, mesma faixa (0 a 10.000, fora disso "Valor fora do razoável.") e mesmo
+ * formato na gravação (quatro casas). O formato importa: quem lê essa chave do outro
+ * lado é a ferramenta desktop, com `float(...)` em cima do que estiver lá.
+ * Campo vazio vale 0, como no Python (`float(... or 0)`) — é assim que se APAGA o
+ * valor e se desligam os cartões de dinheiro de novo. */
+function lerValorHora(bruto) {
+  const limpo = String(bruto ?? "").replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
+  const v = parseFloat(limpo || "0");
+  if (!Number.isFinite(v) || v < 0 || v > 10000) return { erro: "Valor fora do razoável." };
+  return { valor: v };
+}
+
+// app.js `dvh`: 38.5 -> "38,5" na caixinha (o usuário digita em pt-BR).
+const horaParaCampo = (v) => (num(v) > 0 ? String(num(v)).replace(".", ",") : "");
 
 /* A CADEIA DE ARREDONDAMENTO DO PAINEL DE HORAS, preservada de propósito:
    `get_dashboard_horas` devolve as horas de oportunidade com UMA casa
@@ -771,14 +816,18 @@ function apurarOportunidade(gorduras, casos) {
 // A Edge Function aceita até 5.000 por página (LIMITE_MAX), então aqui a
 // paginação é própria. `ordem` é obrigatória: sem ordenação estável o
 // offset devolve linha repetida e some com outra.
-async function lerPaginado(tabela, opcoes, maxPaginas = 12, passo = 5000) {
+// `aoTruncar` avisa quando o teto de páginas foi atingido com a última página CHEIA —
+// ou seja, quando provavelmente ficou linha para trás. Sem esse aviso, o teto vira uma
+// leitura parcial silenciosa, que é o mesmo defeito do painel que mostra zero.
+async function lerPaginado(tabela, opcoes, maxPaginas = 12, passo = 5000, aoTruncar) {
   const todas = [];
   for (let pagina = 0; pagina < maxPaginas; pagina += 1) {
     // eslint-disable-next-line no-await-in-loop
     const bloco = await lerDP360(tabela, { ...opcoes, limite: passo, offset: pagina * passo });
     todas.push(...bloco);
-    if (bloco.length < passo) break;
+    if (bloco.length < passo) return todas;
   }
+  if (todas.length === maxPaginas * passo && typeof aoTruncar === "function") aoTruncar(todas.length);
   return todas;
 }
 
@@ -829,12 +878,19 @@ export default function DP360Resumo() {
   const podeAcessar = canUserAccessPath(user, "/dp360-resumo", profileMap);
 
   const [competencias, setCompetencias] = useState([]);
-  const [competencia, setCompetencia] = useState("");
+  // `null` = a lista ainda não chegou (nada escolhido); `TODAS` ("") = todas as
+  // competências; qualquer outra coisa = uma competência. Ver o comentário de `TODAS`.
+  const [competencia, setCompetencia] = useState(null);
   const [valorHora, setValorHora] = useState(0);
+  const [horaSalva, setHoraSalva] = useState("");   // o valor da hora como texto no banco
+  const [horaTxt, setHoraTxt] = useState("");       // o que está na caixinha
+  const [salvandoHora, setSalvandoHora] = useState(false);
+  const [avisoHora, setAvisoHora] = useState(null); // { tom: "ok"|"danger", texto }
   const [linhas, setLinhas] = useState([]);
   const [casos, setCasos] = useState([]);
   const [carregandoBase, setCarregandoBase] = useState(true);
   const [carregando, setCarregando] = useState(false);
+  const [carregandoCasos, setCarregandoCasos] = useState(false);
   const [erro, setErro] = useState("");
   const [avisoCasos, setAvisoCasos] = useState("");
   const [recarga, setRecarga] = useState(0);
@@ -877,20 +933,36 @@ export default function DP360Resumo() {
         const lista = competenciasEntre(maisAntigo?.[0]?.date_ref, maisNovo?.[0]?.date_ref);
         setCompetencias(lista);
         // main.py `get_gerencial`: a mais recente costuma estar EM ANDAMENTO —
-        // o padrão é a última já fechada.
-        setCompetencia((atual) => (atual && lista.includes(atual) ? atual : lista[1] || lista[0] || ""));
+        // o padrão é a última já fechada. Escolha já feita (inclusive "Todas") é
+        // preservada no recarregar; por isso o teste é contra `null`, não contra falsy.
+        setCompetencia((atual) => (
+          atual !== null && (atual === TODAS || lista.includes(atual))
+            ? atual
+            : (lista[1] || lista[0] || TODAS)
+        ));
 
-        // Valor da hora (main.py `set_valor_hora` grava em app_config). Só serve
-        // pra converter captura em dinheiro; se falhar, a tela segue sem o card.
+        // Valor da hora (main.py `set_valor_hora` grava em app_config). Serve pra
+        // converter captura em dinheiro e é EDITÁVEL logo abaixo; se a leitura falhar,
+        // a tela segue sem os cartões de dinheiro, dizendo que o valor não foi lido.
         try {
           const cfg = await lerDP360("app_config", {
             colunas: "chave,valor",
             filtros: { chave: "eq.valor_hora_motorista" },
             limite: 1,
           });
-          if (vivo) setValorHora(num(cfg?.[0]?.valor));
+          if (vivo) {
+            const v = num(cfg?.[0]?.valor);
+            setValorHora(v);
+            setHoraSalva(horaParaCampo(v));
+            setHoraTxt(horaParaCampo(v));
+            setAvisoHora(null);
+          }
         } catch {
-          if (vivo) setValorHora(0);
+          if (vivo) {
+            setValorHora(0);
+            setHoraSalva("");
+            setHoraTxt("");
+          }
         }
       } catch (falha) {
         if (vivo) setErro(falha?.message || "Falha ao consultar a base DP360.");
@@ -901,15 +973,23 @@ export default function DP360Resumo() {
     return () => { vivo = false; };
   }, [podeAcessar, recarga]);
 
-  // Competência escolhida: ponto (Gerencial + baldes) e casos (esteira).
+  // Competência escolhida: o PONTO (Gerencial + baldes). Em "Todas as competências"
+  // esta leitura não acontece — são ~13 mil linhas POR competência, e a `ponto_diario`
+  // é uma tabela muito larga. As seções que dependem dela saem da tela avisando.
   useEffect(() => {
-    if (!competencia) return undefined;
+    if (competencia === null) return undefined;
+    setAberto("");
+    setPainel(null);
+    if (competencia === TODAS) {
+      setLinhas([]);
+      setErro("");
+      setCarregando(false);
+      return undefined;
+    }
     const [ini, fim] = periodoDaCompetencia(competencia);
     if (!ini || !fim) return undefined;
     let vivo = true;
     setCarregando(true);
-    setAberto("");
-    setPainel(null);
     (async () => {
       try {
         const ponto = await lerPaginado("ponto_diario", {
@@ -920,24 +1000,6 @@ export default function DP360Resumo() {
         if (!vivo) return;
         setLinhas(ponto);
         setErro("");
-
-        // `ponto_caso` é pequena e muda a cada decisão do DP: sem colunas fixas
-        // (`select=*`), porque `captura_min`/`captura_tipo` são colunas novas e
-        // pedir uma que ainda não existe devolveria HTTP 400.
-        try {
-          const lidos = await lerTudoDP360(
-            "ponto_caso",
-            { filtros: { date_ref: [`gte.${ini}`, `lte.${fim}`] }, ordem: "date_ref" },
-            10,
-          );
-          if (!vivo) return;
-          setCasos(lidos);
-          setAvisoCasos("");
-        } catch (falhaCaso) {
-          if (!vivo) return;
-          setCasos([]);
-          setAvisoCasos(falhaCaso?.message || "Não deu pra ler o ciclo dos avisos (ponto_caso).");
-        }
       } catch (falha) {
         if (vivo) { setLinhas([]); setErro(falha?.message || "Falha ao consultar a base DP360."); }
       } finally {
@@ -947,11 +1009,64 @@ export default function DP360Resumo() {
     return () => { vivo = false; };
   }, [competencia, recarga]);
 
+  // Os CASOS (esteira, ciclo do aviso, gordura corrigida). Efeito próprio porque é a
+  // ÚNICA leitura que sobrevive ao modo "Todas as competências": a `ponto_caso` é
+  // pequena — uma linha por crachá×dia que o DP tratou —, então varrê-la inteira é
+  // barato. Sem colunas fixas (`select=*`) de propósito: `captura_min`/`captura_tipo`
+  // são colunas novas e pedir uma que ainda não exista devolveria HTTP 400.
+  useEffect(() => {
+    if (competencia === null) return undefined;
+    const [ini, fim] = competencia === TODAS ? ["", ""] : periodoDaCompetencia(competencia);
+    if (competencia !== TODAS && (!ini || !fim)) return undefined;
+    let vivo = true;
+    setCarregandoCasos(true);
+    (async () => {
+      let truncou = 0;
+      try {
+        const lidos = await lerPaginado(
+          "ponto_caso",
+          {
+            filtros: competencia === TODAS ? undefined : { date_ref: [`gte.${ini}`, `lte.${fim}`] },
+            // Ordem estável: sem ela o offset devolve linha repetida e some com outra.
+            ordem: "date_ref,cracha",
+          },
+          20,
+          5000,
+          (qtd) => { truncou = qtd; },
+        );
+        if (!vivo) return;
+        setCasos(lidos);
+        setAvisoCasos(truncou
+          ? `A leitura dos casos parou em ${truncou} linhas (teto de segurança): a esteira `
+            + "pode estar incompleta. Escolha uma competência para ver o número certo."
+          : "");
+      } catch (falhaCaso) {
+        if (!vivo) return;
+        setCasos([]);
+        setAvisoCasos(falhaCaso?.message || "Não deu pra ler o ciclo dos avisos (ponto_caso).");
+      } finally {
+        if (vivo) setCarregandoCasos(false);
+      }
+    })();
+    return () => { vivo = false; };
+  }, [competencia, recarga]);
+
   // Competência escolhida, parte da OPORTUNIDADE: a gordura crua, a marcação da
   // linha 99 e as reservas lançadas no INOVE. Efeito separado de propósito (ver o
   // comentário do estado): esta leitura é a cara e a que depende de outra base.
   useEffect(() => {
-    if (!competencia) return undefined;
+    if (competencia === null) return undefined;
+    // "Todas as competências" não lê gordura: seriam ~10 mil linhas POR competência,
+    // vezes todas elas, e ainda as quatro camadas por cima de cada uma. É a mesma
+    // razão da série por competência continuar fora (ver o cabeçalho do arquivo).
+    if (competencia === TODAS) {
+      setGorduraBruta(null);
+      setCom99(new Set());
+      setReservas(new Map());
+      setAvisoGordura("");
+      setCarregandoGordura(false);
+      return undefined;
+    }
     const [ini, fim] = periodoDaCompetencia(competencia);
     if (!ini || !fim) return undefined;
     let vivo = true;
@@ -1043,6 +1158,49 @@ export default function DP360Resumo() {
   const taxaResposta = pct(ciclo.respondidos, ciclo.avisados);
   const taxaCorrecao = pct(ciclo.corrigidos, ciclo.avisados);
 
+  // "Todas as competências": só o que nasce da `ponto_caso` fica de pé.
+  const modoTodas = competencia === TODAS;
+
+  /* GRAVA O VALOR DA HORA — a única escrita desta tela. Porte de main.py
+     `set_valor_hora` (:3814) + do botão `dvhsave` (app.js:6447). A confirmação diz o
+     número por extenso e lembra que a chave é compartilhada: a ferramenta desktop lê o
+     MESMO `app_config.valor_hora_motorista`, então salvar aqui muda o painel de lá. */
+  const salvarValorHora = async () => {
+    const lido = lerValorHora(horaTxt);
+    if (lido.erro) {
+      setAvisoHora({ tom: "danger", texto: lido.erro });
+      return;
+    }
+    const pergunta = lido.valor > 0
+      ? `Gravar a hora do motorista como ${brl(lido.valor)}?\n\n`
+        + "Vale para esta tela e também para a ferramenta antiga, que lê a mesma chave "
+        + "(app_config.valor_hora_motorista)."
+      : "Gravar ZERO na hora do motorista?\n\nOs cartões de dinheiro desta tela e o "
+        + "\"Valor gerencial\" da ferramenta antiga deixam de aparecer.";
+    if (!window.confirm(pergunta)) return;
+    setSalvandoHora(true);
+    setAvisoHora(null);
+    try {
+      // Quatro casas, como o `f"{v:.4f}"` do Python: quem lê do outro lado é a
+      // ferramenta desktop, com float() em cima do que estiver gravado aqui.
+      const gravado = lido.valor.toFixed(4);
+      await upsertDP360("app_config", { chave: "valor_hora_motorista", valor: gravado });
+      setValorHora(lido.valor);
+      setHoraSalva(horaParaCampo(lido.valor));
+      setHoraTxt(horaParaCampo(lido.valor));
+      setAvisoHora({ tom: "ok", texto: `✓ salvo em valor_hora_motorista: ${gravado}` });
+    } catch (falha) {
+      // O erro REAL do servidor (o gateway devolve o motivo no corpo; `dp360Api`
+      // desembrulha). Sem isso, toda falha vira "non-2xx status code".
+      setAvisoHora({
+        tom: "danger",
+        texto: falha?.message || "Não foi possível gravar valor_hora_motorista.",
+      });
+    } finally {
+      setSalvandoHora(false);
+    }
+  };
+
   // app.js `viewDash`: HORAS ABERTAS = o que ainda não foi encerrado — o que nunca
   // virou aviso + o avisado no prazo + o vencido + o advertido. É o número do topo
   // do Radar e a base do "potencial aberto" em R$. Sem a gordura lida, `faltam`
@@ -1087,6 +1245,12 @@ export default function DP360Resumo() {
       qtd: faltam?.qtd || 0,
       min: faltam?.min || 0,
       indisponivel: !faltam,
+      // Por que a caixa está vazia MUDA conforme o modo, e o motivo certo é o que
+      // impede alguém de achar que a fila acabou.
+      porQueNao: modoTodas
+        ? "Esta caixa nasce da gordura, que não é lida em \"Todas as competências\". "
+          + "Escolha uma competência para vê-la."
+        : "não deu pra contar agora.",
       abrir: abrirFaltam,
     },
     ...CAIXAS.map((c) => ({
@@ -1094,6 +1258,7 @@ export default function DP360Resumo() {
       qtd: captura.caixas[c.id]?.qtd || 0,
       min: captura.caixas[c.id]?.min || 0,
       indisponivel: false,
+      porQueNao: "",
       abrir: () => abrirCaixa(c.id),
     })),
   ];
@@ -1122,8 +1287,10 @@ export default function DP360Resumo() {
     );
   }
 
-  const ocupado = carregandoBase || carregando;
-  const semDados = !ocupado && !erro && !linhas.length;
+  const ocupado = carregandoBase || carregando || carregandoCasos;
+  // Em "Todas" quem diz se há o que mostrar é a `ponto_caso`; nas outras, o ponto.
+  const temConteudo = modoTodas ? casos.length > 0 : linhas.length > 0;
+  const semDados = !ocupado && !erro && !temConteudo;
 
   return (
     <div className="dp360 -m-4 sm:-m-6">
@@ -1141,25 +1308,42 @@ export default function DP360Resumo() {
 
       <div className="dp-viewbar">
         <select
-          value={competencia}
+          value={competencia === null ? TODAS : competencia}
           onChange={(e) => setCompetencia(e.target.value)}
           disabled={!competencias.length}
           aria-label="Competência"
         >
           {competencias.length
-            ? competencias.map((c) => (
-              <option key={c} value={c}>{nomeCompetencia(c)}</option>
-            ))
-            : <option value="">Sem competências</option>}
+            ? [
+              // app.js:6335 — a primeira opção do painel original é "Todas as
+              // competências" (valor vazio), e main.py só filtra quando vem valor.
+              <option key="__todas" value={TODAS}>Todas as competências</option>,
+              ...competencias.map((c) => (
+                <option key={c} value={c}>{nomeCompetencia(c)}</option>
+              )),
+            ]
+            : <option value={TODAS}>Sem competências</option>}
         </select>
         <button type="button" className="dp-btn" onClick={recarregar} disabled={ocupado}>
           <RefreshCw size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
           Recarregar
         </button>
         <span className="dp-faint" style={{ marginLeft: "auto", fontSize: 12 }}>
-          somente leitura · a competência vai do dia 20 ao 19
+          a competência vai do dia 20 ao 19 · só o valor da hora é gravado aqui
         </span>
       </div>
+
+      {/* Em "Todas" a tela diz o que ficou de fora, em vez de mostrar zero. */}
+      {!erro && modoTodas && !ocupado && (
+        <div className="dp-resumo">
+          <span className="dp-pill mute">
+            Todas as competências — esteira, ciclo do aviso e gordura corrigida somam a
+            base inteira (`ponto_caso`). O Gerencial, os baldes do ponto e a oportunidade
+            de gordura ficam de fora: são dezenas de milhares de linhas por competência.
+            Escolha uma competência para vê-los.
+          </span>
+        </div>
+      )}
 
       {erro && (
         <div className="dp-resumo"><span className="dp-pill danger">{erro}</span></div>
@@ -1180,23 +1364,32 @@ export default function DP360Resumo() {
 
       {semDados && (
         <div style={{ padding: "0 20px 20px" }}>
-          <div className="dp-vazio">Sem dias de ponto nesta competência.</div>
+          <div className="dp-vazio">
+            {modoTodas
+              ? "Sem casos de gordura na base."
+              : "Sem dias de ponto nesta competência."}
+          </div>
         </div>
       )}
 
-      {!ocupado && !erro && !!linhas.length && (
+      {!ocupado && !erro && temConteudo && (
         <>
           {/* ---------------- cartões de indicador (topo) ------------------ */}
           <div style={{ padding: "14px 20px 4px", display: "grid", gap: 12,
             gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
-            <Cartao rotulo="Dias com cartão" valor={gerencial.kpis.diasPeriodo}
-              nota="linhas de ponto na competência" />
-            <Cartao rotulo="Dias errados (P1)" valor={gerencial.kpis.diasErrados}
-              nota="sem almoço curto/longo" tom="warn" />
-            <Cartao rotulo="Pessoas com erro" valor={gerencial.kpis.pessoasErro}
-              nota="com pelo menos um dia errado" />
-            <Cartao rotulo="Pessoas muito graves" valor={gerencial.kpis.pessoasGrave}
-              nota="sinal grave ou 3+ dias errados" tom="danger" />
+            {/* Os quatro do Gerencial saem da `ponto_diario` — não existem em "Todas". */}
+            {!modoTodas && (
+              <>
+                <Cartao rotulo="Dias com cartão" valor={gerencial.kpis.diasPeriodo}
+                  nota="linhas de ponto na competência" />
+                <Cartao rotulo="Dias errados (P1)" valor={gerencial.kpis.diasErrados}
+                  nota="sem almoço curto/longo" tom="warn" />
+                <Cartao rotulo="Pessoas com erro" valor={gerencial.kpis.pessoasErro}
+                  nota="com pelo menos um dia errado" />
+                <Cartao rotulo="Pessoas muito graves" valor={gerencial.kpis.pessoasGrave}
+                  nota="sinal grave ou 3+ dias errados" tom="danger" />
+              </>
+            )}
             <Cartao rotulo="Ação agora" valor={urgenteDias}
               nota={`${hhmm(urgente)} vencidas ou advertidas`} tom="warn" />
             <Cartao rotulo="Gordura corrigida" valor={hhmm(economizado.liquidoMin)}
@@ -1236,6 +1429,66 @@ export default function DP360Resumo() {
             )}
           </div>
 
+          {/* ------- o valor da hora: o único campo que esta tela grava ---- */}
+          <div style={{ padding: "12px 20px 0" }}>
+            <div
+              className="dp-card"
+              style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}
+            >
+              <div style={{ minWidth: 200 }}>
+                <div className="dp-muted" style={{ fontSize: 11.5, fontWeight: 600 }}>
+                  Valor da hora do motorista
+                </div>
+                <div className="dp-faint dp-mono" style={{ fontSize: 11.5 }}>
+                  app_config.chave = valor_hora_motorista
+                </div>
+              </div>
+
+              <label
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}
+              >
+                R$
+                <input
+                  type="text"
+                  className="dp-input dp-num"
+                  inputMode="decimal"
+                  value={horaTxt}
+                  // SEM saneamento no onChange: quem apara e converte é `lerValorHora`,
+                  // na hora de salvar (o mesmo desenho do `lerVh` do app.js).
+                  onChange={(e) => { setHoraTxt(e.target.value); setAvisoHora(null); }}
+                  placeholder="0,00"
+                  style={{ width: 110, textAlign: "right" }}
+                  aria-label="Valor da hora do motorista"
+                />
+              </label>
+
+              <button
+                type="button"
+                className="dp-btn primary"
+                onClick={salvarValorHora}
+                disabled={horaTxt === horaSalva || salvandoHora}
+              >
+                {salvandoHora ? "Salvando…" : "Salvar"}
+              </button>
+              {horaTxt !== horaSalva && !salvandoHora && (
+                <span className="dp-pill warn">alteração não salva</span>
+              )}
+              {avisoHora && <span className={`dp-pill ${avisoHora.tom}`}>{avisoHora.texto}</span>}
+
+              <div className="dp-faint" style={{ fontSize: 11.5, flexBasis: "100%" }}>
+                {valorHora > 0
+                  ? "É o que converte hora em dinheiro nos cartões \"Valor gerencial\" e "
+                    + "\"Potencial aberto\". Fica no banco e não no código porque é número de "
+                    + "dissídio: muda por acordo (main.py set_valor_hora). A ferramenta antiga "
+                    + "lê a mesma chave."
+                  : "Enquanto esse valor for zero, os cartões \"Valor gerencial\" e "
+                    + "\"Potencial aberto\" NÃO são desenhados — não há como converter hora em "
+                    + "dinheiro. Preencha aqui (é número de dissídio, muda por acordo) e eles "
+                    + "aparecem. A ferramenta antiga lê a mesma chave."}
+              </div>
+            </div>
+          </div>
+
           {/* ---------------- esteira de captura (gordura + ponto_caso) ---- */}
           <Secao
             titulo="Esteira de captura"
@@ -1256,7 +1509,7 @@ export default function DP360Resumo() {
                   className="dp-card"
                   onClick={c.abrir}
                   disabled={!c.qtd}
-                  title={c.indisponivel ? `${c.ajuda} — não deu pra contar agora.` : c.ajuda}
+                  title={c.indisponivel ? `${c.ajuda} — ${c.porQueNao}` : c.ajuda}
                   style={{
                     display: "flex", alignItems: "center", gap: 12, textAlign: "left",
                     font: "inherit", cursor: c.qtd ? "pointer" : "default",
@@ -1295,7 +1548,8 @@ export default function DP360Resumo() {
             </div>
 
             <div className="dp-det-foot">
-              Ciclo do aviso na competência: <b>{ciclo.avisados}</b> avisados ·{" "}
+              Ciclo do aviso {modoTodas ? "na base inteira" : "na competência"}:{" "}
+              <b>{ciclo.avisados}</b> avisados ·{" "}
               <b>{ciclo.respondidos}</b> responderam · <b>{ciclo.executados}</b> conferidos no
               Transnet · <b>{ciclo.advertidos}</b> advertidos · <b>{ciclo.corrigidos}</b> corrigidos.
               {economizado.devolvidoMin > 0 && (
@@ -1312,7 +1566,9 @@ export default function DP360Resumo() {
             </div>
           </Secao>
 
-          {/* ------- oportunidade de gordura (ponto_gordura + 4 camadas) --- */}
+          {/* ------- oportunidade de gordura (ponto_gordura + 4 camadas) ---
+              Fora em "Todas as competências": a gordura não é lida lá. */}
+          {!modoTodas && (
           <Secao
             titulo="Oportunidade de gordura"
             tag={oportunidade
@@ -1433,8 +1689,11 @@ export default function DP360Resumo() {
               </>
             )}
           </Secao>
+          )}
 
-          {/* ---------------- baldes por categoria (ponto_diario) ---------- */}
+          {/* ---------------- baldes por categoria (ponto_diario) ----------
+              Fora em "Todas as competências": a `ponto_diario` não é lida lá. */}
+          {!modoTodas && (
           <Secao
             titulo="Resumo do ponto por categoria"
             tag="clique no número para ver as ocorrências"
@@ -1497,8 +1756,11 @@ export default function DP360Resumo() {
               </table>
             </div>
           </Secao>
+          )}
 
-          {/* ---------------- gerencial: quem está incorreto --------------- */}
+          {/* ---------------- gerencial: quem está incorreto ---------------
+              Fora em "Todas as competências": a `ponto_diario` não é lida lá. */}
+          {!modoTodas && (
           <Secao
             titulo="Gerencial de ponto"
             tag={`${pessoasVisiveis.length} ${pessoasVisiveis.length === 1 ? "pessoa" : "pessoas"}`}
@@ -1640,10 +1902,19 @@ export default function DP360Resumo() {
               <div className="dp-vazio">Nenhum caso bate com esse filtro.</div>
             )}
           </Secao>
+          )}
         </>
       )}
 
-      {painel && <PainelDetalhe painel={painel} onFechar={() => setPainel(null)} />}
+      {/* `key` por painel: a busca e o "mostrar todas" são estado DELE, e trocar de
+          caixa tem de começar do zero, não herdar o filtro da caixa anterior. */}
+      {painel && (
+        <PainelDetalhe
+          key={`${painel.tipo}|${painel.titulo}`}
+          painel={painel}
+          onFechar={() => setPainel(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1798,9 +2069,32 @@ function SerieDiaria({ dias }) {
 
 /* A LISTA ATRÁS DO NÚMERO (app.js `dashDetalhe`). Sem isto o painel só afirma:
    "3,6 h capturadas" não diz de quem, nem de que dia, nem se está certo — e
-   número que não dá pra conferir ninguém usa pra decidir. */
+   número que não dá pra conferir ninguém usa pra decidir.
+
+   O CORTE TEM SAÍDA, e é por isso que ele existe. Na ferramenta a lista do CASO vinha
+   cortada do servidor em 400 (`itens[:400]`, main.py:3806) e o rodapé mandava "refine
+   pela competência" — o que ali FUNCIONAVA, porque o seletor tinha "Todas as
+   competências" e escolher uma reduzia o universo de verdade. Aqui a competência já é
+   o recorte, então repetir esse conselho seria mandar a pessoa fazer o que ela já fez;
+   e a lista do PONTO nem tem teto no original (`get_dashboard_itens`, main.py:7501,
+   devolve tudo). Como no navegador a lista inteira já está em mãos, o limite virou só
+   quanto se desenha de uma vez: tem busca e tem o botão que mostra todas. */
 function PainelDetalhe({ painel, onFechar }) {
-  const visiveis = painel.itens.slice(0, LIMITE_LISTA);
+  const [busca, setBusca] = useState("");
+  const [verTudo, setVerTudo] = useState(false);
+
+  // Filtra por nome, chapa, dia e detalhe — os campos que a pessoa tem na mão quando
+  // procura alguém. Apara na COMPARAÇÃO, nunca no onChange (o input é controlado).
+  const achados = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    if (!q) return painel.itens;
+    return painel.itens.filter((i) => [i.nome, i.cracha, i.dia, i.detalhe, i.batidas]
+      .some((c) => String(c ?? "").toLowerCase().includes(q)));
+  }, [painel.itens, busca]);
+
+  const visiveis = verTudo ? achados : achados.slice(0, LIMITE_LISTA);
+  const cortou = achados.length > visiveis.length;
+
   return (
     <div
       className="dp-overlay"
@@ -1816,6 +2110,28 @@ function PainelDetalhe({ painel, onFechar }) {
         </div>
         <p className="dp-muted" style={{ margin: "8px 0 4px", fontSize: 12 }}>{painel.ajuda}</p>
         <div className="dp-resumo" style={{ padding: "0 0 10px" }}>{painel.resumo}</div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+          margin: "0 0 10px" }}
+        >
+          <label className="dp-busca">
+            <Search size={14} />
+            <input
+              type="text"
+              className="dp-input"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Filtrar por nome, chapa, dia ou detalhe…"
+              autoComplete="off"
+              style={{ paddingLeft: 29, width: "100%" }}
+            />
+          </label>
+          <span className="dp-faint" style={{ fontSize: 11.5 }}>
+            {busca.trim()
+              ? `${achados.length} de ${painel.itens.length} linha(s)`
+              : `${painel.itens.length} linha(s)`}
+          </span>
+        </div>
 
         <div className="dp-tabela-wrap" style={{ maxHeight: "52vh" }}>
           <table className="dp-tabela">
@@ -1855,10 +2171,28 @@ function PainelDetalhe({ painel, onFechar }) {
           </table>
         </div>
 
-        {painel.itens.length > visiveis.length && (
+        {!visiveis.length && (
+          <div className="dp-vazio" style={{ marginTop: 8 }}>
+            Nenhuma linha bate com esse filtro.
+          </div>
+        )}
+
+        {cortou && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8,
+            flexWrap: "wrap" }}
+          >
+            <span className="dp-faint" style={{ fontSize: 11.5 }}>
+              mostrando {visiveis.length} de {achados.length} — nada foi descartado, só não
+              cabe tudo de uma vez
+            </span>
+            <button type="button" className="dp-btn" onClick={() => setVerTudo(true)}>
+              Mostrar todas as {achados.length}
+            </button>
+          </div>
+        )}
+        {verTudo && achados.length > LIMITE_LISTA && (
           <p className="dp-faint" style={{ marginTop: 8, fontSize: 11.5 }}>
-            mostrando {visiveis.length} de {painel.itens.length} — refine pela competência
-            ou pela função para ver o resto
+            mostrando as {achados.length} linhas.
           </p>
         )}
       </div>

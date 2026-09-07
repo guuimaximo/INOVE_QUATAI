@@ -26,9 +26,12 @@ import { lerDP360, upsertDP360 } from "../../../services/dp360Api";
    grava uma STRING JSON — é isso que `ler_config` espera de volta. Aqui a gente
    escreve string também; nada de objeto, ou o Python quebra na hora do envio.
 
-   Fora de escopo nesta fase (existem no app antigo e NÃO foram portados):
-   "↩ Padrão" (apagar o texto salvo), "Testar os 9 modelos" e "Auditar CSVs" —
-   os dois últimos dependem do robô que gera os CSVs, que não existe no INOVE.
+   O "↩ Padrão" (app.js:6810 e :6837) e o "Testar os modelos" (app.js:6818 →
+   main.py `testar_mensagens`, :8443) ENTRARAM — ver os comentários de cada um.
+   Continua FORA só o "▤ Auditar CSVs já gerados" (app.js:6819 →
+   `auditar_mensagens_enviadas`, main.py:8494): ele abre os arquivos que a ferramenta
+   desktop escreveu na pasta `exports/` da máquina do DP, e navegador nenhum enxerga
+   esse disco.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const CHAVE_MOTIVO = "motivo_advertencia";
@@ -114,16 +117,72 @@ function comoTexto(valor) {
   return typeof valor === "string" ? valor : JSON.stringify(valor);
 }
 
+/* A PRÉVIA IMITA O ENVIO, INCLUSIVE NO DEFEITO. Só MAIÚSCULA é trocada — variável
+   maiúscula que ninguém conhece vira vazio, e `{Nome}` fica NA TELA, literal. É o que
+   `normalizaMensagem` (em `comunicadoTransnet.js`, porte do homônimo do app.js) faz no
+   envio de verdade: `.replace(/\{[A-Z_]+\}/g, "")`. Deixar a prévia
+   "consertar" o que o envio não conserta esconderia justo o erro que interessa. */
 const preencher = (texto) =>
   String(texto ?? "").replace(/\{([A-Z_]+)\}/g, (todo, chave) =>
     EXEMPLO[chave] != null ? EXEMPLO[chave] : ""
   );
 
-/* Porte de set_template: recusa variável que não existe no tipo. */
+/* Porte de set_template (main.py:8146): recusa variável que não existe no tipo.
+
+   COM UMA AMPLIAÇÃO DE PROPÓSITO — o `[A-Za-z_]` no lugar do `[A-Z_]`. O
+   `set_template` do Python só olha MAIÚSCULA, então `{Nome}` passa pela gravação; e
+   `testar_mensagens` (main.py:8465), que roda depois, olha `\{[A-Za-z_]+\}` e acusa.
+   O que muda o tamanho do estrago é o que cada lado faz com o que sobrou:
+     · na ferramenta, `_render` (main.py:8182) termina com
+       `re.sub(r"\{[A-Za-z_]+\}", "", out)` — `{Nome}` some e a frase fica com um buraco;
+     · no INOVE, `normalizaMensagem` (em `comunicadoTransnet.js`) apaga SÓ maiúsculas,
+       então `{Nome}` sai LITERAL na carta do colaborador.
+   Como as duas telas leem esta mesma `app_config`, o lugar de barrar é aqui, antes de
+   gravar. A comparação com as válidas continua sensível a maiúscula, igual ao Python:
+   `{Nome}` é inválido mesmo existindo `{NOME}`. */
 function variaveisInvalidas(tipo, texto) {
   const validas = new Set(VARS[tipo] || []);
-  const usadas = new Set(String(texto ?? "").match(/\{[A-Z_]+\}/g) || []);
+  const usadas = new Set(String(texto ?? "").match(/\{[A-Za-z_]+\}/g) || []);
   return [...usadas].filter((v) => !validas.has(v)).sort();
+}
+
+/* ENSAIO DOS MODELOS — porte de `testar_mensagens` (main.py:8443, botão em
+   app.js:6818). Não grava, não gera CSV, não abre o Transnet, não envia nada: roda os
+   modelos ativos pelo MESMO preenchimento da prévia e diz o que sairia quebrado.
+
+   As três checagens do original, na mesma ordem: texto vazio · variável inválida ·
+   variável que sobrou depois do render.
+
+   TRÊS ANOTAÇÕES, todas conferidas no código do original (não na docstring):
+
+   1. O original testa o texto GRAVADO (ele chama `get_templates`). Aqui o teste roda o
+      texto que está NO EDITOR — é o que o Salvar vai gravar, e o objetivo é pegar o
+      erro ANTES de ele virar carta. A coluna "origem" diz de onde veio cada um, e
+      rascunho em branco é testado como o modelo oficial, porque vazio VOLTA ao oficial.
+
+   2. "variável sem preencher" é código MORTO no original: `_render` (main.py:8182)
+      termina apagando qualquer `\{[A-Za-z_]+\}`, então nunca sobra nada pro
+      `re.findall` seguinte achar. Aqui a checagem tem efeito de verdade, porque quem
+      limpa no envio do INOVE (`normalizaMensagem`) apaga SÓ maiúsculas: é exatamente
+      por onde um `{Nome}` chegaria ao colaborador.
+
+   3. A checagem `cp1252` do original NÃO foi portada: o INOVE manda UTF-8 e o CSV do
+      robô sai em UTF-8. Mas o risco não sumiu junto — a ferramenta desktop lê ESTA
+      MESMA `app_config` e escreve o CSV do comunicado em cp1252 com
+      `errors="replace"` (main.py:8249). Uma seta "→" ou um travessão salvos aqui viram
+      "?" na carta que sai por lá. Escreva os modelos em texto simples. */
+function testarModelos(textoDe, origemDe) {
+  return TIPOS.map(([tipo, rotulo]) => {
+    const bruto = String(textoDe(tipo) ?? "");
+    const invalidas = variaveisInvalidas(tipo, bruto);
+    const render = preencher(bruto);
+    const sobrou = [...new Set(render.match(/\{[A-Za-z_]+\}/g) || [])].sort();
+    const erros = [];
+    if (!render.trim()) erros.push("texto vazio");
+    if (invalidas.length) erros.push(`variável inválida: ${invalidas.join(", ")}`);
+    if (sobrou.length) erros.push(`variável sem preencher: ${sobrou.join(", ")}`);
+    return { tipo, rotulo, origem: origemDe(tipo), ok: !erros.length, erros };
+  });
 }
 
 function fmtQuando(valor) {
@@ -157,6 +216,7 @@ export default function Config() {
   const [tipo, setTipo] = useState(TIPOS[0][0]);
   const [aviso, setAviso] = useState(null);    // { chave, tom: "ok"|"danger", texto }
   const [gravando, setGravando] = useState("");
+  const [teste, setTeste] = useState(null);    // resultado do último ensaio (ou null)
   const areaRef = useRef(null);
 
   const carregar = useCallback(() => {
@@ -176,6 +236,7 @@ export default function Config() {
         setSalvo(valores);
         setQuando(datas);
         setRascunho({});
+        setTeste(null); // resultado velho não vale para texto novo
       })
       .catch((falha) => setErro(falha.message || "Falha ao ler app_config."))
       .finally(() => setCarregando(false));
@@ -189,11 +250,29 @@ export default function Config() {
   const rotulo = useMemo(() => (TIPOS.find(([t]) => t === tipo) || [, ""])[1], [tipo]);
 
   // Texto vigente = o que está no banco; chave vazia cai no padrão do Python.
+  // (Vale para QUALQUER tipo, não só o aberto: é o que o ensaio dos modelos usa.)
+  const vigenteDe = (t) => {
+    const g = salvo[chaveTemplate(t)];
+    return String(g ?? "").trim() ? g : PADRAO[t];
+  };
+  const editorDe = (t) => {
+    const r = rascunho[chaveTemplate(t)];
+    return r != null ? r : vigenteDe(t);
+  };
+  // O que o envio usaria se fosse agora: rascunho em branco VOLTA ao modelo oficial
+  // (main.py `get_templates`, :8134 — "texto salvo tem prioridade; vazio cai no oficial").
+  const efetivoDe = (t) => (String(editorDe(t)).trim() ? editorDe(t) : PADRAO[t]);
+  const origemDe = (t) => {
+    if (editorDe(t) !== vigenteDe(t)) return "não salva";
+    return String(salvo[chaveTemplate(t)] ?? "").trim() ? "personalizada" : "padrão";
+  };
+
   const gravado = salvo[chave];
   const ehPadrao = !String(gravado ?? "").trim();
-  const vigente = ehPadrao ? PADRAO[tipo] : gravado;
-  const texto = rascunho[chave] != null ? rascunho[chave] : vigente;
+  const vigente = vigenteDe(tipo);
+  const texto = editorDe(tipo);
   const sujo = texto !== vigente;
+  const textoVazio = !String(texto).trim();
 
   const motivoGravado = String(salvo[CHAVE_MOTIVO] ?? "");
   const motivo = rascunho[CHAVE_MOTIVO] != null ? rascunho[CHAVE_MOTIVO] : motivoGravado;
@@ -204,6 +283,9 @@ export default function Config() {
   const editar = (qual, valor) => {
     setRascunho((atual) => ({ ...atual, [qual]: valor }));
     setAviso(null);
+    // Ensaio velho não vale pro texto novo — e um "✓ testado" desatualizado é pior
+    // do que nenhum, porque dá permissão pra não testar de novo.
+    setTeste(null);
   };
 
   // Insere a variável na posição do cursor, como os chips do app antigo.
@@ -253,8 +335,40 @@ export default function Config() {
       });
       return;
     }
+    /* CAIXA VAZIA NÃO É CARTA EM BRANCO. Gravar "" nesta chave é justamente o que faz o
+       modelo VOLTAR ao texto oficial (main.py `get_templates`, :8134: "texto salvo tem
+       prioridade; vazio cai no modelo oficial") — é o mesmo caminho do botão "↩ Padrão"
+       do app antigo (app.js:6837, `set_template(tipo, "")`). Mas o botão nessa hora
+       ainda diz "Salvar", e ninguém é obrigado a saber disso: a confirmação diz o que
+       vai acontecer de verdade. */
+    if (textoVazio) {
+      if (!window.confirm(
+        "O texto está vazio.\n\nSalvar assim APAGA a personalização e o modelo volta "
+        + "ao texto oficial — não manda carta em branco para ninguém.\n\nConfirmar?",
+      )) return;
+      salvarChave(chave, "");
+      return;
+    }
     salvarChave(chave, texto);
   };
+
+  /* "↩ Padrão" (app.js:6810 e :6837). O botão do original grava texto VAZIO e recarrega
+     os modelos — vazio é o que devolve o oficial. Mesma coisa aqui, com a mesma
+     pergunta antes (`confirm("Voltar essa mensagem ao texto padrão?")`). */
+  const voltarAoPadrao = () => {
+    if (ehPadrao) return;
+    if (!window.confirm(
+      `Voltar "${rotulo}" ao texto padrão?\n\nA personalização gravada em ${chave} é `
+      + "apagada e o modelo oficial (Art. 74 da CLT) volta a valer — inclusive para a "
+      + "ferramenta antiga, que lê a mesma chave.",
+    )) return;
+    salvarChave(chave, "");
+  };
+
+  // O ensaio é local e instantâneo: não há chamada de rede, nada é gravado.
+  const rodarTeste = () => setTeste(testarModelos(efetivoDe, origemDe));
+  const testeDoTipo = teste ? teste.find((x) => x.tipo === tipo) : null;
+  const testeFalhas = teste ? teste.filter((x) => !x.ok).length : 0;
 
   const salvarMotivo = () => {
     const limpo = motivo.trim();
@@ -362,6 +476,15 @@ export default function Config() {
             </div>
           ) : null}
 
+          {/* A caixa vazia é um caminho legítimo — e é o único que não se adivinha. */}
+          {textoVazio ? (
+            <div style={{ marginTop: 8 }}>
+              <span className="dp-pill warn">
+                caixa vazia = volta ao modelo oficial · não manda carta em branco
+              </span>
+            </div>
+          ) : null}
+
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
             <button
               type="button"
@@ -370,6 +493,17 @@ export default function Config() {
               disabled={!sujo || !!invalidas.length || gravando === chave}
             >
               {gravando === chave ? "Salvando…" : "Salvar"}
+            </button>
+            <button
+              type="button"
+              className="dp-btn"
+              onClick={voltarAoPadrao}
+              disabled={ehPadrao || gravando === chave}
+              title={ehPadrao
+                ? "Esta chave já está vazia — o que vale é o texto oficial."
+                : "Apaga o texto gravado; o modelo oficial volta a valer."}
+            >
+              ↩ Padrão
             </button>
             <span className="dp-faint dp-mono" style={{ fontSize: 12 }}>
               grava em app_config.chave = {chave}
@@ -386,8 +520,13 @@ export default function Config() {
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
             <strong style={{ fontSize: 14 }}>Prévia</strong>
             <span className="dp-faint" style={{ fontSize: 12 }}>
-              — com dados de exemplo; variável sem valor sai vazia
+              — com dados de exemplo; variável MAIÚSCULA sem valor sai vazia
             </span>
+            {testeDoTipo ? (
+              <span className={`dp-pill ${testeDoTipo.ok ? "ok" : "danger"}`}>
+                {testeDoTipo.ok ? "✓ modelo testado" : "✕ revisar modelo"}
+              </span>
+            ) : null}
           </div>
           <div
             style={{
@@ -406,6 +545,81 @@ export default function Config() {
             No envio, o Python junta as quebras de linha em um parágrafo só
             (<span className="dp-mono">_render</span> em app/main.py) e traduz hora ≥ 24:00 para
             &quot;01:15 do dia seguinte&quot;.
+          </div>
+        </div>
+
+        {/* ── ensaio dos modelos (app.js:6818 → main.py `testar_mensagens`) ── */}
+        <div className="dp-card">
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+            <strong style={{ fontSize: 14 }}>Teste dos modelos</strong>
+            <span className="dp-faint" style={{ fontSize: 12 }}>
+              — não grava, não gera arquivo, não envia nada
+            </span>
+          </div>
+          <div className="dp-faint" style={{ fontSize: 12, marginTop: 6 }}>
+            Roda os {TIPOS.length} modelos com os dados de exemplo e acusa o que sairia
+            quebrado: variável que não existe no tipo, variável que sobrou depois do
+            preenchimento e texto vazio. Repare no CASO das letras — <span className="dp-mono">
+            {"{Nome}"}</span> não é <span className="dp-mono">{"{NOME}"}</span>: o envio do
+            INOVE só apaga variável MAIÚSCULA, então a minúscula sai literal na carta do
+            colaborador. Testa o que está no editor, inclusive alteração ainda não salva.
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+            <button type="button" className="dp-btn" onClick={rodarTeste}>
+              ✓ Testar os {TIPOS.length} modelos
+            </button>
+            {teste ? (
+              <span className={`dp-pill ${testeFalhas ? "danger" : "ok"}`}>
+                {testeFalhas
+                  ? `${testeFalhas} modelo(s) para revisar`
+                  : `${teste.length} modelos sem problema`}
+              </span>
+            ) : (
+              <span className="dp-faint" style={{ fontSize: 12 }}>
+                Ainda não testado nesta tela.
+              </span>
+            )}
+          </div>
+
+          {teste ? (
+            <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+              {teste.map((x) => (
+                <button
+                  key={x.tipo}
+                  type="button"
+                  onClick={() => setTipo(x.tipo)}
+                  title={`abrir ${x.tipo}`}
+                  style={{
+                    display: "flex", alignItems: "baseline", gap: 8, textAlign: "left",
+                    font: "inherit", fontSize: 12.5, border: 0, padding: "4px 0",
+                    background: "transparent", cursor: "pointer",
+                    color: x.tipo === tipo ? "var(--dp-accent)" : "var(--dp-ink)",
+                  }}
+                >
+                  <span style={{ color: x.ok ? "var(--dp-ok-ink)" : "var(--dp-danger-ink)",
+                    fontWeight: 700, width: 14 }}
+                  >
+                    {x.ok ? "✓" : "✕"}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <b>{x.rotulo}</b>{" "}
+                    <span className="dp-faint">{x.origem}</span>
+                    {x.ok ? null : (
+                      <span className="dp-muted"> — {x.erros.join("; ")}</span>
+                    )}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="dp-faint" style={{ fontSize: 12, marginTop: 10 }}>
+            Escreva os modelos em texto simples. A ferramenta antiga lê esta mesma
+            <span className="dp-mono"> app_config</span> e grava o CSV do comunicado em
+            Windows-1252 com <span className="dp-mono">errors=&quot;replace&quot;</span>
+            {" "}(main.py:8249): uma seta &quot;→&quot; ou um travessão salvos aqui viram
+            &quot;?&quot; na carta que sai por lá.
           </div>
         </div>
 

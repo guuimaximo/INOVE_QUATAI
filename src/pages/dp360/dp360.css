@@ -1171,3 +1171,468 @@
   cursor: pointer;
 }
 .dp360 .oc-sel:focus { border-color: var(--dp-accent); }
+
+/* ═════════ OCORRÊNCIAS — a saída de exceção do caso aberto (prefixo `oc-`) ═════════
+ * ACRÉSCIMO: nada aqui reescreve regra existente. O prefixo `oc-` é de Ocorrências.
+ *
+ * Este é o bloco de "fechar à mão o que o robô não conseguiu", e o visual dele tem
+ * função: ele NÃO pode se parecer com os dois blocos de robô que estão logo acima.
+ * Fechado, é só um link apagado — para não ser lido como o jeito rápido de tirar um
+ * caso da fila. Aberto, é moldura TRACEJADA em cor de alerta sobre fundo âmbar: dá
+ * para ver de longe, sem ler, que ali se saiu do caminho normal.
+ */
+.dp360 .oc-fora-chamada {
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--dp-border);
+}
+.dp360 .oc-fora-abrir {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dp-faint);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.dp360 .oc-fora-abrir:hover { color: var(--dp-warn-ink); }
+.dp360 .oc-fora {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--dp-warn-bg);
+  border: 1px dashed var(--dp-warn-ink);
+  border-radius: 12px;
+}
+.dp360 .oc-fora-tit { color: var(--dp-warn-ink); }
+/* o "esconder" fica na ponta da linha do título, longe dos dois botões que gravam */
+.dp360 .oc-fora-tit .oc-fora-abrir { float: right; }
+.dp360 .oc-fora-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+}
+.dp360 .oc-fora-nota {
+  font: inherit;
+  font-size: 12px;
+  width: 100%;
+  max-width: 420px;
+  padding: 5px 9px;
+  border: 1px solid var(--dp-border-strong);
+  border-radius: 8px;
+  background: var(--dp-surface);
+  color: var(--dp-ink);
+  outline: none;
+}
+.dp360 .oc-fora-nota:focus { border-color: var(--dp-warn-ink); }
+
+/* ═══════════ REFEIÇÃO — os dois caminhos da importação (prefixo `rf-`) ═══════════
+ * ACRÉSCIMO: nada aqui reescreve regra existente. O prefixo `rf-` é da Refeição.
+ *
+ * O almoço entra no Transnet por dois caminhos que NÃO são intercambiáveis: o robô
+ * reescreve o cartão inteiro (e por isso exige as duas pontas), o arquivo .txt só
+ * acrescenta as duas batidas do almoço (e por isso alcança quem não tem cartão).
+ * Os dois ficam LADO A LADO, com o mesmo peso visual: escondido num menu, o caminho
+ * manual continuaria não existindo para quem depende dele. A coluna quebra sozinha
+ * abaixo de ~640px do pop-up, e aí eles viram um embaixo do outro.
+ */
+.dp360 .rf-caminhos {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  margin: 12px 0 4px;
+}
+.dp360 .rf-caminho {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--dp-surface-2);
+  border: 1px solid var(--dp-border);
+  border-radius: 12px;
+}
+.dp360 .rf-caminho-tag {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--dp-muted);
+}
+.dp360 .rf-caminho-titulo { font-size: 14px; font-weight: 700; line-height: 1.2; }
+.dp360 .rf-caminho-nota { font-size: 12px; line-height: 1.55; color: var(--dp-muted); }
+.dp360 .rf-caminho-nota b { color: var(--dp-ink); font-weight: 700; }
+.dp360 .rf-comp { display: flex; flex-wrap: wrap; gap: 6px; }
+/* `margin-top:auto` empurra a ação para o pé: os dois cartões podem ter textos de
+   alturas diferentes e os botões precisam ficar alinhados entre si. */
+.dp360 .rf-caminho-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 4px;
+}
+.dp360 .rf-caminho-rodape { font-size: 11.5px; line-height: 1.5; color: var(--dp-faint); }
+.dp360 .rf-caminho-rodape code,
+.dp360 .rf-caminho-rodape .dp-mono { font-family: var(--dp-mono); }
+.dp360 .rf-caminho-recado { font-size: 12px; line-height: 1.5; }
+.dp360 .rf-check {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--dp-ink);
+  cursor: pointer;
+}
+.dp360 .rf-check input { margin: 2px 0 0; cursor: pointer; }
+/* O aviso da sobreposição: os dois caminhos gravam o MESMO miolo, então fazer os
+   dois no mesmo dia põe o almoço duas vezes no cartão. É alerta, não decoração. */
+.dp360 .rf-aviso {
+  margin: 4px 0;
+  padding: 9px 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  background: var(--dp-warn-bg);
+  border: 1px solid var(--dp-warn-ink);
+  border-radius: 10px;
+  color: var(--dp-warn-ink);
+}
+.dp360 .rf-aviso b { font-weight: 800; }
+
+/* ═════════ REVISÃO — o lote do "✅ Lançar ajuste" (prefixo `rv-`) ═════════
+ * ACRÉSCIMO: nada aqui reescreve regra existente.
+ *
+ * As DUAS listas do painel (quem entra e quem fica de fora) rolam dentro da
+ * própria caixa. O painel não pode crescer com o lote: um dia de motorista tem
+ * ~200 linhas, e sem teto o rodapé — que é onde vivem "Ensaio" e "Lançar de
+ * verdade" — sairia da tela. A tabela em si é a `rv-tabela`, a mesma do cartão.
+ */
+.dp360 .rv-lote-rol { max-height: 34vh; overflow: auto; overscroll-behavior: contain; }
+/* Uma pessoa barrada por linha, com o motivo em texto corrido: o motivo é frase
+ * ("o cartão deste dia já foi mexido…"), não rótulo, então ele QUEBRA em vez de
+ * ser cortado — é ele que explica por que a pessoa não entrou. */
+.dp360 .rv-lote-fora {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--dp-border);
+}
+.dp360 .rv-lote-fora:last-child { border-bottom: 0; }
+
+/* ═══════════════ FOLGAS — motivo do dia, lote e reserva (prefixo `fg-`) ═════
+ * ACRÉSCIMO: nada aqui reescreve regra existente. Porte de `.mv-*`, `.cell.dp-set`,
+ * `.calchk`, `.calcnt` e `.dres` de Sistemas/PONTO/app/ui/styles.css.
+ *
+ * A célula do calendário vira BOTÃO quando o dia aceita motivo (S/PONTO ou folga
+ * ainda não lançada). Botão não herda fonte do pai, então o reset de fonte é
+ * obrigatório aqui — sem ele a célula clicável fica com outra tipografia e a
+ * grade "desalinha" só nas células que o DP pode mexer.
+ */
+.dp360 .dp-cell.fg-mv {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  text-align: center;
+}
+.dp360 .dp-cell.fg-mv:hover:not(:disabled) { box-shadow: inset 0 0 0 1.5px var(--dp-accent); }
+.dp360 .dp-cell.fg-mv:focus-visible { outline: 2px solid var(--dp-accent); outline-offset: -2px; }
+.dp360 .dp-cell.fg-mv:disabled { cursor: progress; }
+/* contorno tracejado = "isto foi você quem definiu", não o que a view calculou */
+.dp360 .dp-cell.fg-set { outline: 2px dashed var(--dp-accent); outline-offset: -2px; }
+.dp360 .dp-cell.fg-gravando { opacity: 0.55; }
+
+/* caixa de seleção do lote (1ª coluna da grade) */
+.dp360 .dp-calmark.fg-chk { display: flex; align-items: center; justify-content: center; }
+.dp360 .dp-calmark.fg-chk input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--dp-accent);
+  cursor: pointer;
+}
+
+/* barra do lote: contagem à esquerda, ensaio e valendo à direita */
+.dp360 .fg-lote {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 20px 8px;
+  padding: 9px 12px;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-border);
+  border-radius: 12px;
+}
+.dp360 .fg-lote-txt { font-size: 12.5px; line-height: 1.5; min-width: 0; }
+.dp360 .fg-lote-acoes { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dp360 .fg-avisos {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 20px 8px;
+}
+
+/* "marcar como reserva" no detalhe do dia (porte de .dres) */
+.dp360 .fg-res {
+  margin-left: 58px;
+  margin-top: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--dp-muted);
+  cursor: pointer;
+}
+.dp360 .fg-res input { width: 14px; height: 14px; accent-color: var(--dp-accent); cursor: pointer; }
+
+/* picker de motivo: `position: fixed` porque a grade rola dentro de um
+   contêiner com overflow — dentro da célula o pop-up seria cortado */
+.dp360 .fg-pop {
+  position: fixed;
+  z-index: 200;
+  width: 238px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-border);
+  border-radius: 11px;
+  box-shadow: var(--dp-shadow);
+}
+.dp360 .fg-pop-h {
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dp-faint);
+  padding: 3px 8px 4px;
+}
+.dp360 .fg-pop-busca {
+  font: inherit;
+  font-size: 13px;
+  margin: 0 2px 3px;
+  padding: 6px 9px;
+  border: 1px solid var(--dp-border);
+  border-radius: 8px;
+  background: var(--dp-surface-2);
+  color: var(--dp-ink);
+}
+.dp360 .fg-pop-busca:focus {
+  outline: 0;
+  border-color: var(--dp-accent);
+  box-shadow: 0 0 0 3px var(--dp-accent-soft);
+}
+.dp360 .fg-pop-scroll { display: flex; flex-direction: column; gap: 2px; max-height: 280px; overflow: auto; }
+.dp360 .fg-pop-vazio { font-size: 12px; color: var(--dp-faint); padding: 8px 9px; }
+.dp360 .fg-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--dp-ink);
+  padding: 7px 9px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.dp360 .fg-opt:hover { background: var(--dp-surface-2); }
+.dp360 .fg-opt.on { background: var(--dp-accent-soft); color: var(--dp-accent); font-weight: 700; }
+.dp360 .fg-opt.limpar {
+  color: var(--dp-muted);
+  border-top: 1px solid var(--dp-border);
+  border-radius: 0;
+  margin-top: 3px;
+}
+.dp360 .fg-cd {
+  flex: none;
+  min-width: 22px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--dp-muted);
+  background: var(--dp-surface-2);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+.dp360 .fg-opt.on .fg-cd { background: #fff; color: var(--dp-accent); }
+/* "manual" = o robô NÃO lança esse código; o DP lança na mão (atestado, 04) */
+.dp360 .fg-man {
+  flex: none;
+  margin-left: auto;
+  font-size: 8.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--dp-warn-ink);
+  background: var(--dp-warn-bg);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* ════════════════ CartaoDoDia: a semana e o pedido de exclusão ════════════════
+ * Porte do `pd-semana`/`pd-ac` do app antigo (app.js:948 e :4990). Prefixo `cd-`
+ * porque o dono do bloco é o `CartaoDoDia`, compartilhado por Revisão e Gordura.
+ *
+ * A FAIXA É UMA LINHA SÓ, de propósito. Ela mora acima das colunas do pop-up e o
+ * que ela responde ("este dia devia ter ponto?") tem de caber num relance — em
+ * grade ou em cartões ela empurraria o cartão do dia para baixo da dobra, que é
+ * exatamente o problema que ela existe para evitar.
+ */
+.dp360 .cd-sem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 8px 12px;
+}
+.dp360 .cd-sem-t {
+  flex: none;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dp-muted);
+}
+.dp360 .cd-sem-l { display: flex; flex-wrap: wrap; gap: 4px; }
+.dp360 .cd-sem-n { font-size: 11.5px; color: var(--dp-muted); }
+/* O alerta ocupa a linha inteira: quebrar `flex-basis` aqui é o que impede que ele
+   fique espremido no fim da faixa, onde ninguém lê o que mais importa. */
+.dp360 .cd-sem-alerta {
+  flex: 1 0 100%;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 6px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--dp-danger-line);
+  background: var(--dp-danger-bg);
+  color: var(--dp-danger-ink);
+}
+.dp360 .cd-rj { color: var(--dp-danger-ink); }
+
+/* Um dia da semana. O ✓ vale só para o dia LIMPO (4+ batidas depois de tirar o
+   fantasma); `mag` é dia com ponto mas incompleto e `vazio` é dia sem ponto. */
+.dp360 .cd-sd {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 8px;
+  border: 1px solid var(--dp-border);
+  background: var(--dp-surface-2);
+  font-size: 11px;
+  line-height: 1.1;
+  color: var(--dp-muted);
+  cursor: default;
+}
+.dp360 .cd-sd b { font-weight: 700; text-transform: none; }
+.dp360 .cd-sd i { font-style: normal; font-weight: 800; font-variant-numeric: tabular-nums; }
+.dp360 .cd-sd.ok { border-color: var(--dp-ok-ink); background: var(--dp-ok-bg); color: var(--dp-ok-ink); }
+.dp360 .cd-sd.mag { border-color: var(--dp-warn-ink); background: var(--dp-warn-bg); color: var(--dp-warn-ink); }
+.dp360 .cd-sd.vazio { border-style: dashed; color: var(--dp-faint); }
+/* O DIA ABERTO fica marcado: sem isso a faixa é sete caixinhas iguais e ninguém
+   sabe qual delas é o dia que está na tela. */
+.dp360 .cd-sd.hoje { outline: 2px solid var(--dp-accent); outline-offset: 1px; font-weight: 800; }
+/* O ponto da batida colada — o mesmo sinal do `u` do original. */
+.dp360 .cd-sd.colado u { text-decoration: none; color: var(--dp-danger-ink); font-weight: 900; }
+
+/* O pedido do dia (hoje só a rota da exclusão). Faixa de alerta, não cartão neutro:
+   é uma ação que APAGA registro, e ela precisa se distinguir do resto do pop-up. */
+.dp360 .cd-acao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 9px 12px;
+  border-color: var(--dp-warn-ink);
+  background: var(--dp-warn-bg);
+}
+.dp360 .cd-acao-t {
+  flex: 1 1 320px;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--dp-ink);
+}
+
+/* Campo de texto FORA da barra de filtros. A pele do input só existia em
+   `.dp-viewbar input`, então quem precisa de um campo dentro de um cartão ou de um
+   modal (o valor da hora no Resumo, a busca do painel de detalhe) ficava com o input
+   cru do navegador, que não acompanha o tema. */
+.dp360 .dp-input {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--dp-border-strong);
+  background: var(--dp-surface);
+  color: var(--dp-ink);
+  outline: none;
+}
+.dp360 .dp-input:focus { border-color: var(--dp-accent); }
+
+/* ═══ Banco de Horas ═══════════════════════════════════════════════════════════
+   As duas placas do topo (o `bh-kpis` do original): o passivo da unidade com e sem
+   as competências que a folha ainda não pagou. São o número que alguém usa para
+   decidir, então ficam acima da barra de filtros — e não obedecem a ela. */
+.dp360 .bh-placas {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 20px 2px;
+}
+.dp360 .bh-placa {
+  flex: 1 1 280px;
+  min-width: 250px;
+  padding: 12px 16px;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-border);
+  border-radius: var(--dp-radius);
+  box-shadow: var(--dp-shadow);
+}
+.dp360 .bh-placa .n {
+  font-family: var(--dp-mono);
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.dp360 .bh-placa .l {
+  margin-top: 4px;
+  color: var(--dp-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.dp360 .bh-placa.ok .n { color: var(--dp-ok-ink); }
+.dp360 .bh-placa.danger .n { color: var(--dp-danger-ink); }
+.dp360 .bh-placa.mute .n { color: var(--dp-muted); }
+/* O saldo bruto é o número inflado: fica em tom de aviso de propósito, para não
+   ser confundido com o de cima na hora de copiar para um e-mail. */
+.dp360 .bh-placa.aberto {
+  background: var(--dp-warn-bg);
+  border-color: #e8d5a8;
+}
+.dp360 .bh-placa.aberto .n { color: var(--dp-warn-ink); }
+
+.dp360 .bh-modos { display: inline-flex; gap: 6px; }
+
+/* Competência sem folha paga na tabela por mês: a linha inteira marcada, porque o
+   número dela é o que está inflando o acumulado das linhas seguintes. */
+.dp360 tr.bh-mes-aberto > td { background: var(--dp-warn-bg); }

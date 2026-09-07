@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import AbaShell from "./AbaShell";
 import TabelaDP from "../TabelaDP";
 import {
@@ -7,6 +7,8 @@ import {
   lerDP360,
   lerTudoDP360,
 } from "../../../services/dp360Api";
+import { AuthContext } from "../../../context/AuthContext";
+import { supabase } from "../../../supabase";
 import { hm2min, min2hm } from "../regrasPonto";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -412,15 +414,25 @@ const buscarLinhas = (data) =>
     ordem: "cracha.asc",
   });
 
-/* ═════════════════ importação da refeição (o lote do robô) ═════════════════
+/* ═══════════ importação da refeição — DOIS CAMINHOS PARA O MESMO FIM ═══════════
 
-   O QUE MUDA EM RELAÇÃO À FERRAMENTA. Lá (main.py `gerar_import_p1` →
-   ferramenta/processar_intervalo.py `gerar_arquivo_importacao`) o Passo 1 escreve
-   um .txt de batidas cruas (`ponto2_sugerido`/`ponto3_sugerido`, 34 chars com o
-   PIS) que ALGUÉM sobe à mão no Transnet — duas marcações NOVAS, sem tocar no
-   resto do cartão. No INOVE quem executa é o robô `bot_ponto.py`, e ele preenche
-   os QUATRO campos do Cartão de Ponto de uma vez. Não existe meio-termo: ou o
-   robô escreve o cartão inteiro, ou não escreve nada.
+   O almoço entra no Transnet por dois caminhos, e eles não são intercambiáveis:
+
+     A) O ROBÔ (`bot_ponto.py`, GitHub Actions) — preenche os QUATRO campos do
+        Cartão de Ponto de uma vez. Não existe meio-termo: ou escreve o cartão
+        inteiro, ou não escreve nada. Automático, mas exige cartão completo.
+     B) O ARQUIVO .txt de batidas — porte de main.py `gerar_import_p1` →
+        ferramenta/processar_intervalo.py `gerar_arquivo_importacao`. Só
+        ACRESCENTA as duas marcações do almoço (`ponto2_sugerido`/`ponto3_sugerido`,
+        34 chars com o PIS) e não toca em entrada/saída; por isso NÃO depende de
+        cartão completo. Em compensação, alguém sobe o arquivo à mão no Transnet.
+
+   Até aqui o INOVE só tinha o (A), e quem estava na fila da Revisão — justamente
+   quem tem uma ponta faltando — ficava sem refeição lançada e sem plano B se o
+   Actions estivesse fora do ar. O (B) existe para esse buraco. Um dia, um
+   caminho: subir o arquivo para quem o robô já lançou põe o almoço duas vezes.
+
+   ── A) o lote do robô ──────────────────────────────────────────────────────
 
    Daí a única decisão de projeto desta tela: a ENTRADA e a SAÍDA voltam
    EXATAMENTE como estão hoje no cartão (`ponto_diario`), e só o miolo vira a
@@ -639,6 +651,206 @@ function montarLote(linhas, cartoes, casos, data) {
   return { dentro, fora };
 }
 
+/* ═══════ B) o arquivo .txt de batidas (porte de processar_intervalo.py) ═══════
+
+   LAYOUT DA LINHA — 34 caracteres, sem separador (processar_intervalo.py:86,
+   `_monta_batida`; a view `vw_ponto_intervalo_motorista_diario.sql:427` monta a
+   mesma string em SQL, e é dela que vêm `ponto2_sugerido`/`ponto3_sugerido`):
+
+       0000851853 | DDMMAAAA | HHMM | 0 | PIS
+        empresa(10)  data(8)  hora(4) (1)  (11)
+
+   O arquivo tem TODAS as `ponto2` (saída para o almoço) primeiro e só depois
+   TODAS as `ponto3` (volta) — não é um par por pessoa. Cada linha termina em
+   CRLF, inclusive a última (`newline="\r\n"` + `write(linha + "\n")`,
+   processar_intervalo.py:131-136). Só dígitos: nada de BOM, ao contrário do CSV.
+
+   QUEM ENTRA AQUI E NÃO ENTRA NO ROBÔ. Todas as exclusões do `montarLote` são
+   sobre o CARTÃO (sem cartão, sem entrada/saída, janela não cabe, cartão já
+   mexido no Transnet) — e existem porque o robô reescreve o cartão inteiro.
+   O arquivo não reescreve nada, então nenhuma delas se aplica: essa gente entra.
+   A única exclusão que atravessa os dois caminhos é o `almoco_travado`, porque
+   ela é sobre o MIOLO — e o miolo é exatamente o que este arquivo escreve.      */
+
+const EMPRESA_IMPORT = "0000851853"; // processar_intervalo.py:83
+const TAM_BATIDA = 34; // 10 + 8 + 4 + 1 + 11
+const MIN_ALMOCO_ABAIXO = 15; // processar_intervalo.py:98
+
+/* processar_intervalo.py:86 (`_monta_batida`). `minutos` é o horário em minutos
+   do dia; passando de 24h, a batida cai no dia seguinte (`minutos // 1440`).
+   A aritmética de dias roda TODA em UTC — Date.UTC entra, getUTC* sai — porque
+   aqui a data é um RÓTULO, não um instante: montada em horário local, um dia
+   como 2026-11-01 no horário de verão poderia voltar como 31/10. */
+function montaBatida(dataRef, minutos, pis) {
+  const iso = cru(dataRef).slice(0, 10);
+  const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  const documento = cru(pis);
+  if (!partes || !documento || minutos == null || minutos < 0) return "";
+  const dia = new Date(
+    Date.UTC(Number(partes[1]), Number(partes[2]) - 1, Number(partes[3]) + Math.floor(minutos / 1440)),
+  );
+  const hora = minutos % 1440;
+  const dd = (n) => String(n).padStart(2, "0");
+  const data = `${dd(dia.getUTCDate())}${dd(dia.getUTCMonth() + 1)}${dia.getUTCFullYear()}`;
+  return `${EMPRESA_IMPORT}${data}${dd(Math.floor(hora / 60))}${dd(hora % 60)}0${documento}`;
+}
+
+/* processar_intervalo.py:71 (`linhas_a_importar`): quem já tem as duas batidas
+   PRONTAS na view. É o mesmo conjunto do `pedeImportacao` — a view só preenche
+   `ponto2_sugerido` quando a jornada passa de 6h e o Transnet ainda não tem
+   almoço >= 27 min —, o que muda é o destino. Quando o PIS falta, o `concat` da
+   view devolve nulo e a pessoa já sai aqui, sem batida meio montada. */
+function batidasDaView(linha) {
+  const p2 = cru(linha.ponto2_sugerido);
+  const p3 = cru(linha.ponto3_sugerido);
+  return p2 && p3 ? { p2, p3 } : null;
+}
+
+/* processar_intervalo.py:100 (`linhas_abaixo_importar`) — o "incluir Abaixo
+   27min" do app.js:5386. Aqui a batida é montada na mão, porque a view zera
+   `ponto2_sugerido` abaixo dos 27 min.
+
+   E ATENÇÃO À DIVERGÊNCIA DO ORIGINAL: a docstring de processar_intervalo.py:126
+   diz "força 30 min do início do gap", mas a linha :121 grava o FIM REAL. Vale o
+   código — sobe O QUE A PESSOA FEZ, não uma janela inventada de 30 min. É por
+   isso que este caminho usa `sugestao_inicio`/`sugestao_fim` (o gap cru do
+   Citatti, sem a troca pelo SST) e não `importacao_inicio`/`importacao_fim`.
+   Piso de 15 min: abaixo disso o que ele fez foi curto demais e não sobe. */
+function batidasDoAbaixo(linha) {
+  const pis = cru(linha.nr_pis);
+  const inicio = hm2min(cru(linha.sugestao_inicio));
+  const fim = hm2min(cru(linha.sugestao_fim));
+  if (!pis || inicio == null || fim == null) return null;
+  if (fim - inicio < MIN_ALMOCO_ABAIXO) return null; // vira negativo na virada de dia — e aí também fica fora
+  const p2 = montaBatida(linha.data_ref, inicio, pis);
+  const p3 = montaBatida(linha.data_ref, fim, pis);
+  return p2 && p3 ? { p2, p3 } : null;
+}
+
+/**
+ * Divide os candidatos do dia entre o que vai para o ARQUIVO e o que fica de fora.
+ * `cartoes` serve só para o `almoco_travado` (quem não tem cartão nenhum entra —
+ * é justamente a gente que o robô não alcança). `noRobo` é o Set de crachás que
+ * já estão no lote do robô, para a tela mostrar a sobreposição dos dois caminhos.
+ * `incluirAbaixo` é o checkbox do "Abaixo 27min".
+ */
+function montarArquivo(linhas, cartoes, noRobo, incluirAbaixo) {
+  const dentro = [];
+  const fora = [];
+
+  for (const linha of linhas) {
+    const abaixo = chaveStatus(linha.status_almoco) === "AB";
+    // Sem o checkbox, os "Abaixo 27min" não são candidatos — não entram nem na
+    // lista de excluídos, porque ninguém os pediu.
+    if (!pedeImportacao(linha) && !(abaixo && incluirAbaixo)) continue;
+
+    const cracha = cra8(linha.cracha);
+    const base = {
+      cracha,
+      nome: linha.nm_funcionario || "",
+      fonte: linha.fonte || "",
+      abaixo,
+      // O "Abaixo 27min" sobe o gap REAL; o resto sobe a janela de 30 min da view.
+      janelaIni: cru(abaixo ? linha.sugestao_inicio : linha.importacao_inicio),
+      janelaFim: cru(abaixo ? linha.sugestao_fim : linha.importacao_fim),
+    };
+    const deixaFora = (motivo) => fora.push({ ...base, motivo });
+
+    // A ÚNICA TRAVA QUE VALE PARA OS DOIS CAMINHOS. O robô fica de fora do dia
+    // travado porque reescreveria o cartão; o arquivo fica de fora porque a
+    // Revisão já cravou o alvo do MIOLO, e o miolo é o que estas duas batidas
+    // são. Quem não tem cartão nenhum não tem trava — e entra.
+    const cartao = cartoes?.get(cracha);
+    if (cartao && ehVerdadeiro(cartao.almoco_travado)) {
+      deixaFora("almoço travado pela Revisão — o alvo do miolo já foi decidido lá, e é o miolo que este arquivo escreve");
+      continue;
+    }
+
+    const batidas = abaixo ? batidasDoAbaixo(linha) : batidasDaView(linha);
+    if (!batidas) {
+      deixaFora(
+        abaixo
+          ? `o intervalo que ele fez não chega a ${MIN_ALMOCO_ABAIXO} min, ou falta o PIS — curto demais para subir`
+          : "sem as duas batidas prontas na view (PIS ausente) — não dá para montar a linha",
+      );
+      continue;
+    }
+
+    dentro.push({ ...base, ...batidas, noRobo: noRobo.has(cracha) });
+  }
+
+  return { dentro, fora };
+}
+
+// processar_intervalo.py:131-136 — TODAS as ponto2 primeiro, TODAS as ponto3
+// depois, cada linha terminada em CRLF (inclusive a última).
+const textoDoArquivo = (itens) =>
+  [...itens.map((i) => i.p2), ...itens.map((i) => i.p3)].map((l) => `${l}\r\n`).join("");
+
+// main.py:2711 — `importacao_refeicao_{data}_{HHMMSS}.txt`. O HHMMSS é carimbo
+// de INSTANTE (não de data), então o relógio local é o certo; montado componente
+// a componente porque `toISOString()` daria a hora em UTC.
+function nomeDoArquivo(data) {
+  const agora = new Date();
+  const dd = (n) => String(n).padStart(2, "0");
+  const hora = `${dd(agora.getHours())}${dd(agora.getMinutes())}${dd(agora.getSeconds())}`;
+  return `importacao_refeicao_${cru(data).replace(/\//g, "-")}_${hora}.txt`;
+}
+
+// Sem BOM e sem separador: o arquivo é ASCII puro e o Transnet lê por POSIÇÃO.
+// (O `baixarCsv` da TabelaDP põe BOM e `;` — por isso não dá para reusar.)
+function baixarTxt(nome, texto) {
+  const blob = new Blob([texto], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nome;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ── trilha de quem baixou ────────────────────────────────────────────────────
+   MESMO molde do Banco de Horas e dos Abandonos (`DP360BancoHoras.jsx:216`,
+   `DP360Abandonos.jsx:201`), e pelo cliente `supabase` do INOVE — a trilha é do
+   INOVE, o gateway `dp360-api` fala com a base de ponto e nem enxerga esta
+   tabela. O `user.id` pode ser o id LEGADO (inteiro) de quem não tem conta no
+   `auth.users`; mandar isso num campo `uuid` derrubaria o insert inteiro, que
+   aqui significaria bloquear o plano B de quem tem direito a ele.
+
+   Este arquivo carrega o PIS de cada motorista: vale a mesma regra do Banco de
+   Horas — não existe download sem registro, e o `detalhe` guarda CONTAGEM, nunca
+   crachá, nome ou PIS.                                                          */
+const TABELA_AUDITORIA = "dp360_auditoria";
+
+function ehUUID(valor) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(valor ?? "").trim(),
+  );
+}
+
+function uuidDoUsuario(user) {
+  if (ehUUID(user?.auth_user_id)) return String(user.auth_user_id).trim();
+  if (ehUUID(user?.id)) return String(user.id).trim();
+  return null; // usuário legado: fica só o nome, que é melhor que nada
+}
+
+// `criado_em` fica com o `default now()` do banco de propósito: carimbo de
+// instante é do servidor, não do relógio (nem do fuso) do navegador.
+async function registrarAuditoria({ acao, alvo, detalhe, user }) {
+  const { error } = await supabase.from(TABELA_AUDITORIA).insert({
+    acao,
+    alvo: cru(alvo) || null,
+    detalhe: detalhe || {},
+    autor_id: uuidDoUsuario(user),
+    autor_nome: cru(user?.nome) || cru(user?.login) || null,
+  });
+  // Erro REAL do servidor, sem maquiar: "new row violates row-level security" ou
+  // "relation ... does not exist" (migration não aplicada) tem de aparecer na tela.
+  if (error) throw new Error(error.message || "Não foi possível registrar a auditoria.");
+}
+
 /* ─────────────────────── painel da importação ─────────────────────── */
 
 function LinhaLote({ item }) {
@@ -658,11 +870,17 @@ function LinhaLote({ item }) {
 }
 
 function PainelImportacao({ data, linhas, aoFechar }) {
+  const { user } = useContext(AuthContext) || {};
   const [cartoes, setCartoes] = useState(null);
   const [casos, setCasos] = useState(null);
   const [erro, setErro] = useState("");
   const [disparando, setDisparando] = useState(false);
   const [recado, setRecado] = useState(null);
+  // Checkbox do "incluir Abaixo 27min" (app.js:5386) — só o arquivo o oferece:
+  // esse pessoal não tem `ponto2_sugerido`, então nunca esteve no lote do robô.
+  const [incluirAbaixo, setIncluirAbaixo] = useState(false);
+  const [baixando, setBaixando] = useState(false);
+  const [recadoArquivo, setRecadoArquivo] = useState(null);
 
   // O cartão do dia só é lido quando o painel abre: a grade da Refeição não
   // precisa dele e são mais mil linhas de `ponto_diario` por dia.
@@ -701,6 +919,40 @@ function PainelImportacao({ data, linhas, aoFechar }) {
   const lote = useMemo(
     () => (cartoes ? montarLote(linhas, cartoes, casos, data) : null),
     [linhas, cartoes, casos, data],
+  );
+
+  // O arquivo é montado sobre as MESMAS linhas do dia, mas com as regras dele.
+  // Depende do lote só para saber quem já está no caminho do robô (a coluna
+  // "também no robô") — nada do que o robô exclui exclui aqui.
+  const arquivo = useMemo(() => {
+    if (!lote) return null;
+    const noRobo = new Set(lote.dentro.map((item) => item.cracha));
+    return montarArquivo(linhas, cartoes, noRobo, incluirAbaixo);
+  }, [lote, linhas, cartoes, incluirAbaixo]);
+
+  // Só o arquivo alcança: pediam refeição, o robô não pôde escrever o cartão.
+  // É a conta que justifica este caminho existir.
+  const soNoArquivo = useMemo(
+    () => (arquivo ? arquivo.dentro.filter((item) => !item.noRobo).length : 0),
+    [arquivo],
+  );
+
+  // Para a lista "fora do lote" poder dizer, pessoa a pessoa, que o outro
+  // caminho a alcança — é a resposta visível ao "ficou sem refeição lançada".
+  const crachasNoArquivo = useMemo(
+    () => new Set((arquivo?.dentro || []).map((item) => item.cracha)),
+    [arquivo],
+  );
+
+  // Linha fora dos 34 caracteres = PIS com tamanho estranho na origem. NÃO tira
+  // ninguém do arquivo (a ferramenta sobe o que a view deu), mas avisa: o
+  // Transnet lê por posição e devolveria o arquivo inteiro sem dizer por quê.
+  const tortas = useMemo(
+    () =>
+      arquivo
+        ? arquivo.dentro.filter((i) => i.p2.length !== TAM_BATIDA || i.p3.length !== TAM_BATIDA).length
+        : 0,
+    [arquivo],
   );
 
   // ENSAIO x VALENDO são dois BOTÕES, não um checkbox: checkbox marcado por
@@ -778,6 +1030,103 @@ function PainelImportacao({ data, linhas, aoFechar }) {
     }
   };
 
+  // CAMINHO B. Nada aqui chama o robô nem escreve no Transnet: o arquivo desce
+  // para a máquina de quem clicou, e o lançamento continua sendo o upload à mão.
+  const baixar = async () => {
+    const itens = arquivo?.dentro || [];
+    if (!itens.length || baixando) return;
+
+    const nome = nomeDoArquivo(data);
+    const quantosAbaixo = itens.filter((item) => item.abaixo).length;
+    const tambemNoRobo = itens.length - soNoArquivo;
+
+    if (
+      !window.confirm(
+        `Baixar o arquivo de batidas de ${fmtData(data)}: ${itens.length} pessoa(s), ` +
+          `${itens.length * 2} batidas.\n\n` +
+          `O arquivo NÃO reescreve cartão — ele só ACRESCENTA a saída e a volta do ` +
+          `almoço. Por isso não depende de cartão completo: ${soNoArquivo} dessas ` +
+          `pessoas o robô não conseguiria lançar.\n` +
+          `Alguém precisa subir o arquivo à mão no Transnet.\n\n` +
+          (quantosAbaixo
+            ? `${quantosAbaixo} são "Abaixo 27min" e sobem com o intervalo REAL que a pessoa fez.\n\n`
+            : "") +
+          (tambemNoRobo
+            ? `UM DIA, UM CAMINHO: ${tambemNoRobo} dessas pessoas também estão no lote do robô. ` +
+              `Se você já lançou pelo robô, não suba o arquivo para elas — o almoço entraria duas vezes.\n\n`
+            : "") +
+          `O arquivo tem o PIS de cada motorista. O download fica registrado em ` +
+          `${TABELA_AUDITORIA} com o seu nome.`,
+      )
+    )
+      return;
+
+    setBaixando(true);
+    setRecadoArquivo(null);
+
+    // A TRILHA PRIMEIRO, e ela manda (mesma ordem do Banco de Horas): se o
+    // insert falhar, a função PARA e mostra o erro do servidor — não existe
+    // download de PIS com a trilha vazia.
+    try {
+      await registrarAuditoria({
+        acao: "refeicao_import_txt",
+        alvo: data,
+        detalhe: {
+          arquivo: nome,
+          pessoas: itens.length,
+          batidas: itens.length * 2,
+          tambem_no_robo: tambemNoRobo,
+          so_no_arquivo: soNoArquivo,
+          abaixo_27min: quantosAbaixo,
+          fora_do_arquivo: arquivo.fora.length,
+        },
+        user,
+      });
+    } catch (falha) {
+      setRecadoArquivo({
+        tipo: "erro",
+        texto: `Download cancelado: a trilha de auditoria não pôde ser registrada — ${
+          falha?.message || "erro desconhecido"
+        }`,
+      });
+      setBaixando(false);
+      return; // sem trilha, sem arquivo.
+    }
+
+    baixarTxt(nome, textoDoArquivo(itens));
+
+    // Histórico por pessoa, como a ferramenta grava ao gerar o .txt (main.py:2722,
+    // `gravar_importacoes` com status 'gerado' — a aba Importações já pinta esse
+    // status). Sem `entrada`/`saida` de propósito: o arquivo não toca nas pontas.
+    let aviso = "";
+    try {
+      await inserirDP360(
+        "ponto_importacoes",
+        itens.map((item) => ({
+          cracha: item.cracha,
+          nome: item.nome,
+          date_ref: data,
+          passo: 1,
+          saida_almoco: item.janelaIni,
+          volta_almoco: item.janelaFim,
+          fonte: item.fonte,
+          arquivo: nome,
+          status: "gerado",
+        })),
+      );
+    } catch {
+      aviso = " (não foi possível registrar o histórico em ponto_importacoes)";
+    }
+
+    setRecadoArquivo({
+      tipo: "ok",
+      texto:
+        `✓ ${nome} — ${itens.length} pessoa(s), ${itens.length * 2} batidas · ` +
+        `registrado em ${TABELA_AUDITORIA}${aviso}`,
+    });
+    setBaixando(false);
+  };
+
   return (
     <div
       style={{
@@ -808,9 +1157,10 @@ function PainelImportacao({ data, linhas, aoFechar }) {
               Importação da refeição · {fmtData(data)}
             </div>
             <div className="dp-muted" style={{ marginTop: 4, fontSize: 12.5, lineHeight: 1.6 }}>
-              O robô <code>bot_ponto.py</code> preenche os quatro campos do Cartão de Ponto no
-              Transnet. A <b>entrada</b> e a <b>saída</b> voltam exatamente como estão hoje no
-              cartão; só o miolo vira a janela de {IMPORTACAO_JANELA_MIN} min da importação.
+              Dois caminhos para o mesmo fim, e eles não são intercambiáveis: o{" "}
+              <b>robô</b> reescreve o cartão inteiro no Transnet e precisa das duas pontas; o{" "}
+              <b>arquivo .txt</b> só acrescenta as duas batidas do almoço, alcança quem não tem
+              cartão completo, e alguém sobe à mão. <b>Um dia, um caminho.</b>
             </div>
           </div>
           <button type="button" className="dp-btn" onClick={aoFechar} aria-label="Fechar">
@@ -833,10 +1183,11 @@ function PainelImportacao({ data, linhas, aoFechar }) {
         {lote && (
           <>
             <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <span className="dp-pill accent">{lote.dentro.length} no lote</span>
+              <span className="dp-pill accent">{lote.dentro.length} no lote do robô</span>
               {lote.fora.length ? (
                 <span className="dp-pill warn">{lote.fora.length} fora do lote</span>
               ) : null}
+              <span className="dp-pill ok">{arquivo?.dentro.length ?? 0} no arquivo .txt</span>
             </div>
 
             {lote.dentro.length ? (
@@ -866,7 +1217,9 @@ function PainelImportacao({ data, linhas, aoFechar }) {
 
             {/* NUNCA SUMIR COM A PESSOA. Quem pedia importação e não entrou no lote
                 aparece aqui com o motivo — sem esta lista, a diferença entre o chip
-                "N para importar" e o que o robô recebeu seria invisível. */}
+                "N para importar" e o que o robô recebeu seria invisível. E agora
+                cada linha diz se o OUTRO caminho a alcança: era exatamente essa
+                gente que ficava sem refeição lançada e sem plano B. */}
             {lote.fora.length > 0 && (
               <div className="dp-det-bot" style={{ marginTop: 12 }}>
                 <div className="dp-det-bot-linha">
@@ -880,7 +1233,180 @@ function PainelImportacao({ data, linhas, aoFechar }) {
                     <div
                       key={`${item.cracha}-${item.motivo}`}
                       className="dp-det-bot-linha"
-                      style={{ display: "flex", gap: 8, alignItems: "baseline" }}
+                      style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}
+                    >
+                      <span className="dp-mono dp-num">{item.cracha}</span>
+                      <span style={{ fontWeight: 600 }}>{item.nome || "—"}</span>
+                      <span className="dp-muted">{item.motivo}</span>
+                      {crachasNoArquivo.has(item.cracha) ? (
+                        <span className="dp-pill ok">no arquivo .txt</span>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* OS DOIS CAMINHOS, LADO A LADO. A tela não escolhe por ninguém —
+                diz o que cada um faz, a quem alcança, e que só um deles vale
+                por dia. Lado a lado de propósito: escondido num menu, o caminho
+                manual continuaria não existindo para quem precisa dele. */}
+            <div className="rf-caminhos">
+              <div className="rf-caminho">
+                <div className="rf-caminho-tag">Caminho A · automático</div>
+                <div className="rf-caminho-titulo">🤖 Robô do ponto</div>
+                <div className="rf-caminho-nota">
+                  Reescreve o <b>cartão inteiro</b> no Transnet: a entrada e a saída voltam
+                  exatamente como estão hoje e só o miolo vira a janela de{" "}
+                  {IMPORTACAO_JANELA_MIN} min. Por isso exige cartão com as duas pontas.
+                </div>
+                <div className="rf-comp">
+                  <span className="dp-pill accent">{lote.dentro.length} cartões</span>
+                  {lote.fora.length ? (
+                    <span className="dp-pill warn">{lote.fora.length} fora</span>
+                  ) : null}
+                </div>
+                <div className="rf-caminho-acoes">
+                  <button
+                    type="button"
+                    className="dp-btn"
+                    disabled={disparando || !lote.dentro.length}
+                    onClick={() => lancar(false)}
+                    title="O robô preenche a tela do Transnet e NÃO clica em Inserir — serve para conferir o lote"
+                  >
+                    🤖 Ensaio
+                  </button>
+                  <button
+                    type="button"
+                    className="dp-btn"
+                    style={{ color: "var(--dp-danger-ink)" }}
+                    disabled={disparando || !lote.dentro.length}
+                    onClick={() => lancar(true)}
+                    title="Reescreve o cartão de ponto dessas pessoas no Transnet"
+                  >
+                    ⚠ Lançar de verdade
+                  </button>
+                  {disparando && <span className="dp-pill accent">disparando…</span>}
+                </div>
+                <div className="rf-caminho-rodape">
+                  O disparo fica registrado com o seu nome; a evidência por pessoa fica no run
+                  do GitHub e não volta sozinha para esta tela.
+                </div>
+                {recado && (
+                  <div className="rf-caminho-recado">
+                    <span className={`dp-pill ${recado.tipo === "ok" ? "ok" : "danger"}`}>
+                      {recado.texto}
+                    </span>
+                    {recado.painel && (
+                      <>
+                        {" "}
+                        <a className="dp-btn" href={recado.painel} target="_blank" rel="noreferrer">
+                          ver o robô rodando
+                        </a>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="rf-caminho">
+                <div className="rf-caminho-tag">Caminho B · manual</div>
+                <div className="rf-caminho-titulo">⬇ Arquivo de batidas (.txt)</div>
+                <div className="rf-caminho-nota">
+                  Só <b>acrescenta</b> a saída e a volta do almoço — não toca em entrada/saída
+                  e por isso <b>não precisa de cartão completo</b>. Alguém sobe o arquivo à mão
+                  no Transnet. É o caminho de quem está na fila da Revisão, e o plano B quando
+                  o robô está fora do ar.
+                </div>
+                <div className="rf-comp">
+                  <span className="dp-pill accent">{arquivo.dentro.length} pessoas</span>
+                  <span className="dp-pill mute">{arquivo.dentro.length * 2} batidas</span>
+                  {soNoArquivo ? (
+                    <span className="dp-pill ok">{soNoArquivo} que só o arquivo alcança</span>
+                  ) : null}
+                  {arquivo.fora.length ? (
+                    <span className="dp-pill warn">{arquivo.fora.length} fora</span>
+                  ) : null}
+                </div>
+                {/* app.js:5386 — o mesmo checkbox da ferramenta. Só existe deste
+                    lado: sem `ponto2_sugerido`, esse pessoal nunca foi candidato
+                    do robô. Sobe o intervalo REAL (processar_intervalo.py:121),
+                    não os 30 min que a docstring de :126 promete. */}
+                <label
+                  className="rf-check"
+                  title={`Inclui os "Abaixo 27min" com o intervalo REAL que a pessoa fez, não a janela de ${IMPORTACAO_JANELA_MIN} min. Gap menor que ${MIN_ALMOCO_ABAIXO} min fica de fora.`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={incluirAbaixo}
+                    onChange={(evento) => setIncluirAbaixo(evento.target.checked)}
+                  />
+                  <span>
+                    incluir <b>Abaixo 27min</b> — o intervalo real que ele fez, ≥{" "}
+                    {MIN_ALMOCO_ABAIXO} min
+                  </span>
+                </label>
+                <div className="rf-caminho-acoes">
+                  <button
+                    type="button"
+                    className="dp-btn primary"
+                    disabled={baixando || !arquivo.dentro.length}
+                    onClick={baixar}
+                    title="Gera o .txt de batidas PIS no formato que o Transnet importa"
+                  >
+                    ⬇ Baixar arquivo (.txt)
+                  </button>
+                  {baixando && <span className="dp-pill accent">gerando…</span>}
+                </div>
+                <div className="rf-caminho-rodape">
+                  Uma linha por batida, 34 caracteres:{" "}
+                  <span className="dp-mono">empresa(10) + data(8) + hora(4) + 0 + PIS(11)</span> —
+                  todas as saídas primeiro, as voltas depois. O arquivo tem PIS: o download fica
+                  registrado em <code>{TABELA_AUDITORIA}</code> com o seu nome.
+                </div>
+                {tortas ? (
+                  <div className="rf-caminho-recado">
+                    <span className="dp-pill danger">
+                      {tortas} linha(s) fora dos {TAM_BATIDA} caracteres — confira o PIS dessas
+                      pessoas antes de subir
+                    </span>
+                  </div>
+                ) : null}
+                {recadoArquivo && (
+                  <div className="rf-caminho-recado">
+                    <span className={`dp-pill ${recadoArquivo.tipo === "ok" ? "ok" : "danger"}`}>
+                      {recadoArquivo.texto}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* A sobreposição é o risco real de ter dois caminhos: o robô GRAVA o
+                miolo e o arquivo ACRESCENTA o miolo — fazer os dois no mesmo dia
+                põe o almoço duas vezes no cartão. */}
+            {arquivo.dentro.length - soNoArquivo > 0 && (
+              <div className="rf-aviso">
+                <b>Um dia, um caminho.</b> {arquivo.dentro.length - soNoArquivo} pessoa(s) estão
+                nos dois lados. Escolha o robô <i>ou</i> o arquivo para elas — fazer os dois
+                lança o almoço duas vezes no mesmo cartão.
+              </div>
+            )}
+
+            {/* Mesma regra da lista do robô: quem pediu e não entrou no arquivo
+                aparece com o motivo, em vez de sumir. */}
+            {arquivo.fora.length > 0 && (
+              <div className="dp-det-bot">
+                <div className="dp-det-bot-linha">
+                  <b>Fora do arquivo ({arquivo.fora.length})</b>{" "}
+                  <span className="dp-faint">· nem o caminho manual alcança esses dias</span>
+                </div>
+                <div style={{ maxHeight: "22vh", overflow: "auto" }}>
+                  {arquivo.fora.map((item) => (
+                    <div
+                      key={`txt-${item.cracha}-${item.motivo}`}
+                      className="dp-det-bot-linha"
+                      style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}
                     >
                       <span className="dp-mono dp-num">{item.cracha}</span>
                       <span style={{ fontWeight: 600 }}>{item.nome || "—"}</span>
@@ -890,54 +1416,6 @@ function PainelImportacao({ data, linhas, aoFechar }) {
                 </div>
               </div>
             )}
-
-            <div className="dp-det-bot">
-              <div className="dp-det-bot-linha">
-                <b>{lote.dentro.length} cartão(ões) para o robô</b>
-                <span className="dp-faint">
-                  {" "}
-                  · o disparo fica registrado com o seu nome; a evidência por pessoa fica no run
-                  do GitHub e não volta sozinha para esta tela
-                </span>
-              </div>
-              <div className="dp-det-bot-acoes">
-                <button
-                  type="button"
-                  className="dp-btn"
-                  disabled={disparando || !lote.dentro.length}
-                  onClick={() => lancar(false)}
-                  title="O robô preenche a tela do Transnet e NÃO clica em Inserir — serve para conferir o lote"
-                >
-                  🤖 Ensaio
-                </button>
-                <button
-                  type="button"
-                  className="dp-btn"
-                  style={{ color: "var(--dp-danger-ink)" }}
-                  disabled={disparando || !lote.dentro.length}
-                  onClick={() => lancar(true)}
-                  title="Reescreve o cartão de ponto dessas pessoas no Transnet"
-                >
-                  ⚠ Lançar de verdade
-                </button>
-                {disparando && <span className="dp-pill accent">disparando…</span>}
-              </div>
-              {recado && (
-                <div className="dp-det-bot-linha">
-                  <span className={`dp-pill ${recado.tipo === "ok" ? "ok" : "danger"}`}>
-                    {recado.texto}
-                  </span>
-                  {recado.painel && (
-                    <>
-                      {" "}
-                      <a className="dp-btn" href={recado.painel} target="_blank" rel="noreferrer">
-                        ver o robô rodando
-                      </a>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
           </>
         )}
       </div>
@@ -1157,7 +1635,11 @@ function Legenda() {
         )}
         {item(
           `Importação: janela fixa de ${IMPORTACAO_JANELA_MIN} min.`,
-          "O arquivo grava sempre 30 min a partir do início sugerido, não a duração realizada.",
+          "Grava sempre 30 min a partir do início sugerido, não a duração realizada — nos dois caminhos (robô e arquivo).",
+        )}
+        {item(
+          `Abaixo 27min no arquivo: piso de ${MIN_ALMOCO_ABAIXO} min.`,
+          "Só o arquivo .txt alcança esse pessoal, e ele sobe o intervalo REAL que a pessoa fez — não a janela de 30 min. Menos que 15 min é curto demais e fica de fora.",
         )}
       </ul>
       <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -1292,11 +1774,20 @@ export default function Refeicao() {
   // de ponto, que o painel busca na hora.
   const candidatos = useMemo(() => linhas.filter(pedeImportacao).length, [linhas]);
 
+  // O ARQUIVO alcança também os "Abaixo 27min", que a view nunca marca como
+  // "pede importação" (ela zera `ponto2_sugerido` abaixo dos 27 min). Sem contar
+  // esses aqui, um dia só de Abaixo 27min deixaria o botão desligado e o caminho
+  // manual — o único que essa gente tem — inalcançável.
+  const candidatosAbaixo = useMemo(
+    () => linhas.filter((linha) => chaveStatus(linha.status_almoco) === "AB").length,
+    [linhas],
+  );
+
   const colunas = colunasDoFiltro(filtro);
 
   return (
     <AbaShell
-      resumo="Confere o intervalo de cada motorista contra a operação e prepara o que precisa ser importado. A grade é só leitura; a única escrita é o “Gerar importação”, que monta o lote do robô e pede confirmação antes de tocar no Transnet."
+      resumo="Confere o intervalo de cada motorista contra a operação e prepara o que precisa ser importado. A grade é só leitura; o “Gerar importação” abre os dois caminhos até o Transnet — o robô, que reescreve o cartão inteiro, e o arquivo .txt de batidas, que só acrescenta o almoço e alcança quem não tem cartão completo. Nenhum dos dois anda sem confirmação."
       carregando={carregandoDatas}
       erro={erro}
       filtros={
@@ -1356,17 +1847,18 @@ export default function Refeicao() {
             ))}
 
             {/* "Gerar importação" NÃO dispara nada sozinho: abre o painel, que
-                mostra o lote pessoa a pessoa, quem ficou de fora e por quê, e só
-                então oferece os dois botões (ensaio / valendo). Escrever no cartão
-                de alguém não pode caber num clique de barra de ferramentas. */}
+                mostra os dois caminhos pessoa a pessoa, quem ficou de fora e por
+                quê, e só então oferece os botões. Escrever no cartão de alguém
+                (ou baixar um arquivo com PIS) não pode caber num clique de barra
+                de ferramentas. */}
             <button
               type="button"
               className="dp-btn primary"
-              disabled={!candidatos || carregandoLinhas}
+              disabled={(!candidatos && !candidatosAbaixo) || carregandoLinhas}
               onClick={() => setImportando(true)}
               title={
-                candidatos
-                  ? "Monta o lote do robô do ponto (ensaio ou lançamento) para o dia escolhido"
+                candidatos || candidatosAbaixo
+                  ? "Abre os dois caminhos do dia escolhido: o robô do ponto (ensaio ou lançamento) e o arquivo .txt de batidas"
                   : "Nada pede importação nesse dia"
               }
               style={{ marginLeft: "auto" }}

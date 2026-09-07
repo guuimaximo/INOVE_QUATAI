@@ -264,3 +264,37 @@ páginas sem sinalizar, ao contrário do Abandonos, que avisa "leitura truncada"
 `acao_sugerida`, e a view atual sempre traz — além de não ser chamado de lugar
 nenhum no `app.js`. `_filtra_gordura_cartao_valido` (`main.py:4683`) é definido e
 nunca chamado. `run_etapa3` (`main.py:1577`) está marcado OBSOLETO no próprio código.
+
+## 10. Credencial do Transnet — o estado e a decisão (07/09/2026)
+
+**Estado:** os secrets `TRANSNET_USER` / `TRANSNET_PASSWORD` do repo `guuimaximo/DP360`
+**não existem**. Existiam até 03/09 (o log do run daquele dia mostra `STEP login →
+logado`). Sem eles, todo run morre no login em ~16 s com `Usuario Transnet:` — que é o
+prompt de terminal do bot, disparado quando a variável de ambiente chega vazia.
+
+Isso derruba os dois caminhos, não só o do INOVE: quando a **ferramenta desktop**
+despacha para a nuvem (`_roda_na_nuvem`), o run lê os mesmos secrets — e ela só cai
+para o modo local quando não consegue despachar, não quando o run falha.
+
+**Conserto imediato, sem código:** recriar os dois secrets com a credencial
+compartilhada, como estava.
+
+**O desenho por pessoa ficou PARA DEPOIS, por decisão do dono (07/09):** os bots do
+repo `DP360` são os mesmos que a ferramenta desktop usa, e mexer em como eles leem a
+credencial quebraria o desktop junto. Não é a hora.
+
+Quando for, o que ficou levantado:
+
+- **Input de workflow não serve.** O GitHub imprime o bloco `run:` com o input já
+  substituído — verificado no log do run 34073577523, que mostra
+  `CASOS='[{"cracha":"30060937",…}]'` em texto puro. Uma senha ali ficaria legível no
+  histórico, para sempre.
+- **Secret de repositório não serve para "por pessoa".** É um só: a Gabi salva, o Josué
+  dispara, e o Transnet registra a Gabi como autora da advertência que o Josué mandou.
+- **Caminho recomendado — bilhete.** A credencial vai cifrada para uma linha da própria
+  pessoa, com validade curta, apagada ao sair do INOVE; o disparo leva só um bilhete
+  opaco de uso único, e o bot troca o bilhete pela credencial na hora de logar. A
+  alternativa (cifrar no input) esconde do log mas deixa o texto cifrado eterno no
+  histórico do run — vazou a chave um dia, vazou tudo que já passou.
+- **A mudança no bot pode ser compatível:** ler o bilhete quando ele existir e cair na
+  variável de ambiente quando não — assim o desktop continua funcionando como hoje.

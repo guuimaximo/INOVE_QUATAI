@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Lock, X } from "lucide-react";
 import MapaBatidas from "./MapaBatidas";
-import { apagarDP360, lerDP360, upsertDP360 } from "../../services/dp360Api";
+import { apagarDP360, dispararRoboDP360, lerDP360, upsertDP360 } from "../../services/dp360Api";
 import { supabase } from "../../supabase";
 import { getStoredUser } from "../../utils/auth";
 import { RAIO_LOCAL, RAIO_VEIC, reguaLocal, resumoGps } from "./regrasGps";
-import { chaveTemplate, escolherTemplate } from "./comunicadoTransnet";
+import {
+  MOTIVO_AVISO,
+  TIPO,
+  assinaturaExclusao,
+  chaveTemplate,
+  escolherTemplate,
+  marcarReavisos,
+  mensagemPedirExclusao,
+  prepararComunicado,
+  variaveisPendentes,
+} from "./comunicadoTransnet";
 import {
   CONSTANTES,
   almocoDaRefeicao,
@@ -122,6 +132,32 @@ export const fmtData = (iso) => {
   const [y, m, d] = s.split("-");
   return `${d}/${m}/${y}`;
 };
+
+/** Os nomes curtos da faixa da semana, na ordem do original (segunda → domingo). */
+const NOMES_SEMANA = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
+
+/**
+ * Os 7 dias (segunda→domingo) da semana que contém `iso` — o `seg = d - weekday` de
+ * main.py:805 (`get_semana`).
+ *
+ * ARITMÉTICA DE CALENDÁRIO EM UTC, de propósito, e formatação à mão: `new Date(iso)` lê
+ * a string como meia-noite UTC e no BRT (UTC−3) o `getDay()` cairia no dia ANTERIOR — a
+ * semana inteira sairia deslocada, e "quinta" apareceria no lugar de "sexta". `toISOString()`
+ * também está fora: aqui a data é LOCAL do calendário, não instante.
+ */
+export function semanaDe(iso) {
+  const s = String(iso ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return [];
+  const [ano, mes, dia] = s.split("-").map(Number);
+  const base = Date.UTC(ano, mes - 1, dia);
+  const dow = new Date(base).getUTCDay(); // 0 = domingo
+  const segunda = base - (dow === 0 ? 6 : dow - 1) * 86400000;
+  const p2 = (n) => String(n).padStart(2, "0");
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(segunda + i * 86400000);
+    return `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())}`;
+  });
+}
 
 export const fmtDataHora = (v) => {
   const s = String(v ?? "").trim();
@@ -988,6 +1024,379 @@ export function BotaoPontoConferido({ linha, caso, aoRecarregar }) {
   );
 }
 
+/* ═══════════════════════ A SEMANA DELE ═══════════════════════
+   Porte de main.py:797 (`get_semana`) + app.js:948-963 e :5044-5063.
+
+   POR QUE ELA É A PEÇA MAIS SÉRIA DESTE POP-UP: inserir ponto no dia de FOLGA de
+   alguém é o erro que não se desfaz. O pedido chega isolado, o cartão do dia está
+   vazio, e nada na tela dizia se aquele dia era de trabalho. Com os sete dias à
+   vista, EDISON 23/07 se lê num piscar — seg·ter·qua·sex·dom completos e 23/07
+   vazio: é dia de trabalho mesmo, a inserção procede. E o inverso também: dia
+   vazio com os outros SEIS batidos é 6x1, a folga é este — e aí o certo é parar.
+
+   BATIDA COLADA CONTA COMO UMA SÓ. Contar marcação crua mente: MARCO tem qua/qui/sex
+   com 4 a 6 marcações e todas terminam num par de 1 minuto — o dia aparecia
+   "completo ✓" tendo 3 batidas reais. Quem colapsa é o MOTOR (`removeFantasmas`),
+   a mesma régua do resto do cartão — aqui não há segunda detecção.                */
+
+function FaixaSemana({ semana, resumo, carregando, erro }) {
+  if (carregando) {
+    return (
+      <div className="dp-card cd-sem">
+        <span className="cd-sem-t">Semana dele</span>
+        <span className="dp-faint" style={{ fontSize: 11.5 }}>
+          lendo os 7 dias…
+        </span>
+      </div>
+    );
+  }
+  // A FALHA APARECE. Sumir em silêncio seria o pior desfecho possível para esta faixa:
+  // ela é a trava contra inserir ponto em dia de folga, e quem não a vê não sabe que
+  // está decidindo sem ela — conclui que o dia "não tem nada de estranho".
+  if (erro) {
+    return (
+      <div className="dp-card cd-sem">
+        <span className="cd-sem-t">Semana dele</span>
+        <span className="dp-pill warn">⚠ não foi possível ler a semana</span>{" "}
+        <span className="dp-muted" style={{ fontSize: 11.5 }}>
+          {erro}. Decida sem ela por sua conta e risco: nada aqui diz se este dia era de folga.
+        </span>
+      </div>
+    );
+  }
+  if (!semana?.length || !resumo) return null;
+  return (
+    <div className="dp-card cd-sem">
+      <span
+        className="cd-sem-t"
+        title="Os 7 dias (segunda a domingo) da semana deste dia, com as batidas LIMPAS de cada um."
+      >
+        Semana dele
+      </span>
+      <div className="cd-sem-l">
+        {semana.map((d) => (
+          <span
+            key={d.data}
+            className={`cd-sd ${d.n >= 4 ? "ok" : d.n ? "mag" : "vazio"}${d.colados ? " colado" : ""}${
+              d.hoje ? " hoje" : ""
+            }`}
+            title={
+              `${d.dia} ${fmtData(d.data)} — ` +
+              (d.nBruto ? `${d.nBruto} marcação(ões): ${d.batidas}` : "sem ponto") +
+              (d.colados ? ` · ${d.colados} colada(s) → ${d.n} batida(s) real(is)` : "") +
+              (d.status ? ` · ${d.status}` : "")
+            }
+          >
+            <b>{d.dia}</b>
+            <i>{d.n >= 4 ? "✓" : d.n || "—"}</i>
+            {!!d.colados && <u title="tem batida colada">•</u>}
+          </span>
+        ))}
+      </div>
+      <span className="cd-sem-n">
+        <b>{resumo.completos}</b> dia(s) completo(s) de {resumo.comPonto} com ponto ·{" "}
+        {resumo.hoje?.n ? (
+          <>
+            este dia tem <b>{resumo.hoje.n}</b> batida(s)
+          </>
+        ) : (
+          <>
+            este dia está <b>sem ponto</b>
+          </>
+        )}
+        {!!resumo.comColada && (
+          <>
+            {" · "}
+            <b className="cd-rj">{resumo.comColada} dia(s) com batida colada</b>
+          </>
+        )}
+      </span>
+      {/* FOLGA PROVÁVEL (app.js:958-963): o dia está vazio e os outros SEIS já têm ponto —
+          6x1, a folga é este. Inserir ponto aqui é o que precisa de um segundo olhar, e a
+          faixa diz isso com todas as letras em vez de deixar o DP deduzir do desenho. */}
+      {resumo.folgaProvavel && (
+        <span className="cd-sem-alerta">
+          ⚠ <b>Os outros 6 dias já têm ponto</b> — este parece ser a <b>FOLGA</b>. Confira a escala antes
+          de inserir ponto neste dia.
+        </span>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════ PEDIR EXCLUSÃO DE BATIDA INDEVIDA ═══════════════
+   Porte de app.js:4927-4939 (`acaoDia`, ramo `pedir_exclusao`) + main.py:8036.
+
+   O BURACO QUE ISTO FECHA: o modelo `template_pedir_exclusao` é editável no Config
+   e NADA o enviava — o admin editava uma carta que a tela não conseguia mandar, e o
+   dia de batida colada caía em "pedir registro do ponto", que é o pedido errado: não
+   há o que ele registre, há o que ele apague. As regras (formato do CSV, a barreira
+   da assinatura, o caso que abre, o reaviso) são de `../comunicadoTransnet`, as
+   MESMAS dos outros cinco tipos; este componente é só a TELA.
+
+   DOIS BOTÕES, NUNCA UM CHECKBOX. Ensaio: o robô anexa o arquivo e NÃO confirma —
+   e ensaio NÃO ABRE CASO. A ordem é disparar e só então gravar o caso: gravá-lo antes
+   de saber se o robô saiu deixaria alguém "avisado" por um disparo que o GitHub
+   recusou.                                                                        */
+
+function ModalPedirExclusao({ linha, caso, aoFechar, aoConcluir }) {
+  const [template, setTemplate] = useState(null);
+  const [erro, setErro] = useState("");
+  const [disparando, setDisparando] = useState(false);
+  const [recado, setRecado] = useState(null);
+
+  // main.py `sc.tem_coluna("ponto_caso", "ponto_antes")`: a coluna existe em algumas
+  // instalações e não em outras, e coluna inexistente no upsert derruba a gravação
+  // inteira. Só entra quando ela FOI VISTA numa linha já lida deste dia.
+  const comPontoAntes = !!caso && Object.prototype.hasOwnProperty.call(caso, "ponto_antes");
+
+  useEffect(() => {
+    let ativo = true;
+    lerDP360("app_config", { filtros: { chave: `eq.${chaveTemplate("pedir_exclusao")}` }, limite: 1 })
+      .then((cfg) => {
+        if (ativo) setTemplate(escolherTemplate(cfg?.[0]?.valor, "pedir_exclusao"));
+      })
+      .catch((falha) => {
+        // Sem o app_config o envio não trava: cai no texto oficial e a tela avisa.
+        if (!ativo) return;
+        setTemplate(escolherTemplate("", "pedir_exclusao"));
+        setErro(`Não foi possível ler o modelo salvo (${falha.message || falha}). Usando o texto padrão.`);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const escapa = (e) => {
+      if (e.key === "Escape" && !disparando) aoFechar();
+    };
+    document.addEventListener("keydown", escapa);
+    return () => document.removeEventListener("keydown", escapa);
+  }, [aoFechar, disparando]);
+
+  // O carimbo do caso é o INSTANTE do envio, então o preparo é refeito no clique.
+  // Este é só o da tela (prévia, barrados, CSV que a pessoa vê).
+  const montar = useCallback(
+    (agora) =>
+      prepararComunicado({
+        tipo: TIPO.PEDIR_EXCLUSAO,
+        linhas: [linha],
+        mensagemDe: (l) => mensagemPedirExclusao(template, l),
+        comPontoAntes,
+        agora,
+      }),
+    [linha, template, comPontoAntes],
+  );
+  const preparo = useMemo(() => (template ? montar(undefined) : null), [template, montar]);
+  const pendentes = useMemo(
+    () => [...new Set((preparo?.itens || []).flatMap((i) => variaveisPendentes(i.mensagem)))],
+    [preparo],
+  );
+  const jaAvisado = String(caso?.aviso_enviado_em ?? "").trim();
+
+  const disparar = async (confirmar) => {
+    const p = montar(agoraUtc());
+    if (!p.itens.length) {
+      setRecado({
+        tipo: "erro",
+        texto: p.barrados[0]?.motivo
+          ? `Não sai: ${p.barrados[0].motivo}.`
+          : "Nenhum comunicado a enviar.",
+      });
+      return;
+    }
+    if (pendentes.length) {
+      setRecado({ tipo: "erro", texto: `Envio bloqueado: variável sem preencher (${pendentes.join(", ")}).` });
+      return;
+    }
+    const item = p.itens[0];
+    const cabeca = confirmar
+      ? `ENVIAR DE VERDADE o pedido de EXCLUSÃO de batida no Transnet:`
+      : `ENSAIO (o robô anexa o arquivo e NÃO confirma o envio):`;
+    // O que ACONTECE, dito sem eufemismo — inclusive o que este pedido NÃO faz.
+    const efeito = confirmar
+      ? `${item.nome || item.cracha} recebe no Transnet o pedido de APAGAR o registro do dia, e o caso ` +
+        `deste dia é aberto/atualizado em ponto_caso com o carimbo do aviso.\n` +
+        `NENHUM horário é lançado por este pedido: ele não abre correção de ponto — quem exclui a ` +
+        `batida é o próprio colaborador, pelo aplicativo.`
+      : `Nada é enviado e NENHUM caso é aberto.`;
+    if (
+      !window.confirm(
+        `${cabeca}\n\n· ${item.nome || item.cracha} (${item.cracha}) — ${item.data}\n\n${efeito}\n\n` +
+          `Quem executa é o robô, no GitHub Actions. O disparo fica registrado com o seu nome.`,
+      )
+    )
+      return;
+
+    setDisparando(true);
+    setRecado(null);
+    try {
+      // ORDEM DELIBERADA: dispara PRIMEIRO, grava o caso DEPOIS.
+      const r = await dispararRoboDP360("comunicado", {
+        csv: p.csv,
+        data: p.datas[0],
+        motivo: MOTIVO_AVISO, // aviso (102). Advertência não sai desta rota — nem poderia:
+        confirmar: confirmar ? "true" : "false", // não há alvo, então não há o que corrigir depois.
+      });
+
+      let alerta = "";
+      let reavisados = [];
+      if (confirmar && p.casos.length) {
+        const { casos, reavisos } = marcarReavisos(p.casos, () => caso || null);
+        reavisados = reavisos;
+        try {
+          await upsertDP360("ponto_caso", casos);
+        } catch (falha) {
+          alerta =
+            ` ATENÇÃO: o comunicado SAIU, mas o registro em ponto_caso falhou (${falha.message || falha}).` +
+            ` O dia não consta como avisado — avise quem cuida do ciclo.`;
+        }
+      }
+      setRecado({
+        tipo: alerta ? "erro" : "ok",
+        texto:
+          `${confirmar ? "Pedido de exclusão" : "Ensaio"} disparado — ${item.nome || item.cracha}, ${item.data}.` +
+          (reavisados.length ? " Este dia já tinha sido avisado antes (o registro original ficou)." : "") +
+          alerta,
+        painel: r?.painel || "",
+      });
+      if (confirmar && aoConcluir) await aoConcluir();
+    } catch (falha) {
+      setRecado({ tipo: "erro", texto: falha?.message || "Não foi possível disparar o robô." });
+    } finally {
+      setDisparando(false);
+    }
+  };
+
+  const primeira = preparo?.itens?.[0];
+  return (
+    <div
+      className="fixed inset-0 flex items-start justify-center overflow-y-auto"
+      style={{ background: "rgba(15,20,32,.5)", padding: 16, zIndex: 60 }}
+    >
+      <div className="dp-card w-full max-w-3xl" style={{ padding: 0 }}>
+        <header
+          className="flex items-start justify-between gap-3"
+          style={{ padding: "14px 18px", borderBottom: "1px solid var(--dp-border)" }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <b style={{ fontSize: 14 }}>🗑 Pedir exclusão de batida — {linha.nm_funcionario || linha.cracha}</b>
+            <div className="dp-muted" style={{ fontSize: 11.5, marginTop: 2 }}>
+              O pedido é para o colaborador <b>APAGAR</b> o registro pelo aplicativo de ponto — não há
+              horário a corrigir. O modelo é o <b>template_pedir_exclusao</b> da aba Config. O CSV sai
+              idêntico ao Transnet (Empresa · Crachá · Comunicado, campos entre aspas).
+            </div>
+          </div>
+          <button type="button" className="dp-det-x" onClick={aoFechar} aria-label="Fechar">
+            <X size={16} />
+          </button>
+        </header>
+
+        <div style={{ padding: "14px 18px", display: "grid", gap: 12 }}>
+          {erro && <div className="dp-pill warn">{erro}</div>}
+          {!template && <div className="dp-muted">Carregando o modelo…</div>}
+
+          {template && (
+            <div>
+              <label className="dp-muted" style={{ fontSize: 11.5, display: "block", marginBottom: 4 }}>
+                Texto que vai para o colaborador — a edição aqui vale <b>só para este envio</b>. Para mudar
+                o modelo salvo, use a aba <b>Config</b>.
+              </label>
+              <textarea
+                value={template}
+                onChange={(e) => setTemplate(e.target.value)}
+                rows={7}
+                style={{ ...ESTILO_INPUT, width: "100%", minHeight: 120, resize: "vertical" }}
+              />
+            </div>
+          )}
+
+          {primeira && (
+            <div className="dp-card" style={{ fontSize: 12 }}>
+              <b>Prévia — como vai no CSV:</b>
+              <div style={{ marginTop: 4 }}>&quot;{primeira.mensagem}&quot;</div>
+            </div>
+          )}
+
+          {!!pendentes.length && (
+            <div className="dp-pill danger">Não enviar: variável sem preencher ({pendentes.join(", ")}).</div>
+          )}
+
+          {/* O BARRADO APARECE, com nome e motivo — não some da tela em silêncio. */}
+          {!!preparo?.barrados?.length && (
+            <div className="dp-card" style={{ borderColor: "var(--dp-danger-ink)" }}>
+              <span className="dp-pill danger">⚠ não recebe</span>{" "}
+              <span className="dp-muted" style={{ fontSize: 11.5 }}>
+                {preparo.barrados[0].nome || "—"} ({preparo.barrados[0].cracha}) — {preparo.barrados[0].motivo}.
+                Nada é enviado e nenhum caso é aberto.
+              </span>
+            </div>
+          )}
+
+          {!!jaAvisado && (
+            <p className="dp-muted" style={{ margin: 0, fontSize: 11.5 }}>
+              Este dia <b>já foi avisado</b> em {fmtDataHora(jaAvisado)}. Enviar de novo recarimba a data
+              (o prazo reinicia, que é o efeito de reavisar) e <b>não reescreve</b> o que ficou congelado
+              no primeiro aviso.
+            </p>
+          )}
+        </div>
+
+        <footer
+          className="flex flex-wrap items-center justify-between gap-3"
+          style={{
+            padding: "12px 18px",
+            borderTop: "1px solid var(--dp-border)",
+            background: "var(--dp-surface-2)",
+            borderRadius: "0 0 var(--dp-radius) var(--dp-radius)",
+          }}
+        >
+          <div className="dp-det-bot-linha" style={{ minWidth: 0 }}>
+            {disparando && <span className="dp-pill accent">disparando…</span>}
+            {recado && (
+              <>
+                <span className={`dp-pill ${recado.tipo === "ok" ? "ok" : "danger"}`}>{recado.texto}</span>
+                {recado.painel && (
+                  <>
+                    {" "}
+                    <a className="dp-btn" href={recado.painel} target="_blank" rel="noreferrer">
+                      ver o robô
+                    </a>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="dp-btn"
+              disabled={!template || disparando || !preparo?.itens?.length}
+              onClick={() => disparar(false)}
+              title="O robô anexa o arquivo no Transnet e NÃO confirma o envio. Nenhum caso é aberto."
+            >
+              Ensaio
+            </button>
+            <button
+              type="button"
+              className="dp-btn primary"
+              disabled={!template || disparando || !preparo?.itens?.length || !!pendentes.length}
+              onClick={() => disparar(true)}
+              title="Envia de verdade no Transnet e abre/atualiza o caso deste dia em ponto_caso."
+            >
+              Enviar de verdade
+            </button>
+            <button type="button" className="dp-btn" onClick={aoFechar} disabled={disparando}>
+              Fechar
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 /* =============================================================================
    O CARTÃO
    ========================================================================== */
@@ -1024,6 +1433,10 @@ export default function CartaoDoDia({
   // O detalhamento das viagens abre SOBRE o cartão (não no lugar dele): o DP está
   // olhando o caso e as viagens são a explicação da operação que ele está lendo.
   const [verViagens, setVerViagens] = useState(false);
+  // A SEMANA (main.py `get_semana`) e o pedido de exclusão da batida indevida.
+  const [semana, setSemana] = useState(null);
+  const [erroSemana, setErroSemana] = useState("");
+  const [pedirExclusao, setPedirExclusao] = useState(false);
 
   const dia = String(linha.date_ref ?? "").slice(0, 10);
   const cracha = linha.cracha;
@@ -1110,6 +1523,65 @@ export default function CartaoDoDia({
     };
   }, [cracha, dia, semGpsProprio, gorduraDaTela]);
 
+  /* ---- A SEMANA DELE (main.py:797 `get_semana`) ----
+     Leitura própria e independente do resto: se ela falhar, a faixa some e o cartão
+     continua inteiro. Sete dias de UM crachá — `in.(...)` nas duas colunas, uma
+     chamada só. As colunas são as quatro que a faixa usa; `todas_batidas` é a fonte
+     do cartão de cada dia (a `batidas_limpas` sozinha descarta a entrada em ~400
+     dias, main.py:7734 — por isso o motor também prefere a primeira).              */
+  useEffect(() => {
+    let ativo = true;
+    setSemana(null);
+    setErroSemana("");
+    const dias = semanaDe(dia);
+    if (!dias.length) {
+      setSemana([]);
+      return undefined;
+    }
+    lerDP360("ponto_diario", {
+      colunas: "cracha,date_ref,todas_batidas,status_ponto",
+      filtros: {
+        cracha: `in.(${variantesCracha(cracha).join(",")})`,
+        date_ref: `in.(${dias.join(",")})`,
+      },
+      limite: 60,
+    })
+      .then((linhas) => {
+        if (!ativo) return;
+        const porDia = new Map();
+        for (const l of linhas || []) porDia.set(String(l.date_ref ?? "").slice(0, 10), l);
+        setSemana(
+          dias.map((d, i) => {
+            const l = porDia.get(d) || {};
+            const bruto = String(l.todas_batidas ?? "").trim();
+            const marcacoes = batidasDoCartao(bruto);
+            const { limpas, fora } = removeFantasmas(marcacoes);
+            return {
+              data: d,
+              dia: NOMES_SEMANA[i],
+              n: limpas.length, // batidas REAIS (a colada conta como uma só)
+              nBruto: marcacoes.length, // marcações cruas, como o cartão mostra
+              colados: fora.length,
+              // O separador do lake é `|`, mas há linha com vírgula — o motor aceita os
+              // dois (`batidasDoCartao`), e a legenda tem de aceitar também, senão o dia
+              // vira um blocão ilegível no title.
+              batidas: bruto.split(/[|,]/).map((x) => x.trim()).filter(Boolean).join(" · "),
+              status: String(l.status_ponto ?? "").trim(),
+              hoje: d === dia,
+            };
+          }),
+        );
+      })
+      .catch((falha) => {
+        if (!ativo) return;
+        setSemana([]);
+        setErroSemana(falha?.message || "falha ao ler a ponto_diario");
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [cracha, dia]);
+
   /* ---- A MENSAGEM do balão da linha do tempo ----
      O modelo é o MESMO que o envio usa: sai do `app_config` e cai no texto oficial
      quando não há nada salvo. Quem monta o texto é o `previaAviso` da aba, que já
@@ -1144,13 +1616,13 @@ export default function CartaoDoDia({
 
   useEffect(() => {
     const escapa = (e) => {
-      // Com as viagens abertas por cima, o Esc fecha SÓ elas (quem trata é o
-      // próprio pop-up das viagens) — senão os dois sumiriam de uma vez.
-      if (e.key === "Escape" && !verViagens) aoFechar();
+      // Com um pop-up aberto por cima (viagens ou pedido de exclusão), o Esc fecha SÓ
+      // ele — quem trata é o próprio — senão os dois sumiriam de uma vez.
+      if (e.key === "Escape" && !verViagens && !pedirExclusao) aoFechar();
     };
     document.addEventListener("keydown", escapa);
     return () => document.removeEventListener("keydown", escapa);
-  }, [aoFechar, verViagens]);
+  }, [aoFechar, verViagens, pedirExclusao]);
 
   const iv = extra.intervalo || {};
   const gpsEfetivo = gps || extra.gps;
@@ -1216,6 +1688,55 @@ export default function CartaoDoDia({
       motivo: bloqueioSimulacao(simulaCartao({ batidas: fonte }).notas),
     };
   }, [linha.todas_batidas, linha.batidas_limpas]);
+
+  // O que a faixa da semana CONCLUI (app.js:957-963). `comPonto` conta os dias com
+  // qualquer batida; `completos` os que têm 4 ou mais DEPOIS de tirar o fantasma.
+  const resumoSemana = useMemo(() => {
+    if (!semana?.length) return null;
+    const hoje = semana.find((d) => d.hoje) || {};
+    const comPonto = semana.filter((d) => d.n > 0).length;
+    return {
+      hoje,
+      comPonto,
+      completos: semana.filter((d) => d.n >= 4).length,
+      comColada: semana.filter((d) => d.colados).length,
+      // 6x1: o dia aberto está vazio e os outros seis têm ponto — a folga é este.
+      folgaProvavel: !hoje.n && comPonto >= 6,
+      // Os OUTROS dias, que é o que reforça o texto do pedido de exclusão
+      // (app.js:4933-4934): contar este aqui faria o dia se auto-justificar.
+      outrosCompletos: semana.filter((d) => d.n >= 4 && !d.hoje).length,
+      outrosColados: semana.filter((d) => d.colados && !d.hoje).length,
+    };
+  }, [semana]);
+
+  /* ---- A ROTA DA EXCLUSÃO (app.js:4927 `acaoDia`) ----
+     AS BATIDAS PODEM NÃO ESTAR NA LINHA (app.js:4877): a linha da Gordura não traz
+     `todas_batidas` — só as pontas —, e a conta dava ZERO marcações; o dia do MANOEL
+     caía no ramo errado ("pedir registro") justamente onde era para excluir. Quando a
+     linha vem sem cartão, vale o que a SEMANA leu da `ponto_diario` para este mesmo
+     dia. A detecção em si é do módulo do comunicado, que por sua vez usa o
+     `removeFantasmas` do motor — nenhuma régua nova nasce aqui.                     */
+  const exclusao = useMemo(() => {
+    const doDia = semana?.find((d) => d.hoje);
+    const fonte =
+      String(linha.todas_batidas ?? "").trim() ||
+      String(linha.batidas_limpas ?? "").trim() ||
+      String(doDia?.batidas ?? "").replace(/ · /g, " | ");
+    return { ...assinaturaExclusao({ todas_batidas: fonte }), fonte };
+  }, [linha.todas_batidas, linha.batidas_limpas, semana]);
+
+  // PONTO INVERTIDO tem tratamento próprio e a rota não se oferece nele (app.js:4882:
+  // `if (pontoInvertidoAtivo) return`). E dia já conferido pelo DP também não: pedir
+  // exclusão de um dia que ele mesmo deu por certo seria mandar apagar a decisão.
+  const cabeExclusao =
+    exclusao.colada && !ehPontoInvertido(linha) && !pontoConferido(caso);
+
+  // A linha que vai no comunicado: a mesma do cartão, com o `todas_batidas` que a
+  // rota apurou (é ele que vira o {BATIDAS} da carta — o registro a ser apagado).
+  const linhaExclusao = useMemo(
+    () => ({ ...linha, date_ref: dia, todas_batidas: exclusao.fonte }),
+    [linha, dia, exclusao.fonte],
+  );
 
   // Quanto de almoço a jornada CRAVADA exige (main.py `_almoco_matriz`): < 4h nada,
   // 4h–6h 15 min, 6h+ 30 min. Vale a versão POR CATEGORIA, que é o porte literal: só
@@ -1530,6 +2051,56 @@ export default function CartaoDoDia({
               INTEIRO (muda a operação real, a gordura e a régua do GPS) e o dono
               reclamou justamente que ela "não estava vindo do controle de reserva". */}
           <BlocoReserva reserva={extra.reserva} />
+
+          {/* A SEMANA vem ANTES das colunas, e antes de qualquer número do dia: ela é o
+              contexto que decide se o dia sequer devia ter ponto. Enfiada numa coluna,
+              ficaria abaixo da dobra num cartão com muitas batidas — e a trava contra
+              inserir ponto em dia de folga só serve se for a primeira coisa que se vê. */}
+          <FaixaSemana
+            semana={semana}
+            resumo={resumoSemana}
+            carregando={semana === null}
+            erro={erroSemana}
+          />
+
+          {/* QUAL PEDIDO ESTE DIA MERECE (app.js:4927). Só aparece quando o dia tem a
+              assinatura do coletor; nos outros formatos o pedido é o da aba (📣 no
+              rodapé), e esta faixa fica fora do caminho. */}
+          {cabeExclusao && (
+            <div className="dp-card cd-acao">
+              <div className="cd-acao-t">
+                <b>
+                  {exclusao.marcacoes} marcação(ões) em {exclusao.span == null ? 0 : exclusao.span} min
+                </b>{" "}
+                — não é jornada, é a mesma leitura do coletor repetida.
+                {!!resumoSemana?.outrosCompletos && (
+                  <>
+                    {" "}
+                    A semana tem <b>{resumoSemana.outrosCompletos} dia(s) completo(s)</b>.
+                  </>
+                )}
+                {!!resumoSemana?.outrosColados && (
+                  <>
+                    {" "}
+                    <b className="cd-rj">
+                      Atenção: mais {resumoSemana.outrosColados} dia(s) da semana também têm batida colada
+                    </b>{" "}
+                    — vale olhar o crachá ou o relógio.
+                  </>
+                )}{" "}
+                O pedido certo é <b>excluir</b> a batida — pedir que ele registre o ponto cobra uma
+                jornada que não existiu.
+              </div>
+              <button
+                type="button"
+                className="dp-btn primary"
+                onClick={() => setPedirExclusao(true)}
+                title="Abre o comunicado deste dia com o modelo template_pedir_exclusao: prévia do texto e os dois botões (Ensaio · Enviar de verdade)."
+              >
+                🗑 Pedir exclusão desta batida
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="rv-colunas" style={{ padding: 18 }}>
@@ -2017,6 +2588,17 @@ export default function CartaoDoDia({
           nome={linha.nm_funcionario || ""}
           dia={dia}
           aoFechar={() => setVerViagens(false)}
+        />
+      )}
+
+      {/* O pedido de exclusão também abre POR CIMA: quem vai mandar apagar uma batida
+          precisa continuar vendo a semana que justifica o pedido. */}
+      {pedirExclusao && (
+        <ModalPedirExclusao
+          linha={linhaExclusao}
+          caso={caso}
+          aoFechar={() => setPedirExclusao(false)}
+          aoConcluir={recarregar}
         />
       )}
     </div>

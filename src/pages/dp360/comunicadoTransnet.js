@@ -41,11 +41,16 @@
 //  4. Os casos do ciclo dos outros tipos, com o ALVO CONGELADO, e os REAVISOS: o que já
 //     foi congelado FICA; o segundo aviso só recarimba a data (reiniciar o prazo é o
 //     efeito pretendido) e vira uma linha de "já tinha sido avisado" para a tela.
+//  5. `tipo="pedir_exclusao"` é o ÚNICO que manda APAGAR registro, e por isso é o único
+//     com barreira de FORMATO do dia: sem a assinatura do coletor (1 a 3 marcações num
+//     intervalo <= 2 min) o pedido não sai. Ele nasce SEM alvo e SEM ponta de propósito —
+//     não há cartão a cobrar, e um alvo aqui viraria lançamento na correção.
 import { pontaConta } from "./regrasGordura";
 import {
   batidasDoCartao,
   hm2min,
   jornadaDoCartao,
+  min2hm,
   removeFantasmas,
   CONSTANTES,
 } from "./regrasPonto";
@@ -72,6 +77,11 @@ export const TIPO = {
   GERAL: "geral", // aviso genérico de registro incompleto
   FORA: "fora", // bateu ponto fora de local conhecido (GPS) — justificativa
   INTERNO: "interno", // interno/aprendiz: almoço curto · incompleto · jornada curta
+  // O ÚNICO PEDIDO QUE MANDA APAGAR. Dia de batida repetida do coletor: pedir que ele
+  // "registre o ponto" é o pedido errado — não há o que registrar, há o que excluir.
+  // No original o modelo existe (`_TPL.pedir_exclusao`, main.py:8036) e é editável no
+  // Config, mas nenhuma rota o envia; a batida fantasma morria como diagnóstico de tela.
+  PEDIR_EXCLUSAO: "pedir_exclusao",
 };
 
 /* ═════════════════════════════ helpers de texto ═════════════════════════════ */
@@ -161,6 +171,60 @@ export function batidasParaTexto(linha, vazio = "nenhuma") {
     .map((x) => x.trim().replace(/^[ES]+/, "").trim())
     .filter(Boolean);
   return partes.length ? partes.join(" · ") : vazio;
+}
+
+/** O nome do dia por extenso, do jeito que a carta fala ({DIA_SEMANA} — app.js `DIAX`).
+ *  ARITMÉTICA DE CALENDÁRIO EM UTC, de propósito: `new Date("2026-08-09")` é lido como
+ *  meia-noite UTC e, no BRT (UTC−3), `getDay()` devolveria o dia ANTERIOR — a carta diria
+ *  "sábado" para um domingo. `Date.UTC(...)` + `getUTCDay()` não passa por fuso nenhum. */
+const DIAS_EXTENSO = [
+  "domingo",
+  "segunda-feira",
+  "terça-feira",
+  "quarta-feira",
+  "quinta-feira",
+  "sexta-feira",
+  "sábado",
+];
+export function diaSemanaExtenso(iso) {
+  const s = txt(iso).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return "";
+  const [ano, mes, dia] = s.split("-").map(Number);
+  return DIAS_EXTENSO[new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay()] || "";
+}
+
+/* ═════════════════ a batida indevida (a assinatura do coletor) ═════════════════ */
+
+/**
+ * app.js:4885-4888 (`acaoDia`) — DE 1 A 3 MARCAÇÕES NUM INTERVALO DE ATÉ 2 MIN NÃO É
+ * JORNADA: é a mesma leitura do coletor repetida. Assinatura medida na base: 88 dias de
+ * batida colada, 87 deles com EXATAMENTE 1 minuto entre a primeira e a última marcação.
+ *
+ * O SINAL É O SPAN, NÃO A SEMANA (app.js:4930). Exigir "semana cheia" deixava passar
+ * MARCO AURELIO 15/08 (01:17/01:18) só porque a semana dele tinha 4 dias completos e não
+ * 5. A semana entra como REFORÇO no texto da tela, nunca como condição.
+ *
+ * Quem colapsa a batida fantasma é o MOTOR (`removeFantasmas`, tolerância de 6 min):
+ * aqui não existe uma segunda detecção, só a leitura do que ele devolveu.
+ *
+ * @returns { colada, marcacoes, span, reais, fantasmas } — `span` é null com menos de
+ *          duas marcações (um toque solto também é "colada": não há jornada nenhuma ali).
+ */
+export const SPAN_COLADA_MAX = 2;
+export const MARCACOES_COLADA_MAX = 3;
+
+export function assinaturaExclusao(linha) {
+  const mins = batidasDoCartao(txt(linha?.todas_batidas) || txt(linha?.batidas_limpas) || "");
+  const span = mins.length >= 2 ? Math.max(...mins) - Math.min(...mins) : null;
+  const { limpas, fora } = removeFantasmas(mins);
+  return {
+    colada:
+      mins.length >= 1 && mins.length <= MARCACOES_COLADA_MAX && (span == null || span <= SPAN_COLADA_MAX),
+    marcacoes: mins.length,
+    span,
+    reais: limpas.length,
+    fantasmas: fora.map(min2hm),
+  };
 }
 
 /* ═════════════════════════════ o CSV ═════════════════════════════ */
@@ -337,6 +401,28 @@ export function prepararComunicado({
       continue;
     }
 
+    // BARREIRA 1b — A EXCLUSÃO SÓ SAI PARA DIA COM A ASSINATURA DO COLETOR. Este é o
+    // único aviso que manda APAGAR registro, e ele é convincente: mandado num dia de
+    // jornada real, convence a pessoa a excluir ponto que ela cumpriu — e isso não se
+    // desfaz. Por isso a assinatura é conferida AQUI de novo, e não só na tela que
+    // ofereceu o botão: quem monta o envio não pode depender de quem clicou.
+    // Sem marcação nenhuma o texto sairia com "consta em seu cartão o registro nenhuma".
+    if (tipo === TIPO.PEDIR_EXCLUSAO) {
+      const assinatura = assinaturaExclusao(linha);
+      if (!assinatura.marcacoes) {
+        barra("cartão sem marcação — não há batida a excluir");
+        continue;
+      }
+      if (!assinatura.colada) {
+        barra(
+          `sem assinatura de batida repetida (${assinatura.marcacoes} marcação(ões)` +
+            `${assinatura.span == null ? "" : ` em ${assinatura.span} min`})` +
+            ` — pedir exclusão aqui apagaria jornada real`,
+        );
+        continue;
+      }
+    }
+
     // BARREIRA 2 (main.py:2406) — sem contrato não existe aviso automático.
     let contrato = null;
     if (tipo === TIPO.GORDURA || tipo === TIPO.REVMOT) {
@@ -397,6 +483,26 @@ export function prepararComunicado({
     if (tipo === TIPO.FORA) {
       // Justificativa, não ajuste — a origem é o que mantém essa distinção.
       casos.push({ ...base, origem: "fora", tipo: "fora" });
+    } else if (tipo === TIPO.PEDIR_EXCLUSAO) {
+      // O RETRATO DO CARTÃO AQUI É O CRU, não o limpo. Nos outros cinco tipos `antes`
+      // prefere `batidas_limpas`, e isso está certo lá; aqui não: o que se manda apagar
+      // é justamente a marcação que o limpo DESCARTA. MANOEL 09/08 tem 01:15 e 01:16 no
+      // cartão e `batidas_limpas = "01:16"` — guardar só o limpo apagaria do registro a
+      // batida que a exclusão vai remover, e depois ninguém saberia o que existia ali.
+      const cru = txt(linha.todas_batidas) || antes;
+      base.usuario = cru;
+      if (comPontoAntes) base.ponto_antes = cru;
+      // PEDIDO DE APAGAR, NÃO DE AJUSTAR: nasce sem `ponta` e sem `alvo_*` de propósito.
+      // Não há cartão a cobrar, e um alvo aqui viraria lançamento na correção — o bot
+      // gravaria uma jornada num dia que não teve jornada, que é o erro oposto ao que
+      // este aviso conserta.
+      //
+      // MAS ABRE O CASO, como todo aviso (a espinha única da main.py:2428): é o
+      // `aviso_enviado_em` que faz o dia contar como avisado, permite o reaviso ser
+      // detectado e deixa rastro de que a exclusão foi pedida. O `usuario`/`ponto_antes`
+      // do `base` guarda o retrato do cartão ANTES — depois da exclusão o dia fica
+      // vazio, e sem esse retrato ninguém sabe o que foi apagado.
+      casos.push({ ...base, origem: "revisao", tipo: "exclusao" });
     } else if (tipo === TIPO.REVMOT) {
       casos.push({ ...base, origem: "revisao", tipo: "cerco", ponta, ...(contrato || {}) });
     } else if (tipo === TIPO.GERAL) {
@@ -594,6 +700,11 @@ export const chaveTemplate = (tipo) => `template_${tipo}`;
 export const TEMPLATES_PADRAO = {
   ocorrencia_motorista:
     "Prezado(a) {NOME},\n\nCrachá {CRACHA},\n\nIdentificamos que, no dia {DATA}, NÃO houve marcação de {DIVERGENCIA} no seu registro de ponto.\n\nNos termos do art. 74 da CLT, o registro de ponto deve refletir a jornada efetivamente realizada. Solicitamos que {PEDIDO}, por meio do aplicativo de registro de ponto, no prazo de 48 horas.\n\nEm caso de dúvidas, procure seu supervisor imediato ou o Departamento Pessoal.\n\nAtenciosamente,\n\nDP — Quataí Transporte de Passageiros.",
+  // BATIDA INDEVIDA (main.py:8085): o oposto do `registro_incompleto`. Aqui o dia NÃO foi
+  // trabalhado — são marcações coladas, sobra de um toque no relógio. Pedir que ele
+  // "registre as batidas" seria o pedido errado, e é o que a tela mandava até agora.
+  pedir_exclusao:
+    "Prezado(a) {NOME}, crachá {CRACHA}. No dia {DATA} ({DIA_SEMANA}) consta em seu cartão o registro {BATIDAS}, sem jornada correspondente. Pelo que apuramos, não houve trabalho nesse dia — trata-se de marcação indevida. Solicitamos que peça a EXCLUSÃO desse registro pelo aplicativo de ponto no prazo de 48 horas, para que seu cartão reflita a jornada efetivamente cumprida (Art. 74 da CLT). Em caso de dúvida, procure seu supervisor ou o Departamento Pessoal. Atenciosamente, DP — Quataí Transporte de Passageiros.",
   aviso_fora:
     "Prezado(a) {NOME}, crachá {CRACHA}. Identificamos que seu registro de ponto do dia {DATA} foi realizado FORA de local autorizado (garagem ou terminal): a batida das {HORA} ficou a {DISTANCIA} da garagem. O ponto deve ser registrado no seu local de trabalho. Solicitamos que justifique essa ocorrência com seu gestor ou o Departamento Pessoal. Atenciosamente, DP — Quataí Transporte de Passageiros.",
   interno_almoco:
@@ -667,6 +778,23 @@ export function mensagemBateuFora(template, linha, gps) {
   });
 }
 
+/**
+ * app.js `fillTplDia(..., "pedir_exclusao")` — o pedido de EXCLUSÃO de batida indevida.
+ * Não pede horário nenhum, e não pode pedir: o dia não teve jornada. As variáveis são as
+ * cinco declaradas em `_TPL_VARS` (main.py:8046) — {BATIDAS} é o que consta no cartão
+ * (é o registro que se pede para apagar, então tem de estar escrito na carta) e
+ * {DIA_SEMANA} é o nome do dia, que é justamente o que faz a pessoa reconhecer a folga.
+ */
+export function mensagemPedirExclusao(template, linha) {
+  return preencherTemplate(template, {
+    NOME: txt(linha.nm_funcionario) || "Colaborador(a)",
+    CRACHA: txt(linha.cracha),
+    DATA: ddmmaaaa(linha.date_ref || linha.data_ref),
+    DIA_SEMANA: diaSemanaExtenso(linha.date_ref || linha.data_ref),
+    BATIDAS: batidasParaTexto(linha),
+  });
+}
+
 /** main.py `enviar_aviso_interno` (~2670) — os três modelos do interno/aprendiz.
  *  {JORNADA} e {DIVERGENCIA} recebem o MESMO valor no Python (o `divergencia` da rota):
  *  no modelo "curta" ele é a jornada apurada; nos outros, a frase do que falta. */
@@ -689,11 +817,15 @@ export default {
   cracha8,
   ddmmaaaa,
   horaMensagem,
+  diaSemanaExtenso,
   normalizaMensagem,
   umaLinha,
   variaveisPendentes,
   preencherTemplate,
   batidasParaTexto,
+  SPAN_COLADA_MAX,
+  MARCACOES_COLADA_MAX,
+  assinaturaExclusao,
   csvComunicado,
   contratoDaRevisao,
   frasePedidoDoAlvo,
@@ -708,5 +840,6 @@ export default {
   escolherTemplate,
   mensagemRevisaoMotorista,
   mensagemBateuFora,
+  mensagemPedirExclusao,
   mensagemInterno,
 };

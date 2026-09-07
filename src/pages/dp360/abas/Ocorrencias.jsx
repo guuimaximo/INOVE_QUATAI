@@ -356,6 +356,13 @@ function rotuloCaso(origem, tipo) {
   if (org === "revisao") {
     if (tp === "cerco")
       return { label: "Aviso de ajuste (revisão)", grupo: "motorista", monitora: true };
+    // PEDIR EXCLUSÃO de batida repetida do coletor. `monitora: false` é o ponto: este
+    // aviso NÃO entra no ciclo de 48 h → advertência. Advertir por exclusão não feita
+    // levaria o `bot_ponto` a lançar um cartão inventado — o erro oposto ao que este
+    // aviso conserta. É motorista, não interno: sem esta linha caía no ramo do interno
+    // e a tela mostrava a label crua "exclusao".
+    if (tp === "exclusao")
+      return { label: "Pedir exclusão de batida", grupo: "motorista", monitora: false };
     const label =
       { incompleto: "Registro incompleto", curta: "Jornada curta", almoco: "Almoço curto" }[tp] ||
       tp ||

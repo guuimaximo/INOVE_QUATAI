@@ -44,17 +44,41 @@
 // NÍVEIS — primeiro a PORTA (de onde o dia veio), depois a aba. E é por isso
 // que a recusa de um dia COM aviso não tem botão na grade: ela só acontece
 // dentro do caso aberto, com o desfecho escolhido à mão.
+//
+// AS QUATRO SAÍDAS QUE ESTA TELA GANHOU (PORTE.md §11, itens 1/3/4/7/8) — cada uma
+// tem o seu bloco de comentário no ponto onde ela vive:
+//   · O CARTÃO DO DIA abre daqui (app.js:2158). O Real manual é o TOPO da cascata da
+//     régua: sem isto o DP que discorda do veredito tinha de sair da tela, ir à
+//     Revisão e reachar data + categoria + pessoa. Ver `lerCartaoDoDia`.
+//   · LANÇAR DIA SEM PONTO (main.py:4389) — DSR/Compensação/Curso no dia com ZERO
+//     batida, pelo robô `ocorrencias`, o mesmo da Folgas. Ver `LancarDiaSemPonto`.
+//   · RECUSAR E CORRIGIR ASSIM (app.js:5612) — quando TODOS os pedidos eram
+//     alteração e não inserção. Ver `ComoAlteracao` / `gravarComoAlteracao`.
+//   · MARCAR SUGESTÃO (app.js:2092) e IMPRIMIR O HISTÓRICO (app.js:2258).
+// Nenhuma delas afrouxa trava: marcar continua deixando `aceite` PENDENTE, dia misto
+// e vencido continuam fora do lote, e decidir ≠ executar continua de pé.
 // ============================================================================
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import TabelaDP from "../TabelaDP";
 import { dispararRoboDP360, lerDP360, lerTudoDP360, upsertDP360 } from "../../../services/dp360Api";
+// O CARTÃO DO DIA é o pop-up COMPARTILHADO (`../CartaoDoDia`), o MESMO que a Revisão e a
+// Gordura abrem — não uma terceira tela de análise do dia. Ele já lê sozinho gordura,
+// intervalo, ajustes do bot, pedidos do app, reserva e GPS do crachá×dia, e já traz o
+// formulário do REAL MANUAL. Daqui não vai prop nova nenhuma: o que ele precisa é a linha
+// do `ponto_diario` (com o overlay do Real, via `aplicarRealManual`) e o `ponto_caso`.
+//
 // A RESERVA LANÇADA mora na base do PRÓPRIO INOVE (`reservas_motoristas`), não na
 // base de importação do DP360 — por isso ela não passa pelo gateway `dp360-api`. O
 // leitor de UMA pessoa num dia já existe e é do cartão compartilhado: reusa-se ele,
 // não se abre um segundo caminho para a mesma tabela.
-import { lerReservaDoDia } from "../CartaoDoDia";
+import CartaoDoDia, {
+  agoraUtc,
+  aplicarRealManual,
+  lerReservaDoDia,
+  quemEstaUsando,
+} from "../CartaoDoDia";
 import {
   CONSTANTES,
   batidasDoCartao,
@@ -473,10 +497,14 @@ const COLS_AJUSTES =
   "ponto_depois,horario_ajuste,alvo_etapa2,verdict,situacao_ajuste,respondido_por," +
   "origem,abertura,capturado_em,aceito_em,batida_atual,batida_nova,dt_referencia_ponto";
 
+// `almoco_travado` é a trava da REVISÃO e vale para quem escreve `ponto_real_manual`
+// (main.py:392 salvar_real_manual recusa alm_* num dia travado). Ela entra aqui porque
+// "Recusar e corrigir assim" crava as quatro pontas no Real — e a recusa tem de vir
+// ANTES do primeiro upsert, não depois de a decisão já estar gravada.
 const COLS_DIARIO =
   "cracha,date_ref,todas_batidas,batidas_limpas,jornada_liquida_min,entrada,saida," +
   "saida_almoco,volta_almoco,esc_entrada,esc_saida,entrada_sug,saida_sug," +
-  "almoco_saida_sug,almoco_volta_sug,status_ponto,motivo,nm_funcao,categoria";
+  "almoco_saida_sug,almoco_volta_sug,status_ponto,motivo,nm_funcao,categoria,almoco_travado";
 
 const COLS_GORDURA =
   "cracha,nm_funcionario,data_ref,esc_inicio,esc_fim,sst_vinculo,sst_desvinculo," +
@@ -672,6 +700,43 @@ async function carregarOcorrencias(aoAvancar) {
   };
 }
 
+/* ── O CARTÃO DO DIA (app.js:2158 → `pontoDetalhe`) ────────────────────────────
+ *
+ * PORTE.md §11 item 1. O Real manual do DP é o TOPO da cascata da régua
+ * (`refDaPonta`: real manual > alvo congelado > sugestão do dia > canon). Julgando um
+ * pedido, o DP que discorda da régua não tinha onde cravar: precisava sair da tela, ir
+ * à Revisão e reachar data + categoria + pessoa. Na ferramenta, clicar na linha do P5
+ * abre o MESMO pop-up do dia — e aqui ele já existe e é o `../CartaoDoDia`, o mesmo que
+ * a Revisão e a Gordura abrem. Nada de tela nova e nenhuma prop nova nele.
+ *
+ * A LINHA VEM DO BANCO NA HORA, NÃO DE `reg.cartao`: (1) `COLS_DIARIO` é um recorte
+ * estreito de propósito (a leitura do lake é por dia, ver `lerLakePorPares`) e o cartão
+ * usa colunas que não estão nele — `acao_sugerida`, `fonte_alvo`, `pede_entrada`…;
+ * (2) o overlay do Real manual (`aplicarRealManual`) tem de ser aplicado sobre a linha
+ * CRUA, senão apagar o Real deixaria `entrada_sug`/`alvo_*` com o valor antigo do DP.
+ * É uma leitura de UMA pessoa num dia, só quando alguém clica.
+ *
+ * As duas variantes do crachá viajam pelo mesmo motivo de sempre: o lake grava ora com
+ * zero à esquerda, ora sem, e perder o par faz o cartão abrir vazio em silêncio.
+ */
+const variantesDoCracha = (c) => [
+  ...new Set([txt(c), txt(c).replace(/^0+/, ""), cra8(c)].filter(Boolean)),
+];
+
+async function lerCartaoDoDia(cracha, dia) {
+  const iso = normData(dia) || txt(dia).slice(0, 10);
+  const filtros = { cracha: `in.(${variantesDoCracha(cracha).join(",")})`, date_ref: `eq.${iso}` };
+  const [diario, reais, casos] = await Promise.all([
+    lerDP360("ponto_diario", { filtros, limite: 5 }),
+    // o Real manual e o caso são camadas: sem eles o cartão abre, só sem overlay
+    lerDP360("ponto_real_manual", { filtros, limite: 5 }).catch(() => []),
+    lerDP360("ponto_caso", { filtros, limite: 5 }).catch(() => []),
+  ]);
+  const linha = diario?.[0];
+  if (!linha) return null;
+  return { linha: aplicarRealManual(linha, reais?.[0] || null), caso: casos?.[0] || null };
+}
+
 /* ────────────────────── montagem das linhas (a conferência) ──────────────── */
 
 // O pedido do lake no formato que o MOTOR entende (regrasPonto: {tipo, hora, id}).
@@ -711,6 +776,9 @@ function montarRegistros(base) {
   };
 
   const mapaCaso = indexar(casos, "date_ref");
+  // `ponto_ocorrencias` é a tabela das ocorrências (DSR/Comp/Curso) que o BOT lançou —
+  // é ela que diz se o dia sem ponto já foi lançado, para ninguém lançar duas vezes.
+  const mapaOcorrencia = indexar(ocorrencias, "date_ref");
   const mapaDiario = indexar(diario, "date_ref");
   const mapaGordura = indexar(gordura, "data_ref");
   const mapaIntervalo = indexar(intervalo, "data_ref");
@@ -1047,6 +1115,13 @@ function montarRegistros(base) {
       antesBruto: antesMin,
       antesFonte: antesCartao.length ? "cartão" : "grade",
       antesTexto: textoBatidas(lim),
+      // DIA SEM PONTO = ZERO batida NO CARTÃO (main.py:6199 `_pedido_do_dia` → "lancar_dia").
+      // Sai de `antesCartao`, nunca de `antesMin`: este último cai no `ponto_antes`
+      // CONGELADO no pedido quando o cartão está vazio, e aí um dia sem batida nenhuma
+      // pareceria ter batidas — justo o dia que este caminho existe para destravar.
+      semBatida: antesCartao.length === 0,
+      ocorrenciaDia: mapaOcorrencia.get(k) || null,
+      almocoTravado: ehVerdadeiro(cp.almoco_travado),
       fantasmas,
       depois: sim,
       depoisTexto: textoBatidas(sim),
@@ -1412,6 +1487,184 @@ async function gravarMarcacao(reg, aceitar, rejeitar, cartaoDoMontador) {
   return gravaContrato(reg, [...ace, ...rej], reg.antesTexto, depois);
 }
 
+/* ══ "RECUSAR OS PEDIDOS E CORRIGIR O PONTO ASSIM" (app.js:1211 → :5612) ═══════
+ *
+ * PORTE.md §11 item 4. O motor já DIAGNOSTICA e o porte já mostrava o selo: `julgaAcoes`
+ * marca `viraAlteracao` quando a ponta JÁ TEM batida no cartão — aí INSERIR não corrige,
+ * acrescenta, e o cartão fica com 3 ou 5 batidas (195 casos). O que faltava era a SAÍDA:
+ * sem ela o DP recusa e o dia fica sem alvo nenhum para a correção mirar.
+ *
+ * A saída é a do original: reprojetar os MESMOS pedidos como ALTERAÇÃO (`D/ a batida que
+ * está lá P/ a hora que ele pediu`) e usar o cartão que sai daí como alvo — cravado no
+ * Real manual, que é o topo da cascata da régua e o que a correção lança.
+ *
+ * SÓ QUANDO TODOS SÃO DE FORMA (app.js:1195-1200). Com um pedido BOM no meio, projetar
+ * só os "vira alteração" joga a correção dele fora e o cartão sai PIOR do que estava —
+ * ALEX 30061167 18/08: o 14:10 estava certo (a operação terminou 13:56) e só o 04:25 era
+ * redundante; com o 04:25 sozinho na conta a projeção propunha 04:25·09:26·09:56·09:57.
+ *
+ * UM MOTOR SÓ, e é o mesmo do montador: `simulaCartao` sobre `antesBruto`, com as refs do
+ * cartão. Uma segunda projeção com outra entrada é como a ferramenta antiga acabou com
+ * três cartões diferentes para o mesmo dia.
+ */
+function projecaoComoAlteracao(reg) {
+  const itens = reg?.acoes || [];
+  if (!itens.length) return null;
+  if (!itens.every((it) => txt(it.viraAlteracao))) return null;
+  const cp = reg.cartao || {};
+  const refs = [hm2min(cp.esc_entrada), hm2min(cp.esc_saida)].filter((v) => v != null);
+  const fechado = txt(cp.status_ponto).toUpperCase() === "SEM_PONTO";
+  const pedidos = itens.map((it) => {
+    // `temposDoAjuste` lê exatamente esta forma: 'D/ 11:13 P/ 04:30' → [673, 270].
+    const hora = `D/ ${txt(it.viraAlteracao)} P/ ${txt(it.hora)}`;
+    return { tipo: "Alteração", hora, ajuste: hora, id: txt((it.ids || [])[0]) };
+  });
+  const sim = simulaCartao({ batidas: reg.antesBruto, pedidos, refs, cartaoFechado: fechado });
+  const notas = sim.notas.filter((n) => !String(n).startsWith("_fantasma"));
+  return {
+    pontos: sim.batidas,
+    texto: textoBatidas(sim.batidas),
+    notas,
+    bloqueio: bloqueioSimulacao(notas),
+    fecha: [2, 4].includes(sim.batidas.length),
+    jornada: jornadaDoCartao(sim.batidas).liquida,
+    semAlmoco: faltaAlmoco(sim.batidas),
+    ids: itens.flatMap((it) => it.ids || []).map(txt).filter(Boolean),
+  };
+}
+
+/**
+ * Grava a saída acima: RECUSA os pedidos e crava o cartão corrigido como Real manual.
+ *
+ * DUAS DIFERENÇAS DELIBERADAS PARA O ORIGINAL, e as duas são para NÃO afrouxar nada:
+ *
+ * 1) `correcao_status = "pendente"`, NUNCA `dispensada`. É a lição do RICHARD 30061188
+ *    07/08 (main.py:9565-9569): `dispensada` fecha a porta da CORREÇÃO junto com a da
+ *    advertência, e este botão está justamente dizendo "corrige o ponto assim" — o Real
+ *    ficaria cravado sem ninguém para lançar.
+ *
+ * 2) O `aceite` já vai como `rejeitado`, e não pendente como no `marcar_ajustes` de lá.
+ *    Lá o aceite fica pendente porque existe um segundo passo de tela ("Aplicar
+ *    decisões" → `aplicar_marcados`, main.py:9580, que promove SEM redecidir). Aqui esse
+ *    passo não existe, e o único caminho que promoveria seria `gravarRecusa` — que
+ *    regrava `correcao_status` (''/dispensada) e apagaria a intenção de corrigir que
+ *    acabou de ser registrada. Ou seja: deixar pendente aqui recriaria exatamente o bug
+ *    que o comentário do Python descreve. Continua valendo decidir ≠ executar: isto
+ *    GRAVA, e nenhum robô é disparado — a recusa sobe depois, pelo rodapé do caso.
+ *
+ * O Real manual respeita a MESMA trava da Revisão (`almoco_travado`, main.py:392): num dia
+ * de almoço travado o alm_* não é escrito — e a recusa é abortada ANTES do primeiro
+ * upsert, para o caso não ficar decidido com o alvo pela metade.
+ */
+async function gravarComoAlteracao(reg, ids, pontos) {
+  const rej = (ids || []).map(txt).filter(Boolean);
+  if (!rej.length) throw new Error("Nenhum pedido para recusar.");
+  const horas = (pontos || []).map(min2hm);
+  if (![2, 4].includes(horas.length))
+    throw new Error("O cartão corrigido tem de fechar em 2 ou 4 batidas.");
+  const campos =
+    horas.length === 4
+      ? { entrada: horas[0], alm_saida: horas[1], alm_volta: horas[2], saida: horas[3] }
+      : { entrada: horas[0], alm_saida: null, alm_volta: null, saida: horas[1] };
+  if (reg.almocoTravado && (campos.alm_saida || campos.alm_volta))
+    throw new Error("O almoço deste motorista foi travado pela regra da Revisão.");
+
+  const agora = agoraISOLocal();
+  await upsertDP360("ponto_caso", {
+    ...chaveDoCaso(reg),
+    aceite: "rejeitado",
+    ajuste: "errado",
+    ajuste_ids: rej.map((i) => `R:${i}`).join(","),
+    aceito_em: agora,
+    correcao_status: "pendente",
+    atualizado_em: agora,
+  });
+  // O contrato aqui NÃO é "o cartão se aceitar" (não se aceitou nada): é o cartão que o DP
+  // aprovou como alvo da correção, desenhado na tela antes do clique. É a mesma escolha de
+  // main.py:9573 — o DP viu o cartão ao marcar, e é esse que vale.
+  const aviso = await gravaContrato(reg, rej, reg.antesTexto, textoBatidas(pontos));
+  try {
+    await upsertDP360("ponto_real_manual", {
+      cracha: cra8(reg.cracha),
+      date_ref: reg.iso,
+      ...campos,
+      definido_por: quemEstaUsando(),
+      // `definido_em` é carimbo de INSTANTE (timestamptz): aqui o UTC é o certo, e é o
+      // que o Python grava. O carimbo LOCAL vale para os campos de `ponto_caso`.
+      definido_em: agoraUtc(),
+    });
+  } catch (e) {
+    return `recusa gravada, mas o cartão certo NÃO virou Real manual: ${e?.message || e}`;
+  }
+  return aviso;
+}
+
+/* ══ LANÇAR DIA SEM PONTO (main.py:4389 lancar_dia_ocorrencia) ═════════════════
+ *
+ * PORTE.md §11 item 3 — a porta que faltava no próprio original. Dia com ZERO batida não
+ * é correção de ponta: não há ponta. Sem esta saída ele entra no motor de correção junto
+ * com o resto, vira um cartão de 4 campos inventado, o Transnet recusa e ele GIRA NA FILA
+ * PARA SEMPRE (14 dias do WILKER 30061203, medidos em 28/08).
+ *
+ * NADA DE BOT NOVO: é o robô `ocorrencias`, o MESMO que a Folgas dispara, com o MESMO CSV
+ * (`cracha,data,tipo`, crachá em 8 dígitos, data dd/mm/aaaa) e os mesmos códigos.
+ *
+ * O TIPO É DECISÃO DO DP (main.py:4398): nenhuma fonte diz por que a pessoa não bateu
+ * ponto. A ferramenta oferece a porta e registra quem mandou — não adivinha.
+ */
+const TIPOS_DIA_SEM_PONTO = [
+  ["05", "DSR"],
+  ["40", "Compensação"],
+  ["29", "Curso"],
+];
+const TIPO_DIA_LBL = Object.fromEntries(TIPOS_DIA_SEM_PONTO);
+const rotuloTipoDia = (t) => `${t}-${TIPO_DIA_LBL[txt(t)] || t}`;
+
+// main.py `_ddmm` — o bot preenche a tela do Transnet, que é dd/mm/aaaa.
+const ddmmaaaa = (iso) => {
+  const v = txt(iso);
+  return v.length >= 10 ? `${v.slice(8, 10)}/${v.slice(5, 7)}/${v.slice(0, 4)}` : v;
+};
+
+// O CSV que o bot lê (csv.DictReader com fieldnames cracha,data,tipo). Mesmo montador da
+// Folgas, campo por campo: sem aspas e sem ponto-e-vírgula, porque nenhum dos três tem
+// vírgula (crachá é dígito, data é dd/mm/aaaa e tipo é código de dois dígitos).
+function csvDiasSemPonto(linhas) {
+  return ["cracha,data,tipo", ...linhas.map((l) => `${l.cracha},${l.data},${l.tipo}`)].join("\n");
+}
+
+/**
+ * RELÊ O CARTÃO ANTES DE LANÇAR (main.py:4415). A tela manda o que está vendo, e o que ela
+ * vê pode ter mudado desde a última pintura — lançar DSR num dia em que a pessoa
+ * trabalhou é o erro que este guarda impede. Barra em vez de descartar em silêncio: quem
+ * clicou precisa saber que aquela pessoa não vai ser tocada.
+ */
+async function conferirDiasSemBatida(regs) {
+  const porDia = new Map();
+  (regs || []).forEach((r) => {
+    if (!r?.iso) return;
+    if (!porDia.has(r.iso)) porDia.set(r.iso, new Set());
+    const alvo = porDia.get(r.iso);
+    alvo.add(txt(r.cracha));
+    alvo.add(cra8(r.cracha));
+  });
+  const comBatida = new Set();
+  await emPool([...porDia.entries()], LIMITE_CHAMADAS, async ([iso, crachas]) => {
+    const linhas = await lerTudoDP360("ponto_diario", {
+      colunas: "cracha,date_ref,todas_batidas,batidas_limpas",
+      ordem: "cracha.asc",
+      filtros: { cracha: `in.(${[...crachas].join(",")})`, date_ref: `eq.${iso}` },
+    });
+    linhas.forEach((l) => {
+      if (batidasDoCartao(l).length) comBatida.add(`${cra8(l.cracha)}|${normData(l.date_ref)}`);
+    });
+  });
+  const ok = [];
+  const barrados = [];
+  (regs || []).forEach((r) => (comBatida.has(r.k) ? barrados : ok).push(r));
+  return { ok, barrados };
+}
+
 /* ───────── as travas que protegem o trabalhador (não são conveniência de tela) ───────── */
 
 // Este dia não comporta decisão NENHUMA — nem em lote, nem no caso aberto.
@@ -1442,6 +1695,52 @@ function motivoForaDoLote(reg, acao) {
   // desfecho escolhido à mão.
   if (acao === "rejeitar" && reg.temAviso)
     return "tem aviso no dia — a recusa pode virar advertência: abra o caso";
+  return "";
+}
+
+/**
+ * Por que ESTE dia não pode receber "lançar dia sem ponto" (main.py:4389).
+ *
+ * A trava do meio é a do próprio original: SÓ DIA SEM BATIDA. As outras duas são as
+ * mesmas desta tela — dia já fechado não recebe lançamento novo, e o que o bot já
+ * lançou não se lança de novo (`ponto_ocorrencias` tem chave cracha+dia: um segundo
+ * lançamento sobrescreveria o registro do primeiro e o Transnet levaria dois).
+ *
+ * NÃO herda `motivoSemDecisao`: este caminho não decide pedido nenhum — o dia justamente
+ * NÃO TEM pedido a julgar, e é por isso que ele girava na fila.
+ */
+function motivoSemLancarDia(reg) {
+  if (!reg) return "sem caso";
+  if (!reg.semBatida)
+    return `o cartão tem batida (${reg.antesTexto || "—"}) — não é dia sem ponto`;
+  const oc = reg.ocorrenciaDia;
+  if (oc && txt(oc.lancado_em))
+    return `o robô já lançou ${rotuloTipoDia(oc.tipo)} neste dia em ${fmtDataHora(oc.lancado_em)}`;
+  const c = reg.caso || {};
+  if (txt(c.correcao_status) === "ponto_fechado")
+    return "competência fechada no Transnet — o robô não consegue lançar este dia";
+  if (txt(c.correcao_final_em)) return "este dia já está registrado como corrigido";
+  return "";
+}
+
+/**
+ * Por que ESTE dia não pode receber "recusar os pedidos e corrigir o ponto assim".
+ *
+ * A base é `motivoSemDecisao` — as mesmas quatro de sempre (já decidido, o Transnet já
+ * resolveu, não há pedido, aviso vencido). O que ele acrescenta é a condição do
+ * ORIGINAL: todos os pedidos têm de ser "era alteração", e a projeção tem de FECHAR.
+ * Fora disso o botão nem aparece (é `projecaoComoAlteracao` devolvendo null/`fecha:false`),
+ * e esta função existe para o clique também não passar.
+ */
+function motivoSemComoAlteracao(reg, proj) {
+  const base = motivoSemDecisao(reg);
+  if (base) return base;
+  if (!proj) return "nem todos os pedidos são 'era alteração' — esta saída vale só quando são todos";
+  if (proj.bloqueio) return proj.bloqueio;
+  if (!proj.fecha)
+    return `a projeção como alteração dá ${proj.pontos.length} batida(s) — o cartão não fecha em 2 ou 4`;
+  if (reg.almocoTravado && proj.pontos.length === 4)
+    return "o almoço deste motorista foi travado pela regra da Revisão — o Real manual não aceita alm_saida/alm_volta";
   return "";
 }
 
@@ -2340,7 +2639,16 @@ function Removidas({ antes, depois }) {
 // REGRA DE OURO DESTA CÉLULA: aqui só se recusa o que NÃO PODE virar advertência.
 // Dia com aviso, dia misto, aviso vencido e dia sem simulação confiável não têm
 // botão de recusa na grade — abrem o caso.
-function CelulaDecisao({ reg, gravando, aoAceitar, aoRejeitar, aoDesfazer, aoAbrir }) {
+function CelulaDecisao({
+  reg,
+  gravando,
+  aoAceitar,
+  aoRejeitar,
+  aoDesfazer,
+  aoAbrir,
+  marca,
+  aoLimparMarca,
+}) {
   if (reg.decJa) {
     return (
       <div style={PILHA}>
@@ -2385,6 +2693,23 @@ function CelulaDecisao({ reg, gravando, aoAceitar, aoRejeitar, aoDesfazer, aoAbr
   const travaRecusa = motivoForaDoLote(reg, "rejeitar");
   return (
     <div style={PILHA}>
+      {/* A MARCA DE LOTE (app.js:2092 "⌁ Marcar sugestão"). Ela é PRÉ-DECISÃO: nada foi
+          gravado ainda. Aparece na linha para o DP conferir o que vai subir antes de
+          clicar em "Aplicar decisões" — e clicar nela tira ESTA linha do lote, que é
+          justamente a passada de ajuste que o botão de marcar em massa pressupõe. */}
+      {marca ? (
+        <BotaoAcao
+          tom={marca === "aceitar" ? "ok" : "erro"}
+          titulo="Marcado para o lote — nada foi gravado ainda. Clique para tirar esta linha."
+          disabled={gravando}
+          onClick={(e) => {
+            e.stopPropagation();
+            aoLimparMarca(reg);
+          }}
+        >
+          ⌁ lote: {marca} — tirar
+        </BotaoAcao>
+      ) : null}
       <div style={FILA}>
         <BotaoAcao
           tom="ok"
@@ -2871,6 +3196,411 @@ function Montador({ reg, montado, reserva }) {
   );
 }
 
+/* ── A SAÍDA "ERA ALTERAÇÃO" (app.js:1195-1212 `ajsugbox` → :5612) ────────────
+ *
+ * Fica GRUDADA no montador e ABAIXO dele, pelo mesmo motivo do card de lá: é a resposta a
+ * "e se a operação certa fosse alteração?", e o cartão desenhado aqui é EXATAMENTE o que
+ * vai virar Real manual. Não aparece quando a projeção não fecha — um cartão de 3 batidas
+ * não é alvo de correção nenhum, e oferecer o botão ali seria prometer o que o Transnet
+ * não guarda.
+ *
+ * ELE NÃO SUBSTITUI O MONTADOR: o montador responde "como o cartão fica com as suas
+ * marcas" (aceitando o que foi marcado); este responde "como o cartão fica se o pedido
+ * dele tivesse sido feito da forma certa". São perguntas diferentes e por isso são dois
+ * cards — o que não pode voltar a existir é o mesmo cartão desenhado duas vezes.
+ */
+function ComoAlteracao({ reg, proj, gravando, aoAplicar }) {
+  if (!proj || !proj.fecha || proj.bloqueio) return null;
+  const trava = motivoSemComoAlteracao(reg, proj);
+  const n = (reg.acoes || []).length;
+  return (
+    <div className="oc-alt">
+      <div className="oc-alt-t">✎ O cartão certo, se fossem alterações</div>
+      <div className="oc-mt-l">
+        <span className="oc-mt-k">fica</span>
+        <CartaoInteiro batidas={proj.pontos} contra={reg.antesBruto} />
+        {proj.jornada != null ? (
+          <span className="dp-faint" style={MINI}>
+            {horasLiquidas(proj.jornada)} líquidas
+          </span>
+        ) : null}
+        {proj.semAlmoco ? (
+          <Selo cor="alerta" titulo="jornada acima de 6h sem par de intervalo no cartão">
+            falta o almoço
+          </Selo>
+        ) : null}
+      </div>
+      <div className="oc-mt-n">
+        {n === 1 ? "O pedido deste dia é" : `Os ${n} pedidos deste dia são`}{" "}
+        <b>alteração, não inserção</b>: a ponta já tem batida no cartão, então aceitar não
+        corrige — acrescenta, e o cartão fica com 3 ou 5 batidas. Do jeito que vieram, são{" "}
+        <b>recusa</b>. O que vale é o cartão acima: ele é gravado como{" "}
+        <span className="dp-mono">ponto_real_manual</span>, que é o topo da régua e o alvo que a
+        correção lança.
+      </div>
+      <div className="dp-det-bot-acoes">
+        <BotaoAcao
+          tom="erro"
+          disabled={Boolean(trava) || gravando}
+          titulo={
+            trava ||
+            "Recusa as ocorrências (ajuste_ids R:), grava correcao_status='pendente' — nunca 'dispensada', que fecharia a porta da correção — e crava este cartão no Real manual. NÃO dispara robô nenhum."
+          }
+          onClick={() => aoAplicar(reg, proj)}
+        >
+          ✎ Recusar os pedidos e corrigir o ponto assim
+        </BotaoAcao>
+      </div>
+      {trava ? (
+        <div className="oc-mt-n dp-faint">indisponível para este caso: {trava}</div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ── LANÇAR DIA SEM PONTO (main.py:4389 · app.js:1615 `modalLancarDia`) ───────
+ *
+ * O TIPO é um `<select>`, como no original: não é uma escolha entre "de mentira" e "de
+ * verdade" — é O QUE ACONTECEU, e são três opções mutuamente exclusivas. Já ENSAIO e
+ * VALENDO continuam sendo dois BOTÕES, a regra desta tela e a da Folgas: um checkbox
+ * marcado por engano lança de verdade na ficha de alguém.
+ *
+ * O ESCOPO é sempre a lista que chega em `regs` — nunca "a fila". O original age em todas
+ * as linhas VISÍVEIS; aqui, como em todo lote desta tela, ele age no que está MARCADO, e
+ * o que não é elegível é dito por extenso em vez de descartado em silêncio.
+ */
+function LancarDiaSemPonto({
+  regs,
+  candidatos = 0,
+  ocupado,
+  aoLancar,
+  titulo,
+  noCasoAberto = false,
+}) {
+  const [tipo, setTipo] = useState("05");
+  const lista = regs || [];
+  const bloqueados = lista.map((r) => ({ r, motivo: motivoSemLancarDia(r) })).filter((x) => x.motivo);
+  const elegiveis = lista.filter((r) => !motivoSemLancarDia(r));
+  return (
+    <div className="oc-lancar">
+      <div className="dp-det-bot-linha oc-lancar-t">
+        <b>📅 {titulo}</b>
+        <span className="dp-faint">
+          {" "}
+          · zero batida no cartão · robô <span className="dp-mono">ocorrencias</span>, o mesmo da
+          Folgas, com o mesmo CSV <span className="dp-mono">cracha,data,tipo</span>
+        </span>
+      </div>
+      <div className="dp-det-bot-linha">
+        Não é corrigir ponta: <b>não há ponta</b>. É dizer o que aconteceu e lançar a ocorrência.
+        A ferramenta <b>não tem como saber</b> — o tipo é a sua decisão, e fica registrado quem
+        mandou. Sem esta porta o dia entra no motor de correção, o Transnet recusa e ele volta à
+        fila em toda rodada (14 dias do WILKER 30061203, medidos em 28/08).
+      </div>
+      {elegiveis.length ? (
+        <div className="dp-det-bot-acoes">
+          <select
+            className="oc-sel"
+            value={tipo}
+            disabled={ocupado}
+            onChange={(e) => setTipo(e.target.value)}
+            title="O que aconteceu neste dia. Nenhuma fonte responde isso — é decisão do DP."
+          >
+            {TIPOS_DIA_SEM_PONTO.map(([k, l]) => (
+              <option key={k} value={k}>
+                {l} ({k})
+              </option>
+            ))}
+          </select>
+          <BotaoAcao
+            disabled={ocupado}
+            titulo="O robô navega e NÃO confirma — serve para conferir o lote antes de valer."
+            onClick={() => aoLancar(elegiveis, tipo, false, noCasoAberto)}
+          >
+            🤖 Ensaio
+          </BotaoAcao>
+          <BotaoAcao
+            tom="erro"
+            disabled={ocupado}
+            titulo="Lança de verdade na ficha do colaborador, no Transnet."
+            onClick={() => aoLancar(elegiveis, tipo, true, noCasoAberto)}
+          >
+            ⚠ Lançar {elegiveis.length} dia(s) de verdade
+          </BotaoAcao>
+        </div>
+      ) : (
+        <div className="dp-det-bot-linha">
+          <Selo cor="alerta" quebra>
+            {lista.length
+              ? noCasoAberto
+                ? "este dia não pode ser lançado"
+                : "nenhuma das linhas marcadas pode ser lançada"
+              : `marque na grade (✔) os dias sem ponto para lançar — ${candidatos} nesta lista`}
+          </Selo>
+        </div>
+      )}
+      {bloqueados.length ? (
+        <div className="dp-det-bot-linha dp-faint">
+          {bloqueados.length} fora:{" "}
+          {bloqueados
+            .slice(0, 4)
+            .map((x) => `${x.r.nome} ${x.r.dataBR} (${x.motivo})`)
+            .join(" · ")}
+          {bloqueados.length > 4 ? " …" : ""}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ══════════ O HISTÓRICO DO CASO, PARA IMPRIMIR (app.js:2258 `relatorioCaso`) ══
+ *
+ * PORTE.md §11 item 7. É a peça de evidência que se anexa, e nenhuma tela do dp360 chamava
+ * `print` até aqui. A ordem é a do original — a HISTÓRIA, não a estrutura dos dados:
+ * (1) os KPIs, que é o que muda decisão; (2) o ponto antes e depois lado a lado;
+ * (3) o que ele pediu e o que o DP decidiu; (4) a trilha, com o próximo passo.
+ *
+ * COMO A IMPRESSÃO FUNCIONA SEM MEXER EM CSS DE NINGUÉM: o bloco vive dentro do caso
+ * aberto, escondido na tela (`.oc-rel` é `display:none`), e só existe no papel. As regras
+ * de `@media print` são TODAS presas a uma classe que esta tela põe no `<body>` na hora do
+ * clique (`oc-imprimindo`) — sem ela, nada muda para nenhuma outra tela do INOVE. E, se o
+ * `afterprint` não vier (navegador antigo), a classe ficar pendurada é inofensivo: ela só
+ * tem efeito dentro de `@media print`.
+ */
+
+// app.js `gordDe` — GORDURA é o tempo fora do alvo que CUSTA: entrar antes, sair depois.
+// Entrar depois ou sair antes é ele trabalhando de graça e não entra na conta.
+function gorduraContraAlvo(batidas, alvoEntrada, alvoSaida) {
+  const b = (batidas || []).filter((t) => t != null).slice().sort((x, y) => x - y);
+  const aE = hm2min(alvoEntrada);
+  const aS = hm2min(alvoSaida);
+  if (!b.length || (aE == null && aS == null)) return null;
+  const ent = aE != null ? Math.max(0, aE - b[0]) : 0;
+  const sai = aS != null ? Math.max(0, b[b.length - 1] - aS) : 0;
+  return { total: ent + sai, ent, sai, pE: b[0], pS: b[b.length - 1] };
+}
+
+// app.js:2492 — o que vem A SEGUIR, dito com todas as letras. É o que o DP precisa saber
+// ao fechar a tela, e o que quem recebe o papel precisa ler.
+function proximoPassoDoCaso(reg) {
+  const c = reg.caso || {};
+  const exec = Boolean(txt(c.conferido_em) || txt(c.correcao_final_em));
+  const aceite = txt(c.aceite);
+  const dispensada = txt(c.correcao_status) === "dispensada";
+  if (exec) {
+    return reg.temAviso && aceite === "rejeitado" && !dispensada && !txt(c.advertencia_enviada_em)
+      ? "Próximo passo: enviar a advertência e corrigir o ponto."
+      : "Ciclo encerrado — nada pendente neste dia.";
+  }
+  if (aceite === "rejeitado" && !reg.temAviso)
+    return "Próximo passo: enviar o AVISO de correção e dar 48h. Sem aviso não existe advertência.";
+  if (aceite && aceite !== "pendente")
+    return "Próximo passo: o bot executar no Transnet e travar o dia.";
+  return "Próximo passo: decidir os pedidos.";
+}
+
+function imprimirHistorico() {
+  if (typeof window === "undefined" || typeof window.print !== "function") return;
+  const corpo = window.document?.body;
+  if (!corpo) return;
+  corpo.classList.add("oc-imprimindo");
+  window.addEventListener("afterprint", () => corpo.classList.remove("oc-imprimindo"), {
+    once: true,
+  });
+  window.print();
+}
+
+const SLOT_ROTULO = ["Entrada", "S. almoço", "V. almoço", "Saída"];
+
+function RelatorioCaso({ reg }) {
+  const c = reg.caso || {};
+  const exec = Boolean(txt(c.conferido_em) || txt(c.correcao_final_em));
+  const quandoFechou = txt(c.conferido_em) || txt(c.correcao_final_em);
+  const jornadaAntes = jornadaDoCartao(reg.antes).liquida;
+  const depois = reg.depois?.length ? reg.depois : reg.antes;
+  const jornadaDepois = jornadaDoCartao(depois).liquida;
+  const gordAntes = gorduraContraAlvo(reg.antes, c.alvo_entrada, c.alvo_saida);
+  const gordFim = gorduraContraAlvo(depois, c.alvo_entrada, c.alvo_saida);
+  const aceite = txt(c.aceite);
+  const estado = exec
+    ? [
+        "ok",
+        "✓ Aplicado",
+        txt(c.conferido_em)
+          ? "o bot executou e travou o dia"
+          : "advertido e corrigido — o ponto foi lançado",
+      ]
+    : !aceite || aceite === "pendente"
+      ? ["neutro", "• A decidir", "esperando você"]
+      : ["alerta", "⏳ Aguardando bot", "decidido, falta subir no Transnet"];
+  // O rótulo da segunda linha do cartão diz DE ONDE ela vem — prévia, contrato decidido ou
+  // o que já foi aplicado. Chamar tudo de "depois" é o que fazia o DP ler uma projeção
+  // como se fosse o cartão que subiu.
+  const rotuloDepois = exec ? "Aplicado" : reg.decJa ? "Contrato da decisão" : "Se aceitar tudo";
+  const etapas = [
+    ["📤", "Aviso enviado", c.aviso_enviado_em, ""],
+    ["👁", "Aviso conferido no Transnet", c.aviso_conferido_em, ""],
+    ["⚖️", `Decisão do DP (${aceite || "pendente"})`, c.aceito_em,
+      aceite === "aceito"
+        ? "aceitou — o ponto fica como ele pediu"
+        : aceite === "rejeitado"
+          ? "recusou os pedidos deste dia"
+          : ""],
+    ["🤖", "Executado no Transnet", c.conferido_em, ""],
+    ["⚠", "Advertência enviada", c.advertencia_enviada_em, ""],
+    ["🔧", "Correção do ponto", c.correcao_final_em, ""],
+    ["🗑", "Aviso cancelado", c.aviso_cancelado_em, ""],
+  ];
+  const kpi = (rot, val, sub, cor) => (
+    <div className={`oc-rel-k${cor ? ` ${cor}` : ""}`}>
+      <div className="oc-rel-kr">{rot}</div>
+      <div className="oc-rel-kv">{val}</div>
+      <div className="oc-rel-ks">{sub}</div>
+    </div>
+  );
+  const linhaCartao = (rot, slots, jornada, gord, cru) => (
+    <tr>
+      <th>{rot}</th>
+      {/* CARTÃO QUE NÃO FECHA NÃO CABE NOS 4 SLOTS (app.js:2384): espremer 7 batidas em 4
+          colunas descartava as 3 últimas EM SILÊNCIO — escondendo justo a batida que é o
+          motivo de a correção existir. Fora do par 2/4, sai o cartão INTEIRO. */}
+      {cru && cru.length && ![2, 4].includes(cru.length) ? (
+        <td colSpan={4} className="oc-rel-cru">
+          {cru.map(min2hm).join(" · ")}
+        </td>
+      ) : (
+        slots.map((h, i) => <td key={`s${i}`}>{h || "—"}</td>)
+      )}
+      <td>{jornada == null ? "—" : horasLiquidas(jornada)}</td>
+      <td>{gord ? horasLiquidas(gord.total) : "—"}</td>
+    </tr>
+  );
+  return (
+    <div className="oc-rel">
+      <div className="oc-rel-h">
+        <b>Histórico do caso</b>
+        <span>
+          {reg.nome} · crachá {reg.cracha} · {reg.dataBR}
+          {reg.funcao ? ` · ${reg.funcao}` : ""} · {reg.categoria}
+        </span>
+      </div>
+      <div className="oc-rel-kpis">
+        {kpi(
+          "Jornada",
+          `${jornadaAntes == null ? "—" : horasLiquidas(jornadaAntes)} → ${
+            jornadaDepois == null ? "—" : horasLiquidas(jornadaDepois)
+          }`,
+          "cartão antes → depois",
+        )}
+        {kpi(
+          "Gordura no fim",
+          gordFim ? horasLiquidas(gordFim.total) : "—",
+          txt(c.alvo_entrada) || txt(c.alvo_saida)
+            ? `alvo ${txt(c.alvo_entrada) || "—"} – ${txt(c.alvo_saida) || "—"}`
+            : "sem alvo congelado para medir",
+          gordFim && gordFim.total > 0 ? "ruim" : gordFim ? "boa" : "",
+        )}
+        {kpi("Estado", estado[1], estado[2], estado[0] === "ok" ? "boa" : "")}
+      </div>
+
+      <div className="oc-rel-b">
+        <div className="oc-rel-bt">O ponto</div>
+        <div className="oc-rel-esc">
+          escala <b>{reg.escala[0] || "—"} – {reg.escala[1] || "—"}</b>
+          {txt(c.alvo_entrada) || txt(c.alvo_saida) ? (
+            <>
+              {" "}· alvo <b>{txt(c.alvo_entrada) || "—"} – {txt(c.alvo_saida) || "—"}</b>
+            </>
+          ) : null}
+          {" "}· régua {reg.baseE || "sem base"} / {reg.baseS || "sem base"} · tolerância{" "}
+          {TOLERANCIA_MIN} min
+        </div>
+        <table className="oc-rel-cart">
+          <tbody>
+            <tr>
+              <th />
+              {SLOT_ROTULO.map((r) => (
+                <th key={r}>{r}</th>
+              ))}
+              <th>Jornada</th>
+              <th>Gordura</th>
+            </tr>
+            {linhaCartao("Antes", reg.slotsAntes, jornadaAntes, gordAntes, reg.antes)}
+            {linhaCartao(rotuloDepois, reg.slotsDepois, jornadaDepois, gordFim, depois)}
+          </tbody>
+        </table>
+        <div className="oc-rel-sub">
+          {reg.antes.length} batida(s) antes · {depois.length} depois
+          {exec ? ` · aplicado no Transnet em ${fmtDataHora(quandoFechou)}` : ""}
+          {reg.bloqueio ? ` · a projeção não fecha: ${reg.bloqueio}` : ""}
+        </div>
+      </div>
+
+      <div className="oc-rel-b">
+        <div className="oc-rel-bt">
+          O que ele pediu —{" "}
+          {aceite === "aceito"
+            ? "você aceitou"
+            : aceite === "rejeitado"
+              ? "você recusou"
+              : "sem decisão ainda"}
+        </div>
+        {reg.acoes?.length ? (
+          <ul className="oc-rel-peds">
+            {reg.acoes.map((a, i) => (
+              <li key={`p${i}`}>
+                <b>{a.tipo || "—"}</b> {a.hora || "—"}
+                {a.n > 1 ? ` (${a.n}×)` : ""} —{" "}
+                {a.redundante
+                  ? "já tinha essa batida"
+                  : a.ok === null
+                    ? "sem base para julgar"
+                    : a.excl
+                      ? a.ok
+                        ? "tirou o errado"
+                        : "tirou o certo"
+                      : a.ok
+                        ? "bate com o alvo"
+                        : "não bate com o alvo"}
+                {a.alvo ? ` · alvo ${a.alvo}${a.dif != null ? ` · ${a.dif} min` : ""}` : ""}
+                {a.viraAlteracao ? ` · era alteração de ${a.viraAlteracao}` : ""}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="oc-rel-sub">nenhum pedido registrado neste crachá+dia</div>
+        )}
+      </div>
+
+      <div className="oc-rel-b">
+        <div className="oc-rel-bt">A trilha do processo</div>
+        <ul className="oc-rel-tl">
+          {etapas.map(([ico, rot, valor, sub]) => (
+            <li key={rot} className={txt(valor) ? "on" : ""}>
+              <span>{txt(valor) ? ico : "–"}</span>
+              <b>{rot}</b>
+              <i>{txt(valor) ? fmtDataHora(valor) : "—"}</i>
+              {txt(valor) && sub ? <em>{sub}</em> : null}
+            </li>
+          ))}
+        </ul>
+        <div className="oc-rel-prox">{proximoPassoDoCaso(reg)}</div>
+        {txt(c.correcao_status) ? (
+          <div className="oc-rel-sub">
+            correcao_status: {txt(c.correcao_status)}
+            {txt(c.usuario) ? ` · usuario: ${txt(c.usuario)}` : ""}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="oc-rel-f">
+        Gerado pela Gestão DP · DP360 · Ocorrências · impresso em {fmtDataHora(agoraISOLocal())}
+        {" "}· veredito, régua e simulação do motor validado (regrasPonto.js)
+      </div>
+    </div>
+  );
+}
+
 function Detalhe({
   reg,
   aoFechar,
@@ -2883,6 +3613,10 @@ function Detalhe({
   aoExecutar,
   aoConferir,
   aoFecharAMao,
+  aoAbrirCartao,
+  abrindoCartao,
+  aoComoAlteracao,
+  aoLancarDia,
   resultadoRobo,
 }) {
   // ENQUANTO O DISPARO ESTÁ NO AR, A DECISÃO NÃO MUDA. O robô já levou a decisão que
@@ -2997,6 +3731,12 @@ function Detalhe({
     });
   }, [reg, marcas]);
 
+  /* ── "E SE FOSSEM ALTERAÇÕES?" (app.js:1195) ────────────────────────────────
+   * NÃO depende das marcas: reprojeta os pedidos COMO VIERAM, com a operação certa. Por
+   * isso mora fora do `montado` — e por isso é um hook próprio, acima de qualquer return
+   * antecipado (o `reg` nulo é tratado dentro, devolvendo null). */
+  const comoAlteracao = useMemo(() => projecaoComoAlteracao(reg), [reg]);
+
   /* ── A RESERVA LANÇADA, do Controle de Reservas do INOVE ────────────────────
    * Leitura de UMA pessoa num dia, só quando o caso abre — a tabela não está (nem
    * deve estar) na allowlist do gateway do DP360, e o leitor já existe no cartão
@@ -3065,9 +3805,29 @@ function Detalhe({
             {reg.realocado ? ` · pedido veio do dia ${paraBR(reg.realocado)}` : ""}
           </div>
         </div>
-        <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar detalhe">
-          <X size={14} />
-        </button>
+        <div style={{ ...FILA, flexWrap: "nowrap" }}>
+          {/* O CARTÃO DO DIA. É o pop-up compartilhado (Revisão/Gordura), com o Real manual
+              dentro — é aqui que o DP que discorda da régua crava o horário, sem sair da
+              tela e sem reachar data + categoria + pessoa na Revisão. */}
+          <BotaoAcao
+            disabled={abrindoCartao}
+            titulo="Abre o cartão do dia (o mesmo pop-up da Revisão e da Gordura): fontes, sugestão, GPS, linha do tempo — e o Real manual, que é o TOPO da régua do veredito."
+            onClick={() => aoAbrirCartao(reg)}
+          >
+            {abrindoCartao ? "abrindo…" : "🗂 Cartão do dia"}
+          </BotaoAcao>
+          {/* O HISTÓRICO IMPRESSO — a peça que se anexa. O bloco fica no fim deste card,
+              invisível na tela e visível só no papel. */}
+          <BotaoAcao
+            titulo="Imprime o histórico deste caso: KPIs (jornada antes→depois, gordura no fim, estado), o ponto antes e depois, o que ele pediu, a trilha e o próximo passo."
+            onClick={imprimirHistorico}
+          >
+            🖨 Imprimir o histórico
+          </BotaoAcao>
+          <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar detalhe">
+            <X size={14} />
+          </button>
+        </div>
       </div>
 
       <div
@@ -3121,6 +3881,15 @@ function Detalhe({
                   marcas", e o contrato congelado é exatamente o que está desenhado
                   nele. Ver o cabeçalho do componente `Montador`. */}
               <Montador reg={reg} montado={montado} reserva={reserva} />
+              {/* A SAÍDA "era alteração", logo abaixo do montador: as duas respondem
+                  perguntas diferentes sobre o mesmo dia, e a de baixo só existe quando
+                  TODOS os pedidos foram feitos da forma errada. */}
+              <ComoAlteracao
+                reg={reg}
+                proj={comoAlteracao}
+                gravando={gravando}
+                aoAplicar={aoComoAlteracao}
+              />
               <div style={{ ...FILA, marginTop: 8 }}>
                 <BotaoAcao
                   titulo={
@@ -3193,6 +3962,19 @@ function Detalhe({
               Nenhum pedido neste crachá+dia — ele não mexeu no ponto depois do aviso.
             </p>
           )}
+          {/* DIA SEM BATIDA NENHUMA. Vale nos DOIS ramos acima de propósito: o caso típico
+              é o dia sem pedido (ele não mexeu porque não havia o que mexer), mas um dia
+              sem cartão também pode ter pedido — e nos dois a saída é a mesma, porque não
+              existe ponta para corrigir. Sem esta porta ele gira na fila para sempre. */}
+          {reg.semBatida ? (
+            <LancarDiaSemPonto
+              regs={[reg]}
+              ocupado={gravando || disparando}
+              aoLancar={aoLancarDia}
+              noCasoAberto
+              titulo="Dia sem ponto — lançar a ocorrência"
+            />
+          ) : null}
         </div>
 
         <div className="dp-card">
@@ -3422,6 +4204,11 @@ function Detalhe({
           resultado={resultadoRobo}
         />
       </div>
+
+      {/* O HISTÓRICO IMPRESSO. Fica no DOM, escondido na tela (`.oc-rel` é display:none) e
+          visível só no papel — é o mesmo caso aberto, então não há como o papel contar uma
+          história diferente da que está na tela. */}
+      <RelatorioCaso reg={reg} />
     </div>
   );
 }
@@ -3447,6 +4234,16 @@ export default function Ocorrencias() {
   const [versao, setVersao] = useState(0);
   const [disparando, setDisparando] = useState(false);
   const [resultadoRobo, setResultadoRobo] = useState(null);
+  // O CARTÃO DO DIA (o pop-up compartilhado). `{ linha, caso }` lidos na hora, ou null.
+  const [cartaoDia, setCartaoDia] = useState(null);
+  const [abrindoCartao, setAbrindoCartao] = useState(false);
+  // Gravou alguma coisa DENTRO do cartão? A releitura da aba inteira custa a varredura
+  // do lake por dia — vale a pena UMA vez, ao fechar, e não a cada campo salvo.
+  const cartaoGravou = useRef(false);
+  // AS MARCAS DE LOTE (app.js `DEC`): k → "aceitar" | "rejeitar". É PRÉ-DECISÃO — nada
+  // gravado — e existe para o lote deixar de aplicar UM veredito por vez: numa grade de
+  // centenas de linhas, "aceitar os certos" e "rejeitar os errados" eram duas passadas.
+  const [marcasLote, setMarcasLote] = useState({});
   // A leitura do lake é por dia e o total de dias é sabido antes de começar: dá para
   // mostrar avanço de verdade. `null` = ainda na primeira fase (o estado do DP), que
   // é indeterminada — e barra indeterminada é honesta, barra que finge não é.
@@ -3567,6 +4364,7 @@ export default function Ocorrencias() {
     setAba((ABAS[id] || ABAS.pedido)[0][0]);
     setAberto(null);
     setSelIds([]);
+    setMarcasLote({});
     zerarEixos();
   };
 
@@ -3589,6 +4387,9 @@ export default function Ocorrencias() {
         const aviso = await tarefa();
         setRecado(aviso ? `${rotulo} — ${aviso}` : `${rotulo} ✓`);
         setSelIds([]);
+        // As marcas do lote são PRÉ-DECISÃO sobre o estado que acabou de mudar: mantê-las
+        // depois de gravar é oferecer um segundo clique sobre um dado velho.
+        setMarcasLote({});
         setVersao((v) => v + 1);
         await carregar();
       } catch (e) {
@@ -3758,6 +4559,178 @@ export default function Ocorrencias() {
       );
     },
     [executarGravacao],
+  );
+
+  /* ── O CARTÃO DO DIA (PORTE.md §11 item 1) ─────────────────────────────────
+   * Abre o pop-up COMPARTILHADO — o mesmo da Revisão e da Gordura. Nada é gravado por
+   * aqui: quem grava é o próprio cartão (Real manual, ponto conferido, pedido de
+   * exclusão), com as travas dele. */
+  const abrirCartaoDoDia = useCallback(async (reg) => {
+    if (!reg) return;
+    setAbrindoCartao(true);
+    setRecado("");
+    try {
+      const dados = await lerCartaoDoDia(reg.cracha, reg.iso);
+      if (!dados) {
+        setRecado(
+          `Sem linha em ponto_diario para ${reg.nome} · ${reg.dataBR} — não há cartão do dia para abrir.`,
+        );
+        return;
+      }
+      cartaoGravou.current = false;
+      setCartaoDia(dados);
+    } catch (e) {
+      setRecado(`Falhou: ${e?.message || e}`);
+    } finally {
+      setAbrindoCartao(false);
+    }
+  }, []);
+
+  /* O `aoRecarregar` do cartão: relê a linha do banco — o cartão NUNCA pinta estado
+   * otimista, e a linha crua é o que permite desfazer o overlay quando o Real é apagado.
+   * A ABA inteira NÃO é relida aqui: a varredura do lake é por dia e custa segundos, e
+   * fazê-la a cada campo salvo desmontaria a moldura (o AbaShell troca os filhos pelo
+   * "carregando") com o pop-up aberto por cima. Ela é relida UMA vez, ao FECHAR — porque
+   * o Real manual é o TOPO da cascata da régua (`refDaPonta`) e a grade atrás não pode
+   * ficar mostrando o veredito de antes do horário cravado. */
+  const recarregarCartaoDoDia = useCallback(async (cracha, dia) => {
+    const dados = await lerCartaoDoDia(cracha, dia);
+    if (dados) setCartaoDia(dados);
+    cartaoGravou.current = true;
+  }, []);
+
+  const fecharCartaoDoDia = useCallback(() => {
+    setCartaoDia(null);
+    if (!cartaoGravou.current) return;
+    cartaoGravou.current = false;
+    setRecado("Cartão do dia fechado — relendo a fila com o que foi cravado…");
+    carregar();
+  }, [carregar]);
+
+  /* ── "RECUSAR OS PEDIDOS E CORRIGIR O PONTO ASSIM" (app.js:5612) ───────────── */
+  const aoComoAlteracao = useCallback(
+    (reg, proj) => {
+      const trava = motivoSemComoAlteracao(reg, proj);
+      if (trava) {
+        setRecado(`Não dá para recusar e corrigir assim: ${trava}.`);
+        return;
+      }
+      const horas = proj.pontos.map(min2hm);
+      const campos =
+        horas.length === 4
+          ? `entrada=${horas[0]}, alm_saida=${horas[1]}, alm_volta=${horas[2]}, saida=${horas[3]}`
+          : `entrada=${horas[0]}, saida=${horas[1]} (sem almoço)`;
+      if (
+        !confirmar(
+          `RECUSAR os ${proj.ids.length} pedido(s) do dia ${reg.dataBR} de ${reg.nome} (${reg.cracha}) ` +
+            `E CRAVAR O CARTÃO CERTO.\n\n` +
+            `Do jeito que vieram eles quebram o cartão: a ponta já tem batida, então inserir ` +
+            `acrescenta em vez de corrigir. O certo era ALTERAR.\n\n` +
+            `Cartão que fica como alvo da correção: ${reg.antesTexto || "—"} → ${proj.texto}\n\n` +
+            `Grava em ponto_caso: aceite=rejeitado, ajuste=errado, ajuste_ids=R:${proj.ids.join(",R:")}, ` +
+            `correcao_status="pendente" (NUNCA "dispensada" — ela fecharia a porta da correção).\n` +
+            `Grava em ponto_real_manual: ${campos} — é ele que vira a régua e o alvo.\n` +
+            `Congela o contrato antes/depois em ponto_ajustes_app (só onde ainda não estiver).\n\n` +
+            `NÃO roda robô nenhum: a recusa sobe ao Transnet depois, pela execução do rodapé, ` +
+            `e a correção do cartão continua sendo o robô \`ponto\`, fora desta tela.`,
+        )
+      )
+        return;
+      executarGravacao(
+        `Recusado e cartão certo cravado (${reg.nome} · ${reg.dataBR})`,
+        () => gravarComoAlteracao(reg, proj.ids, proj.pontos),
+      );
+    },
+    [executarGravacao],
+  );
+
+  /* ── LANÇAR DIA SEM PONTO — robô `ocorrencias`, o MESMO da Folgas ───────────
+   *
+   * As mesmas quatro garantias da execução, com uma a mais que é do original: o CARTÃO É
+   * RELIDO antes do disparo (main.py:4415). A tela manda o que está vendo, e o que ela vê
+   * pode ter mudado — lançar DSR num dia em que a pessoa trabalhou é o erro que este
+   * guarda impede, e o que ficar de fora é dito por extenso.
+   */
+  const aoLancarDiaSemPonto = useCallback(
+    async (regs, tipo, valendo, noCasoAberto = false) => {
+      const lista = (regs || []).filter(Boolean);
+      // ONDE O RECADO APARECE é dito pelo CHAMADOR, como na conferência: ver o resultado
+      // de um disparo da barra brotar no rodapé de OUTRO caso aberto é o tipo de confusão
+      // que faz alguém achar que lançou quem não lançou.
+      const avisar = (tipoAviso, texto, painel) => {
+        if (noCasoAberto) setResultadoRobo({ tipo: tipoAviso, texto, painel: painel || "" });
+        setRecado(texto);
+      };
+      if (!lista.length) {
+        avisar("erro", "Nenhum dia sem ponto selecionado.");
+        return;
+      }
+      if (!TIPO_DIA_LBL[txt(tipo)]) {
+        avisar("erro", "Escolha o tipo: DSR (05), Compensação (40) ou Curso (29).");
+        return;
+      }
+      const nomes =
+        lista
+          .slice(0, 12)
+          .map((r) => `· ${r.nome} ${r.dataBR}`)
+          .join("\n") + (lista.length > 12 ? `\n… e mais ${lista.length - 12}` : "");
+      if (
+        !confirmar(
+          `${
+            valendo
+              ? "LANÇAR DE VERDADE no Transnet"
+              : "ENSAIO (o robô navega e NÃO confirma)"
+          }: ${lista.length} dia(s) SEM PONTO como ${rotuloTipoDia(tipo)}.\n\n${nomes}\n\n` +
+            `Nenhum destes dias tem batida no cartão — não é corrigir ponta, é dizer o que ` +
+            `aconteceu. O tipo é a SUA decisão: nenhuma fonte responde isso.\n\n` +
+            `Robô: ocorrencias (o mesmo da Folgas) · CSV cracha,data,tipo.\n` +
+            `${
+              valendo
+                ? "Lança na ficha do colaborador. O resultado por dia NÃO volta sozinho: a evidência fica no run."
+                : "Nada é confirmado e nada é gravado."
+            }\n` +
+            `O cartão de cada dia é RELIDO antes do disparo — quem tiver ganhado batida fica de fora.`,
+        )
+      )
+        return;
+
+      setDisparando(true);
+      if (noCasoAberto) setResultadoRobo(null);
+      setRecado("");
+      try {
+        const { ok, barrados } = await conferirDiasSemBatida(lista);
+        if (!ok.length) {
+          avisar(
+            "erro",
+            `Nenhum dia elegível: ${barrados.length} tem batida no cartão agora — não é dia sem ponto.`,
+          );
+          return;
+        }
+        const csv = csvDiasSemPonto(
+          ok.map((r) => ({ cracha: cra8(r.cracha), data: ddmmaaaa(r.iso), tipo: txt(tipo) })),
+        );
+        const r = await dispararRoboDP360("ocorrencias", {
+          csv,
+          confirmar: valendo ? "true" : "false",
+        });
+        avisar(
+          "ok",
+          `${valendo ? "Lançamento" : "Ensaio"} disparado — ${ok.length} dia(s) como ` +
+            `${rotuloTipoDia(tipo)}.` +
+            (barrados.length
+              ? ` ${barrados.length} ficou/ficaram de fora: o cartão ganhou batida.`
+              : "") +
+            ` O resultado por dia NÃO volta sozinho: a evidência fica no run.`,
+          r?.painel || "",
+        );
+        await carregar();
+      } catch (e) {
+        avisar("erro", `Falhou: ${e?.message || "Não foi possível disparar o robô."}`);
+      } finally {
+        setDisparando(false);
+      }
+    },
+    [carregar],
   );
 
   /* ── EXECUÇÃO: manda ao robô uma decisão JÁ GRAVADA, um crachá+dia por vez ──
@@ -3994,6 +4967,142 @@ export default function Ocorrencias() {
     [linhas, selIds, executarGravacao],
   );
 
+  /* ══ "MARCAR SUGESTÃO" (app.js:2092 o botão · :2145 o handler) ═══════════════
+   *
+   * PORTE.md §11 item 8. O lote desta tela aplica UM veredito por vez ("Aceitar
+   * marcados" / "Rejeitar marcados"), então uma grade de centenas de linhas exigia DUAS
+   * passadas manuais: marcar os certos, aplicar, desmarcar, marcar os errados, aplicar.
+   * Um clique marca o veredito SUGERIDO em cada linha visível — certo→aceitar,
+   * errado→rejeitar — e "Aplicar decisões" grava os dois lados de uma vez.
+   *
+   * TRÊS COISAS QUE NÃO MUDAM, e nenhuma é conveniência de tela:
+   *  · MARCAR NÃO GRAVA. É pré-decisão; enquanto ninguém aplica, `ponto_caso` não muda.
+   *  · A MARCA NUNCA PROPÕE O QUE O LOTE RECUSA. Cada linha passa por `motivoForaDoLote`
+   *    com a ação sugerida ANTES de ser marcada — então dia misto, aviso vencido, dia sem
+   *    simulação confiável e recusa de dia COM aviso continuam fora, exatamente como
+   *    estavam. Marcar em massa o que depois seria bloqueado no clique seria só uma
+   *    maneira mais rápida de descobrir que não dá.
+   *  · O ESCOPO É O QUE ESTÁ EM TELA (`linhas`), como no original — e o reclique limpa só
+   *    essas, não a tela inteira.
+   *
+   * O BOTÃO DIZ O QUE O PRÓXIMO CLIQUE FAZ (app.js:2131-2137): com algo marcado ele vira
+   * "Desmarcar (N)". Marcar e desmarcar pelo mesmo lugar, sem caçar linha a linha.
+   */
+  const contMarcas = useMemo(() => {
+    let ac = 0;
+    let rj = 0;
+    linhas.forEach((r) => {
+      if (marcasLote[r.k] === "aceitar") ac += 1;
+      else if (marcasLote[r.k] === "rejeitar") rj += 1;
+    });
+    return { ac, rj, total: ac + rj };
+  }, [linhas, marcasLote]);
+
+  const marcarSugestao = useCallback(() => {
+    const chaves = linhas.map((r) => r.k);
+    const jaMarcadas = chaves.filter((k) => marcasLote[k]).length;
+    if (jaMarcadas) {
+      setMarcasLote((m) => {
+        const novo = { ...m };
+        chaves.forEach((k) => delete novo[k]);
+        return novo;
+      });
+      setRecado(`${jaMarcadas} marcação(ões) desfeita(s) — nada tinha sido gravado.`);
+      return;
+    }
+    const novo = {};
+    let fora = 0;
+    let semSugestao = 0;
+    linhas.forEach((r) => {
+      const acao =
+        r.diaStatus === "certo" ? "aceitar" : r.diaStatus === "errado" ? "rejeitar" : "";
+      if (!acao) {
+        semSugestao += 1;
+        return;
+      }
+      if (motivoForaDoLote(r, acao)) {
+        fora += 1;
+        return;
+      }
+      novo[r.k] = acao;
+    });
+    const ac = Object.values(novo).filter((v) => v === "aceitar").length;
+    const rj = Object.values(novo).length - ac;
+    setMarcasLote(novo);
+    setRecado(
+      ac + rj
+        ? `Marcado o veredito sugerido: ${ac} para aceitar, ${rj} para recusar. ` +
+            `NADA foi gravado — confira as linhas e use “Aplicar decisões”.` +
+            (fora ? ` ${fora} linha(s) fora do lote (misto, vencido, sem simulação ou com aviso).` : "") +
+            (semSugestao ? ` ${semSugestao} sem veredito para sugerir.` : "")
+        : "Nenhuma linha desta lista tem veredito que possa entrar em lote.",
+    );
+  }, [linhas, marcasLote]);
+
+  const limparMarca = useCallback((reg) => {
+    setMarcasLote((m) => {
+      const novo = { ...m };
+      delete novo[reg.k];
+      return novo;
+    });
+  }, []);
+
+  /** Aplica as marcas: os dois lados de uma vez, cada linha com o SEU veredito. */
+  const aplicarMarcadas = useCallback(() => {
+    const alvo = linhas.filter((r) => marcasLote[r.k]);
+    if (!alvo.length) {
+      setRecado("Nenhuma linha marcada.");
+      return;
+    }
+    // A trava é revalidada AGORA, com a ação de cada linha: a tela pode ter recarregado
+    // desde a marcação, e o que valia então pode não valer mais.
+    const bloqueados = alvo
+      .map((r) => ({ r, motivo: motivoForaDoLote(r, marcasLote[r.k]) }))
+      .filter((x) => x.motivo);
+    if (bloqueados.length) {
+      setRecado(
+        `Lote recusado — ${bloqueados.length} linha(s) não podem entrar em decisão em massa: ` +
+          bloqueados
+            .slice(0, 6)
+            .map((x) => `${x.r.nome} ${x.r.dataBR} (${x.motivo})`)
+            .join(" · ") +
+          (bloqueados.length > 6 ? " …" : "") +
+          ". Tire a marca dessas linhas ou abra cada caso.",
+      );
+      return;
+    }
+    const ac = alvo.filter((r) => marcasLote[r.k] === "aceitar");
+    const rj = alvo.filter((r) => marcasLote[r.k] === "rejeitar");
+    const lista = (regs) =>
+      regs
+        .slice(0, 8)
+        .map((r) => `· ${r.nome} ${r.dataBR}`)
+        .join("\n") + (regs.length > 8 ? `\n… e mais ${regs.length - 8}` : "");
+    if (
+      !confirmar(
+        `APLICAR ${alvo.length} decisão(ões) marcada(s):\n\n` +
+          (ac.length ? `ACEITAR (${ac.length}):\n${lista(ac)}\n\n` : "") +
+          (rj.length ? `REJEITAR e ENCERRAR (${rj.length}):\n${lista(rj)}\n\n` : "") +
+          `Grava aceite=aceito nos primeiros e aceite=rejeitado + correcao_status="dispensada" ` +
+          `nos segundos — nenhum destes dias tem aviso, então nenhuma recusa vira advertência.\n\n` +
+          `NÃO roda o robô: o disparo é sempre de UM caso, no caso aberto.`,
+      )
+    )
+      return;
+    executarGravacao(`${alvo.length} caso(s) gravado(s)`, async () => {
+      const avisos = [];
+      for (const reg of alvo) {
+        // um a um: o upsert em lote esconderia qual linha falhou
+        const a =
+          marcasLote[reg.k] === "aceitar"
+            ? await gravarAceite(reg)
+            : await gravarRecusa(reg, "rejeitar");
+        if (a) avisos.push(a);
+      }
+      return avisos.join(" · ");
+    });
+  }, [linhas, marcasLote, executarGravacao]);
+
   /* ── colunas de cada grade (formato do TabelaDP: id/titulo/valor/render) ── */
 
   const acoesDecisao = {
@@ -4002,6 +5111,7 @@ export default function Ocorrencias() {
     aoRejeitar,
     aoDesfazer,
     aoAbrir: abrir,
+    aoLimparMarca: limparMarca,
   };
 
   const colColaborador = {
@@ -4066,7 +5176,7 @@ export default function Ocorrencias() {
       largura: 230,
       ordenavel: false,
       valor: (r) => (r.decJa ? (r.decJa.aceito ? "aceito" : "recusado") : "a decidir"),
-      render: (r) => <CelulaDecisao reg={r} {...acoesDecisao} />,
+      render: (r) => <CelulaDecisao reg={r} {...acoesDecisao} marca={marcasLote[r.k]} />,
     },
     colAjustes,
   ];
@@ -4136,7 +5246,7 @@ export default function Ocorrencias() {
             </span>
           </div>
         ) : (
-          <CelulaDecisao reg={r} {...acoesDecisao} />
+          <CelulaDecisao reg={r} {...acoesDecisao} marca={marcasLote[r.k]} />
         ),
     },
   ];
@@ -4264,6 +5374,10 @@ export default function Ocorrencias() {
   };
 
   const marcados = linhas.filter((r) => selIds.includes(r.k));
+  // DIA SEM PONTO: os candidatos são os da lista em tela; o escopo do disparo são os
+  // MARCADOS entre eles — nunca "a fila", que é a regra desta tela inteira.
+  const semPontoNaTela = linhas.filter((r) => r.semBatida);
+  const semPontoMarcados = marcados.filter((r) => r.semBatida);
 
   const barraLote = grade.selecionavel ? (
     <div style={{ ...FILA, gap: 8 }}>
@@ -4273,10 +5387,10 @@ export default function Ocorrencias() {
         title={grade.loteConferir ? AVISO_CONFERIR : undefined}
       >
         {selIds.length
-          ? `${selIds.length} marcada(s)`
+          ? `${selIds.length} marcada(s) na ✔`
           : grade.loteConferir
             ? "marque linhas para conferir no Transnet (só leitura)"
-            : "marque linhas para decidir em lote"}
+            : "marque na ✔ para aplicar UM veredito, ou use ⌁ Marcar sugestão para os dois"}
       </span>
       {grade.loteDecisao ? (
         <>
@@ -4295,6 +5409,34 @@ export default function Ocorrencias() {
             onClick={() => emLote("rejeitar")}
           >
             ✗ Rejeitar marcados (sem aviso)
+          </BotaoAcao>
+          {/* ── MARCAR SUGESTÃO + APLICAR (app.js:2092/2145) ────────────────────
+              Este par é o OUTRO eixo do lote, e é de propósito que ele não usa as
+              caixinhas de seleção: os botões acima aplicam UM veredito ao que está
+              marcado; este marca o veredito de CADA linha e aplica os dois lados de
+              uma vez. A marca não grava nada — ela aparece na coluna Decisão para o
+              DP conferir e tirar o que quiser antes de aplicar. */}
+          <span className="oc-sep" aria-hidden="true" />
+          <BotaoAcao
+            titulo={
+              contMarcas.total
+                ? "Tira a marcação de todos os dias desta lista. Nada tinha sido gravado."
+                : "Marca em cada linha desta lista o veredito sugerido (certo→aceitar, errado→rejeitar). NÃO grava: você ajusta o que quiser e depois aplica. Dia misto, aviso vencido, dia sem simulação confiável e recusa de dia COM aviso continuam fora."
+            }
+            disabled={gravando || !linhas.length}
+            onClick={marcarSugestao}
+          >
+            {contMarcas.total ? `⌁ Desmarcar (${contMarcas.total})` : "⌁ Marcar sugestão"}
+          </BotaoAcao>
+          <BotaoAcao
+            tom="ok"
+            titulo="Grava as marcas: aceite=aceito nas marcadas para aceitar e aceite=rejeitado + dispensada nas marcadas para recusar. NÃO roda o robô."
+            disabled={!contMarcas.total || gravando}
+            onClick={aplicarMarcadas}
+          >
+            {contMarcas.total
+              ? `✓ Aplicar decisões (${contMarcas.ac}✓ ${contMarcas.rj}✗)`
+              : "✓ Aplicar decisões"}
           </BotaoAcao>
         </>
       ) : null}
@@ -4324,7 +5466,7 @@ export default function Ocorrencias() {
     </div>
   ) : null;
 
-  return (
+  const corpo = (
     <AbaShell
       carregando={carregando}
       erro={erro}
@@ -4463,6 +5605,14 @@ export default function Ocorrencias() {
             o caso de “Execução pendente”) — nas linhas marcadas ou no caso aberto; <em>capturar</em>{" "}
             varre a grade e traz as ocorrências novas para a base, sem escopo. Decidir e executar
             continuam sendo dois passos, e nenhum botão de robô decide nada.{" "}
+            <strong>As saídas do dia que não é correção de ponta:</strong> o{" "}
+            <em>cartão do dia</em> abre do caso (é o mesmo pop-up da Revisão e da Gordura — o
+            Real manual cravado ali é o topo da régua); o dia com <em>zero batida</em> não se
+            aceita nem se recusa, ele é lançado como DSR/Compensação/Curso pelo robô{" "}
+            <span className="dp-mono">ocorrencias</span>, o mesmo da Folgas, e o tipo é decisão
+            sua; e quando <em>todos</em> os pedidos eram alteração e não inserção, dá para
+            recusá-los e cravar de uma vez o cartão certo como alvo da correção. Nenhuma delas
+            decide por você e nenhuma afrouxa as travas de lote.{" "}
             <strong>O que ela NÃO faz:</strong> enviar a advertência, corrigir o cartão ou cancelar a
             ocorrência — esses são os robôs <span className="dp-mono">comunicado</span> e{" "}
             <span className="dp-mono">ponto</span>, e um modo que o workflow nem expõe; os botões
@@ -4529,6 +5679,9 @@ export default function Ocorrencias() {
                 setAba(id);
                 setAberto(null);
                 setSelIds([]);
+                // A marca de lote acompanha a ✔: filtro que sobrevive à navegação é como
+                // se aplica uma decisão de outra aba sem ver a linha.
+                setMarcasLote({});
                 zerarEixos();
               }}
               className={`dp-chip-f${ativa ? " on" : ""}`}
@@ -4599,6 +5752,27 @@ export default function Ocorrencias() {
       {/* A ajuda da porta ativa NÃO se repete aqui: ela já está escrita dentro do
           cartão da porta, dois blocos acima, e a repetição só apertava o topo. */}
 
+      {/* ── DIA SEM PONTO — PAINEL, não botão de lote (app.js:2952 `envsemponto`) ──
+          Ele não é parte do fluxo de decisão: estes dias não têm pedido para julgar. Fica
+          ACIMA da grade, em painel próprio, porque tem um seletor de tipo e dois botões —
+          amassado na barra do lote viraria só mais um botão de veredito, que é
+          exatamente o que ele não é.
+          SÓ NAS CAIXAS DE ENTRADA (`loteDecisao`), como no original: nas abas de desfecho
+          o dia já teve um fim, e oferecer ali um lançamento novo é convidar a reabrir o
+          que foi fechado. No caso aberto ele continua existindo — com as travas de
+          `motivoSemLancarDia` dizendo por que não dá, quando não dá. */}
+      {grade.loteDecisao && semPontoNaTela.length ? (
+        <div className="oc-lote-linha">
+          <LancarDiaSemPonto
+            regs={semPontoMarcados}
+            candidatos={semPontoNaTela.length}
+            ocupado={gravando || disparando}
+            aoLancar={aoLancarDiaSemPonto}
+            titulo={`Lançar dia(s) sem ponto — ${semPontoNaTela.length} nesta lista`}
+          />
+        </div>
+      ) : null}
+
       <TabelaDP
         key={`${grade.chave}-${versao}`}
         chave={grade.chave}
@@ -4627,9 +5801,44 @@ export default function Ocorrencias() {
         aoExecutar={aoExecutarRobo}
         aoConferir={aoConferirRobo}
         aoFecharAMao={aoFecharAMao}
+        aoAbrirCartao={abrirCartaoDoDia}
+        abrindoCartao={abrindoCartao}
+        aoComoAlteracao={aoComoAlteracao}
+        aoLancarDia={aoLancarDiaSemPonto}
         resultadoRobo={resultadoRobo}
       />
     </AbaShell>
+  );
+
+  return (
+    <>
+      {corpo}
+      {/* O CARTÃO DO DIA abre POR CIMA de tudo (`rv-overlay` é `position:fixed`), como na
+          Revisão e na Gordura: quem clicou continua com o caso aberto atrás.
+          FICA FORA DO `AbaShell` DE PROPÓSITO: quando a aba recarrega, o AbaShell troca os
+          FILHOS pela linha de "carregando" — o pop-up sumiria no meio da edição e voltaria
+          com o formulário zerado. Aqui ele atravessa a releitura inteiro.
+          É o MESMO componente compartilhado: nenhuma prop nova foi pedida a ele, e nenhuma
+          regra dele foi contornada — o Real manual continua com as travas dele. */}
+      {cartaoDia ? (
+        <CartaoDoDia
+          linha={cartaoDia.linha}
+          caso={cartaoDia.caso}
+          // A Ocorrências não carrega GPS por dia (a Revisão carrega e passa pronto):
+          // aqui o cartão lê ponto_gps/gps_carro deste crachá×dia sozinho.
+          gpsAuto
+          aoFechar={fecharCartaoDoDia}
+          aoRecarregar={recarregarCartaoDoDia}
+          rodapeInfo={
+            <>
+              O <b>Real manual</b> que você cravar aqui vira a <b>régua do veredito</b> e o{" "}
+              <b>alvo da correção</b> — é o topo da cascata, acima do alvo congelado e da
+              sugestão do dia. Ao <b>fechar</b>, a fila de Ocorrências é relida com ele.
+            </>
+          }
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -4673,6 +5882,36 @@ export default function Ocorrencias() {
  *   de pé: isto registra o fim de uma decisão, não decide no lugar dela. Existe
  *   porque um lançamento recusado sem desfecho voltava à fila em toda rodada, para
  *   sempre (CLAUDINEI/NELSON/SILVANO, três runs cada, recusados nos três).
+ * · LANÇAR DIA SEM PONTO (LIGADO). main.py:4389 (lancar_dia_ocorrencia) — robô
+ *   `ocorrencias`, o MESMO da Folgas, com o MESMO CSV `cracha,data,tipo` e os mesmos
+ *   três tipos (05 DSR · 40 Compensação · 29 Curso). NADA mudou no bot nem no workflow.
+ *   Só dia com ZERO batida, e o cartão é RELIDO antes do disparo: quem ganhou batida
+ *   desde a última pintura fica de fora, dito por extenso. O TIPO É DECISÃO DO DP —
+ *   nenhuma fonte diz por que a pessoa não bateu ponto. Ensaio e valendo são dois
+ *   botões; o escopo é a lista marcada (ou o caso aberto), nunca "a fila". Existe
+ *   porque sem ela o dia sem batida entrava no motor de correção, o Transnet recusava e
+ *   ele girava na fila para sempre (14 dias do WILKER 30061203, medidos em 28/08).
+ * · CARTÃO DO DIA (LIGADO). app.js:2158 — abre o `../CartaoDoDia`, o pop-up
+ *   COMPARTILHADO com a Revisão e a Gordura, sem prop nova nenhuma. É por ele que o DP
+ *   crava o REAL MANUAL sem sair da tela — e é o Real manual que manda na régua
+ *   (`refDaPonta`: real > alvo congelado > sugestão > canon). Ao gravar lá, esta aba é
+ *   RELIDA: veredito da grade e horário cravado não podem contar histórias diferentes.
+ * · RECUSAR E CORRIGIR ASSIM (LIGADO). app.js:1211 → :5612 (aplicarComoAlteracao). Só
+ *   quando TODOS os pedidos do dia são "era alteração" e a reprojeção fecha em 2/4.
+ *   Grava recusa (ajuste_ids R:), congela o contrato, crava o cartão em
+ *   `ponto_real_manual` e põe `correcao_status='pendente'` — NUNCA 'dispensada', que
+ *   fecharia a porta da correção junto com a da advertência (RICHARD 30061188 07/08).
+ *   Não dispara robô: a recusa sobe pela execução do rodapé e a correção do cartão
+ *   continua sendo o robô `ponto`, fora desta tela.
+ * · MARCAR SUGESTÃO / APLICAR DECISÕES (LIGADO). app.js:2092 e :2145. Marca é
+ *   PRÉ-DECISÃO: nada é gravado até "Aplicar". Cada linha só recebe marca se passar por
+ *   `motivoForaDoLote` com a ação sugerida, e a trava é revalidada no clique de aplicar
+ *   — dia misto, aviso vencido, dia sem simulação confiável e recusa de dia COM aviso
+ *   continuam de fora, exatamente como antes.
+ * · IMPRIMIR O HISTÓRICO (LIGADO). app.js:2258 (relatorioCaso) — a peça de evidência
+ *   que se anexa. Sai do MESMO caso aberto (não há segunda fonte para o papel
+ *   contradizer a tela) e não grava nada. As regras de `@media print` estão presas à
+ *   classe `oc-imprimindo`, que só esta tela põe no <body> no clique.
  * · ADVERTIR e CORRIGIR (FORA — ver MOTIVO_ADVERTIR). São outros dois robôs
  *   (`comunicado` motivo 103 e `ponto`) e outros dois carimbos
  *   (advertencia_enviada_em / correcao_final_em), gravados por quem LÊ o resultado

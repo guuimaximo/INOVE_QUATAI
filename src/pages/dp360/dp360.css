@@ -1827,3 +1827,188 @@
   border-radius: var(--dp-radius);
 }
 .dp360 .fg-hist .dp-vazio { margin-top: 12px; box-shadow: none; }
+
+/* ═════════ OCORRÊNCIAS — as saídas novas do caso (prefixo `oc-`) ═════════════
+ * ACRÉSCIMO: nada aqui reescreve regra existente. O prefixo `oc-` é de Ocorrências.
+ * PORTE.md §11 — itens 3 (lançar dia sem ponto), 4 ("era alteração") e 7 (imprimir).
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── "O cartão certo, se fossem alterações" (item 4) ──────────────────────────
+   Mesma linguagem do card do montador (`oc-mt`), um degrau abaixo no peso visual: ele
+   fica logo ABAIXO do montador e as duas respondem perguntas diferentes sobre o mesmo
+   dia. A cor é a do accent, não a de alerta: aqui não há nada de errado com a tela —
+   há um caminho a mais, e ele é o certo para este caso. */
+.dp360 .oc-alt {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--dp-accent);
+  border-radius: var(--dp-radius);
+  background: var(--dp-accent-soft);
+  display: grid;
+  gap: 7px;
+}
+.dp360 .oc-alt-t {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--dp-accent);
+}
+
+/* ── "Lançar dia sem ponto" (item 3) ─────────────────────────────────────────
+   Tracejado, como a saída de exceção (`oc-fora`): também é um caminho fora do fluxo de
+   decisão — este dia não tem pedido para julgar, tem uma ocorrência para lançar. */
+.dp360 .oc-lancar {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--dp-border-strong);
+  border-radius: var(--dp-radius);
+  background: var(--dp-surface-2);
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.dp360 .oc-lancar-t { color: var(--dp-ink); }
+/* Painel PRÓPRIO acima da grade, alinhado com ela (a tabela e a barra de ferramentas
+   usam a mesma margem lateral de 20px). Não vai na barra do lote porque não é um
+   veredito: tem seletor de tipo e dois botões, e ali viraria só mais um botão. */
+.dp360 .oc-lote-linha { margin: 8px 20px 0; }
+
+/* ── O histórico do caso, para IMPRIMIR (item 7) ──────────────────────────────
+   NA TELA ELE NÃO EXISTE: o caso aberto já mostra tudo isso, e um segundo bloco com a
+   mesma informação é a receita de dois números diferentes para o mesmo dia. Ele é a
+   peça de PAPEL — a que se anexa.
+
+   TODA A PARTE DE IMPRESSÃO ESTÁ PRESA À CLASSE `oc-imprimindo`, que só esta tela põe no
+   <body> no clique do botão e tira no `afterprint`. Sem ela, nada aqui muda a impressão
+   de nenhuma outra tela do INOVE — e se o `afterprint` não vier, a classe pendurada é
+   inofensiva: ela só tem efeito dentro do `@media print`. */
+.dp360 .oc-rel { display: none; }
+
+@media print {
+  /* 1) O CAMINHO QUE FUNCIONA EM QUALQUER NAVEGADOR: some com tudo pela VISIBILIDADE e
+        traz de volta só o relatório. `display:none` no resto derrubaria também os
+        contêineres que levam até ele — e o relatório iria junto. */
+  body.oc-imprimindo * { visibility: hidden !important; }
+  body.oc-imprimindo .oc-rel,
+  body.oc-imprimindo .oc-rel * { visibility: visible !important; }
+
+  /* O corpo do app é um contêiner de ROLAGEM com altura de tela; sem soltar isso o papel
+     sairia cortado na primeira dobra. Vale para todos os ancestrais, e só enquanto a
+     classe de impressão está no <body>. */
+  body.oc-imprimindo * {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  body.oc-imprimindo,
+  body.oc-imprimindo #root,
+  body.oc-imprimindo .dp360 { height: auto !important; }
+
+  body.oc-imprimindo .dp360 .oc-rel {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: #fff;
+    color: #000;
+    font-size: 10pt;
+    line-height: 1.45;
+  }
+  body.oc-imprimindo .oc-rel-h {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #000;
+  }
+  body.oc-imprimindo .oc-rel-h b { font-size: 15pt; }
+  body.oc-imprimindo .oc-rel-h span { font-size: 10pt; }
+
+  body.oc-imprimindo .oc-rel-kpis {
+    display: flex;
+    gap: 10pt;
+    margin: 10pt 0;
+  }
+  body.oc-imprimindo .oc-rel-k {
+    flex: 1 1 0;
+    border: 1px solid #000;
+    border-radius: 4pt;
+    padding: 6pt 8pt;
+  }
+  body.oc-imprimindo .oc-rel-kr {
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  body.oc-imprimindo .oc-rel-kv { font-size: 14pt; font-weight: 800; }
+  body.oc-imprimindo .oc-rel-ks { font-size: 8pt; }
+  /* A gordura que sobrou é o número que muda decisão: ela sai marcada, não discreta. */
+  body.oc-imprimindo .oc-rel-k.ruim { border-width: 2px; }
+  body.oc-imprimindo .oc-rel-k.ruim .oc-rel-kv { text-decoration: underline; }
+
+  body.oc-imprimindo .oc-rel-b { margin-top: 10pt; page-break-inside: avoid; }
+  body.oc-imprimindo .oc-rel-bt {
+    font-size: 9pt;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid #000;
+    padding-bottom: 2pt;
+    margin-bottom: 5pt;
+  }
+  body.oc-imprimindo .oc-rel-esc { font-size: 9pt; margin-bottom: 4pt; }
+  body.oc-imprimindo .oc-rel-cart { width: 100%; border-collapse: collapse; font-size: 10pt; }
+  body.oc-imprimindo .oc-rel-cart th,
+  body.oc-imprimindo .oc-rel-cart td {
+    border: 1px solid #000;
+    padding: 3pt 5pt;
+    text-align: center;
+  }
+  body.oc-imprimindo .oc-rel-cart th:first-child,
+  body.oc-imprimindo .oc-rel-cart td:first-child { text-align: left; }
+  body.oc-imprimindo .oc-rel-cru { text-align: left !important; }
+  body.oc-imprimindo .oc-rel-sub { font-size: 8.5pt; margin-top: 3pt; }
+
+  body.oc-imprimindo .oc-rel-peds { margin: 0; padding-left: 14pt; font-size: 9.5pt; }
+  body.oc-imprimindo .oc-rel-peds li { margin-bottom: 2pt; }
+
+  body.oc-imprimindo .oc-rel-tl { list-style: none; margin: 0; padding: 0; font-size: 9.5pt; }
+  body.oc-imprimindo .oc-rel-tl li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6pt;
+    align-items: baseline;
+    padding: 1.5pt 0;
+  }
+  /* Etapa que NÃO aconteceu sai apagada, não some: a trilha é o caminho que este caso
+     percorreu, e o buraco no meio dela é informação. */
+  body.oc-imprimindo .oc-rel-tl li:not(.on) { opacity: 0.45; }
+  body.oc-imprimindo .oc-rel-tl li > i { font-style: normal; }
+  body.oc-imprimindo .oc-rel-tl li > em { font-style: italic; flex: 1 1 100%; padding-left: 16pt; }
+  body.oc-imprimindo .oc-rel-prox {
+    margin-top: 6pt;
+    padding: 5pt 7pt;
+    border: 1px solid #000;
+    font-weight: 700;
+    font-size: 10pt;
+  }
+  body.oc-imprimindo .oc-rel-f {
+    margin-top: 12pt;
+    padding-top: 5pt;
+    border-top: 1px solid #000;
+    font-size: 8pt;
+  }
+}
+
+/* 2) O AJUSTE FINO, em bloco SEPARADO de propósito. O truque do `visibility` esconde,
+      mas não TIRA DO FLUXO: o resto da tela continua ocupando altura e o PDF sai com um
+      punhado de páginas em branco depois do papel. Isto tira do fluxo tudo que não é o
+      relatório nem caminho até ele. Se o navegador não entender `:has()`, ele descarta
+      SÓ este bloco e o de cima continua valendo — sai o papel certo, com folhas em
+      branco atrás. Nunca o contrário. */
+@media print {
+  body.oc-imprimindo :not(:has(.oc-rel)):not(.oc-rel):not(.oc-rel *) {
+    display: none !important;
+  }
+}

@@ -9,12 +9,19 @@ import {
   lerTudoDP360,
   upsertDP360,
 } from "../../../services/dp360Api";
-// A reserva LANÇADA pelo gestor mora na base do PRÓPRIO INOVE (tabela
-// `reservas_motoristas` — quem grava é src/pages/pessoas/ControleReservas.jsx:91-99 e
-// 460-489), NÃO na base de importação do DP360. Por isso ela não está (nem deve estar)
-// na allowlist do gateway `dp360-api`: aqui se lê com o cliente Supabase normal do
-// INOVE, exatamente como o app antigo faz em ferramenta/supabase_client.py:695-715.
-import { supabase } from "../../../supabase";
+// O CARTÃO DO DIA É O MESMO DA REVISÃO (pedido do dono, 06/09: "na verdade é o mesmo
+// pop-up de análise do da Revisão"). Com ele a Gordura ganhou o que não tinha: o bloco
+// "3 · Real" e o "4 · Real manual do DP" — a linha barrada por "revisar alvo e
+// refeição" só destrava cravando o Real, e até agora isso obrigava a sair da Gordura e
+// reachar pessoa+dia na Revisão.
+//
+// A leitura da RESERVA lançada no INOVE também vem de lá, uma vez só: a tabela
+// `reservas_motoristas` mora na base do PRÓPRIO INOVE (quem grava é
+// src/pages/pessoas/ControleReservas.jsx:91-99 e 460-489), NÃO na base de importação
+// do DP360. Por isso ela não está (nem deve estar) na allowlist do gateway
+// `dp360-api`: lê-se com o cliente Supabase normal do INOVE, exatamente como o app
+// antigo faz em ferramenta/supabase_client.py:695-715.
+import CartaoDoDia, { aplicarRealManual, lerReservasInove } from "../CartaoDoDia";
 // AS QUATRO CAMADAS DA GORDURA (o `_gord()` do app antigo) e as conversões que elas
 // exigem moram em `regrasGordura.js` — módulo puro, sem React e sem rede. Estavam
 // escritas aqui dentro e por isso o Resumo não conseguia mostrar oportunidade sem
@@ -404,37 +411,14 @@ function mensagemGordura(template, r) {
 
 /* --------------- leitura da camada que mora fora do DP360 ------------------ */
 // As QUATRO CAMADAS (linha 99 · reserva do INOVE · reserva por GPS · alvo) estão em
-// `regrasGordura.js`. O que sobra aqui é a LEITURA da reserva, que vem de outra base
-// e por isso não cabe num módulo puro.
-
-// Reservas LANÇADAS no INOVE para um dia, indexadas por crachá|dia.
-// Porte de `ferramenta/supabase_client.py:695-715` (`ler_reservas_motoristas`), só que
-// filtrado pelo dia — a aba já é por dia e o volume é pequeno (dezenas).
-// DEGRADAÇÃO: se a tabela não existir, a RLS negar ou a rede cair, devolve vazio e a aba
-// segue SEM a camada, igual ao try/except do original (main.py:4851-4856).
-async function lerReservasInove(dia) {
-  try {
-    const { data, error } = await supabase
-      .from("reservas_motoristas")
-      .select("funcionario_cracha,data_referencia,hora_entrada,hora_saida,cobertura,atualizado_em")
-      .eq("data_referencia", dia)
-      .order("atualizado_em", { ascending: true, nullsFirst: true });
-    if (error) throw error;
-    const mapa = new Map();
-    // Ordem crescente + "o último vence" deixa a reserva MAIS RECENTE do dia — mesmo
-    // critério do pop-up do app antigo (`order=atualizado_em.desc&limit=1`,
-    // supabase_client.py:732). O lote do Python ordenava só por data e ficava com uma
-    // qualquer quando havia duas no mesmo dia.
-    (data || []).forEach((r) => {
-      const cra = cracha8(r.funcionario_cracha);
-      if (!cra) return; // sem crachá não há como casar com a gordura
-      mapa.set(chaveDe(cra, r.data_referencia), r);
-    });
-    return mapa;
-  } catch {
-    return new Map();
-  }
-}
+// `regrasGordura.js`. A LEITURA da reserva vem de outra base e por isso não cabe num
+// módulo puro — ela é o `lerReservasInove` do `../CartaoDoDia`, o MESMO que a Revisão
+// e o cartão do dia usam: um Map `crachá|dia -> registro` com a reserva mais recente
+// do dia (ordem crescente de `atualizado_em`, o último vence — critério do pop-up do
+// app antigo, supabase_client.py:732). A chave bate com a `chaveDe` daqui.
+// A camada `camadaReservaInove` só lê `hora_entrada`, `hora_saida` e `cobertura` do
+// registro; as colunas a mais (observação, quem lançou) são para o cartão mostrar e
+// NÃO entram em conta nenhuma.
 
 /* --------------------------------- pedaços --------------------------------- */
 // Overlay/detalhe não têm classe própria no dp360.css (e o arquivo de estilo não é
@@ -623,66 +607,55 @@ function Overlay({ titulo, largura = 860, aoFechar, children }) {
   );
 }
 
-// Detalhe do dia: horários e jornada POR FONTE + o cálculo da gordura por ponta.
-// Ato disciplinar merece o DP enxergar GPS/SST/bilhetagem antes de confirmar,
-// não só o número final.
-function PainelDetalhe({ linha, aoFechar, aoAvisar }) {
-  const r = linha;
-  const opIni = hm2m(r.op_inicio) != null ? hm2m(r.op_inicio) : hm2m(r.sst_vinculo);
-  const valIni = hm2m(r.val_inicio);
-  let dif = opIni != null && valIni != null ? Math.abs(valIni - opIni) : null;
-  if (dif != null && dif > 720) dif = 1440 - dif;
-  const foraDaCurva = dif != null && dif > 20; // régua de concordância entre fontes
+/* ═════════ O DETALHE DO DIA — O MESMO POP-UP DA REVISÃO ═════════
+   Pedido do dono (06/09): "na verdade é o mesmo pop-up de análise do da Revisão…
+   quero deixar organizado os pontos, ficar no mesmo padrão todos". O painel próprio
+   desta aba acabou: fontes, sugestão, Real, Real manual, almoço, GPS, mapa, linha do
+   tempo do caso e as viagens do Citatti são do `../CartaoDoDia`, o MESMO componente.
 
-  const Fonte = ({ rotulo, cor, ini, fim, aviso, destaque }) => {
-    if (hm2m(ini) == null && hm2m(fim) == null) return null;
-    return (
-      <tr className={destaque ? "row-p4" : ""}>
-        <td>
-          <span className="flex items-center gap-2" style={{ fontWeight: 600 }}>
-            <i style={{ ...ESTILO.ponto, background: cor }} />
-            {rotulo}
-            {aviso && <span className="dp-pill danger">{aviso}</span>}
-          </span>
-        </td>
-        <td className="dp-mono dp-num">{H(ini)}</td>
-        <td className="dp-mono dp-num">{H(fim)}</td>
-        <td className="dp-mono dp-num dp-muted">{durHM(ini, fim)}</td>
-      </tr>
-    );
-  };
+   O QUE A GORDURA GANHOU com isso: o bloco "3 · Real" (o que ele bateu) e o
+   "4 · Real manual do DP". A linha barrada por "revisar alvo e refeição" só destrava
+   cravando o Real, e até agora isso obrigava a sair da Gordura e reachar pessoa+dia
+   na Revisão. Mesma gravação, mesmas travas, mesma releitura depois de gravar.
 
-  const Conta = ({ lado, bateu, real, minutos, nivel }) => {
-    const n = num(minutos);
-    const nv = txt(nivel).toUpperCase();
-    const conta = !NIVEIS_MUDOS.has(nv) && n != null;
-    return (
-      <div className="flex flex-wrap items-center justify-between gap-2" style={ESTILO.blocoSuave}>
-        <span style={{ fontWeight: 700 }}>{lado}</span>
-        <span className="dp-muted">
-          bateu <b className="dp-mono dp-num">{H(bateu)}</b> · real{" "}
-          <b className="dp-mono dp-num">{H(real)}</b>
-        </span>
-        <span className="flex items-center gap-2">
-          {conta ? (
-            <b
-              className="dp-num"
-              style={{ color: n > 0 ? "var(--dp-danger-ink)" : "var(--dp-ok-ink)" }}
-            >
-              {n > 0 ? "+" : ""}
-              {Math.round(n)} min
-            </b>
-          ) : (
-            <span className="dp-faint">— ({nv ? nv.toLowerCase().replace(/_/g, " ") : "sem dado"})</span>
-          )}
-          <ChipNivel nivel={nivel} />
-        </span>
-      </div>
-    );
-  };
+   O QUE CONTINUA SENDO SÓ DAQUI vira `blocoLateral`: os NÍVEIS P por ponta, o alvo
+   que a gordura cobra (com a refeição resolvida por `cartoesGordura`) e o efeito da
+   reserva lançada. Nada disso muda de número — a régua continua em `regrasGordura`.
 
-  const temRealManual = [r.rm_entrada, r.rm_alm_saida, r.rm_alm_volta, r.rm_saida].some((v) => fmtHora(v));
+   O QUE SAIU e não faz falta: a tabela "Horários e jornada por fonte" (é o bloco
+   "1 · Fontes" do cartão, com a mesma marca "fora da curva" na bilhetagem, só que
+   pelo `difRelogio` do motor em vez de uma conta de relógio escrita à mão) e o
+   quadro somente-leitura do Real manual (virou o bloco 4, que agora GRAVA).        */
 
+// Uma ponta da conta da gordura: o que ele bateu × o que a operação mostra, os
+// minutos e o nível. Era um componente interno do painel antigo; continua idêntico.
+function Conta({ lado, bateu, real, minutos, nivel }) {
+  const n = num(minutos);
+  const nv = txt(nivel).toUpperCase();
+  const conta = !NIVEIS_MUDOS.has(nv) && n != null;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2" style={ESTILO.blocoSuave}>
+      <span style={{ fontWeight: 700 }}>{lado}</span>
+      <span className="dp-muted">
+        bateu <b className="dp-mono dp-num">{H(bateu)}</b> · real <b className="dp-mono dp-num">{H(real)}</b>
+      </span>
+      <span className="flex items-center gap-2">
+        {conta ? (
+          <b className="dp-num" style={{ color: n > 0 ? "var(--dp-danger-ink)" : "var(--dp-ok-ink)" }}>
+            {n > 0 ? "+" : ""}
+            {Math.round(n)} min
+          </b>
+        ) : (
+          <span className="dp-faint">— ({nv ? nv.toLowerCase().replace(/_/g, " ") : "sem dado"})</span>
+        )}
+        <ChipNivel nivel={nivel} />
+      </span>
+    </div>
+  );
+}
+
+/** Os blocos que só a Gordura tem, na coluna 2 do cartão compartilhado. */
+function BlocosGordura({ r }) {
   // O que a reserva LANÇADA alargou. Só entra a ponta que de fato mudou: o original
   // grava `*_sem_reserva` apenas quando altera (main.py:4869-4871 e 4877-4879), então a
   // ausência do campo já significa "a operação sozinha já cobria o período lançado".
@@ -704,103 +677,8 @@ function PainelDetalhe({ linha, aoFechar, aoAvisar }) {
   ].filter((s) => fmtHora(s.antes));
 
   return (
-    <Overlay
-      titulo={`${txt(r.nm_funcionario) || "Colaborador"} · ${fmtData(r.data_ref)}`}
-      aoFechar={aoFechar}
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="dp-pill mute">Crachá {txt(r.cracha) || "—"}</span>
-        {txt(r.veiculo) && <span className="dp-pill mute">Carro {txt(r.veiculo)}</span>}
-        {r.__linha99 && (
-          <span className="dp-pill accent">
-            <span className="flex items-center gap-1">
-              <Bus size={12} /> Linha 99 · Citatti é a fonte
-            </span>
-          </span>
-        )}
-        {r.__reservaInove && (
-          <span className="dp-pill res">
-            <span className="flex items-center gap-1">
-              <CalendarClock size={12} /> Reserva lançada pelo gestor
-            </span>
-          </span>
-        )}
-        {r.__reserva && !r.__reservaInove && (
-          <span className="dp-pill res">
-            <span className="flex items-center gap-1">
-              <PauseCircle size={12} /> {r.reserva_por_gps ? "Reserva detectada pelo GPS" : "Reserva"}
-            </span>
-          </span>
-        )}
-        {txt(r.__casoStatus) && <span className="dp-pill accent">{r.__casoStatus}</span>}
-      </div>
-
-      <div className="mt-4">
-        <div style={ESTILO.rotulo}>Horários e jornada por fonte</div>
-        {/* O contêiner precisa rolar por conta própria: o `th` da .dp-tabela é sticky, e
-            sem um ancestral de rolagem aqui ele grudaria no topo da JANELA, por cima do
-            cabeçalho do modal. */}
-        <div className="mt-2" style={{ overflow: "auto", maxHeight: 320 }}>
-          <table className="dp-tabela" style={{ minWidth: 440 }}>
-            <thead>
-              <tr>
-                <th>Fonte</th>
-                <th>Entrada</th>
-                <th>Saída</th>
-                <th>Jornada</th>
-              </tr>
-            </thead>
-            <tbody>
-              <Fonte rotulo="Escala" cor={COR.escala} ini={r.esc_inicio} fim={r.esc_fim} />
-              {/* Lançamento do gestor no INOVE — some sozinho quando não há reserva. */}
-              <Fonte
-                rotulo="Reserva (INOVE)"
-                cor={COR.reservaInove}
-                ini={r.reserva_inove_entrada}
-                fim={r.reserva_inove_saida}
-              />
-              <Fonte rotulo="GPS (Citatti)" cor={COR.operacao} ini={r.op_inicio} fim={r.op_fim} />
-              <Fonte rotulo="SS (SST)" cor={COR.operacao} ini={r.sst_vinculo} fim={r.sst_desvinculo} />
-              <Fonte
-                rotulo="Bilhetagem"
-                cor={COR.bilhetagem}
-                ini={r.val_inicio}
-                fim={r.val_fim}
-                aviso={foraDaCurva ? "fora da curva" : ""}
-              />
-              <Fonte rotulo="Operação real" cor={COR.real} ini={r.real_inicio} fim={r.real_fim} destaque />
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="mt-4 grid gap-2">
-        <div className="flex flex-wrap items-center justify-between gap-2" style={ESTILO.blocoAlvo}>
-          <span style={{ ...ESTILO.rotulo, color: "var(--dp-warn-ink)" }}>
-            Alvo (real com tolerância)
-          </span>
-          {r.__cartao.alvoValido ? (
-            <LinhaCartao horas={r.__cartao.alvo} mudou={r.__cartao.mudou} />
-          ) : (
-            <span style={{ fontWeight: 700, color: "var(--dp-danger-ink)" }}>
-              revisar alvo e refeição antes de corrigir
-            </span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2" style={ESTILO.blocoLinha}>
-          <span style={ESTILO.rotulo}>Ponto (bateu)</span>
-          <LinhaCartao horas={r.__cartao.atual} />
-        </div>
-        {txt(r.fonte_alvo_gordura) && (
-          <p className="dp-muted" style={{ fontSize: 12 }}>
-            Fonte do alvo:{" "}
-            <b>{r.fonte_alvo_gordura === "revisao" ? "alvo publicado pela Revisão" : "calculado na Gordura"}</b>
-            {txt(r.fonte_operacao) ? ` · operação: ${txt(r.fonte_operacao)}` : ""}
-          </p>
-        )}
-      </div>
-
-      <div className="mt-4">
+    <>
+      <section>
         <div style={ESTILO.rotulo}>Cálculo da gordura</div>
         <div className="mt-2 grid gap-2">
           <Conta
@@ -823,15 +701,8 @@ function PainelDetalhe({ linha, aoFechar, aoAvisar }) {
         {r.__reservaInove && (
           <div className="mt-2" style={ESTILO.blocoReserva}>
             <div className="flex items-center gap-1.5" style={{ ...ESTILO.rotulo, color: "inherit" }}>
-              <CalendarClock size={13} /> Reserva lançada pelo gestor
+              <CalendarClock size={13} /> O que a reserva mudou na conta
             </div>
-            <p className="mt-1" style={ESTILO.textoLargo}>
-              Lançada das <b className="dp-mono dp-num">{H(r.reserva_inove_entrada)}</b> às{" "}
-              <b className="dp-mono dp-num">{H(r.reserva_inove_saida)}</b>
-              {txt(r.reserva_inove_cobertura) ? ` · cobertura: ${txt(r.reserva_inove_cobertura)}` : ""}. Ele
-              estava <b>à disposição</b> desde a hora lançada, então a operação real é a{" "}
-              <b>união reserva ∪ operação</b> — a espera até assumir a tabela não é gordura.
-            </p>
             {semReserva.length ? (
               <ul className="mt-1.5 grid gap-1" style={{ fontSize: 12, lineHeight: 1.6, fontWeight: 600 }}>
                 {semReserva.map((s) => (
@@ -859,64 +730,101 @@ function PainelDetalhe({ linha, aoFechar, aoAvisar }) {
             {txt(r.justificativa)}
           </p>
         )}
-      </div>
+      </section>
 
-      <div className="mt-4">
-        <div style={ESTILO.rotulo}>Real manual do DP</div>
-        {temRealManual ? (
-          <>
-            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {[
-                ["Entrada", r.rm_entrada],
-                ["Saída almoço", r.rm_alm_saida],
-                ["Volta almoço", r.rm_alm_volta],
-                ["Saída", r.rm_saida],
-              ].map(([rot, val]) => (
-                <div key={rot} style={ESTILO.blocoLinha}>
-                  <div style={ESTILO.rotulo}>{rot}</div>
-                  <div className="dp-mono dp-num mt-0.5" style={{ fontWeight: 700 }}>
-                    {H(val)}
-                  </div>
-                </div>
-              ))}
-            </div>
-            {(txt(r.rm_por) || txt(r.rm_em)) && (
-              <p className="dp-muted mt-1.5" style={{ fontSize: 12 }}>
-                Cravado por <b>{txt(r.rm_por) || "—"}</b>
-                {txt(r.rm_em) ? ` em ${fmtData(r.rm_em)}` : ""}
-              </p>
+      <section>
+        <div style={ESTILO.rotulo}>Alvo da gordura</div>
+        <div className="mt-2 grid gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2" style={ESTILO.blocoAlvo}>
+            <span style={{ ...ESTILO.rotulo, color: "var(--dp-warn-ink)" }}>Alvo (real com tolerância)</span>
+            {r.__cartao.alvoValido ? (
+              <LinhaCartao horas={r.__cartao.alvo} mudou={r.__cartao.mudou} />
+            ) : (
+              <span style={{ fontWeight: 700, color: "var(--dp-danger-ink)" }}>
+                revisar alvo e refeição antes de corrigir
+              </span>
             )}
-          </>
-        ) : (
-          <p className="dp-muted mt-2">
-            Nenhum horário cravado pelo DP neste dia — vale a régua automática acima.
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2" style={ESTILO.blocoLinha}>
+            <span style={ESTILO.rotulo}>Ponto (bateu)</span>
+            <LinhaCartao horas={r.__cartao.atual} />
+          </div>
+        </div>
+        {txt(r.fonte_alvo_gordura) && (
+          <p className="dp-muted mt-2" style={{ fontSize: 12 }}>
+            Fonte do alvo:{" "}
+            <b>{r.fonte_alvo_gordura === "revisao" ? "alvo publicado pela Revisão" : "calculado na Gordura"}</b>
+            {txt(r.fonte_operacao) ? ` · operação: ${txt(r.fonte_operacao)}` : ""}
           </p>
         )}
-      </div>
-
-      {/* O aviso deste DIA, para esta PESSOA — o `avisoDaGordura` do app antigo, que
-          abria a MESMA tela de mensagem já com a linha daquele crachá×dia. Quem monta
-          o CSV, decide os barrados e grava o caso é o `ModalComunicado`, o mesmo do
-          botão do lote; aqui só se escolhe o escopo de uma linha. */}
-      <div
-        className="mt-4 flex flex-wrap items-center justify-end gap-2"
-        style={{ borderTop: "1px solid var(--dp-border)", paddingTop: 12 }}
-      >
-        {aoAvisar && (
-          <button
-            type="button"
-            className="dp-btn"
-            onClick={() => aoAvisar(r)}
-            title="Abre o comunicado deste dia: prévia do texto, quem recebe, quem fica de fora e os dois botões (Ensaio · Enviar de verdade)."
-          >
-            📣 Enviar ocorrência
-          </button>
+        {!r.__cartao.alvoValido && (
+          <p className="dp-muted mt-1" style={{ fontSize: 12, lineHeight: 1.5 }}>
+            Sem alvo válido não dá para cobrar. Crave o horário no bloco{" "}
+            <b>4 · Real manual do DP</b>, ali ao lado — é ele que destrava o dia, e não
+            precisa mais ir até a Revisão para isso.
+          </p>
         )}
-        <button type="button" className="dp-btn" onClick={aoFechar}>
-          Fechar
-        </button>
-      </div>
-    </Overlay>
+      </section>
+    </>
+  );
+}
+
+/**
+ * O detalhe do dia: o cartão compartilhado + os blocos desta aba.
+ *
+ * `gorduraDaTela={r}` é o ponto delicado: o cartão, sozinho, leria a `ponto_gordura`
+ * CRUA, e a Gordura exibe a linha com as QUATRO CAMADAS aplicadas
+ * (`aplicarCamadasGordura`). Sem o repasse, a "Operação real" do pop-up sairia
+ * diferente da que está na grade atrás dele — número que não bate, ninguém usa.
+ */
+function PainelDetalhe({ linha, aoFechar, aoAvisar, aoRecarregar, impedimentoAviso, previaAviso }) {
+  const r = linha;
+  return (
+    <CartaoDoDia
+      linha={r.__linhaPonto}
+      caso={r.__caso}
+      gorduraDaTela={r}
+      // A Gordura não carrega GPS por dia (a Revisão carrega, e passa pronto). Aqui o
+      // cartão lê ponto_gps/gps_carro deste crachá×dia e roda a MESMA régua
+      // (`regrasGps`), com a reserva do INOVE ligando a tolerância de dia sem carro.
+      gpsAuto
+      aoFechar={aoFechar}
+      aoRecarregar={aoRecarregar}
+      // O comunicado da Gordura é por linha da GORDURA (é ela que tem `__cartao` e os
+      // níveis), não pela linha do ponto — por isso o argumento do cartão é ignorado.
+      aoAvisar={() => aoAvisar(r)}
+      impedimentoAviso={impedimentoAviso}
+      previaAviso={previaAviso}
+      selos={
+        <>
+          {r.__linha99 && (
+            <span className="dp-pill accent" title="Linha 99 — Citatti é a fonte das pontas">
+              <span className="flex items-center gap-1">
+                <Bus size={12} /> Linha 99
+              </span>
+            </span>
+          )}
+          {/* A reserva LANÇADA já ganha pílula própria no cartão (ele lê o registro).
+              Aqui só a DEDUZIDA, que é outra coisa e o operador precisa distinguir. */}
+          {r.__reserva && !r.__reservaInove && (
+            <span className="dp-pill res">
+              <span className="flex items-center gap-1">
+                <PauseCircle size={12} /> {r.reserva_por_gps ? "Reserva pelo GPS" : "Reserva"}
+              </span>
+            </span>
+          )}
+          {txt(r.__casoStatus) && <span className="dp-pill accent">{r.__casoStatus}</span>}
+        </>
+      }
+      blocoLateral={<BlocosGordura r={r} />}
+      rodapeInfo={
+        <>
+          O <b>Real manual</b> fica na base do DP e pode ser desfeito — é ele que destrava o alvo
+          desta linha. <b>Enviar ocorrência</b> fala com o trabalhador: abre o comunicado deste dia,
+          com Ensaio e envio de verdade.
+        </>
+      }
+    />
   );
 }
 
@@ -1500,10 +1408,30 @@ export default function Gordura() {
 
       const cartao = cartoesGordura(g, pd, rm, caso);
       const nivies = [txt(g.nivel_entrada).toUpperCase(), txt(g.nivel_saida).toUpperCase()];
+
+      // A LINHA DO PONTO que o cartão do dia compartilhado consome (fontes, sugestão,
+      // Real, Real manual, almoço). O `pd` continua CRU para as camadas da gordura e
+      // para `cartoesGordura` — que leem `alvo_*_ref`, `entrada_sug` e o `rm` separados
+      // —; o overlay do Real manual é aplicado numa CÓPIA, exatamente como a Revisão
+      // faz na grade dela. Nenhum número da gordura passa por aqui.
+      // Sem linha na `ponto_diario` (dia que não chegou) o cartão ainda precisa saber
+      // de quem e de que dia é: crachá, data e nome caem para os da gordura.
+      const linhaPonto = aplicarRealManual(
+        {
+          ...pd,
+          cracha: txt(pd.cracha) || txt(g.cracha),
+          date_ref: dia10(pd.date_ref) || dia10(g.data_ref),
+          nm_funcionario: txt(pd.nm_funcionario) || txt(g.nm_funcionario),
+          categoria: txt(pd.categoria) || "MOTORISTA",
+        },
+        rmMapa.has(chave) ? rm : null,
+      );
+
       return {
         ...g,
         __chave: chave,
         __cartao: cartao,
+        __linhaPonto: linhaPonto,
         __linha99: !!g.prioridade_citatti_linha99 || com99.has(chave),
         // Duas coisas diferentes: o gestor LANÇOU a reserva no INOVE (documento, manda
         // em tudo) x a reserva foi DEDUZIDA do dado (GPS) ou o nível saiu RESERVA.
@@ -1540,7 +1468,12 @@ export default function Gordura() {
     // lista é relida para as marcas do caso (avisado, status) refletirem o que saiu.
     carregarDia(data)
       .then((prontas) => {
-        if (ativo) setLinhas(prontas);
+        if (!ativo) return;
+        setLinhas(prontas);
+        // O pop-up aberto recebe a linha NOVA (mesma `__chave`): sem isto ele
+        // continuaria mostrando o Real e o alvo antigos enquanto a grade atrás dele
+        // já mostra os novos. É o mesmo cuidado que a Revisão tem com o `setAberta`.
+        setDetalhe((d) => (d ? prontas.find((p) => p.__chave === d.__chave) || d : d));
       })
       .catch((falha) => {
         if (!ativo) return;
@@ -1554,6 +1487,20 @@ export default function Gordura() {
       ativo = false;
     };
   }, [data, carregarDia, refresco]);
+
+  /* ---- releitura depois de gravar o Real manual no cartão ----
+     A tela nunca pinta o estado otimista: o dia inteiro é RELIDO e passa outra vez
+     pelas quatro camadas (`aplicarCamadasGordura`) e por `cartoesGordura`. É de
+     propósito que seja o dia todo: cravar o Real muda o alvo — é exatamente para isso
+     que o DP crava —, e uma releitura só da linha deixaria a grade, os chips de nível
+     e a soma P1 discordando do pop-up. A regra não muda em lugar nenhum: é a MESMA
+     função de carga da abertura da aba. */
+  const recarregarDia = useCallback(async () => {
+    if (!data) return;
+    const prontas = await carregarDia(data);
+    setLinhas(prontas);
+    setDetalhe((d) => (d ? prontas.find((p) => p.__chave === d.__chave) || d : d));
+  }, [carregarDia, data]);
 
   // Trocar de dia zera a marcação: os ✔ do dia anterior não podem virar lote de hoje.
   useEffect(() => {
@@ -1714,6 +1661,37 @@ export default function Gordura() {
     () => visiveis.filter((r) => marcados.includes(r.__chave)),
     [visiveis, marcados],
   );
+
+  /* ---- POR QUE o 📣 do cartão está apagado ----
+     As MESMAS duas barreiras do envio (`prepararComunicado`), ditas antes do clique:
+     sem ponta acima da régua fixa o texto viraria um pedido que não pede nada; sem
+     alvo cronológico não há horário a cobrar. Nada é recalculado aqui — `pontaConta`
+     e `contratoDaGordura` são as funções do próprio envio. */
+  const impedimentoAviso = useMemo(() => {
+    if (!detalhe) return "";
+    const temPonta =
+      pontaConta(detalhe.nivel_entrada, detalhe.gordura_entrada, "entrada") ||
+      pontaConta(detalhe.nivel_saida, detalhe.gordura_saida, "saida");
+    if (!temPonta)
+      return "Nenhuma ponta acima da régua fixa (entrada 10 min · saída 8 min) — não há gordura a cobrar neste dia.";
+    return contratoDaGordura(detalhe).erro;
+  }, [detalhe]);
+
+  /* ---- a MENSAGEM que o balão da linha do tempo mostra ----
+     Mesmo modelo e MESMA função do envio de verdade (`mensagemGordura`), para a prévia
+     não poder divergir do que o colaborador recebe. A chave do modelo é a da GORDURA
+     (`comunicado_modelo`), que não é da família `template_*` da Revisão — por isso ela
+     e o `modeloDoBanco` viajam junto com a prévia. */
+  const previaAviso = useMemo(() => {
+    if (!detalhe) return null;
+    return {
+      chave: CHAVE_MODELO,
+      configChave: CHAVE_MODELO,
+      resolver: modeloDoBanco,
+      rotulo: "cobrar a gordura",
+      montar: (tpl) => mensagemGordura(tpl, detalhe),
+    };
+  }, [detalhe]);
 
   const semDatas = !carregando && !datas.length;
   // Antes de o primeiro dia chegar, a barra ficaria com um <select> vazio — não desenha.

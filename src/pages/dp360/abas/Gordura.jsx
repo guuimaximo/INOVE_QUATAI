@@ -212,6 +212,26 @@ function refeicaoLancadaNoCartao(bruto, entrada) {
   return null;
 }
 
+/**
+ * A CASCATA DE UMA PONTA — o `fontes()` de dentro do `_contrato_alvo`
+ * (main.py:5947). Horas candidatas EM ORDEM DE CONFIANÇA, sem repetir.
+ *
+ * Existe porque uma ponta sozinha pode estar errada sem que o resto do cartão
+ * esteja: um caso antigo pode ter UMA ponta congelada que já não fecha com a
+ * refeição de hoje. Não dá para descartar o cartão inteiro por isso (era o que
+ * acontecia: o dia sumia da fila) nem aceitar a ponta só porque estava gravada.
+ * A lista preserva cada valor já escolhido e, quando ELE é o que torna o cartão
+ * impossível, a próxima fonte DAQUELA ponta assume — a outra ponta não é punida.
+ */
+function fontesDaPonta(...valores) {
+  const out = [];
+  for (const valor of valores) {
+    const hora = fmtHora(valor);
+    if (hora && hora !== "--" && hm2m(hora) != null && !out.includes(hora)) out.push(hora);
+  }
+  return out;
+}
+
 // Cartões da Gordura: a régua só altera as PONTAS, mas o alvo é sempre o cartão
 // inteiro (entrada · saída almoço · volta almoço · saída).
 function cartoesGordura(g, pd, rm, caso) {
@@ -242,21 +262,84 @@ function cartoesGordura(g, pd, rm, caso) {
     const y = fmtHora(b);
     return x && y ? [x, y] : null;
   };
-  // A ponta de referência vem da Revisão (`alvo_*_ref` do ponto_diario); o alvo já
-  // resolvido em `camadaAlvo` entra logo depois. O cartão não substitui essa régua.
-  const ent = fmtHora(pd.alvo_entrada_ref || g.alvo_entrada || rm.entrada || pd.entrada_sug) || base[0];
-  const sai = fmtHora(pd.alvo_saida_ref || g.alvo_saida || rm.saida || pd.saida_sug) || base[3];
-  const candidatos = [
-    par(caso.alvo_alm_saida, caso.alvo_alm_volta), // almoço congelado no aviso
-    par(rm.alm_saida, rm.alm_volta), // real manual do DP
-    refeicaoLancadaNoCartao(bruto, ent),
-    par(pd.almoco_saida_sug, pd.almoco_volta_sug),
-    [base[1], base[2]],
-  ].filter(Boolean);
+  // A CASCATA POR PONTA (main.py:5960). A ordem é deliberada e vale para o dia novo
+  // e para o legado: **real manual > alvo congelado no caso > régua > sugestão >
+  // cartão**. Antes existia UMA combinação (`alvo_*_ref || g.alvo_* || rm.* || sug`)
+  // e três coisas quebravam com isso:
+  //   · o Real manual cravado pelo DP não vencia a carta — o DP crava justamente
+  //     para destravar o dia, e o aviso cobrava outro horário;
+  //   · num REAVISO a carta podia pedir hora diferente do `alvo_*` que o caso
+  //     congelou — e é o do caso que a correção lança depois (`marcarReavisos`
+  //     preserva o congelado, então os dois tinham de nascer iguais);
+  //   · a ponta que não fechava derrubava a LINHA INTEIRA (o dia sumia da fila).
+  //
+  // O QUE NÃO MUDOU: dentro da fatia da RÉGUA, `alvo_*_ref` continua na frente do
+  // `g.alvo_*` — "o alvo é da Revisão; régua é uma só" (PORTE.md §5). Real manual e
+  // alvo congelado não são régua: são fato cravado à mão e prova já cobrada, e no
+  // original (`_contrato_alvo`) eles vêm antes da régua também.
+  const entFontes = fontesDaPonta(
+    rm.entrada,
+    caso.alvo_entrada,
+    pd.alvo_entrada_ref,
+    g.alvo_entrada,
+    pd.entrada_sug,
+    base[0],
+  );
+  const saiFontes = fontesDaPonta(
+    rm.saida,
+    caso.alvo_saida,
+    pd.alvo_saida_ref,
+    g.alvo_saida,
+    pd.saida_sug,
+    base[3],
+  );
+
+  // O MIOLO já tinha candidatos e continua com os MESMOS, na mesma ordem. Só depende
+  // da entrada escolhida (`refeicaoLancadaNoCartao` ancora nela), por isso é
+  // memorizado por ponta de entrada em vez de recalculado nas 36 combinações.
+  const meioPorEntrada = new Map();
+  const candidatosDoMeio = (ent) => {
+    if (!meioPorEntrada.has(ent)) {
+      meioPorEntrada.set(
+        ent,
+        [
+          par(caso.alvo_alm_saida, caso.alvo_alm_volta), // almoço congelado no aviso
+          par(rm.alm_saida, rm.alm_volta), // real manual do DP
+          refeicaoLancadaNoCartao(bruto, ent),
+          par(pd.almoco_saida_sug, pd.almoco_volta_sug),
+          [base[1], base[2]],
+        ].filter(Boolean),
+      );
+    }
+    return meioPorEntrada.get(ent);
+  };
   // Não mistura uma refeição anterior com a entrada-alvo: usa o primeiro par que
   // forma um cartão cronológico inteiro.
-  const meio = candidatos.find((p) => cartaoValido([ent, p[0], p[1], sai])) || candidatos[0] || ["", ""];
-  const alvo = [ent, meio[0] || "", meio[1] || "", sai];
+  const cartaoDe = (ent, sai) => {
+    const candidatos = candidatosDoMeio(ent);
+    const meio =
+      candidatos.find((p) => cartaoValido([ent, p[0], p[1], sai])) || candidatos[0] || ["", ""];
+    return [ent, meio[0] || "", meio[1] || "", sai];
+  };
+
+  // ITERA O PRODUTO entrada × saída até fechar um cartão cronológico, na ordem de
+  // confiança das duas listas: preserva cada fonte válida e substitui SOMENTE a
+  // ponta que torna o cartão impossível (main.py:5975).
+  let alvo = null;
+  for (const ent of entFontes) {
+    for (const sai of saiFontes) {
+      const tentativa = cartaoDe(ent, sai);
+      if (cartaoValido(tentativa)) {
+        alvo = tentativa;
+        break;
+      }
+    }
+    if (alvo) break;
+  }
+  // Nenhuma combinação fecha: o dia continua na fila, com o alvo mais confiável de
+  // cada ponta e `alvoValido: false` — a grade escreve "revisar alvo e refeição" e
+  // `contratoDaGordura` barra o aviso com a MESMA frase. Não se cobra o que não fecha.
+  if (!alvo) alvo = cartaoDe(entFontes[0] || base[0] || "", saiFontes[0] || base[3] || "");
 
   return {
     atual: base,
@@ -316,6 +399,11 @@ function modeloDoBanco(valor) {
  * `cartoesGordura` — o mesmo que a coluna "Alvo (c/ tolerância)" mostra e que o
  * DP conferiu antes de marcar a linha. Cobrar na carta um horário diferente do
  * que está na tela seria pior do que não avisar.
+ *
+ * A CASCATA POR PONTA (real manual > alvo congelado > régua > sugestão > cartão) e
+ * a iteração entrada × saída moram lá em cima, dentro de `cartoesGordura`, porque
+ * o alvo da carta e o alvo da tela têm de ser o MESMO objeto — se a cascata
+ * vivesse aqui, a coluna e o comunicado voltariam a poder divergir.
  *
  * `cartaoValido` já é a checagem de cartão cronológico do contrato (quatro slots
  * em ordem, virada de meia-noite desenrolada, ≤ 24 h); quando ela falha a tela já
@@ -1171,6 +1259,106 @@ function ModalComunicado({ linhas, casoDe, comPontoAntes, aoFechar, aoConcluir }
   );
 }
 
+/* ═══════════════ O STATUS ATUAL DO CICLO (a coluna que faltava) ═══════════════
+   Porte de app.js:4322 (`casoCell`, chave `c_status`), a terceira coluna do
+   `COLS_P4` da ferramenta (app.js:5409). Ela sumiu no porte e o efeito é prático:
+   o DP monta o lote de comunicados às cegas — sem ver quem JÁ foi avisado (e
+   REAVISO REINICIA as 48 h, `marcarReavisos`) nem quem já venceu. Hoje a lista de
+   "já tinham sido avisados" só aparece DEPOIS do disparo, quando não adianta mais.
+
+   NADA AQUI DECIDE NADA: só lê a `ponto_caso` que a linha já carrega em `__caso`.
+   Nenhum número da gordura passa por esta função.                              */
+
+// PORTE.md §4 / main.py `PRAZO_HORAS` — o mesmo 48 da aba Ocorrências.
+const PRAZO_AVISO_H = 48;
+
+/**
+ * Horas decorridas desde um carimbo do banco.
+ *
+ * `aviso_enviado_em` é INSTANTE (esta aba grava `new Date().toISOString()`), então
+ * o fuso do texto é RESPEITADO: jogar o fuso fora e ler como hora local erra 3 h no
+ * BRT — e 3 h decidem quem está "no prazo" na fronteira das 48. Carimbo sem fuso
+ * nenhum é lido como UTC, que é como esta tela e o robô gravam.
+ *
+ * O `+00` do Postgres (duas casas, sem `:00`) vira `+00:00` antes do parse: no
+ * formato ISO com `T` ele é `NaN`, e um carimbo ilegível viraria "sem status".
+ */
+function horasDesde(carimbo) {
+  let s = txt(carimbo);
+  if (!s) return null;
+  s = s.replace(/([+-]\d{2})$/, "$1:00");
+  if (!/(Z|[+-]\d{2}:\d{2})$/.test(s)) s = `${s.replace(" ", "T")}Z`;
+  const t = Date.parse(s);
+  return Number.isNaN(t) ? null : Math.max(0, Date.now() - t) / 3600000;
+}
+
+function horasTexto(h) {
+  if (h == null) return "";
+  if (h < 24) return `${Math.round(h)}h`;
+  return `${Math.floor(h / 24)}d ${Math.round(h % 24)}h`;
+}
+
+/**
+ * O estado do ciclo deste dia, na ORDEM DE TESTES DO ORIGINAL — que não é
+ * intercambiável. Em especial "enviado" vem ANTES da conta das 48 h: enquanto
+ * ninguém conferiu o aviso (`aviso_conferido_em`) o caso está no correio, e chamar
+ * isso de vencido mandaria o DP advertir quem talvez nem tenha sido lido ainda.
+ * Vale o CÓDIGO da ferramenta, não a leitura intuitiva da ordem.
+ *
+ * @returns null quando não há caso (a célula fica "—") ou `{rotulo, cor, titulo}`.
+ */
+function statusDoCiclo(caso) {
+  if (!caso) return null;
+  const correcao = txt(caso.correcao_status).toLowerCase();
+  const enviadoEm = txt(caso.aviso_enviado_em);
+  const horas = horasDesde(enviadoEm);
+  const desde = horas == null ? "" : ` · avisado há ${horasTexto(horas)}`;
+
+  if (
+    correcao === "corrigido" ||
+    (txt(caso.correcao_final_em) && correcao === "ok") ||
+    txt(caso.ajuste) === "certo"
+  )
+    return { rotulo: "corrigido", cor: "ok", titulo: "O cartão deste dia já está certo." };
+  if (correcao === "pendente" || ["aceito", "rejeitado"].includes(txt(caso.aceite)))
+    return {
+      rotulo: "aguardando correção",
+      cor: "warn",
+      titulo: `O pedido já foi decidido; falta a correção entrar no cartão${desde}.`,
+    };
+  if (enviadoEm && !txt(caso.aviso_conferido_em))
+    return {
+      rotulo: "enviado",
+      cor: "warn",
+      titulo: `Comunicado no Transnet, ainda sem conferência${desde}. Reavisar REINICIA as ${PRAZO_AVISO_H} h.`,
+    };
+  if (horas != null && horas > PRAZO_AVISO_H)
+    return {
+      rotulo: "vencido",
+      cor: "danger",
+      titulo: `Passou das ${PRAZO_AVISO_H} h do aviso sem correção${desde} — é o caso que vira advertência.`,
+    };
+  if (enviadoEm)
+    return {
+      rotulo: "no prazo",
+      cor: "warn",
+      titulo: `Dentro das ${PRAZO_AVISO_H} h do aviso${desde}. Reavisar REINICIA o prazo.`,
+    };
+  return null;
+}
+
+function CelulaStatusCiclo({ caso }) {
+  const s = statusDoCiclo(caso);
+  if (!s) return <span className="dp-faint">—</span>;
+  // A COR É O VEREDITO — as mesmas famílias do `.vbadge` da ferramenta
+  // (certo→ok, pend→warn, errado→danger), pela pílula do tema DP.
+  return (
+    <span className={`dp-pill ${s.cor}`} title={s.titulo}>
+      {s.rotulo}
+    </span>
+  );
+}
+
 /* ---------------------------- colunas da grade ------------------------------ */
 // MESMAS colunas, MESMA ordem e MESMO conteúdo de célula da tabela que estava escrita
 // à mão nesta aba. A divisão de trabalho é a da TabelaDP:
@@ -1233,6 +1421,17 @@ const COLUNAS_P4 = [
     largura: 110,
     valor: (r) => txt(r.cracha),
     render: (r) => txt(r.cracha) || "—",
+  },
+  {
+    // TERCEIRA COLUNA, como no `COLS_P4` da ferramenta (app.js:5409) — antes da
+    // data, porque é ela que o DP lê ao escolher quem entra no lote de hoje.
+    // `valor` é o rótulo (ordena e vai para o CSV, como o `colSituacao` das
+    // Ocorrências); `render` é a pílula com a cor do veredito.
+    id: "c_status",
+    titulo: "Status atual",
+    largura: 160,
+    valor: (r) => statusDoCiclo(r.__caso)?.rotulo || "",
+    render: (r) => <CelulaStatusCiclo caso={r.__caso} />,
   },
   {
     id: "data_ref",

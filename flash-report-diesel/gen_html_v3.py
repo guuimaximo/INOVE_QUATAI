@@ -1,6 +1,7 @@
 # Monta o HTML (paginas, A4 paisagem) do Flash Report Diesel v3 e converte pra PDF.
 from pathlib import Path
 from collections import Counter as _Counter
+import os
 import re as _re
 import importlib.util
 
@@ -350,7 +351,12 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 # deveria ter tido nas condicoes dela - e em litros/100km vale real = ideal + excesso.
 # Entao da para dizer, em portugues, se a operacao ficou mais pesada ou se andaram pior,
 # e quanto isso custou EM LITROS. O mix x desempenho vira uma linha de rodape.
-_ac = gfd.ANALISE_CLUSTER
+# [COWORK] As duas paginas de diagnostico do cluster (C11) foram DESLIGADAS a pedido do
+# usuario em 07/09/2026. A analise continua sendo calculada em gen_flash_diesel_v3.py
+# (gfd.ANALISE_CLUSTER) - so nao vira pagina. Para religar: FLASH_CLUSTER_DIAG_PAGINAS=1.
+# Como a pagina de velocidade sai de _ac["vel"], desligar aqui remove as duas.
+_DIAG_CLUSTER_ON = os.environ.get("FLASH_CLUSTER_DIAG_PAGINAS", "").strip().lower() in ("1", "true", "sim")
+_ac = gfd.ANALISE_CLUSTER if _DIAG_CLUSTER_ON else None
 if _ac:
     _CL = _ac["cluster"]
     _c = _ac.get("causa")

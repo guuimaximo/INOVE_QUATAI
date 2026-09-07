@@ -55,24 +55,19 @@ import {
   lerTudoDP360,
   upsertDP360,
 } from "../../../services/dp360Api";
-// O PORTÃO DA SUGESTÃO NÃO É REESCRITO AQUI. `sugBloqueio` (porte de main.py
-// `_sug_bloqueio`) e `ehPontoInvertido` são os MESMOS que a Revisão e a Gordura
-// usam — um lugar só decide se a sugestão do dia pode ir para o Transnet. O
-// `aplicarRealManual` é o overlay do Real cravado pelo DP, e é ele que faz o dia
-// já decidido na Revisão aparecer aqui com o horário que o DP mandou.
-// `ehVerdadeiro` do cartão aceita mais grafias que o desta tela ("t", "1", "sim"),
-// e é o que a Revisão usa nos campos da sugestão — vem com apelido para não
-// esconder o `ehVerdadeiro` local, que continua servindo a grade.
+// O `aplicarRealManual` é o overlay do Real cravado pelo DP, e é ele que faz o
+// dia já decidido na Revisão aparecer aqui com o horário que o DP mandou.
+import { aplicarRealManual, fmtHora } from "../CartaoDoDia";
+// AS TRAVAS DO LANÇAMENTO NÃO SÃO DESTA TELA — nem da Revisão. Elas moram em
+// `../regrasAjustePonto`, o mesmo módulo que o lote da Revisão usa: uma régua só
+// para o mesmo robô (`sugBloqueio`, ponto invertido, cartão já mexido, as duas
+// pontas, o miolo inteiro, a virada de meia-noite) e um CSV só.
 import {
-  aplicarRealManual,
-  ehPontoInvertido,
-  ehVerdadeiro as ehVerdadeiroAmplo,
-  fmtHora,
-  sugBloqueio,
-} from "../CartaoDoDia";
-// Aritmética de relógio é do MOTOR, nunca escrita à mão: `hm2min` aceita "1420"
-// (o que a tela do Cartão de Ponto devolve) e `min2hm` preserva a notação 24+.
-import { hm2min, min2hm } from "../regrasPonto";
+  almocoTravado,
+  csvDoAjustePonto,
+  ddmmaaaa,
+  montarAjusteDoDia,
+} from "../regrasAjustePonto";
 
 /* ───────────────────────── constantes do domínio ───────────────────────── */
 
@@ -345,13 +340,6 @@ function motivoCelula(codigo) {
 
 const nomeDoMotivo = (codigo) => `${codigo}-${MOTIVO_LBL[codigo] || codigo}`;
 
-// main.py `_ddmm` — o bot preenche a tela do Transnet, que é dd/mm/aaaa.
-// (o `ddmm` desta tela é só o rótulo curto dd/mm, não serve para o CSV)
-const ddmmaaaa = (iso) => {
-  const v = texto(iso);
-  return v.length >= 10 ? `${v.slice(8, 10)}/${v.slice(5, 7)}/${v.slice(0, 4)}` : v;
-};
-
 // O CSV que o bot lê (csv.DictReader com fieldnames cracha,data,tipo). Sem aspas
 // e sem ponto-e-vírgula: nenhum dos três campos tem vírgula — crachá é dígito,
 // data é dd/mm/aaaa e tipo é código de dois dígitos.
@@ -383,24 +371,16 @@ function dispararLote(fila, confirmar) {
    reencontrar data + categoria + pessoa para lançar UM dia — e o dono já tinha
    apontado essa mesma volta no item 1 da §11.
 
-   O ROBÔ, O ARQUIVO E O FORMATO SÃO OS MESMOS DA REVISÃO. `dispararRoboDP360
-   ("ponto", …)` = workflow `ponto.yml` = `bot_ponto.py --lote`, que lê as SEIS
-   colunas do `csv.DictReader` (`cracha,data,entrada,alm_saida,alm_volta,saida`),
-   crachá de 8 dígitos, data dd/mm/aaaa e hora em 24+ depois de desenrolada a
-   virada. NADA muda no repo do bot: é disparo que já existe, com o input que ele
-   já aceita.
+   O ROBÔ, O ARQUIVO, O FORMATO E AS TRAVAS SÃO OS MESMOS DA REVISÃO — e agora
+   são LITERALMENTE os mesmos: `montarAjusteDoDia` e o CSV vêm de
+   `../regrasAjustePonto`, que a Revisão também usa. Era a dívida registrada
+   aqui ("mexer numa trava exige mexer nas duas"), e ela foi paga.
 
-   E O ROBÔ GRAVA O CARTÃO INTEIRO: os quatro campos, ou nada
-   (`bot_ponto.lancar_registro` recusa ponta em branco com SEM_REAL e zera o
-   resto). É daí que vem o peso das travas de `montarAjusteDoDia` — cada disparo
-   daqui REESCREVE o cartão de ponto de um dia de alguém.
-
-   AS TRAVAS SÃO AS DA REVISÃO, NA MESMA ORDEM. A lógica é a mesma do
-   `montarLoteAjuste` de `abas/Revisao.jsx`; ela NÃO foi extraída para um módulo
-   comum porque `Revisao.jsx` não é desta tarefa (fica registrado: é o candidato
-   óbvio a `regrasAjustePonto.js`, e enquanto não for, mexer numa trava exige
-   mexer nas duas). O que dá para compartilhar JÁ é compartilhado: `sugBloqueio`,
-   `ehPontoInvertido`, `aplicarRealManual`, `hm2min`/`min2hm`.                  */
+   A ÚNICA COISA QUE MUDA entre as duas telas está dentro do módulo, na origem
+   `"digitado"`: aqui o DP DIGITA as duas pontas, então há um passo a mais
+   ("isto é hora?") e o `sugBloqueio` é lido sobre o que foi digitado — é sobre o
+   horário que vai ser GRAVADO que o teto de 13 h vale. NADA muda no repo do bot:
+   é disparo que já existe, com o input que ele já aceita.                     */
 
 // Colunas da `ponto_diario` que a sugestão precisa. NÃO entram no COLUNAS_GRADE:
 // a grade carrega a semana inteira da categoria (~1.700 linhas) e estas colunas
@@ -414,168 +394,10 @@ const COLUNAS_AJUSTE = [
   "requer_alvo_manual", "fonte_alvo", "alvo_confiavel", "almoco_confiavel", "almoco_travado",
 ].join(",");
 
-const CAMPOS_CSV_AJUSTE = ["cracha", "data", "entrada", "alm_saida", "alm_volta", "saida"];
-
-// Sem aspas: crachá é dígito, data é dd/mm/aaaa e hora é HH:MM (ou 25:40).
-// Mesmo montador do lote da Revisão e da Refeição — um formato só para o mesmo robô.
-const csvDoAjuste = (fila) =>
-  [
-    CAMPOS_CSV_AJUSTE.join(","),
-    ...fila.map((l) => CAMPOS_CSV_AJUSTE.map((c) => l[c]).join(",")),
-  ].join("\n");
-
 // O dia tem sugestão de alguma ponta? (`temSug` do app.js:6188.)
 const temSugestao = (cartao) =>
   [cartao?.entrada_sug, cartao?.almoco_saida_sug, cartao?.almoco_volta_sug, cartao?.saida_sug]
     .some((v) => !!fmtHora(v));
-
-// O ALMOÇO TRAVADO da Revisão manda (main.py:906-910). `almoco_travado` significa
-// que a matriz de meio de jornada já cravou o miolo; por isso as duas células do
-// miolo não são editáveis — nem na célula SUG da Revisão, nem aqui — e o que vai
-// para o robô é o miolo da VIEW, nunca um horário digitado.
-const almocoTravado = (cartao) => ehVerdadeiroAmplo(cartao?.almoco_travado);
-
-// Aceita o que a tela do Cartão de Ponto devolve ("1420") e devolve HH:MM, ou
-// `null` quando o texto não é hora. Vazio é vazio (o miolo pode não existir).
-function horaDigitada(valor) {
-  const bruto = texto(valor);
-  if (!bruto) return "";
-  const min = hm2min(bruto);
-  if (min === null || min < 0) return null;
-  return min2hm(min);
-}
-
-/**
- * Monta (ou barra) o lançamento de UM dia. Espelha `montarLoteAjuste` de
- * `abas/Revisao.jsx` na mesma ordem de barramento, com uma diferença: lá os
- * horários vêm da view (mais o Real manual gravado), aqui vêm também do que o DP
- * acabou de digitar nas duas PONTAS.
- *
- * Devolve `{ csv, cartaoHoje, alvo }` quando pode lançar, ou `{ fora }` com o
- * motivo — nunca `null` calado: quem não vai para o robô aparece na tela dizendo
- * por quê, que é a regra do lote da Revisão.
- *
- * `cartao` já vem com o overlay do Real manual (`aplicarRealManual`); `caso` é a
- * linha de `ponto_caso` do dia. Não faz I/O.
- */
-function montarAjusteDoDia(cartao, edicao, caso) {
-  const dia = texto(cartao?.date_ref).slice(0, 10);
-  const travado = almocoTravado(cartao);
-  const cartaoHoje = [cartao?.entrada, cartao?.saida_almoco, cartao?.volta_almoco, cartao?.saida]
-    .map((h) => fmtHora(h));
-  const fora = (motivo) => ({ fora: motivo, cartaoHoje, dia });
-
-  // 1) PONTO_INVERTIDO É DIAGNÓSTICO, NÃO LANÇAMENTO (`_fila_correcoes`, 1º skip).
-  //    Cartão rotacionado é defeito de posição das batidas — quem decide o que
-  //    fazer é o DP, linha a linha, na Revisão.
-  if (ehPontoInvertido(cartao)) {
-    return fora("ponto invertido — a view não propõe lançamento, exige decisão manual do DP");
-  }
-
-  // 2) O QUE FOI DIGITADO É HORA? Este passo não existe no lote da Revisão porque
-  //    lá os horários já vêm normalizados da view; aqui o DP acabou de digitar.
-  const entrada = horaDigitada(edicao.entrada);
-  const saida = horaDigitada(edicao.saida);
-  // MIOLO TRAVADO: o valor é o da view, o que o DP digitou não é lido.
-  const almIni = travado ? fmtHora(cartao.almoco_saida_sug) : horaDigitada(edicao.alm_saida);
-  const almFim = travado ? fmtHora(cartao.almoco_volta_sug) : horaDigitada(edicao.alm_volta);
-  const ilegivel = [
-    entrada === null && "entrada",
-    almIni === null && "saída do almoço",
-    almFim === null && "volta do almoço",
-    saida === null && "saída",
-  ].filter(Boolean);
-  if (ilegivel.length) {
-    return fora(`horário ilegível em ${ilegivel.join(", ")} — use HH:MM (ou 1420)`);
-  }
-
-  /* 3) O ÚLTIMO PORTÃO ANTES DO TRANSNET (`_sug_bloqueio`), lido sobre a linha
-        COM o que o DP digitou — é sobre o horário que vai ser gravado que o teto
-        de jornada e a jornada negativa valem.
-        O contrato da view (alvo confiável / almoço confiável) NÃO é promovido
-        aqui: digitar nesta tela não é cravar o Real manual. Dia cujo alvo exige
-        decisão do DP continua barrado, e a tela manda ele à Revisão — lá a
-        decisão fica gravada em `ponto_real_manual` com nome e horário, e volta
-        para cá pelo `aplicarRealManual`. */
-  const bloqueio = sugBloqueio({
-    ...cartao,
-    entrada_sug: entrada,
-    saida_sug: saida,
-    almoco_saida_sug: almIni,
-    almoco_volta_sug: almFim,
-  });
-  if (bloqueio) return fora(bloqueio);
-
-  // 4) CARTÃO JÁ MEXIDO NO TRANSNET DEPOIS DO NOSSO RETRATO (lição da Refeição,
-  //    main.py:2856). As pontas que mandamos são as do nosso retrato; se o cartão
-  //    foi corrigido lá no meio-tempo, lançar por cima DEVOLVE as pontas velhas e
-  //    desfaz a correção, sem ninguém ver.
-  const mexido = texto(caso?.conferido_em) || texto(caso?.correcao_final_em);
-  if (mexido) {
-    return fora(
-      "o cartão deste dia já foi mexido no Transnet depois do último import — " +
-        "lançar por cima devolveria as pontas antigas e desfaria a correção",
-    );
-  }
-
-  // 5) AS DUAS PONTAS (`_fila_correcoes`, teste final). O robô grava o cartão
-  //    inteiro e recusa ponta em branco com SEM_REAL.
-  if (!entrada || !saida) {
-    const falta = [!entrada && "ENTRADA", !saida && "SAÍDA"].filter(Boolean).join(" e ");
-    return fora(`sem ${falta} — o robô grava o cartão inteiro e recusa ponta em branco (SEM_REAL)`);
-  }
-
-  // 6) O MIOLO VAI INTEIRO OU NÃO VAI. Meia janela grava 00:00 na outra ponta e
-  //    inventa um intervalo que ninguém fez. Vazio nas duas é dia SEM almoço — o
-  //    bot escreve 00:00 nos intervalos, que é como o Transnet representa "não teve".
-  if (Boolean(almIni) !== Boolean(almFim)) {
-    return fora(
-      `só uma ponta do almoço foi preenchida (${almIni || "—"} → ${almFim || "—"}) — ` +
-        "o robô gravaria 00:00 na outra e criaria um intervalo que não existiu",
-    );
-  }
-
-  // 7) A VIRADA DE MEIA-NOITE, DESENROLADA (main.py `_desenrola_cartao`). "23:50"
-  //    de entrada com "06:10" de saída viraria jornada negativa; o bot reduz mod 24
-  //    na hora de digitar (`bot_ponto._mod24`), então quem manda a notação é a fila.
-  const mEntrada = hm2min(entrada);
-  let mSaida = hm2min(saida);
-  let mAlmIni = almIni ? hm2min(almIni) : null;
-  let mAlmFim = almFim ? hm2min(almFim) : null;
-  if (mEntrada == null || mSaida == null || (almIni && (mAlmIni == null || mAlmFim == null))) {
-    return fora("horário ilegível — não dá para montar as quatro batidas");
-  }
-  while (mSaida < mEntrada) mSaida += 1440;
-  if (mAlmIni != null && mAlmFim != null) {
-    while (mAlmIni < mEntrada) mAlmIni += 1440;
-    while (mAlmFim < mAlmIni) mAlmFim += 1440;
-    // O MIOLO TEM DE CABER DENTRO DO CARTÃO: cravar uma saída às 14:00 num dia
-    // cuja volta do almoço é 15:00 faria o robô escrever volta DEPOIS da saída.
-    if (mAlmFim > mSaida) {
-      return fora(
-        `o almoço ${almIni}–${almFim} não cabe entre a entrada ${entrada} e a saída ${saida}`,
-      );
-    }
-  }
-
-  const alvo = [min2hm(mEntrada), mAlmIni == null ? "" : min2hm(mAlmIni),
-    mAlmFim == null ? "" : min2hm(mAlmFim), min2hm(mSaida)];
-  return {
-    dia,
-    cartaoHoje,
-    alvo,
-    // De onde a view tirou o alvo — vira a coluna `fonte` do histórico por pessoa.
-    fonte: texto(cartao.fonte_alvo) || texto(cartao.sugestao_fonte),
-    csv: {
-      cracha: cra8(cartao.cracha),
-      data: ddmmaaaa(dia), // da LINHA, nunca de `new Date()`
-      entrada: alvo[0],
-      alm_saida: alvo[1],
-      alm_volta: alvo[2],
-      saida: alvo[3],
-    },
-  };
-}
 
 // Folgas ainda NÃO lançadas, com o tipo automático (folgasP, app.js ~3582):
 // duas seguidas → 1ª Compensação (40) e 2ª DSR (05); isolada → DSR (05); curso → 29.
@@ -1412,7 +1234,7 @@ function PainelDetalhe({
   const lancarAjuste = useCallback(
     async (ajuste, confirmar) => {
       const resposta = await dispararRoboDP360("ponto", {
-        csv: csvDoAjuste([ajuste.csv]),
+        csv: csvDoAjustePonto([ajuste.csv]),
         data: ajuste.csv.data,
         confirmar: confirmar ? "true" : "false",
       });

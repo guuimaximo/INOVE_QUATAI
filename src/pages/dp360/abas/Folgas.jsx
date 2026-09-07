@@ -2,14 +2,23 @@
 // sete colunas (Seg→Dom) com o estado de cada dia.
 //
 // PORTE FIEL de `Sistemas/PONTO/app/ui/app.js` (`viewP3`, `calHtml`, `cellFor`,
-// `folgasP`, `isDiaCurso`, `isSemOperacao`, `LEGENDA`) + do pivô de
+// `folgasP`, `isDiaCurso`, `isSemOperacao`, `LEGENDA`, `abrePickerMotivo`,
+// `filaTotal`/`lancarMassa`, `abreDetalhe`) + do pivô de
 // `ferramenta/processar_ponto.py`. A REGRA NÃO É DAQUI: `status_ponto`,
 // `classificacao`, `dsr_auto` e `acao_passo3` já vêm calculados pelas views do
 // Athena e caem prontos na `ponto_diario` (ver docs/dp360/PORTE.md §1). Esta tela
 // só desenha o que a view decidiu — mudar régua é no SQL, não aqui.
 //
-// FASE ATUAL: SOMENTE LEITURA. Não grava nada.
-// LANÇAR OCORRÊNCIA (DSR / Compensação / Curso) — ligado.
+// O QUE ESTA TELA GRAVA (o resto é leitura):
+//   · `app_config.folga_motivos` — o motivo que o DP define à mão num dia
+//     S/PONTO (ou troca numa folga automática). É a MESMA chave da ferramenta
+//     desktop (main.py `set_folga_motivo`/`limpar_folga_motivos`), então o que
+//     for marcado aqui aparece lá e vice-versa. Por isso toda gravação RELÊ a
+//     chave inteira imediatamente antes de escrever: gravar o mapa que a tela
+//     leu na abertura apagaria, calado, o que a outra ponta marcou.
+//   · `ponto_reservas` — marcar/desmarcar o dia do motorista como RESERVA
+//     (main.py `set_reserva`). Sem isso quem estava de reserva fica com a célula
+//     vermelha `S/OPER.` para sempre, com a mesma cor da falta.
 //
 // O navegador não dirige o Transnet: isso é o Selenium `bot_ocorrencia.py`, que
 // roda no GitHub Actions do repo DP360, onde a credencial do Transnet vive como
@@ -17,19 +26,25 @@
 //
 // O CSV é o mesmo que a ferramenta escreve (main.py `lancar_ocorrencias`, ~4451):
 // colunas `cracha,data,tipo`, crachá com 8 dígitos (zeros à esquerda, senão o bot
-// quebra), data dd/mm/aaaa, tipo 05=DSR · 40=Compensação · 29=Curso. O tipo não é
-// escolha da tela: vem do `folgasALancar`, a mesma regra do original (duas
-// seguidas → 1ª Compensação e 2ª DSR; isolada → DSR; dia de curso → 29).
+// quebra), data dd/mm/aaaa, tipo = código do Transnet. O tipo automático vem do
+// `folgasALancar` (duas seguidas → 1ª Compensação e 2ª DSR; isolada → DSR; dia de
+// curso → 29) e o motivo definido à mão VENCE o automático no mesmo dia.
 //
-// O QUE ESTA TELA NÃO FAZ: ler o resultado de volta. O workflow guarda a
+// O QUE ESTA TELA NÃO FAZ: ler o resultado do robô de volta. O workflow guarda a
 // evidência como artefato e não escreve no Supabase — quem preenche
 // `ponto_ocorrencias` hoje é o pós-processo da ferramenta desktop
 // (`_ingest_ocorr`). Então, depois de disparar daqui, a coluna 🤖 só muda quando
 // alguém ingerir o resultado. Está dito na tela, para ninguém achar que sumiu.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Palette, RefreshCw, Search, X } from "lucide-react";
 import AbaShell from "./AbaShell";
-import { dispararRoboDP360, lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
+import {
+  apagarDP360,
+  dispararRoboDP360,
+  lerDP360,
+  lerTudoDP360,
+  upsertDP360,
+} from "../../../services/dp360Api";
 
 /* ───────────────────────── constantes do domínio ───────────────────────── */
 
@@ -59,15 +74,16 @@ const ESTADOS_CELULA = new Set([
   "atest", "ferias", "afast", "feriado", "just", "sem", "vazio",
 ]);
 
-// Espelho de LEGENDA (app.js ~3656), sem os itens que dependem de escrita.
+// Espelho de LEGENDA (app.js ~3656). O item "definido por você" é desenhado à
+// parte, no fim da lista, como no `legendaModal` do original.
 const LEGENDA = [
   ["ok", "✓", "OK", "Bateu ponto e o dia fechou certo"],
   ["rev", "!", "Revisar", "Ponto com pendência (tratado na aba Revisão)"],
   ["folga", "DSR", "Folga a lançar", "DSR quando isolada; COMP na 1ª de duas folgas seguidas"],
   ["curso", "Curso", "Curso", "Dia de curso do aprendiz (código 29)"],
   ["falta", "Falta", "Falta · S/OPER.", "Faltou, ou motorista bateu ponto sem operar (sem Citatti/bilhetagem)"],
-  ["res", "RES.", "Reserva", "Motorista de reserva (standby) — marcado em ponto_reservas"],
-  ["verif", "S/PONTO", "S/PONTO", "Sem ponto e sem nada lançado — o DP precisa definir o motivo"],
+  ["res", "RES.", "Reserva", "Motorista de reserva (standby) — marque no detalhe do dia"],
+  ["verif", "S/PONTO", "S/PONTO", "Sem ponto e sem nada lançado — clique na célula e diga o motivo"],
   ["atest", "Atest", "Atestado", "Atestado já lançado no Transnet"],
   ["ferias", "Férias", "Férias", "Férias já lançadas no Transnet"],
   ["afast", "Afast", "Afastado", "Afastamento (INSS, licença, suspensão…)"],
@@ -78,6 +94,24 @@ const LEGENDA = [
 
 // Códigos de ocorrência do Transnet usados pelo Passo 3 (app.js MOTIVO_OPTS ~9).
 const ROTULO_TIPO = { "05": "DSR", 40: "Compensação", 29: "Aprendizagem (curso)" };
+
+/* ───────────── motivo do dia (o picker do S/PONTO) — app.js:9-15 ───────────
+   Os 14 códigos que o DP pode escolher. O código é o que o bot DIGITA na tela
+   do Transnet: não é rótulo bonito, é o campo do sistema. Mexer nesta lista é
+   mexer no que o robô vai lançar. */
+const MOTIVO_OPTS = [
+  ["05", "DSR"], ["40", "Compensação"], ["12", "Folga compensada"], ["02", "Folga extra"],
+  ["01", "Falta"], ["04", "Atestado médico"], ["29", "Aprendizagem (aprendiz)"],
+  ["03", "Licença matrimonial"], ["08", "Licença paternidade"], ["16", "Suspensão"],
+  ["13", "Abono"], ["10", "Luto"], ["17", "Doação de sangue"], ["26", "Exame periódico"],
+];
+// MOTIVO_MANUAL (app.js:15): o Atestado (04) fica na lista para o DP REGISTRAR o
+// que foi o dia, mas NÃO entra na fila do robô — esse é lançado à mão. Se
+// entrasse, o robô tentaria e o dia voltaria como erro.
+const MOTIVO_MANUAL = new Set(["04"]);
+const MOTIVO_LBL = Object.fromEntries(MOTIVO_OPTS);
+// A MESMA chave do `app_config` que a ferramenta desktop usa (main.py:7008).
+const CHAVE_MOTIVOS = "folga_motivos";
 
 const RE_CURSO = /CURSO|APRENDIZ|TREINAMENT/i;
 const RE_FOLGA_LANCADA = /DSR|DESCANSO SEMANAL|COMPENS|FOLGA|CURSO|APRENDIZAGEM|TREINAMENT/i;
@@ -107,6 +141,15 @@ const texto = (valor) => String(valor ?? "").trim();
 function cra8(valor) {
   const c = texto(valor);
   return /^\d{1,7}$/.test(c) ? c.padStart(8, "0") : c;
+}
+
+// Todas as grafias do mesmo crachá. A ferramenta desktop grava em
+// `ponto_reservas` o crachá CRU (7 ou 8 dígitos, como veio do lake) e esta tela
+// grava com 8; sem varrer as duas formas, desmarcar uma reserva deixaria para
+// trás a linha escrita pelo desktop e a marcação "voltaria" na próxima leitura.
+function variantesCracha(valor) {
+  const c = texto(valor);
+  return [...new Set([c, cra8(c), c.replace(/^0+/, "")].filter(Boolean))];
 }
 
 const chaveDia = (cracha, dataRef) => `${cra8(cracha)}|${texto(dataRef).slice(0, 10)}`;
@@ -147,6 +190,23 @@ const ddmm = (iso) => {
   const v = texto(iso);
   return v.length >= 10 ? `${v.slice(8, 10)}/${v.slice(5, 7)}` : v;
 };
+
+// Carimbo de INSTANTE (não é data local calculada): "06/09 14:32", o mesmo
+// formato de `datetime.now().strftime("%d/%m %H:%M")` do desktop, para as duas
+// ferramentas escreverem `ponto_reservas.marcado_em` igual. Fuso fixado em
+// São Paulo — o relógio do navegador pode estar em qualquer lugar.
+function carimboLocal() {
+  const partes = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const p = Object.fromEntries(partes.map((x) => [x.type, x.value]));
+  return `${p.day}/${p.month} ${p.hour}:${p.minute}`;
+}
 
 // Código curto do evento lançado no Transnet: "07-FERIAS", "04-ATESTADO", DSR → "05-DSR".
 function teCurto(descricao) {
@@ -236,6 +296,27 @@ function celulaDoDia(linha, cracha, ctx) {
     : { cls: "sem", txt: "—", full: "Sem escala / sem informação para o dia" };
 }
 
+// motivoCell (app.js ~20): cor + rótulo curto do motivo que o DP escolheu. A
+// classe vem da PALAVRA da descrição, não do número — é o que faz "Suspensão"
+// pintar de afastado e "Folga extra" pintar de folga.
+function motivoCelula(codigo) {
+  const rotulo = texto(MOTIVO_LBL[codigo] || codigo);
+  const alto = rotulo.toUpperCase();
+  const curto = rotulo.split(" ")[0].slice(0, 7);
+  if (/DSR/.test(alto)) return { cls: "folga", txt: "DSR" };
+  if (/COMPENSA/.test(alto)) return { cls: "folga", txt: "COMP" };
+  if (/FOLGA|TIRA/.test(alto)) return { cls: "folga", txt: "Folga" };
+  if (/FALTA/.test(alto)) return { cls: "falta", txt: "Falta" };
+  if (/CURSO|APRENDIZ/.test(alto)) return { cls: "curso", txt: "Curso" };
+  if (/ATESTADO/.test(alto)) return { cls: "atest", txt: "Atest" };
+  if (/FERIAS/.test(alto)) return { cls: "ferias", txt: "Férias" };
+  if (/FERIADO/.test(alto)) return { cls: "feriado", txt: "Feriado" };
+  if (/LICEN|INSS|SUSPENS|SENTENCA|CARCERE|MILITAR/.test(alto)) return { cls: "afast", txt: curto };
+  return { cls: "just", txt: curto };
+}
+
+const nomeDoMotivo = (codigo) => `${codigo}-${MOTIVO_LBL[codigo] || codigo}`;
+
 // main.py `_ddmm` — o bot preenche a tela do Transnet, que é dd/mm/aaaa.
 // (o `ddmm` desta tela é só o rótulo curto dd/mm, não serve para o CSV)
 const ddmmaaaa = (iso) => {
@@ -248,6 +329,21 @@ const ddmmaaaa = (iso) => {
 // data é dd/mm/aaaa e tipo é código de dois dígitos.
 function csvDoLote(linhas) {
   return ["cracha,data,tipo", ...linhas.map((l) => `${l.cracha},${l.data},${l.tipo}`)].join("\n");
+}
+
+// ÚNICO caminho de disparo desta aba (pessoa a pessoa e lote usam este). O CSV é
+// montado num lugar só: dois montadores divergem em silêncio e o robô lança
+// errado sem ninguém perceber.
+function dispararLote(fila, confirmar) {
+  const lote = fila.map((item) => ({
+    cracha: cra8(item.cracha),
+    data: ddmmaaaa(item.data),
+    tipo: item.tipo,
+  }));
+  return dispararRoboDP360("ocorrencias", {
+    csv: csvDoLote(lote),
+    confirmar: confirmar ? "true" : "false",
+  });
 }
 
 // Folgas ainda NÃO lançadas, com o tipo automático (folgasP, app.js ~3582):
@@ -267,8 +363,113 @@ function folgasALancar(pessoa, diasCurso) {
   return dias.map((item, i) => {
     const seguidaDepois = i < dias.length - 1 && dias[i + 1].d === item.d + 1;
     const tipo = item.curso ? "29" : seguidaDepois ? "40" : "05";
-    return { dia: item.d, data: item.data, tipo };
+    return { cracha: pessoa.cracha, dia: item.d, data: item.data, tipo };
   });
+}
+
+// filaTotal (app.js:3743): folgas automáticas de QUEM ESTÁ MARCADO + TODOS os
+// motivos que o DP definiu à mão, deduplicados por dia — e o motivo definido
+// VENCE o tipo automático, para o mesmo dia nunca sair duas vezes no CSV.
+// O atestado (04) sai da fila do robô e volta em `manuais`, para a tela dizer
+// quantos dias ainda precisam de lançamento à mão.
+function montarFila(pessoas, motivos, diasCurso) {
+  const porDia = new Map();
+  pessoas.forEach((pessoa) => {
+    folgasALancar(pessoa, diasCurso).forEach((f) => {
+      porDia.set(chaveDia(pessoa.cracha, f.data), {
+        chave: chaveDia(pessoa.cracha, f.data),
+        cracha: pessoa.cracha,
+        data: f.data,
+        tipo: f.tipo,
+        definido: false,
+      });
+    });
+  });
+  motivos.forEach((tipo, chave) => {
+    const [cracha, data] = chave.split("|");
+    porDia.set(chave, { chave, cracha, data, tipo, definido: true });
+  });
+  const todos = [...porDia.values()];
+  return {
+    fila: todos.filter((x) => !MOTIVO_MANUAL.has(x.tipo)),
+    manuais: todos.filter((x) => MOTIVO_MANUAL.has(x.tipo)),
+  };
+}
+
+/* ────────────────── gravação: motivos (app_config) e reservas ───────────── */
+
+// `app_config.valor` é jsonb, mas guarda uma STRING JSON: o desktop faz
+// `json.dumps` para gravar e `json.loads` para ler (main.py:7016). Gravar um
+// objeto de verdade aqui faria o `json.loads` de lá estourar, o `except`
+// devolveria {} e a ferramenta pararia de enxergar motivo nenhum.
+function motivosDeConfig(valor) {
+  const mapa = new Map();
+  let bruto = valor;
+  if (typeof bruto === "string") {
+    const cru = bruto.trim();
+    if (!cru) return mapa;
+    try {
+      bruto = JSON.parse(cru);
+    } catch {
+      return mapa; // config corrompida não pode derrubar a tela
+    }
+  }
+  if (!bruto || typeof bruto !== "object" || Array.isArray(bruto)) return mapa;
+  Object.entries(bruto).forEach(([chave, tipo]) => {
+    const k = texto(chave);
+    const v = texto(tipo);
+    if (k.includes("|") && v) mapa.set(k, v);
+  });
+  return mapa;
+}
+
+async function lerMotivos() {
+  const linhas = await lerDP360("app_config", {
+    colunas: "chave,valor",
+    filtros: { chave: `eq.${CHAVE_MOTIVOS}` },
+    limite: 1,
+  });
+  return motivosDeConfig(linhas?.[0]?.valor);
+}
+
+// RELÊ antes de gravar e RELÊ depois. Antes: a chave é compartilhada com a
+// ferramenta desktop e com outra aba aberta — escrever o mapa lido na abertura
+// apagaria em silêncio o que o outro marcou (o upsert responde 200 do mesmo
+// jeito). Depois: o que a tela mostra passa a ser o que está no banco, não o
+// que ela achou que gravou.
+async function gravarMotivos(mudar) {
+  const atual = await lerMotivos();
+  mudar(atual);
+  await upsertDP360("app_config", {
+    chave: CHAVE_MOTIVOS,
+    valor: JSON.stringify(Object.fromEntries(atual)),
+  });
+  return lerMotivos();
+}
+
+// set_reserva (main.py:4443 → supabase_client.set_reserva): ligado = upsert
+// {cracha, date_ref, marcado_em}; desligado = DELETE da linha. Volta o que o
+// banco respondeu na releitura, não o que a tela pediu.
+async function gravarReserva(cracha, dia, ligado) {
+  const filtroDia = {
+    cracha: `in.(${variantesCracha(cracha).join(",")})`,
+    date_ref: `eq.${dia}`,
+  };
+  if (ligado) {
+    await upsertDP360("ponto_reservas", {
+      cracha: cra8(cracha),
+      date_ref: dia,
+      marcado_em: carimboLocal(),
+    });
+  } else {
+    await apagarDP360("ponto_reservas", filtroDia);
+  }
+  const conferido = await lerDP360("ponto_reservas", {
+    colunas: "cracha,date_ref",
+    filtros: filtroDia,
+    limite: 5,
+  });
+  return (conferido || []).length > 0;
 }
 
 /* ──────────────────────────── carga dos dados ──────────────────────────── */
@@ -336,12 +537,29 @@ function apurarDiasCurso(linhas) {
 
 /* ─────────────────────────── peças de interface ────────────────────────── */
 
-function Celula({ estado }) {
+function Celula({ estado, aoClicar, definido, gravando }) {
   const cls = ESTADOS_CELULA.has(estado.cls) ? estado.cls : "sem";
+  const classes = ["dp-cell", cls];
+  if (definido) classes.push("fg-set");
+  if (gravando) classes.push("fg-gravando");
+  if (!aoClicar) {
+    return (
+      <div className={classes.join(" ")} title={estado.full || undefined}>
+        <span>{estado.txt}</span>
+      </div>
+    );
+  }
+  classes.push("fg-mv");
   return (
-    <div className={`dp-cell ${cls}`} title={estado.full || undefined}>
-      <span>{estado.txt}</span>
-    </div>
+    <button
+      type="button"
+      className={classes.join(" ")}
+      title={estado.full || "Clique para definir o motivo do dia"}
+      disabled={gravando}
+      onClick={aoClicar}
+    >
+      <span>{gravando ? "…" : estado.txt}</span>
+    </button>
   );
 }
 
@@ -358,6 +576,78 @@ function MarcaBot({ situacao }) {
     <span className="dp-botmark o" title="Ocorrência lançada pelo bot com sucesso">
       🤖 ✓
     </span>
+  );
+}
+
+// abrePickerMotivo (app.js:3682): a lista inteira dos códigos do Transnet, com
+// busca e "Limpar". Fica em `position: fixed` porque a grade rola dentro de um
+// contêiner com overflow — um pop-up dentro da célula seria cortado.
+function PickerMotivo({ ancora, atual, aoEscolher, aoFechar }) {
+  const caixa = useRef(null);
+  const [busca, setBusca] = useState("");
+  const [posicao, setPosicao] = useState({ left: ancora.left, top: ancora.bottom + 4 });
+
+  useLayoutEffect(() => {
+    const el = caixa.current;
+    if (!el) return;
+    const largura = el.offsetWidth;
+    const altura = el.offsetHeight;
+    const left = Math.max(8, Math.min(ancora.left, window.innerWidth - largura - 8));
+    const abaixo = ancora.bottom + 4;
+    const top = abaixo + altura > window.innerHeight ? Math.max(8, ancora.top - altura - 4) : abaixo;
+    setPosicao({ left, top });
+  }, [ancora]);
+
+  useEffect(() => {
+    const foraDaCaixa = (evento) => {
+      if (caixa.current && !caixa.current.contains(evento.target)) aoFechar();
+    };
+    const tecla = (evento) => {
+      if (evento.key === "Escape") aoFechar();
+    };
+    document.addEventListener("mousedown", foraDaCaixa);
+    document.addEventListener("keydown", tecla);
+    return () => {
+      document.removeEventListener("mousedown", foraDaCaixa);
+      document.removeEventListener("keydown", tecla);
+    };
+  }, [aoFechar]);
+
+  const q = busca.trim().toLowerCase();
+  const opcoes = MOTIVO_OPTS.filter(
+    ([codigo, rotulo]) => !q || `${codigo} ${rotulo}`.toLowerCase().includes(q),
+  );
+
+  return (
+    <div className="fg-pop" ref={caixa} style={{ left: posicao.left, top: posicao.top }}>
+      <div className="fg-pop-h">O que foi esse dia?</div>
+      <input
+        className="fg-pop-busca"
+        value={busca}
+        autoComplete="off"
+        autoFocus
+        placeholder="buscar motivo…"
+        onChange={(evento) => setBusca(evento.target.value)}
+      />
+      <div className="fg-pop-scroll">
+        {opcoes.length === 0 && <div className="fg-pop-vazio">nenhum motivo com esse texto</div>}
+        {opcoes.map(([codigo, rotulo]) => (
+          <button
+            key={codigo}
+            type="button"
+            className={`fg-opt${codigo === atual ? " on" : ""}`}
+            onClick={() => aoEscolher(codigo)}
+          >
+            <span className="fg-cd">{codigo}</span>
+            {rotulo}
+            {MOTIVO_MANUAL.has(codigo) && <span className="fg-man">manual</span>}
+          </button>
+        ))}
+      </div>
+      <button type="button" className="fg-opt limpar" onClick={() => aoEscolher("")}>
+        ✕ Limpar
+      </button>
+    </div>
   );
 }
 
@@ -388,42 +678,82 @@ function ModalLegenda({ aoFechar }) {
               </div>
             </div>
           ))}
+          <div className="dp-lg-row">
+            <span className="dp-cell lg-sw verif fg-set">
+              <span>Falta</span>
+            </span>
+            <div className="dp-lg-txt">
+              <b>Definido por você</b>
+              <span>
+                Motivo que você marcou na célula — o contorno tracejado diz que foi manual, e o dia
+                está esperando o robô lançar.
+              </span>
+            </div>
+          </div>
         </div>
         <p className="dp-lg-foot">
           O lançamento das ocorrências no Transnet é feito pelo robô (fora do navegador). Esta tela
-          mostra o que está pendente e o que o robô já lançou.
+          mostra o que está pendente e o que o robô já lançou. Exceção: <b>Atestado (04)</b> fica
+          registrado aqui mas é lançado <b>à mão</b> no Transnet — o robô não lança atestado.
         </p>
       </div>
     </div>
   );
 }
 
-function PainelDetalhe({ pessoa, semana, ctx, aoFechar }) {
+function PainelDetalhe({
+  pessoa,
+  semana,
+  ctx,
+  aoFechar,
+  aoAbrirPicker,
+  motivoGravando,
+  aoMarcarReserva,
+  reservaGravando,
+  aoDisparar,
+}) {
   const folgas = folgasALancar(pessoa, ctx.diasCurso);
   const tipoPorData = new Map(folgas.map((f) => [f.data, f.tipo]));
   const situacaoRuim = pessoa.situacao && !/^OK/i.test(pessoa.situacao);
   const [disparando, setDisparando] = useState(false);
   const [recado, setRecado] = useState(null);
 
+  // Motivos que o DP definiu para ESTA pessoa (qualquer dia, inclusive de outra
+  // semana) — a fila do original também é por pessoa, não por tela (app.js:6253).
+  const prefixo = `${cra8(pessoa.cracha)}|`;
+  const motivosDaPessoa = useMemo(() => {
+    const so = new Map();
+    ctx.motivos.forEach((tipo, chave) => {
+      if (chave.startsWith(prefixo)) so.set(chave, tipo);
+    });
+    return so;
+  }, [ctx.motivos, prefixo]);
+
+  const { fila, manuais } = useMemo(
+    () => montarFila([pessoa], motivosDaPessoa, ctx.diasCurso),
+    [pessoa, motivosDaPessoa, ctx.diasCurso],
+  );
+
   // ENSAIO x VALENDO são dois botões, não um checkbox. Checkbox marcado por
   // engano lança de verdade na ficha de alguém; dois botões obrigam a escolher,
   // e a confirmação de cada um diz qual dos dois é.
   const lancar = async (confirmar) => {
-    const lote = folgas.map((f) => ({
-      cracha: cra8(pessoa.cracha),
-      data: ddmmaaaa(f.data),
-      tipo: f.tipo,
-    }));
-    if (!lote.length) return;
-    const resumo = lote
-      .map((l) => `· ${l.data} — ${l.tipo}-${ROTULO_TIPO[l.tipo] || l.tipo}`)
+    if (!fila.length) return;
+    const resumo = fila
+      .map((l) => `· ${ddmm(l.data)} — ${nomeDoMotivo(l.tipo)}${l.definido ? " (você definiu)" : ""}`)
       .join("\n");
-    const texto1 = confirmar
+    const cabecalho = confirmar
       ? `LANÇAR DE VERDADE no Transnet, na ficha de ${pessoa.nome || pessoa.cracha}:`
       : `ENSAIO (o robô navega e NÃO confirma) para ${pessoa.nome || pessoa.cracha}:`;
     if (
       !window.confirm(
-        `${texto1}\n\n${resumo}\n\n` +
+        `${cabecalho}\n\n1 pessoa · ${fila.length} dia(s)\n\n${resumo}\n\n` +
+          (manuais.length
+            ? `${manuais.length} dia(s) marcados como Atestado (04) NÃO entram: esses são lançados à mão.\n\n`
+            : "") +
+          (confirmar
+            ? "Ao disparar valendo, os motivos que você definiu saem da fila.\n\n"
+            : "") +
           `Quem executa é o robô, no GitHub Actions. O disparo fica registrado ` +
           `com o seu nome.\n\n` +
           `O resultado por dia NÃO volta sozinho para esta tela: a evidência ` +
@@ -435,13 +765,10 @@ function PainelDetalhe({ pessoa, semana, ctx, aoFechar }) {
     setDisparando(true);
     setRecado(null);
     try {
-      const r = await dispararRoboDP360("ocorrencias", {
-        csv: csvDoLote(lote),
-        confirmar: confirmar ? "true" : "false",
-      });
+      const r = await aoDisparar(fila, confirmar);
       setRecado({
         tipo: "ok",
-        texto: `${confirmar ? "Lançamento" : "Ensaio"} disparado — ${lote.length} dia(s).`,
+        texto: `${confirmar ? "Lançamento" : "Ensaio"} disparado — ${fila.length} dia(s).`,
         painel: r?.painel || "",
       });
     } catch (falha) {
@@ -481,38 +808,47 @@ function PainelDetalhe({ pessoa, semana, ctx, aoFechar }) {
         </button>
       </div>
 
-      {folgas.length > 0 && (
+      {(fila.length > 0 || manuais.length > 0) && (
         <div className="dp-det-bot">
           <div className="dp-det-bot-linha">
-            <b>
-              {folgas.length} folga(s) a lançar
-            </b>
-            <span className="dp-faint">
-              {" "}
-              · {folgas.map((f) => `${ddmm(f.data)} ${f.tipo}`).join(" · ")}
-            </span>
+            <b>{fila.length} dia(s) na fila do robô</b>
+            {fila.length > 0 && (
+              <span className="dp-faint">
+                {" "}
+                · {fila.map((f) => `${ddmm(f.data)} ${f.tipo}`).join(" · ")}
+              </span>
+            )}
           </div>
-          <div className="dp-det-bot-acoes">
-            <button
-              type="button"
-              className="dp-btn"
-              disabled={disparando}
-              onClick={() => lancar(false)}
-              title="O robô navega até o botão e NÃO clica — serve para conferir o lote"
-            >
-              🤖 Ensaio
-            </button>
-            <button
-              type="button"
-              className="dp-btn"
-              style={{ color: "var(--dp-danger-ink)" }}
-              disabled={disparando}
-              onClick={() => lancar(true)}
-              title="Lança de verdade na ficha do colaborador, no Transnet"
-            >
-              ⚠ Lançar de verdade
-            </button>
-          </div>
+          {manuais.length > 0 && (
+            <div className="dp-det-bot-linha">
+              <span className="dp-pill warn">
+                ✋ {manuais.length} dia(s) de Atestado (04) — lançar à mão no Transnet
+              </span>
+            </div>
+          )}
+          {fila.length > 0 && (
+            <div className="dp-det-bot-acoes">
+              <button
+                type="button"
+                className="dp-btn"
+                disabled={disparando}
+                onClick={() => lancar(false)}
+                title="O robô navega até o botão e NÃO clica — serve para conferir o lote"
+              >
+                🤖 Ensaio
+              </button>
+              <button
+                type="button"
+                className="dp-btn"
+                style={{ color: "var(--dp-danger-ink)" }}
+                disabled={disparando}
+                onClick={() => lancar(true)}
+                title="Lança de verdade na ficha do colaborador, no Transnet"
+              >
+                ⚠ Lançar de verdade
+              </button>
+            </div>
+          )}
           {disparando && <span className="dp-pill accent">disparando…</span>}
           {recado && (
             <div className="dp-det-bot-linha">
@@ -536,7 +872,7 @@ function PainelDetalhe({ pessoa, semana, ctx, aoFechar }) {
         {[1, 2, 3, 4, 5, 6, 7].map((d) => {
           const linha = pessoa.linha[d];
           const dataRef = texto(linha?.date_ref).slice(0, 10) || somaDias(semana, d - 1);
-          const estado = celulaDoDia(linha, pessoa.cracha, ctx);
+          const estado = { ...celulaDoDia(linha, pessoa.cracha, ctx) };
           const jornada = texto(linha?.jornada_transnet);
           const batidas =
             texto(linha?.todas_batidas).replace(/\s*\|\s*/g, " · ") ||
@@ -547,7 +883,25 @@ function PainelDetalhe({ pessoa, semana, ctx, aoFechar }) {
           const lancado = folgaJaLancada(linha);
           const tipo = tipoPorData.get(dataRef);
           const motivo = texto(linha?.motivo);
-          const bot = ctx.ocorrencias.get(chaveDia(pessoa.cracha, dataRef));
+          const chave = chaveDia(pessoa.cracha, dataRef);
+          const bot = ctx.ocorrencias.get(chave);
+          const definido = ctx.motivos.get(chave) || "";
+          const ehReserva = ctx.reservas.has(chave);
+          const gravandoReserva = reservaGravando === chave;
+
+          // Clicável no MESMO lugar do original (app.js:6209/6218): o dia
+          // S/PONTO e a folga/curso ainda a lançar. Dia já lançado no Transnet
+          // não é opinião do DP — é fato, e não abre picker.
+          const podeMotivo =
+            !!linha && !lancado && !texto(linha.te_descricao_dia) &&
+            (estado.cls === "verif" || estado.cls === "folga" || estado.cls === "curso");
+
+          if (podeMotivo && definido) {
+            const pintura = motivoCelula(definido);
+            estado.cls = pintura.cls;
+            estado.txt = pintura.txt;
+            estado.full = `${nomeDoMotivo(definido)} — definido por você`;
+          }
 
           return (
             <div key={d} className="dp-dblock">
@@ -557,7 +911,16 @@ function PainelDetalhe({ pessoa, semana, ctx, aoFechar }) {
                   <span className="sub">{ddmm(dataRef)}</span>
                 </div>
                 <div className="dp-dcell">
-                  <Celula estado={estado} />
+                  <Celula
+                    estado={estado}
+                    definido={podeMotivo && !!definido}
+                    gravando={motivoGravando === chave}
+                    aoClicar={
+                      podeMotivo
+                        ? (evento) => aoAbrirPicker(evento, chave, definido)
+                        : undefined
+                    }
+                  />
                 </div>
               </div>
 
@@ -572,19 +935,51 @@ function PainelDetalhe({ pessoa, semana, ctx, aoFechar }) {
               )}
 
               {semOperacao(linha) && (
-                <div
-                  className={`dp-dnote ${ctx.reservas.has(chaveDia(pessoa.cracha, dataRef)) ? "ok" : "danger"}`}
-                >
-                  {ctx.reservas.has(chaveDia(pessoa.cracha, dataRef))
-                    ? "✅ RES. — marcado como reserva (sem operação confirmada)"
-                    : "⚠ bateu ponto mas NÃO operou (sem Citatti/bilhetagem) — confirmar se foi reserva"}
+                <>
+                  <div className={`dp-dnote ${ehReserva ? "ok" : "danger"}`}>
+                    {ehReserva
+                      ? "✅ RES. — marcado como reserva (sem operação confirmada)"
+                      : "⚠ bateu ponto mas NÃO operou (sem Citatti/bilhetagem) — confirmar se foi reserva"}
+                  </div>
+                  <label className="fg-res">
+                    <input
+                      type="checkbox"
+                      checked={ehReserva}
+                      disabled={gravandoReserva}
+                      onChange={(evento) =>
+                        aoMarcarReserva(pessoa.cracha, dataRef, evento.target.checked)
+                      }
+                    />
+                    marcar como reserva
+                    {gravandoReserva && <span className="dp-pill accent">gravando…</span>}
+                  </label>
+                </>
+              )}
+
+              {podeMotivo && definido && (
+                <div className="dp-dnote sug">
+                  ✎ {nomeDoMotivo(definido)} — definido por você
+                  {MOTIVO_MANUAL.has(definido) ? " · lançar MANUAL no Transnet" : " (a lançar pelo robô)"}
                 </div>
               )}
 
-              {!lancado && tipo && (
+              {podeMotivo && !definido && tipo && (
                 <div className="dp-dnote sug">
-                  Sugestão: {tipo}-{ROTULO_TIPO[tipo] || tipo} — a lançar pelo robô
+                  Sugestão: {tipo}-{ROTULO_TIPO[tipo] || tipo} — a lançar pelo robô · clique na
+                  célula para trocar
                 </div>
+              )}
+
+              {/* S/PONTO é o único dia que não fecha sozinho: sem ponto e sem
+                  nada lançado, só o DP sabe o que foi (app.js:6221). */}
+              {podeMotivo && !definido && !tipo && estado.cls === "verif" && (
+                <div className="dp-dnote warn">
+                  ⚠ sem ponto e sem nada lançado — <b>clique na célula para definir o motivo</b>
+                </div>
+              )}
+
+              {podeMotivo && !definido && !tipo && estado.cls !== "verif" && (
+                <div className="dp-dnote mute">clique na célula para trocar o tipo do dia</div>
               )}
 
               {motivo && texto(linha?.status_ponto) !== "OK" && !semOperacao(linha) && (
@@ -603,7 +998,8 @@ function PainelDetalhe({ pessoa, semana, ctx, aoFechar }) {
       </div>
 
       <p className="dp-det-foot">
-        Somente leitura. O lançamento das ocorrências no Transnet continua no robô.
+        O motivo do dia e a marcação de reserva são gravados na base do DP (a mesma da ferramenta).
+        O lançamento das ocorrências no Transnet continua sendo do robô.
       </p>
     </aside>
   );
@@ -620,6 +1016,7 @@ export default function Folgas() {
   const [reservas, setReservas] = useState(() => new Set());
   const [ocorrencias, setOcorrencias] = useState(() => new Map());
   const [diasCurso, setDiasCurso] = useState(() => new Map());
+  const [motivos, setMotivos] = useState(() => new Map());
 
   const [pessoas, setPessoas] = useState([]);
   const [carregandoBase, setCarregandoBase] = useState(true);
@@ -629,35 +1026,51 @@ export default function Folgas() {
   const [legendaAberta, setLegendaAberta] = useState(false);
   const [recarga, setRecarga] = useState(0);
 
+  const [selecao, setSelecao] = useState(() => new Set());
+  const [picker, setPicker] = useState(null);          // { chave, atual, ancora }
+  const [motivoGravando, setMotivoGravando] = useState("");
+  const [reservaGravando, setReservaGravando] = useState("");
+  const [aviso, setAviso] = useState(null);            // { tipo, texto }
+  const [disparandoLote, setDisparandoLote] = useState(false);
+  const [recadoLote, setRecadoLote] = useState(null);
+
   const recarregar = useCallback(() => setRecarga((n) => n + 1), []);
 
-  // Base fixa: semanas disponíveis, reservas, ocorrências do bot e dias de curso.
+  // Base fixa: semanas disponíveis, reservas, ocorrências do bot, dias de curso
+  // e os motivos que o DP já definiu (a fila compartilhada com a ferramenta).
   useEffect(() => {
     let vivo = true;
     setCarregandoBase(true);
     setErro("");
     (async () => {
       try {
-        const [maisNovo, maisAntigo, linhasReservas, linhasOcorrencias, linhasAprendiz] =
-          await Promise.all([
-            lerDP360("ponto_diario", { colunas: "semana,date_ref", ordem: "date_ref.desc", limite: 1 }),
-            lerDP360("ponto_diario", { colunas: "semana,date_ref", ordem: "date_ref.asc", limite: 1 }),
-            lerTudoDP360("ponto_reservas", { colunas: "cracha,date_ref", ordem: "cracha" }, 10),
-            lerTudoDP360(
-              "ponto_ocorrencias",
-              { colunas: "cracha,date_ref,tipo,status,lancado_em", ordem: "cracha" },
-              10,
-            ),
-            lerTudoDP360(
-              "ponto_diario",
-              {
-                colunas: "cracha,dia_semana_num,jornada_transnet,todas_batidas,te_descricao_dia",
-                filtros: { categoria: "eq.APRENDIZ" },
-                ordem: "cracha",
-              },
-              10,
-            ),
-          ]);
+        const [
+          maisNovo,
+          maisAntigo,
+          linhasReservas,
+          linhasOcorrencias,
+          linhasAprendiz,
+          mapaMotivos,
+        ] = await Promise.all([
+          lerDP360("ponto_diario", { colunas: "semana,date_ref", ordem: "date_ref.desc", limite: 1 }),
+          lerDP360("ponto_diario", { colunas: "semana,date_ref", ordem: "date_ref.asc", limite: 1 }),
+          lerTudoDP360("ponto_reservas", { colunas: "cracha,date_ref", ordem: "cracha" }, 10),
+          lerTudoDP360(
+            "ponto_ocorrencias",
+            { colunas: "cracha,date_ref,tipo,status,lancado_em", ordem: "cracha" },
+            10,
+          ),
+          lerTudoDP360(
+            "ponto_diario",
+            {
+              colunas: "cracha,dia_semana_num,jornada_transnet,todas_batidas,te_descricao_dia",
+              filtros: { categoria: "eq.APRENDIZ" },
+              ordem: "cracha",
+            },
+            10,
+          ),
+          lerMotivos(),
+        ]);
         if (!vivo) return;
 
         const topo = maisNovo[0] || {};
@@ -683,6 +1096,7 @@ export default function Folgas() {
           ),
         );
         setDiasCurso(apurarDiasCurso(linhasAprendiz));
+        setMotivos(mapaMotivos);
       } catch (falha) {
         if (vivo) setErro(falha?.message || "Falha ao consultar a base DP360.");
       } finally {
@@ -700,6 +1114,11 @@ export default function Folgas() {
     let vivo = true;
     setCarregandoGrade(true);
     setSelecionado("");
+    // Selecionar é POR PESSOA VISÍVEL. Trocar de semana/categoria troca quem
+    // está na tela; manter as marcações antigas faria o lote sair com gente que
+    // ninguém está vendo.
+    setSelecao(new Set());
+    setRecadoLote(null);
     (async () => {
       try {
         // Filtra pelo INTERVALO de date_ref (formato garantido "YYYY-MM-DD") e não
@@ -734,7 +1153,10 @@ export default function Folgas() {
     };
   }, [categoria, semana, recarga]);
 
-  const ctx = useMemo(() => ({ reservas, ocorrencias, diasCurso }), [reservas, ocorrencias, diasCurso]);
+  const ctx = useMemo(
+    () => ({ reservas, ocorrencias, diasCurso, motivos }),
+    [reservas, ocorrencias, diasCurso, motivos],
+  );
 
   const visiveis = useMemo(() => {
     const q = termo.trim().toLowerCase();
@@ -796,7 +1218,23 @@ export default function Folgas() {
               estado.full = "DSR (05) — folga a lançar";
             }
           }
-          return { dia: d, estado };
+
+          // Picker de motivo: S/PONTO ou folga ainda NÃO lançada (app.js:3632).
+          // Dia já lançado no Transnet não abre — lá o fato já existe.
+          const chave = linha && dataRef ? chaveDia(pessoa.cracha, dataRef) : "";
+          const podeMotivo =
+            !!linha && !!chave && !texto(linha.te_descricao_dia) &&
+            (estado.cls === "verif" || estado.cls === "folga");
+          const definido = podeMotivo ? texto(ctx.motivos.get(chave)) : "";
+          if (definido) {
+            const pintura = motivoCelula(definido);
+            estado.cls = pintura.cls;
+            estado.txt = pintura.txt;
+            estado.full = `${nomeDoMotivo(definido)} — definido por você${
+              MOTIVO_MANUAL.has(definido) ? " · lançar MANUAL no Transnet" : " (a lançar pelo robô)"
+            }`;
+          }
+          return { dia: d, estado, chave, podeMotivo, definido };
         });
 
         let bot = "";
@@ -818,6 +1256,186 @@ export default function Folgas() {
     () => linhasGrade.reduce((soma, item) => soma + item.folgas.length, 0),
     [linhasGrade],
   );
+
+  /* ── seleção múltipla + fila do lote (app.js:3617/3640/3740) ────────────── */
+
+  const marcados = useMemo(
+    () => linhasGrade.filter((item) => selecao.has(item.pessoa.cracha)),
+    [linhasGrade, selecao],
+  );
+  const todosMarcados = linhasGrade.length > 0 && marcados.length === linhasGrade.length;
+
+  const alternarPessoa = useCallback((cracha) => {
+    setSelecao((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(cracha)) novo.delete(cracha);
+      else novo.add(cracha);
+      return novo;
+    });
+    setRecadoLote(null);
+  }, []);
+
+  const alternarTodos = useCallback(() => {
+    setSelecao((atual) => {
+      const visiveisAgora = linhasGrade.map((item) => item.pessoa.cracha);
+      const jaTodos = visiveisAgora.length > 0 && visiveisAgora.every((c) => atual.has(c));
+      return jaTodos ? new Set() : new Set(visiveisAgora);
+    });
+    setRecadoLote(null);
+  }, [linhasGrade]);
+
+  const { fila, manuais } = useMemo(
+    () => montarFila(marcados.map((item) => item.pessoa), motivos, diasCurso),
+    [marcados, motivos, diasCurso],
+  );
+
+  const pessoasNaFila = useMemo(
+    () => new Set(fila.map((item) => cra8(item.cracha))).size,
+    [fila],
+  );
+  const daFilaDefinidos = useMemo(() => fila.filter((item) => item.definido).length, [fila]);
+
+  // Dias que estão na fila mas NÃO aparecem nesta tela (motivo definido em outra
+  // semana/categoria e ainda não lançado). O original também lança tudo junto —
+  // aqui a tela pelo menos DIZ quantos são, antes de a pessoa confirmar.
+  const chavesVisiveis = useMemo(() => {
+    const chaves = new Set();
+    linhasGrade.forEach((item) =>
+      item.celulas.forEach((c) => {
+        if (c.chave) chaves.add(c.chave);
+      }),
+    );
+    return chaves;
+  }, [linhasGrade]);
+  const foraDaTela = useMemo(
+    () => fila.filter((item) => !chavesVisiveis.has(item.chave)).length,
+    [fila, chavesVisiveis],
+  );
+
+  /* ── gravações ──────────────────────────────────────────────────────────── */
+
+  const abrirPicker = useCallback((evento, chave, atual) => {
+    evento.stopPropagation();
+    const r = evento.currentTarget.getBoundingClientRect();
+    setPicker({
+      chave,
+      atual: atual || "",
+      ancora: { left: r.left, top: r.top, bottom: r.bottom },
+    });
+  }, []);
+
+  const fecharPicker = useCallback(() => setPicker(null), []);
+
+  const escolherMotivo = useCallback(
+    async (chave, tipo) => {
+      setPicker(null);
+      setMotivoGravando(chave);
+      setAviso(null);
+      try {
+        const atualizados = await gravarMotivos((mapa) => {
+          if (tipo) mapa.set(chave, tipo);
+          else mapa.delete(chave);
+        });
+        setMotivos(atualizados);
+        setAviso({
+          tipo: "ok",
+          texto: tipo
+            ? `Motivo ${nomeDoMotivo(tipo)} salvo em app_config.${CHAVE_MOTIVOS}${
+                MOTIVO_MANUAL.has(tipo) ? " — atestado é lançado à mão, fora do robô." : "."
+              }`
+            : `Motivo removido de app_config.${CHAVE_MOTIVOS}.`,
+        });
+      } catch (falha) {
+        setAviso({ tipo: "danger", texto: falha?.message || "Não foi possível salvar o motivo." });
+      } finally {
+        setMotivoGravando("");
+      }
+    },
+    [],
+  );
+
+  const marcarReserva = useCallback(async (cracha, dia, ligado) => {
+    const chave = chaveDia(cracha, dia);
+    setReservaGravando(chave);
+    setAviso(null);
+    try {
+      const existe = await gravarReserva(cracha, dia, ligado);
+      setReservas((atual) => {
+        const novo = new Set(atual);
+        if (existe) novo.add(chave);
+        else novo.delete(chave);
+        return novo;
+      });
+      setAviso({
+        tipo: existe ? "ok" : "mute",
+        texto: existe
+          ? `Dia ${ddmm(dia)} marcado como RESERVA em ponto_reservas — a célula deixa de acusar S/OPER.`
+          : `Marcação de reserva do dia ${ddmm(dia)} removida de ponto_reservas.`,
+      });
+    } catch (falha) {
+      setAviso({ tipo: "danger", texto: falha?.message || "Não foi possível gravar a reserva." });
+    } finally {
+      setReservaGravando("");
+    }
+  }, []);
+
+  // Disparo compartilhado (lote e pessoa a pessoa). Depois de um lançamento DE
+  // VERDADE, os motivos definidos saem da fila — é o `limpar_folga_motivos` do
+  // original (app.js:3755). Ensaio não limpa nada.
+  const disparar = useCallback(async (filaDoLote, confirmar) => {
+    const resposta = await dispararLote(filaDoLote, confirmar);
+    if (confirmar) {
+      const chaves = filaDoLote.filter((item) => item.definido).map((item) => item.chave);
+      if (chaves.length) {
+        const atualizados = await gravarMotivos((mapa) => {
+          chaves.forEach((k) => mapa.delete(k));
+        });
+        setMotivos(atualizados);
+      }
+    }
+    return resposta;
+  }, []);
+
+  const lancarLote = async (confirmar) => {
+    if (!fila.length) return;
+    const cabecalho = confirmar
+      ? "LANÇAR DE VERDADE no Transnet:"
+      : "ENSAIO (o robô navega e NÃO confirma):";
+    const linhas = [
+      `${cabecalho}`,
+      "",
+      `${pessoasNaFila} pessoa(s) · ${fila.length} dia(s)`,
+      daFilaDefinidos
+        ? `${fila.length - daFilaDefinidos} de folga automática e ${daFilaDefinidos} de motivo que você definiu`
+        : `${fila.length} de folga automática (DSR / Compensação / Curso)`,
+      foraDaTela
+        ? `${foraDaTela} dia(s) vêm de motivos definidos FORA desta semana/categoria — é a mesma fila da ferramenta do DP.`
+        : "",
+      manuais.length
+        ? `${manuais.length} dia(s) de Atestado (04) NÃO entram: esses são lançados à mão.`
+        : "",
+      "",
+      confirmar ? "Ao disparar valendo, os motivos que você definiu saem da fila." : "",
+      "Quem executa é o robô, no GitHub Actions. O disparo fica registrado com o seu nome.",
+      "O resultado por dia NÃO volta sozinho para esta tela: a evidência fica no run do GitHub.",
+    ].filter((l) => l !== "");
+    if (!window.confirm(linhas.join("\n"))) return;
+
+    setDisparandoLote(true);
+    setRecadoLote(null);
+    try {
+      const r = await disparar(fila, confirmar);
+      setRecadoLote({
+        tipo: "ok",
+        texto: `${confirmar ? "Lançamento" : "Ensaio"} disparado — ${pessoasNaFila} pessoa(s) · ${fila.length} dia(s).`,
+        painel: r?.painel || "",
+      });
+    } catch (falha) {
+      setRecadoLote({ tipo: "danger", texto: falha?.message || "Não foi possível disparar o robô." });
+    } finally {
+      setDisparandoLote(false);
+    }
+  };
 
   const indiceSemana = semanas.indexOf(semana);
   const pessoaSelecionada = visiveis.find((p) => p.cracha === selecionado) || null;
@@ -895,12 +1513,73 @@ export default function Folgas() {
       resumo={
         <>
           Calendário semanal do Passo 3: quem está de folga, quem faltou e o que o robô já lançou no
-          Transnet. <b>{visiveis.length}</b> colaborador(es) ·{" "}
-          <b>{totalFolgas}</b> folga(s) a lançar ·{" "}
-          <span className="dp-faint">somente leitura — esta tela não grava nada.</span>
+          Transnet. <b>{visiveis.length}</b> colaborador(es) · <b>{totalFolgas}</b> folga(s) a
+          lançar ·{" "}
+          <span className="dp-faint">
+            clique na célula S/PONTO (ou na folga) para dizer o que foi o dia.
+          </span>
         </>
       }
     >
+      {/* barra do lote — o equivalente ao `gbar tools` do original (app.js:3712) */}
+      <div className="fg-lote">
+        <div className="fg-lote-txt">
+          <b>{marcados.length}</b> selecionado(s) · <b>{fila.length}</b> dia(s) na fila do robô
+          {daFilaDefinidos > 0 && (
+            <span className="dp-faint"> · {daFilaDefinidos} com motivo definido por você</span>
+          )}
+          {foraDaTela > 0 && (
+            <span className="dp-faint"> · {foraDaTela} fora desta semana/categoria</span>
+          )}
+          {manuais.length > 0 && (
+            <>
+              {" "}
+              <span className="dp-pill warn" title="O robô não lança atestado — esse vai à mão">
+                ✋ {manuais.length} atestado(s) à mão
+              </span>
+            </>
+          )}
+        </div>
+        <div className="fg-lote-acoes">
+          <button
+            type="button"
+            className="dp-btn"
+            disabled={!fila.length || disparandoLote}
+            onClick={() => lancarLote(false)}
+            title="O robô navega até o botão e NÃO clica — serve para conferir o lote inteiro"
+          >
+            🤖 Ensaio do lote
+          </button>
+          <button
+            type="button"
+            className="dp-btn"
+            style={{ color: "var(--dp-danger-ink)" }}
+            disabled={!fila.length || disparandoLote}
+            onClick={() => lancarLote(true)}
+            title="Lança de verdade, na ficha de cada um, no Transnet"
+          >
+            ⚠ Lançar o lote de verdade
+          </button>
+          {disparandoLote && <span className="dp-pill accent">disparando…</span>}
+        </div>
+      </div>
+
+      {(recadoLote || aviso) && (
+        <div className="fg-avisos">
+          {recadoLote && (
+            <span className={`dp-pill ${recadoLote.tipo === "ok" ? "ok" : "danger"}`}>
+              {recadoLote.texto}
+            </span>
+          )}
+          {recadoLote?.painel && (
+            <a className="dp-btn" href={recadoLote.painel} target="_blank" rel="noreferrer">
+              ver o robô rodando
+            </a>
+          )}
+          {aviso && <span className={`dp-pill ${aviso.tipo}`}>{aviso.texto}</span>}
+        </div>
+      )}
+
       <div className="dp-calsplit">
         <div className="dp-calscroll">
           {carregandoGrade ? (
@@ -914,7 +1593,15 @@ export default function Folgas() {
           ) : (
             <div className="dp-cal">
               <div className="dp-cal-row dp-cal-head">
-                <div className="dp-calmark" />
+                <div className="dp-calmark fg-chk">
+                  <input
+                    type="checkbox"
+                    checked={todosMarcados}
+                    onChange={alternarTodos}
+                    title="Marcar / desmarcar todos os que estão na tela"
+                    aria-label="Marcar todos"
+                  />
+                </div>
                 <div>Colaborador</div>
                 {cabecalhoDias.map((dia) => (
                   <div key={dia.rotulo}>
@@ -934,8 +1621,16 @@ export default function Folgas() {
                       className={`dp-cal-row${ativo ? " sel" : ""}`}
                       onClick={() => setSelecionado(ativo ? "" : pessoa.cracha)}
                     >
-                      <div className="dp-calmark">
-                        <i />
+                      <div
+                        className="dp-calmark fg-chk"
+                        onClick={(evento) => evento.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selecao.has(pessoa.cracha)}
+                          onChange={() => alternarPessoa(pessoa.cracha)}
+                          aria-label={`Marcar ${pessoa.nome || pessoa.cracha} para o lote`}
+                        />
                       </div>
                       <div className="dp-cal-nome">
                         <b
@@ -961,7 +1656,17 @@ export default function Folgas() {
                         )}
                       </div>
                       {celulas.map((celula) => (
-                        <Celula key={celula.dia} estado={celula.estado} />
+                        <Celula
+                          key={celula.dia}
+                          estado={celula.estado}
+                          definido={!!celula.definido}
+                          gravando={motivoGravando === celula.chave}
+                          aoClicar={
+                            celula.podeMotivo
+                              ? (evento) => abrirPicker(evento, celula.chave, celula.definido)
+                              : undefined
+                          }
+                        />
                       ))}
                       <div className="dp-calbot">
                         <MarcaBot situacao={bot} />
@@ -980,9 +1685,23 @@ export default function Folgas() {
             semana={semana}
             ctx={ctx}
             aoFechar={() => setSelecionado("")}
+            aoAbrirPicker={abrirPicker}
+            motivoGravando={motivoGravando}
+            aoMarcarReserva={marcarReserva}
+            reservaGravando={reservaGravando}
+            aoDisparar={disparar}
           />
         )}
       </div>
+
+      {picker && (
+        <PickerMotivo
+          ancora={picker.ancora}
+          atual={picker.atual}
+          aoFechar={fecharPicker}
+          aoEscolher={(tipo) => escolherMotivo(picker.chave, tipo)}
+        />
+      )}
 
       {legendaAberta && <ModalLegenda aoFechar={() => setLegendaAberta(false)} />}
     </AbaShell>

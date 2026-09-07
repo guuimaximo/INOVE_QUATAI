@@ -1723,3 +1723,107 @@
 /* Competência sem folha paga na tabela por mês: a linha inteira marcada, porque o
    número dela é o que está inflando o acumulado das linhas seguintes. */
 .dp360 tr.bh-mes-aberto > td { background: var(--dp-warn-bg); }
+
+/* ═══ FOLGAS · o ponto sugerido do dia e o histórico do bot (prefixo `fg-`) ════
+ * Porte de `.dedit`/`.hin` (app/ui/styles.css do DP360 desktop, usadas pelo
+ * `editorSug`) e do pop-up `abreHistBot`. Os dois blocos vivem DENTRO do painel
+ * de detalhe / de um `.dp-modal` que já existem — aqui só entram os pedaços que
+ * ainda não tinham pele.
+ */
+
+/* O editor alinha com as notas do dia (`.dp-dnote`/`.fg-res` usam a mesma
+ * margem de 58px), porque ele é mais uma linha do bloco daquele dia. */
+.dp360 .fg-sug {
+  margin-left: 58px;
+  margin-top: 6px;
+  padding: 7px 9px;
+  border: 1px solid var(--dp-border);
+  border-radius: 9px;
+  background: var(--dp-surface-2);
+}
+.dp360 .fg-sug-t { font-size: 11px; color: var(--dp-muted); line-height: 1.4; }
+.dp360 .fg-sug-campos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px;
+  margin-top: 5px;
+}
+.dp360 .fg-sug-c { display: flex; flex-direction: column; gap: 2px; }
+.dp360 .fg-sug-c > span {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dp-faint);
+}
+.dp360 .fg-sug-c input {
+  width: 64px;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: center;
+  padding: 4px 6px;
+  border: 1px solid var(--dp-border-strong);
+  border-radius: 6px;
+  background: var(--dp-surface);
+  color: var(--dp-ink);
+  outline: none;
+}
+.dp360 .fg-sug-c input:focus { border-color: var(--dp-accent); }
+/* Miolo travado pela regra da Revisão: o campo mostra o valor dela e não aceita
+ * digitação — o tracejado é o mesmo vocabulário do `fg-set` da célula. */
+.dp360 .fg-sug-c.travado input {
+  border-style: dashed;
+  background: var(--dp-surface-2);
+  color: var(--dp-muted);
+  cursor: not-allowed;
+}
+.dp360 .fg-sug-c.travado > span::after { content: " 🔒"; }
+.dp360 .fg-sug .dp-btn { padding: 4px 9px; font-size: 11.5px; }
+.dp360 .fg-sug-nota { margin-top: 5px; font-size: 11px; line-height: 1.45; }
+.dp360 .fg-sug-nota.ok { color: var(--dp-ok-ink); font-weight: 600; }
+.dp360 .fg-sug-nota.danger { color: var(--dp-danger-ink); }
+.dp360 .fg-sug-nota.mute { color: var(--dp-muted); }
+.dp360 .fg-sug-aviso { padding: 8px 14px 0; font-size: 12px; }
+
+/* histórico das ocorrências lançadas (item 9): um `.dp-modal` mais largo, porque
+ * a lista tem seis colunas e o padrão de 470px espremeria o status. */
+.dp360 .dp-modal.fg-hist { width: 740px; }
+.dp360 .fg-hist-resumo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  font-size: 12px;
+}
+.dp360 .fg-hist-filtros {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.dp360 .fg-hist-filtros input,
+.dp360 .fg-hist-filtros select {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--dp-border-strong);
+  border-radius: 8px;
+  background: var(--dp-surface);
+  color: var(--dp-ink);
+  outline: none;
+}
+.dp360 .fg-hist-filtros input:focus,
+.dp360 .fg-hist-filtros select:focus { border-color: var(--dp-accent); }
+.dp360 .fg-hist-filtros .dp-busca { min-width: 190px; }
+.dp360 .fg-hist-filtros .dp-busca input { padding-left: 29px; width: 100%; }
+.dp360 .fg-hist-wrap {
+  margin-top: 10px;
+  max-height: 46vh;
+  overflow: auto;
+  border: 1px solid var(--dp-border);
+  border-radius: var(--dp-radius);
+}
+.dp360 .fg-hist .dp-vazio { margin-top: 12px; box-shadow: none; }

@@ -35,16 +35,44 @@
 // `ponto_ocorrencias` hoje é o pós-processo da ferramenta desktop
 // (`_ingest_ocorr`). Então, depois de disparar daqui, a coluna 🤖 só muda quando
 // alguém ingerir o resultado. Está dito na tela, para ninguém achar que sumiu.
+//
+// DUAS COISAS A MAIS, PORTADAS DEPOIS (PORTE.md §11, itens 5 e 9):
+//   · LANÇAR O PONTO SUGERIDO do dia, do próprio detalhe da pessoa (app.js:6168
+//     `editorSug` → :6236 → main.py `lancar_bot_p2` ~2820). É o MESMO robô
+//     (`ponto.yml`), o MESMO CSV de seis colunas e as MESMAS travas do "Lançar
+//     ajuste" da Revisão — nada muda no repo do bot. Ver `montarAjusteDoDia`.
+//   · HISTÓRICO DAS OCORRÊNCIAS já lançadas (app.js:3759 → :6145 `abreHistBot`,
+//     lendo `get_ocorrencias`, main.py:2888). Sem consulta nova: é a MESMA
+//     `ponto_ocorrencias` que a aba já carrega para a pílula 🤖 do dia.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Palette, RefreshCw, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, History, Palette, RefreshCw, Search, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import {
   apagarDP360,
   dispararRoboDP360,
+  inserirDP360,
   lerDP360,
   lerTudoDP360,
   upsertDP360,
 } from "../../../services/dp360Api";
+// O PORTÃO DA SUGESTÃO NÃO É REESCRITO AQUI. `sugBloqueio` (porte de main.py
+// `_sug_bloqueio`) e `ehPontoInvertido` são os MESMOS que a Revisão e a Gordura
+// usam — um lugar só decide se a sugestão do dia pode ir para o Transnet. O
+// `aplicarRealManual` é o overlay do Real cravado pelo DP, e é ele que faz o dia
+// já decidido na Revisão aparecer aqui com o horário que o DP mandou.
+// `ehVerdadeiro` do cartão aceita mais grafias que o desta tela ("t", "1", "sim"),
+// e é o que a Revisão usa nos campos da sugestão — vem com apelido para não
+// esconder o `ehVerdadeiro` local, que continua servindo a grade.
+import {
+  aplicarRealManual,
+  ehPontoInvertido,
+  ehVerdadeiro as ehVerdadeiroAmplo,
+  fmtHora,
+  sugBloqueio,
+} from "../CartaoDoDia";
+// Aritmética de relógio é do MOTOR, nunca escrita à mão: `hm2min` aceita "1420"
+// (o que a tela do Cartão de Ponto devolve) e `min2hm` preserva a notação 24+.
+import { hm2min, min2hm } from "../regrasPonto";
 
 /* ───────────────────────── constantes do domínio ───────────────────────── */
 
@@ -344,6 +372,209 @@ function dispararLote(fila, confirmar) {
     csv: csvDoLote(lote),
     confirmar: confirmar ? "true" : "false",
   });
+}
+
+/* ═══════ LANÇAR O PONTO SUGERIDO DO DIA (PORTE.md §11, item 5) ═══════════════
+   Porte de app.js:6168 (`editorSug`) → :6236 (o handler `.dlancsug`) → main.py
+   `lancar_bot_p2` (~2820) → `_fila_correcoes` (~2786).
+
+   POR QUE ELE MORA AQUI. Quem está vendo a SEMANA da pessoa é quem encontra o dia
+   incompleto. Sem este bloco, o caminho era sair da tela, abrir a Revisão e
+   reencontrar data + categoria + pessoa para lançar UM dia — e o dono já tinha
+   apontado essa mesma volta no item 1 da §11.
+
+   O ROBÔ, O ARQUIVO E O FORMATO SÃO OS MESMOS DA REVISÃO. `dispararRoboDP360
+   ("ponto", …)` = workflow `ponto.yml` = `bot_ponto.py --lote`, que lê as SEIS
+   colunas do `csv.DictReader` (`cracha,data,entrada,alm_saida,alm_volta,saida`),
+   crachá de 8 dígitos, data dd/mm/aaaa e hora em 24+ depois de desenrolada a
+   virada. NADA muda no repo do bot: é disparo que já existe, com o input que ele
+   já aceita.
+
+   E O ROBÔ GRAVA O CARTÃO INTEIRO: os quatro campos, ou nada
+   (`bot_ponto.lancar_registro` recusa ponta em branco com SEM_REAL e zera o
+   resto). É daí que vem o peso das travas de `montarAjusteDoDia` — cada disparo
+   daqui REESCREVE o cartão de ponto de um dia de alguém.
+
+   AS TRAVAS SÃO AS DA REVISÃO, NA MESMA ORDEM. A lógica é a mesma do
+   `montarLoteAjuste` de `abas/Revisao.jsx`; ela NÃO foi extraída para um módulo
+   comum porque `Revisao.jsx` não é desta tarefa (fica registrado: é o candidato
+   óbvio a `regrasAjustePonto.js`, e enquanto não for, mexer numa trava exige
+   mexer nas duas). O que dá para compartilhar JÁ é compartilhado: `sugBloqueio`,
+   `ehPontoInvertido`, `aplicarRealManual`, `hm2min`/`min2hm`.                  */
+
+// Colunas da `ponto_diario` que a sugestão precisa. NÃO entram no COLUNAS_GRADE:
+// a grade carrega a semana inteira da categoria (~1.700 linhas) e estas colunas
+// só interessam à pessoa aberta no detalhe — são lidas sob demanda, 7 linhas.
+const COLUNAS_AJUSTE = [
+  "cracha", "date_ref", "nm_funcionario", "categoria", "status_ponto", "motivo",
+  "acao_sugerida", "sugestao_fonte", "jornada_transnet",
+  "entrada", "saida_almoco", "volta_almoco", "saida",
+  "entrada_sug", "almoco_saida_sug", "almoco_volta_sug", "saida_sug",
+  // O contrato da view, que é o que o `sugBloqueio` lê para decidir.
+  "requer_alvo_manual", "fonte_alvo", "alvo_confiavel", "almoco_confiavel", "almoco_travado",
+].join(",");
+
+const CAMPOS_CSV_AJUSTE = ["cracha", "data", "entrada", "alm_saida", "alm_volta", "saida"];
+
+// Sem aspas: crachá é dígito, data é dd/mm/aaaa e hora é HH:MM (ou 25:40).
+// Mesmo montador do lote da Revisão e da Refeição — um formato só para o mesmo robô.
+const csvDoAjuste = (fila) =>
+  [
+    CAMPOS_CSV_AJUSTE.join(","),
+    ...fila.map((l) => CAMPOS_CSV_AJUSTE.map((c) => l[c]).join(",")),
+  ].join("\n");
+
+// O dia tem sugestão de alguma ponta? (`temSug` do app.js:6188.)
+const temSugestao = (cartao) =>
+  [cartao?.entrada_sug, cartao?.almoco_saida_sug, cartao?.almoco_volta_sug, cartao?.saida_sug]
+    .some((v) => !!fmtHora(v));
+
+// O ALMOÇO TRAVADO da Revisão manda (main.py:906-910). `almoco_travado` significa
+// que a matriz de meio de jornada já cravou o miolo; por isso as duas células do
+// miolo não são editáveis — nem na célula SUG da Revisão, nem aqui — e o que vai
+// para o robô é o miolo da VIEW, nunca um horário digitado.
+const almocoTravado = (cartao) => ehVerdadeiroAmplo(cartao?.almoco_travado);
+
+// Aceita o que a tela do Cartão de Ponto devolve ("1420") e devolve HH:MM, ou
+// `null` quando o texto não é hora. Vazio é vazio (o miolo pode não existir).
+function horaDigitada(valor) {
+  const bruto = texto(valor);
+  if (!bruto) return "";
+  const min = hm2min(bruto);
+  if (min === null || min < 0) return null;
+  return min2hm(min);
+}
+
+/**
+ * Monta (ou barra) o lançamento de UM dia. Espelha `montarLoteAjuste` de
+ * `abas/Revisao.jsx` na mesma ordem de barramento, com uma diferença: lá os
+ * horários vêm da view (mais o Real manual gravado), aqui vêm também do que o DP
+ * acabou de digitar nas duas PONTAS.
+ *
+ * Devolve `{ csv, cartaoHoje, alvo }` quando pode lançar, ou `{ fora }` com o
+ * motivo — nunca `null` calado: quem não vai para o robô aparece na tela dizendo
+ * por quê, que é a regra do lote da Revisão.
+ *
+ * `cartao` já vem com o overlay do Real manual (`aplicarRealManual`); `caso` é a
+ * linha de `ponto_caso` do dia. Não faz I/O.
+ */
+function montarAjusteDoDia(cartao, edicao, caso) {
+  const dia = texto(cartao?.date_ref).slice(0, 10);
+  const travado = almocoTravado(cartao);
+  const cartaoHoje = [cartao?.entrada, cartao?.saida_almoco, cartao?.volta_almoco, cartao?.saida]
+    .map((h) => fmtHora(h));
+  const fora = (motivo) => ({ fora: motivo, cartaoHoje, dia });
+
+  // 1) PONTO_INVERTIDO É DIAGNÓSTICO, NÃO LANÇAMENTO (`_fila_correcoes`, 1º skip).
+  //    Cartão rotacionado é defeito de posição das batidas — quem decide o que
+  //    fazer é o DP, linha a linha, na Revisão.
+  if (ehPontoInvertido(cartao)) {
+    return fora("ponto invertido — a view não propõe lançamento, exige decisão manual do DP");
+  }
+
+  // 2) O QUE FOI DIGITADO É HORA? Este passo não existe no lote da Revisão porque
+  //    lá os horários já vêm normalizados da view; aqui o DP acabou de digitar.
+  const entrada = horaDigitada(edicao.entrada);
+  const saida = horaDigitada(edicao.saida);
+  // MIOLO TRAVADO: o valor é o da view, o que o DP digitou não é lido.
+  const almIni = travado ? fmtHora(cartao.almoco_saida_sug) : horaDigitada(edicao.alm_saida);
+  const almFim = travado ? fmtHora(cartao.almoco_volta_sug) : horaDigitada(edicao.alm_volta);
+  const ilegivel = [
+    entrada === null && "entrada",
+    almIni === null && "saída do almoço",
+    almFim === null && "volta do almoço",
+    saida === null && "saída",
+  ].filter(Boolean);
+  if (ilegivel.length) {
+    return fora(`horário ilegível em ${ilegivel.join(", ")} — use HH:MM (ou 1420)`);
+  }
+
+  /* 3) O ÚLTIMO PORTÃO ANTES DO TRANSNET (`_sug_bloqueio`), lido sobre a linha
+        COM o que o DP digitou — é sobre o horário que vai ser gravado que o teto
+        de jornada e a jornada negativa valem.
+        O contrato da view (alvo confiável / almoço confiável) NÃO é promovido
+        aqui: digitar nesta tela não é cravar o Real manual. Dia cujo alvo exige
+        decisão do DP continua barrado, e a tela manda ele à Revisão — lá a
+        decisão fica gravada em `ponto_real_manual` com nome e horário, e volta
+        para cá pelo `aplicarRealManual`. */
+  const bloqueio = sugBloqueio({
+    ...cartao,
+    entrada_sug: entrada,
+    saida_sug: saida,
+    almoco_saida_sug: almIni,
+    almoco_volta_sug: almFim,
+  });
+  if (bloqueio) return fora(bloqueio);
+
+  // 4) CARTÃO JÁ MEXIDO NO TRANSNET DEPOIS DO NOSSO RETRATO (lição da Refeição,
+  //    main.py:2856). As pontas que mandamos são as do nosso retrato; se o cartão
+  //    foi corrigido lá no meio-tempo, lançar por cima DEVOLVE as pontas velhas e
+  //    desfaz a correção, sem ninguém ver.
+  const mexido = texto(caso?.conferido_em) || texto(caso?.correcao_final_em);
+  if (mexido) {
+    return fora(
+      "o cartão deste dia já foi mexido no Transnet depois do último import — " +
+        "lançar por cima devolveria as pontas antigas e desfaria a correção",
+    );
+  }
+
+  // 5) AS DUAS PONTAS (`_fila_correcoes`, teste final). O robô grava o cartão
+  //    inteiro e recusa ponta em branco com SEM_REAL.
+  if (!entrada || !saida) {
+    const falta = [!entrada && "ENTRADA", !saida && "SAÍDA"].filter(Boolean).join(" e ");
+    return fora(`sem ${falta} — o robô grava o cartão inteiro e recusa ponta em branco (SEM_REAL)`);
+  }
+
+  // 6) O MIOLO VAI INTEIRO OU NÃO VAI. Meia janela grava 00:00 na outra ponta e
+  //    inventa um intervalo que ninguém fez. Vazio nas duas é dia SEM almoço — o
+  //    bot escreve 00:00 nos intervalos, que é como o Transnet representa "não teve".
+  if (Boolean(almIni) !== Boolean(almFim)) {
+    return fora(
+      `só uma ponta do almoço foi preenchida (${almIni || "—"} → ${almFim || "—"}) — ` +
+        "o robô gravaria 00:00 na outra e criaria um intervalo que não existiu",
+    );
+  }
+
+  // 7) A VIRADA DE MEIA-NOITE, DESENROLADA (main.py `_desenrola_cartao`). "23:50"
+  //    de entrada com "06:10" de saída viraria jornada negativa; o bot reduz mod 24
+  //    na hora de digitar (`bot_ponto._mod24`), então quem manda a notação é a fila.
+  const mEntrada = hm2min(entrada);
+  let mSaida = hm2min(saida);
+  let mAlmIni = almIni ? hm2min(almIni) : null;
+  let mAlmFim = almFim ? hm2min(almFim) : null;
+  if (mEntrada == null || mSaida == null || (almIni && (mAlmIni == null || mAlmFim == null))) {
+    return fora("horário ilegível — não dá para montar as quatro batidas");
+  }
+  while (mSaida < mEntrada) mSaida += 1440;
+  if (mAlmIni != null && mAlmFim != null) {
+    while (mAlmIni < mEntrada) mAlmIni += 1440;
+    while (mAlmFim < mAlmIni) mAlmFim += 1440;
+    // O MIOLO TEM DE CABER DENTRO DO CARTÃO: cravar uma saída às 14:00 num dia
+    // cuja volta do almoço é 15:00 faria o robô escrever volta DEPOIS da saída.
+    if (mAlmFim > mSaida) {
+      return fora(
+        `o almoço ${almIni}–${almFim} não cabe entre a entrada ${entrada} e a saída ${saida}`,
+      );
+    }
+  }
+
+  const alvo = [min2hm(mEntrada), mAlmIni == null ? "" : min2hm(mAlmIni),
+    mAlmFim == null ? "" : min2hm(mAlmFim), min2hm(mSaida)];
+  return {
+    dia,
+    cartaoHoje,
+    alvo,
+    // De onde a view tirou o alvo — vira a coluna `fonte` do histórico por pessoa.
+    fonte: texto(cartao.fonte_alvo) || texto(cartao.sugestao_fonte),
+    csv: {
+      cracha: cra8(cartao.cracha),
+      data: ddmmaaaa(dia), // da LINHA, nunca de `new Date()`
+      entrada: alvo[0],
+      alm_saida: alvo[1],
+      alm_volta: alvo[2],
+      saida: alvo[3],
+    },
+  };
 }
 
 // Folgas ainda NÃO lançadas, com o tipo automático (folgasP, app.js ~3582):
@@ -701,6 +932,380 @@ function ModalLegenda({ aoFechar }) {
   );
 }
 
+/* ═══════ HISTÓRICO DAS OCORRÊNCIAS LANÇADAS (PORTE.md §11, item 9) ═══════════
+   Porte de app.js:3759 (o botão da barra) → :6145 (`abreHistBot`), que lê
+   `get_ocorrencias` (main.py:2888).
+
+   NÃO CUSTA CONSULTA NENHUMA: é a MESMA `ponto_ocorrencias` que a aba já carrega
+   na abertura para a pílula 🤖 do dia e para a marca da linha. O que faltava era
+   a visão agregada — sem ela, para saber se um lançamento passou era preciso
+   caçar a pessoa e o dia na grade, uma célula por vez.
+
+   O QUE FICA DE FORA: os `aviso_*`. É o mesmo recorte do `get_ocorrencias`
+   ("migraram pro ponto_caso e aparecem no Meus avisos — aqui ficam de fora pra
+   não poluir"). Este pop-up é o do bot de FOLGAS: DSR, Compensação e Curso. A
+   contagem do que foi cortado aparece no rodapé, para ninguém achar que sumiu.
+
+   O ORIGINAL AINDA MOSTRAVA O LOG DO BOT AO VIVO (`get_job`, polling do processo
+   local). Aqui não existe: o robô roda no GitHub Actions e a evidência é o run —
+   o link "ver o robô rodando" sai no disparo, não neste histórico.            */
+
+// Carimbo do banco, ecoado como veio ("2026-09-06T14:32:…" → "06/09 14:32").
+// Recorte de string: virar `Date` aqui só criaria chance de o fuso mover a hora.
+function instanteCurto(valor) {
+  const v = texto(valor);
+  if (v.length < 16) return v || "—";
+  return `${v.slice(8, 10)}/${v.slice(5, 7)} ${v.slice(11, 16)}`;
+}
+
+const RE_BOT_OK = /^OK/i;
+const RE_AVISO = /^aviso_/i;
+
+// Três baldes, os mesmos que a marca 🤖 da grade usa: deu certo, falhou, ou o bot
+// devolveu outra coisa (pendente, ignorado, em branco).
+function baldeStatus(status) {
+  const s = texto(status);
+  if (RE_BOT_ERRO.test(s)) return "erro";
+  if (RE_BOT_OK.test(s)) return "ok";
+  return "outro";
+}
+
+function ModalHistoricoBot({ linhas, nomes, aoFechar }) {
+  const [busca, setBusca] = useState("");
+  const [balde, setBalde] = useState("");
+  const [tipo, setTipo] = useState("");
+
+  const { historico, avisos } = useMemo(() => {
+    const soFolgas = [];
+    let cortados = 0;
+    linhas.forEach((linha) => {
+      if (RE_AVISO.test(texto(linha.tipo))) {
+        cortados += 1;
+        return;
+      }
+      const cracha = cra8(linha.cracha);
+      soFolgas.push({
+        chave: `${cracha}|${texto(linha.date_ref).slice(0, 10)}|${texto(linha.tipo)}`,
+        cracha,
+        nome: nomes.get(cracha) || "",
+        data: texto(linha.date_ref).slice(0, 10),
+        tipo: texto(linha.tipo),
+        status: texto(linha.status),
+        balde: baldeStatus(linha.status),
+        quando: texto(linha.lancado_em),
+      });
+    });
+    // Mais recente primeiro: pelo carimbo do lançamento e, sem ele, pelo dia.
+    soFolgas.sort((a, b) => (b.quando || "").localeCompare(a.quando || "") || b.data.localeCompare(a.data));
+    return { historico: soFolgas, avisos: cortados };
+  }, [linhas, nomes]);
+
+  const tipos = useMemo(
+    () => [...new Set(historico.map((h) => h.tipo).filter(Boolean))].sort(),
+    [historico],
+  );
+
+  const contagem = useMemo(() => {
+    const c = { ok: 0, erro: 0, outro: 0 };
+    historico.forEach((h) => { c[h.balde] += 1; });
+    return c;
+  }, [historico]);
+
+  const visiveis = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return historico.filter(
+      (h) =>
+        (!balde || h.balde === balde) &&
+        (!tipo || h.tipo === tipo) &&
+        (!q || h.cracha.includes(q) || h.nome.toLowerCase().includes(q)),
+    );
+  }, [historico, busca, balde, tipo]);
+
+  return (
+    <div
+      className="dp-overlay"
+      onClick={(evento) => {
+        if (evento.target === evento.currentTarget) aoFechar();
+      }}
+    >
+      <div className="dp-modal fg-hist">
+        <div className="dp-modal-head">
+          <h3>🤖 Ocorrências lançadas — DSR / Compensação / Curso</h3>
+          <button type="button" className="dp-det-x" onClick={aoFechar} aria-label="Fechar histórico">
+            <X size={17} />
+          </button>
+        </div>
+
+        <div className="fg-hist-resumo">
+          <span className="dp-pill ok">{contagem.ok} OK</span>
+          <span className={`dp-pill ${contagem.erro ? "danger" : "mute"}`}>{contagem.erro} com erro</span>
+          <span className="dp-pill mute">{contagem.outro} sem status conclusivo</span>
+          <span className="dp-faint">· {historico.length} lançamento(s) no total</span>
+        </div>
+
+        <div className="fg-hist-filtros">
+          <div className="dp-busca">
+            <Search size={14} />
+            <input
+              type="search"
+              value={busca}
+              onChange={(evento) => setBusca(evento.target.value)}
+              placeholder="crachá ou nome…"
+            />
+          </div>
+          <select value={balde} onChange={(evento) => setBalde(evento.target.value)}>
+            <option value="">Todos os status</option>
+            <option value="ok">Só OK</option>
+            <option value="erro">Só com erro</option>
+            <option value="outro">Sem status conclusivo</option>
+          </select>
+          <select value={tipo} onChange={(evento) => setTipo(evento.target.value)}>
+            <option value="">Todos os tipos</option>
+            {tipos.map((item) => (
+              <option key={item} value={item}>
+                {item}-{ROTULO_TIPO[item] || item}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {visiveis.length === 0 ? (
+          <div className="dp-vazio">
+            {historico.length === 0
+              ? "Nenhuma ocorrência lançada ainda — ou o resultado do robô ainda não foi ingerido."
+              : "Nenhum lançamento bate com o filtro."}
+          </div>
+        ) : (
+          <div className="fg-hist-wrap">
+            <table className="dp-tabela">
+              <thead>
+                <tr>
+                  <th>Crachá</th>
+                  <th>Colaborador</th>
+                  <th>Dia</th>
+                  <th>Tipo</th>
+                  <th>Status</th>
+                  <th>Lançado em</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visiveis.map((h) => (
+                  <tr key={h.chave} className={h.balde === "erro" ? "row-sem" : undefined}>
+                    <td className="dp-mono dp-num">{h.cracha}</td>
+                    <td>{h.nome || <span className="dp-faint">—</span>}</td>
+                    <td className="dp-num">{ddmm(h.data)}</td>
+                    <td>
+                      {h.tipo ? `${h.tipo}-${ROTULO_TIPO[h.tipo] || h.tipo}` : "—"}
+                    </td>
+                    <td>
+                      <span className={`dp-pill ${h.balde === "ok" ? "ok" : h.balde === "erro" ? "danger" : "mute"}`}>
+                        {h.status || "sem status"}
+                      </span>
+                    </td>
+                    <td className="dp-num dp-muted">{instanteCurto(h.quando)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <p className="dp-lg-foot">
+          Quem preenche esta tabela é a <b>ingestão do resultado do robô</b>, não o disparo: um
+          lançamento feito agora só aparece aqui depois que alguém ingerir a evidência do run. O
+          nome só aparece para quem está na semana/categoria abertas na grade.
+          {avisos > 0 && (
+            <>
+              {" "}
+              {avisos} registro(s) de <code>aviso_*</code> ficam de fora — são do comunicado ao
+              trabalhador, não do bot de folgas.
+            </>
+          )}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- o editor do ponto sugerido de UM dia (app.js `editorSug`) ----------
+   DOIS BOTÕES, NUNCA UM CHECKBOX — a mesma regra do lote de folgas, e aqui com
+   estrago maior: um clique reescreve o cartão de ponto de um dia inteiro de
+   alguém. A confirmação NOMEIA a pessoa, diz o dia e mostra as quatro batidas que
+   vão ser gravadas no lugar do que está lá hoje.
+
+   O original tinha UM botão só ("🤖 Lançar", já valendo, `lancar_bot_p2(..., true)`).
+   Aqui vira ensaio + valendo, que é a regra desta casa para tudo que dirige o
+   Transnet. */
+function EditorPontoSugerido({ pessoa, cartao, caso, aoLancar }) {
+  const travado = almocoTravado(cartao);
+  const semeia = useCallback(
+    () => ({
+      entrada: fmtHora(cartao.entrada_sug),
+      alm_saida: fmtHora(cartao.almoco_saida_sug),
+      alm_volta: fmtHora(cartao.almoco_volta_sug),
+      saida: fmtHora(cartao.saida_sug),
+    }),
+    [cartao.entrada_sug, cartao.almoco_saida_sug, cartao.almoco_volta_sug, cartao.saida_sug],
+  );
+  const [campos, setCampos] = useState(semeia);
+  const [disparando, setDisparando] = useState(false);
+  const [recado, setRecado] = useState(null);
+
+  // Re-semeia quando o VALOR da sugestão muda (releitura depois do disparo, ou o
+  // Real manual chegando da Revisão) — não a cada re-render, senão atropela quem
+  // está digitando.
+  useEffect(() => {
+    setCampos(semeia());
+    setRecado(null);
+  }, [semeia]);
+
+  const ajuste = useMemo(() => montarAjusteDoDia(cartao, campos, caso), [cartao, campos, caso]);
+  const podeLancar = !!ajuste.csv && !disparando;
+  const mexeu = useMemo(() => {
+    const base = semeia();
+    return ["entrada", "alm_saida", "alm_volta", "saida"].some((c) => texto(campos[c]) !== base[c]);
+  }, [campos, semeia]);
+
+  const lancar = async (confirmar) => {
+    if (!ajuste.csv) return;
+    const quem = pessoa.nome || pessoa.cracha;
+    const grava = [ajuste.alvo[0], ajuste.alvo[1] || "—", ajuste.alvo[2] || "—", ajuste.alvo[3]].join(" · ");
+    const hoje = ajuste.cartaoHoje.map((h) => h || "—").join(" · ");
+    const cabeca = confirmar
+      ? `LANÇAR DE VERDADE no Transnet o cartão de ponto de ${quem} (crachá ${ajuste.csv.cracha}) em ${ajuste.csv.data}:`
+      : `ENSAIO (o robô preenche a tela e NÃO clica em Inserir) — cartão de ${quem} (crachá ${ajuste.csv.cracha}) em ${ajuste.csv.data}:`;
+    if (
+      !window.confirm(
+        `${cabeca}\n\n` +
+          `cartão hoje:  ${hoje}\n` +
+          `vai ficar:    ${grava}\n\n` +
+          `(entrada · saída almoço · volta almoço · saída)\n\n` +
+          `O robô escreve os QUATRO campos ou nada — não existe corrigir só uma ponta.\n\n` +
+          (travado ? "O almoço deste dia está travado pela regra da Revisão: o miolo é o dela.\n\n" : "") +
+          `Quem executa é o robô, no GitHub Actions. O disparo fica registrado com o seu nome.\n\n` +
+          `O resultado NÃO volta sozinho para esta tela: a evidência fica no run do GitHub.`,
+      )
+    )
+      return;
+
+    setDisparando(true);
+    setRecado(null);
+    try {
+      const resposta = await aoLancar(ajuste, confirmar);
+      setRecado({
+        tipo: "ok",
+        texto: `${confirmar ? "Lançamento" : "Ensaio"} disparado — ${ajuste.csv.data} · ${grava}.${
+          resposta?.aviso || ""
+        }`,
+        painel: resposta?.painel || "",
+      });
+    } catch (falha) {
+      // O erro mostrado é o do SERVIDOR, sem tradução: é ele que diz se o workflow
+      // não existe, se a permissão faltou ou se o input foi recusado.
+      setRecado({ tipo: "erro", texto: falha?.message || "Não foi possível disparar o robô." });
+    } finally {
+      setDisparando(false);
+    }
+  };
+
+  const campo = (id, rotulo, bloqueado) => (
+    <label className={`fg-sug-c${bloqueado ? " travado" : ""}`}>
+      <span>{rotulo}</span>
+      <input
+        className="dp-mono dp-num"
+        type="text"
+        inputMode="numeric"
+        placeholder="--:--"
+        value={campos[id]}
+        readOnly={bloqueado}
+        disabled={disparando}
+        aria-label={`${rotulo} do dia ${ddmm(cartao.date_ref)}`}
+        title={
+          bloqueado
+            ? "Almoço travado pela regra da Revisão — este campo não é editável e o que vai para o robô é o miolo dela."
+            : "Edite se precisar. Aceita HH:MM e também 1420. A edição vale só para este disparo — ela não é gravada em lugar nenhum."
+        }
+        onChange={(evento) => setCampos((atual) => ({ ...atual, [id]: evento.target.value }))}
+        onClick={(evento) => evento.stopPropagation()}
+        onKeyDown={(evento) => {
+          evento.stopPropagation();
+          if (evento.key === "Escape") setCampos(semeia());
+        }}
+      />
+    </label>
+  );
+
+  return (
+    <div className="fg-sug">
+      <div className="fg-sug-t">
+        ↳ ponto sugerido (edite se precisar) · cartão hoje:{" "}
+        <span className="dp-mono">{ajuste.cartaoHoje.map((h) => h || "—").join(" · ")}</span>
+      </div>
+      <div className="fg-sug-campos">
+        {campo("entrada", "entrada", false)}
+        {campo("alm_saida", "s. almoço", travado)}
+        {campo("alm_volta", "v. almoço", travado)}
+        {campo("saida", "saída", false)}
+        <button
+          type="button"
+          className="dp-btn"
+          disabled={!podeLancar}
+          onClick={() => lancar(false)}
+          title="O robô preenche a tela do Cartão de Ponto e NÃO clica em Inserir — serve para conferir. Nada é gravado."
+        >
+          🤖 Ensaio
+        </button>
+        <button
+          type="button"
+          className="dp-btn"
+          style={{ color: "var(--dp-danger-ink)" }}
+          disabled={!podeLancar}
+          onClick={() => lancar(true)}
+          title="Reescreve o cartão de ponto deste dia no Transnet — os quatro campos."
+        >
+          ⚠ Lançar de verdade
+        </button>
+        {disparando && <span className="dp-pill accent">disparando…</span>}
+      </div>
+
+      {travado && (
+        <div className="fg-sug-nota mute">
+          🔒 almoço travado pela regra da Revisão — o miolo não é editável e o que vai para o robô é
+          o dela.
+        </div>
+      )}
+
+      {/* NUNCA SUMIR COM O DIA: quando não dá para lançar, o motivo fica na tela.
+          Sem isto, a diferença entre "tem sugestão" e "o robô aceita" é invisível. */}
+      {ajuste.fora ? (
+        <div className="fg-sug-nota danger">
+          ⚠ não dá para lançar este dia: {ajuste.fora}. Se for decisão de alvo, crave o{" "}
+          <b>Real manual do DP</b> na Revisão — lá fica registrado com o seu nome, e volta para cá.
+        </div>
+      ) : (
+        <div className="fg-sug-nota ok">
+          vai gravar: <span className="dp-mono">{ajuste.alvo.map((h) => h || "—").join(" · ")}</span>
+          {mexeu ? " · com a sua edição" : ""}
+        </div>
+      )}
+
+      {recado && (
+        <div className="fg-sug-nota">
+          <span className={`dp-pill ${recado.tipo === "ok" ? "ok" : "danger"}`}>{recado.texto}</span>
+          {recado.painel && (
+            <>
+              {" "}
+              <a className="dp-btn" href={recado.painel} target="_blank" rel="noreferrer">
+                ver o robô rodando
+              </a>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PainelDetalhe({
   pessoa,
   semana,
@@ -732,6 +1337,111 @@ function PainelDetalhe({
   const { fila, manuais } = useMemo(
     () => montarFila([pessoa], motivosDaPessoa, ctx.diasCurso),
     [pessoa, motivosDaPessoa, ctx.diasCurso],
+  );
+
+  /* ── o cartão da semana, para lançar o ponto sugerido (PORTE.md §11, item 5) ──
+     Carga SOB DEMANDA, só da pessoa aberta e só da semana na tela: são 7 linhas,
+     contra as ~1.700 que a grade já carrega da categoria inteira. Por isso as
+     colunas da sugestão ficam fora do `COLUNAS_GRADE`.
+
+     `ponto_real_manual` entra porque o Real cravado na Revisão MANDA: sem ele
+     esta tela mostraria a sugestão crua e lançaria coisa diferente do que a
+     Revisão mandaria, sem ninguém ver. `ponto_caso` é a trava do "cartão já mexido
+     no Transnet". O crachá vai nas três grafias (o desktop grava o cru, o INOVE
+     grava com 8) — a mesma varredura da reserva. */
+  const cracha = pessoa.cracha;
+  const [sug, setSug] = useState(() => ({
+    carregando: true,
+    erro: "",
+    cartoes: new Map(),
+    casos: new Map(),
+  }));
+  const [recargaSug, setRecargaSug] = useState(0);
+
+  useEffect(() => {
+    if (!semana) return undefined;
+    let vivo = true;
+    setSug((atual) => ({ ...atual, carregando: true, erro: "" }));
+    (async () => {
+      const filtros = {
+        cracha: `in.(${variantesCracha(cracha).join(",")})`,
+        date_ref: [`gte.${semana}`, `lte.${somaDias(semana, 6)}`],
+      };
+      try {
+        const [diario, reaisManuais, casosDaSemana] = await Promise.all([
+          lerDP360("ponto_diario", { colunas: COLUNAS_AJUSTE, filtros, ordem: "date_ref.asc", limite: 40 }),
+          lerDP360("ponto_real_manual", { filtros, limite: 40 }),
+          lerDP360("ponto_caso", { filtros, limite: 40 }),
+        ]);
+        if (!vivo) return;
+        const reais = new Map(reaisManuais.map((r) => [chaveDia(r.cracha, r.date_ref), r]));
+        setSug({
+          carregando: false,
+          erro: "",
+          cartoes: new Map(
+            diario.map((l) => {
+              const k = chaveDia(l.cracha, l.date_ref);
+              return [k, aplicarRealManual(l, reais.get(k))];
+            }),
+          ),
+          casos: new Map(casosDaSemana.map((c) => [chaveDia(c.cracha, c.date_ref), c])),
+        });
+      } catch (falha) {
+        if (!vivo) return;
+        setSug({
+          carregando: false,
+          erro: falha?.message || "Falha ao ler a sugestão de ponto desta semana.",
+          cartoes: new Map(),
+          casos: new Map(),
+        });
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [cracha, semana, recargaSug]);
+
+  /* Disparo do robô do PONTO (`ponto.yml`), UM dia por vez — o mesmo robô, o mesmo
+     arquivo e o mesmo formato do "Lançar ajuste" da Revisão e da Refeição.
+     Depois do lançamento DE VERDADE: histórico por pessoa em `ponto_importacoes`
+     (passo 2, exatamente o que a Revisão escreve — a aba Importações já rotula
+     esse passo), e RELEITURA da semana, porque `ponto_caso` e o Real manual mudam
+     por baixo. `status: "disparado"` porque o robô foi disparado e ninguém ainda
+     leu a evidência dele — que é o estado da coisa. A trilha do disparo (quem
+     clicou, ensaio ou não) é do gateway, em `dp360_auditoria`. */
+  const lancarAjuste = useCallback(
+    async (ajuste, confirmar) => {
+      const resposta = await dispararRoboDP360("ponto", {
+        csv: csvDoAjuste([ajuste.csv]),
+        data: ajuste.csv.data,
+        confirmar: confirmar ? "true" : "false",
+      });
+      let aviso = "";
+      if (confirmar) {
+        try {
+          await inserirDP360("ponto_importacoes", [
+            {
+              cracha: ajuste.csv.cracha,
+              nome: pessoa.nome,
+              date_ref: ajuste.dia,
+              passo: 2,
+              entrada: ajuste.csv.entrada,
+              saida_almoco: ajuste.csv.alm_saida,
+              volta_almoco: ajuste.csv.alm_volta,
+              saida: ajuste.csv.saida,
+              fonte: ajuste.fonte,
+              arquivo: "robô ponto.yml",
+              status: "disparado",
+            },
+          ]);
+        } catch {
+          aviso = " (não foi possível registrar o histórico em ponto_importacoes)";
+        }
+        setRecargaSug((n) => n + 1);
+      }
+      return { ...resposta, aviso };
+    },
+    [pessoa.nome],
   );
 
   // ENSAIO x VALENDO são dois botões, não um checkbox. Checkbox marcado por
@@ -868,6 +1578,20 @@ function PainelDetalhe({
         </div>
       )}
 
+      {/* A carga da sugestão é separada da grade; quando ela falha, o que some é
+          só o lançamento do ponto — o resto do detalhe continua de pé. */}
+      {(sug.carregando || sug.erro) && (
+        <div className="fg-sug-aviso">
+          {sug.erro ? (
+            <span className="dp-pill danger">
+              ⚠ {sug.erro} — sem o ponto sugerido nesta abertura.
+            </span>
+          ) : (
+            <span className="dp-pill mute">lendo o ponto sugerido da semana…</span>
+          )}
+        </div>
+      )}
+
       <div>
         {[1, 2, 3, 4, 5, 6, 7].map((d) => {
           const linha = pessoa.linha[d];
@@ -895,6 +1619,26 @@ function PainelDetalhe({
           const podeMotivo =
             !!linha && !lancado && !texto(linha.te_descricao_dia) &&
             (estado.cls === "verif" || estado.cls === "folga" || estado.cls === "curso");
+
+          /* O EDITOR DO PONTO SUGERIDO fica no MESMO lugar do original
+             (app.js:6195, o `else if` depois do `isSemOperacao`): dia em que a
+             pessoa TRABALHOU, o cartão não fechou certo, nada foi lançado no
+             Transnet e a view tem sugestão. Dia sem ponto é assunto do picker de
+             motivo, e dia sem operação é assunto da reserva — cada um com o seu.
+
+             O original ainda exigia MOTORISTA (`isMotorista`); aqui não, porque
+             o lote de ajuste da Revisão — de onde vêm as travas — atende as três
+             categorias, e quem decide se há alvo é a view, não a categoria. */
+          const cartaoSug = sug.cartoes.get(chave);
+          const podeAjuste =
+            !!linha &&
+            !!cartaoSug &&
+            !lancado &&
+            !texto(linha.te_descricao_dia) &&
+            texto(linha.status_ponto).toUpperCase() !== "OK" &&
+            !!texto(linha.jornada_transnet) &&
+            !semOperacao(linha) &&
+            temSugestao(cartaoSug);
 
           if (podeMotivo && definido) {
             const pintura = motivoCelula(definido);
@@ -956,6 +1700,19 @@ function PainelDetalhe({
                 </>
               )}
 
+              {podeAjuste && (
+                /* `key` no crachá|dia: trocar de pessoa no painel REUSA este
+                   componente, e sem a chave o que estava digitado no dia da
+                   pessoa anterior continuaria na caixa da próxima. */
+                <EditorPontoSugerido
+                  key={chave}
+                  pessoa={pessoa}
+                  cartao={cartaoSug}
+                  caso={sug.casos.get(chave)}
+                  aoLancar={lancarAjuste}
+                />
+              )}
+
               {podeMotivo && definido && (
                 <div className="dp-dnote sug">
                   ✎ {nomeDoMotivo(definido)} — definido por você
@@ -999,7 +1756,9 @@ function PainelDetalhe({
 
       <p className="dp-det-foot">
         O motivo do dia e a marcação de reserva são gravados na base do DP (a mesma da ferramenta).
-        O lançamento das ocorrências no Transnet continua sendo do robô.
+        O lançamento das ocorrências no Transnet continua sendo do robô. O <b>ponto sugerido</b> que
+        você edita aqui não é gravado em lugar nenhum: ele vale para o disparo daquele clique — o
+        que fica registrado é o cartão que o robô escreveu (<code>ponto_importacoes</code>, passo 2).
       </p>
     </aside>
   );
@@ -1015,6 +1774,10 @@ export default function Folgas() {
 
   const [reservas, setReservas] = useState(() => new Set());
   const [ocorrencias, setOcorrencias] = useState(() => new Map());
+  // A MESMA leitura da linha acima, guardada CRUA para o histórico agregado. O Map
+  // é indexado por crachá|dia (é o que a célula do dia pergunta) e por isso perde a
+  // lista; o pop-up do item 9 precisa dela inteira — e não de outra consulta.
+  const [listaOcorrencias, setListaOcorrencias] = useState([]);
   const [diasCurso, setDiasCurso] = useState(() => new Map());
   const [motivos, setMotivos] = useState(() => new Map());
 
@@ -1024,6 +1787,7 @@ export default function Folgas() {
   const [erro, setErro] = useState("");
   const [selecionado, setSelecionado] = useState("");
   const [legendaAberta, setLegendaAberta] = useState(false);
+  const [historicoAberto, setHistoricoAberto] = useState(false);
   const [recarga, setRecarga] = useState(0);
 
   const [selecao, setSelecao] = useState(() => new Set());
@@ -1087,6 +1851,7 @@ export default function Folgas() {
         setSemanas(lista);
         setSemana((anterior) => (anterior && lista.includes(anterior) ? anterior : lista[0] || ""));
         setReservas(new Set(linhasReservas.map((r) => chaveDia(r.cracha, r.date_ref))));
+        setListaOcorrencias(linhasOcorrencias);
         setOcorrencias(
           new Map(
             linhasOcorrencias.map((o) => [
@@ -1440,6 +2205,21 @@ export default function Folgas() {
   const indiceSemana = semanas.indexOf(semana);
   const pessoaSelecionada = visiveis.find((p) => p.cracha === selecionado) || null;
 
+  // Nome para o histórico do bot: `ponto_ocorrencias` guarda só o crachá. Sai do
+  // que já está na tela — quem não estiver na semana/categoria abertas aparece
+  // pelo crachá, e o rodapé do pop-up diz isso.
+  const nomesNaTela = useMemo(
+    () => new Map(pessoas.filter((p) => p.nome).map((p) => [cra8(p.cracha), p.nome])),
+    [pessoas],
+  );
+
+  // O número no botão tem de ser o mesmo que o pop-up mostra — os `aviso_*` já
+  // saem aqui, senão o botão prometeria linhas que a lista corta.
+  const totalHistorico = useMemo(
+    () => listaOcorrencias.filter((o) => !RE_AVISO.test(texto(o.tipo))).length,
+    [listaOcorrencias],
+  );
+
   const cabecalhoDias = useMemo(
     () =>
       DIAS_SEMANA.map((rotulo, i) => ({
@@ -1503,6 +2283,16 @@ export default function Folgas() {
           <button type="button" className="dp-btn" onClick={() => setLegendaAberta(true)}>
             <Palette size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
             Legenda
+          </button>
+          <button
+            type="button"
+            className="dp-btn"
+            onClick={() => setHistoricoAberto(true)}
+            title="O que o robô já lançou no Transnet (DSR / Compensação / Curso), com o status de cada lançamento"
+          >
+            <History size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
+            Histórico
+            {totalHistorico > 0 && <span className="dp-faint"> · {totalHistorico}</span>}
           </button>
           <button type="button" className="dp-btn" onClick={recarregar}>
             <RefreshCw size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
@@ -1704,6 +2494,14 @@ export default function Folgas() {
       )}
 
       {legendaAberta && <ModalLegenda aoFechar={() => setLegendaAberta(false)} />}
+
+      {historicoAberto && (
+        <ModalHistoricoBot
+          linhas={listaOcorrencias}
+          nomes={nomesNaTela}
+          aoFechar={() => setHistoricoAberto(false)}
+        />
+      )}
     </AbaShell>
   );
 }

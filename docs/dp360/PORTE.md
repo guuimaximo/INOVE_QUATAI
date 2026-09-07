@@ -298,3 +298,41 @@ Quando for, o que ficou levantado:
   histórico do run — vazou a chave um dia, vazou tudo que já passou.
 - **A mudança no bot pode ser compatível:** ler o bilhete quando ele existir e cair na
   variável de ambiente quando não — assim o desktop continua funcionando como hoje.
+
+## 11. Segundo inventário — por AÇÃO (07/09/2026)
+
+A §9 comparou **telas** e por isso deixou passar o que vive dentro de pop-up e o que é
+ação sem tela própria — o dono achou o "montador" sozinho. Este aqui varreu os **121
+métodos públicos** de `main.py` e os **~168 pontos de clique** de `app.js`, um a um.
+
+Classificação: **32 existem** no porte (às vezes com outro nome: `congelar_antes` →
+`gravaContrato`, `get_locais` → `regrasGps.LOCAIS`, `baixar_csv` → `TabelaDP`), **69 não
+se aplicam** (44 getters que o porte substitui lendo o Supabase direto; 12 da
+infraestrutura do robô LOCAL — fila, lock, esteira — que o INOVE não tem porque dispara
+Actions; 7 mortos no próprio original; 6 de máquina local) e **o resto falta**.
+
+Faltas NOVAS (as já conhecidas estão na §7c e na §10), por impacto:
+
+| # | Falta | Ferramenta | Por que importa | Tam. |
+|---|---|---|---|---|
+| 1 | O **cartão do dia não abre** em Ocorrências nem em Motorista | `app.js:2158`, `:6778` | O Real manual é o topo da cascata da régua. Julgando um pedido, o DP discorda e não tem como cravar ali — precisa sair para a Revisão e reachar data + categoria + pessoa | grande |
+| 2 | **Prova no Transnet** — os prints antes/depois do lançamento | `main.py:839`, `app.js:2595` | É a peça de evidência trabalhista. Hoje só existe como artefato do run do GitHub | grande |
+| 3 | **Lançar dias sem ponto** (DSR/Comp/Curso em dia com zero batida) na fila de Ocorrências | `main.py:4389`, `app.js:1615` | É a "porta que faltava" do próprio original: sem ela o dia sem batida entra no motor de correção, o Transnet recusa, e ele gira na fila para sempre (14 dias do WILKER, medido em 28/08) | médio |
+| 4 | **Recusar os pedidos e corrigir o ponto assim** — quando eram alteração, não inserção | `app.js:1211` → `:5612` | O porte diagnostica (mostra o selo) e para. Sem a saída, o DP recusa e o dia fica sem alvo | médio |
+| 5 | **Lançar o ponto sugerido direto na Folgas**, com os campos editáveis no detalhe | `app.js:6168` | Vendo a semana da pessoa, o DP conserta o dia ali em vez de ir à Revisão reencontrar tudo | médio |
+| 6 | **`ponto_ajustes` nunca recebe linha do INOVE** — e o "Histórico do bot" da Revisão sumiu | `main.py:2840`, `:2881` | O próprio porte LÊ essa tabela (`CartaoDoDia.jsx:1457`) para mostrar o que o bot mudou no dia; vai ficar vazia para tudo que o INOVE lançar. O gateway já libera a escrita | médio |
+| 7 | **Imprimir o histórico do caso** (+ KPIs e "próximo passo") | `app.js:2258`, `:2539` | O relatório é a peça que se anexa; nenhuma tela do dp360 chama `print` | pequeno |
+| 8 | **Marcar sugestão** — um clique marca o veredito sugerido em todas as linhas visíveis | `app.js:2092` | Grade de centenas de linhas: hoje são duas passadas manuais | pequeno |
+| 9 | **Histórico das ocorrências lançadas** na Folgas | `app.js:3759` | O dado já é carregado; falta a visão agregada | pequeno |
+
+### Divergências docstring × código (novas)
+
+- `main.py:6199` `_pedido_do_dia` — a docstring lista **seis** desfechos; o código devolve
+  um **sétimo**, `ponto_invertido` (`:6216`).
+- `main.py:8916` `verificar_subiu(self, tol=0)` — recebe `tol` e nunca usa.
+
+### Mortos na ferramenta (não portar)
+
+`salvar_ajuste` (`:379`), `exportar_correcoes_p2` (`:2803`), `previa_vencidos` (`:685`),
+`verificar_subiu` (`:8916`) e `abrir_mapa` (`:6896`) — nenhum é chamado do `app.js` nem
+de dentro do Python.

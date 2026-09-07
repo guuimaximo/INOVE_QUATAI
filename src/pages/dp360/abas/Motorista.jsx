@@ -1,17 +1,49 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { MapPin, RefreshCw, UserRound, X } from "lucide-react";
+import { RefreshCw, UserRound } from "lucide-react";
 import AbaShell from "./AbaShell";
-import MapaBatidas from "../MapaBatidas";
 import TabelaDP from "../TabelaDP";
+import CartaoDoDia, {
+  BotaoPontoConferido,
+  Pilula,
+  aplicarRealManual,
+  fmtMin,
+  marcacaoAusente,
+} from "../CartaoDoDia";
+import {
+  jornadaLiquidaDoDia,
+  mensagemBateuFora,
+  mensagemInterno,
+  mensagemPedirExclusao,
+  mensagemRevisaoMotorista,
+  rotaAvisoInterno,
+} from "../comunicadoTransnet";
 import { lerDP360, lerTudoDP360 } from "../../../services/dp360Api";
 import { GARAGEM, dentroDoLocal, distanciaM, localConhecido } from "../regrasGps";
 
 // Porte da tela "por motorista" do DP360 (Sistemas/PONTO: app/ui/app.js `viewMotorista`
 // + `renderMot`, e app/main.py `get_pessoas_lista` / `get_pontos_pessoa`).
 //
-// Só LEITURA. A regra de negócio (status_ponto, motivo, alvo_*, *_sug) já vem calculada
-// pelas views do Athena e chega pronta em `ponto_diario` — a tela apenas apresenta.
-// Nada aqui grava.
+// A GRADE é só LEITURA: a regra de negócio (status_ponto, motivo, alvo_*, *_sug) já vem
+// calculada pelas views do Athena e chega pronta em `ponto_diario` — a tela apenas
+// apresenta.
+//
+// O DIA CLICADO ABRE O `../CartaoDoDia`, o MESMO pop-up da Revisão e da Gordura — é o
+// que a ferramenta faz (app.js:6778 chama `pontoLinha` + `pontoDetalhe`, o mesmo
+// `pontoDetalhe` da Revisão). O painel próprio desta aba acabou: fontes, sugestão, Real,
+// Real manual, almoço, semana, GPS com mapa, linha do tempo do caso (com o balão do que
+// foi mandado e o que o colaborador pediu) e as viagens do Citatti são todos de lá.
+// Quem está lendo a vida de um motorista e vê um dia torto não precisa mais sair da
+// tela e reachar data + categoria + pessoa na Revisão para cravar o Real.
+//
+// O QUE ESTA ABA PENDURA NO CARTÃO, por prop, sem tocar no arquivo dele:
+//   · `selos`     — a SITUAÇÃO do dia (`tipo_dia`/feriado) e o `motivo` da view, que é
+//                   o que esta aba sabe e o cartão não;
+//   · `previaAviso` — a reconstrução da carta JÁ ENVIADA (o cartão não guarda texto:
+//                   `ponto_caso` só tem o carimbo). Ver o comentário do `previaAviso`;
+//   · `acoesRodape` — o ✓ Ponto conferido, o MESMO botão exportado que a Revisão usa.
+// O ENVIO da ocorrência (📣) NÃO sai daqui: quem monta o CSV, decide os barrados e grava
+// o caso é o `ModalComunicado`, que é de cada aba de origem. Sem `aoAvisar` o cartão
+// simplesmente não desenha o botão.
 
 /* ────────────────────────────── constantes portadas ────────────────────────────── */
 
@@ -21,6 +53,16 @@ import { GARAGEM, dentroDoLocal, distanciaM, localConhecido } from "../regrasGps
 
 const DIAS_SEM = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 const JANELA_PADRAO_DIAS = 30; // período inicial: fim − 30 dias (a base guarda ~70 dias)
+
+// Teto de paginação do seletor de colaborador (o gateway devolve 1000 linhas por
+// página). A leitura é a `ponto_diario` INTEIRA, sem filtro de data: ~70 dias × a
+// garagem passa de 40 mil linhas (é a mesma conta do Abandonos). No teto o
+// `lerTudoDP360` PARA — e parava em silêncio. Como a ordem é `date_ref.desc`, quem
+// some primeiro é justamente quem só aparece nos dias mais ANTIGOS: o afastado, o
+// desligado, o que parou de bater ponto — exatamente quem se vai procurar aqui.
+// Por isso o corte agora é dito na tela, como o Abandonos já faz.
+const TETO_PAGINAS = 60;
+const LINHAS_POR_PAGINA = 1000;
 
 /* ─────────────────────────────────── helpers ──────────────────────────────────── */
 
@@ -84,16 +126,6 @@ function somarDias(iso, n) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 }
 
-/** Carimbo do banco (data ou data+hora) em pt-BR. */
-function fmtQuando(valor) {
-  const s = String(valor ?? "").trim();
-  if (!s) return "";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return fmtData(s);
-  const dt = new Date(s);
-  if (Number.isNaN(dt.getTime())) return s;
-  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(dt);
-}
-
 /* ────────────────────────────────── GPS ───────────────────────────────────────── */
 
 // ATENÇÃO — RÉGUA DIFERENTE DA REVISÃO, DE PROPÓSITO.
@@ -105,6 +137,11 @@ function fmtQuando(valor) {
 // A régua completa (veículo 500 m, reserva, não medido) é a da Revisão, em `reguaLocal`.
 // Aqui só trocamos o código duplicado pelas funções do módulo — a semântica da coluna
 // GPS continua exatamente a mesma.
+//
+// ISTO É SÓ DA COLUNA DA GRADE. O pop-up do dia é o `../CartaoDoDia` e ele roda a régua
+// COMPLETA por conta própria (`gpsAuto`: lê `ponto_gps` + `gps_carro` do crachá×dia e
+// aplica `regrasGps`, com a reserva do INOVE ligando a tolerância de dia sem carro).
+// Duas leituras, duas réguas — mas cada uma na tela em que o original a usa.
 
 function fmtDistancia(metros) {
   const d = Number(metros) || 0;
@@ -124,10 +161,6 @@ function analisarBatidaGps(linha) {
     distLocal: perto?.distancia ?? null,
     dentro: !!perto && dentroDoLocal(perto.nome, perto.distancia),
     distGaragem: distanciaM(lat, lon, GARAGEM.lat, GARAGEM.lon),
-    // lat/lon seguem cru para o mapa do painel do dia (`MapaBatidas`).
-    // Campos NOVOS: nenhum cálculo ou agregação abaixo usa ou muda por isso.
-    lat,
-    lon,
   };
 }
 
@@ -329,259 +362,31 @@ function PilulaGps({ gps }) {
   );
 }
 
-const ROTULO = {
-  fontSize: 10.5,
-  fontWeight: 800,
-  letterSpacing: ".06em",
-  textTransform: "uppercase",
-};
+/* ───────────── o que ESTA aba pendura no cabeçalho do CartaoDoDia ─────────────
+   O cartão mostra o `status_ponto` e o diagnóstico do MOTOR (fantasma, cartão que não
+   fecha). O que ele não tem é o que só esta grade lê: `tipo_dia`/`te_descricao_dia`
+   (FOLGA, ATESTADO, FÉRIAS, AFASTAMENTO…) e `eh_feriado` — e é justamente isso que
+   explica um dia vazio na vida de uma pessoa. Sem a pílula, o cartão de um dia de
+   férias abre parecendo um dia de trabalho sem ponto.
 
-function Campo({ rotulo, children }) {
-  return (
-    <div>
-      <div className="dp-faint" style={ROTULO}>
-        {rotulo}
-      </div>
-      <div style={{ marginTop: 3 }}>{children}</div>
-    </div>
-  );
-}
-
-/* ─────────────────────── painel lateral: detalhe de um dia ────────────────────── */
-
-const ETAPAS_CASO = [
-  { chave: "aviso_enviado_em", rotulo: "Aviso enviado" },
-  { chave: "aviso_conferido_em", rotulo: "Aviso visto pelo colaborador" },
-  { chave: "conferido_em", rotulo: "Executado no Transnet" },
-  { chave: "advertencia_enviada_em", rotulo: "Advertência enviada" },
-  { chave: "correcao_final_em", rotulo: "Correção do ponto" },
-];
-
-function TrilhaCaso({ caso }) {
-  const aceite = String(caso.aceite ?? "").trim();
-  const ajuste = String(caso.ajuste ?? "").trim();
-  const decisao =
-    aceite === "aceito"
-      ? "aceitou — o ponto fica como ele pediu"
-      : aceite === "rejeitado"
-        ? "recusou o pedido"
-        : aceite && aceite !== "pendente"
-          ? aceite
-          : "";
-
-  const bolinha = (aceso) => ({
-    width: 7,
-    height: 7,
-    marginTop: 5,
-    flex: "none",
-    borderRadius: "50%",
-    background: aceso ? "var(--dp-accent)" : "var(--dp-border-strong)",
-  });
-
-  return (
-    <div className="dp-card" style={{ marginTop: 14 }}>
-      <div className="dp-faint" style={ROTULO}>
-        Trilha do caso
-      </div>
-      <ol style={{ margin: "10px 0 0", padding: 0, listStyle: "none" }}>
-        <li style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-          <span style={bolinha(false)} />
-          <div>
-            <div style={{ fontWeight: 600 }}>Decisão do DP</div>
-            <div className="dp-muted" style={{ fontSize: 12 }}>
-              {decisao || "sem decisão registrada"}
-              {ajuste && ajuste !== "nao_ajustou" ? ` · ajuste ${ajuste}` : ""}
-            </div>
-          </div>
-        </li>
-        {ETAPAS_CASO.map((etapa) => {
-          const quando = String(caso[etapa.chave] ?? "").trim();
-          return (
-            <li key={etapa.chave} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-              <span style={bolinha(!!quando)} />
-              <div>
-                <div className={quando ? "" : "dp-faint"} style={{ fontWeight: 600 }}>
-                  {etapa.rotulo}
-                </div>
-                <div className="dp-muted dp-num" style={{ fontSize: 12 }}>
-                  {quando ? fmtQuando(quando) : "—"}
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
-  );
-}
-
-function PainelDia({ dia, pessoa, batidasGps, caso, aoFechar }) {
-  useEffect(() => {
-    const tecla = (e) => {
-      if (e.key === "Escape") aoFechar();
-    };
-    window.addEventListener("keydown", tecla);
-    return () => window.removeEventListener("keydown", tecla);
-  }, [aoFechar]);
-
-  if (!dia) return null;
+   Duas pílulas no máximo, com o MESMO texto e o MESMO tom da coluna Situação da grade
+   (`situacaoDoDia` + `TONS`, nada recalculado aqui):
+     · a SITUAÇÃO, só quando diz algo diferente do `status_ponto` que o cartão já
+       mostra — repetir "REVISAR" ao lado de "REVISAR" é ruído;
+     · o MOTIVO da view, encurtado como na grade e inteiro no `title`. */
+function SelosDoDia({ dia }) {
   const situacao = situacaoDoDia(dia);
-  const atual = cartaoAtual(dia);
-  const sugestao = cartaoSugestao(dia);
-  const escalaIni = fmtHora(dia.programado_entrada || dia.esc_entrada);
-  const escalaFim = fmtHora(dia.programado_saida || dia.esc_saida);
-  const opIni = min2hm(dia.operacao_ini_min);
-  const opFim = min2hm(dia.operacao_fim_min);
-  const data = soData(dia.date_ref);
-
+  const motivo = String(dia.motivo ?? "").trim();
+  const repetido = situacao.texto === String(dia.status_ponto ?? "").trim();
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 50,
-        display: "flex",
-        justifyContent: "flex-end",
-        background: "rgba(20, 30, 55, 0.38)",
-      }}
-      role="presentation"
-      onClick={aoFechar}
-    >
-      <aside
-        style={{
-          height: "100%",
-          width: "min(560px, 100%)",
-          overflowY: "auto",
-          background: "var(--dp-surface)",
-          boxShadow: "0 0 40px rgba(20, 30, 55, 0.25)",
-          padding: "16px 20px 28px",
-        }}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Detalhe do dia ${fmtData(data)}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-          <div>
-            <div className="dp-faint" style={ROTULO}>
-              {pessoa?.nome || "Colaborador"} · {pessoa?.cracha || dia.cracha || ""}
-            </div>
-            <h3 style={{ margin: "3px 0 0", fontSize: 16, fontWeight: 660, letterSpacing: "-.01em" }}>
-              <span className="dp-num">{fmtData(data)}</span>{" "}
-              <span className="dp-muted" style={{ fontWeight: 550 }}>
-                · {diaSemana(data)}
-              </span>
-            </h3>
-          </div>
-          <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar detalhe">
-            <X size={15} />
-          </button>
-        </div>
-
-        <div style={{ marginTop: 12 }}>
-          <PilulaSituacao situacao={situacao} />
-          {dia.status_ponto === "REVISAR" && dia.motivo && (
-            <p className="dp-muted" style={{ margin: "7px 0 0" }}>
-              {String(dia.motivo)}
-            </p>
-          )}
-        </div>
-
-        <div
-          className="dp-card"
-          style={{
-            marginTop: 14,
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-            gap: 12,
-          }}
-        >
-          <Campo rotulo="Ponto batido">
-            <LinhaCartao horas={atual} />
-          </Campo>
-          <Campo rotulo="Sugestão">
-            <LinhaCartao
-              horas={sugestao}
-              destaque={sugestao.map((v, i) => !!v && v !== atual[i])}
-            />
-          </Campo>
-          <Campo rotulo="Escala">
-            <span className="dp-num">
-              {escalaIni || escalaFim ? `${escalaIni || "—"} – ${escalaFim || "—"}` : <Vazio />}
-            </span>
-          </Campo>
-          <Campo rotulo="Operação">
-            <span className="dp-num">
-              {opIni || opFim ? `${opIni || "—"} – ${opFim || "—"}` : <Vazio />}
-            </span>
-          </Campo>
-          <Campo rotulo="Jornada">
-            <span className="dp-num">{dia.jornada_horas || <Vazio />}</span>
-          </Campo>
-          <Campo rotulo="Categoria">{dia.categoria || <Vazio />}</Campo>
-        </div>
-
-        <div className="dp-card" style={{ marginTop: 14 }}>
-          <div
-            className="dp-faint"
-            style={{ ...ROTULO, display: "flex", alignItems: "center", gap: 6 }}
-          >
-            <MapPin size={13} /> Batidas com GPS
-          </div>
-          {batidasGps.length === 0 ? (
-            <p className="dp-muted" style={{ margin: "8px 0 0" }}>
-              Nenhuma batida com GPS neste dia.
-            </p>
-          ) : (
-            <ul style={{ margin: "10px 0 0", padding: 0, listStyle: "none" }}>
-              {batidasGps.map((b, i) => (
-                <li
-                  key={`${b.hora}-${i}`}
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 8,
-                    padding: "7px 0",
-                    borderTop: i ? "1px solid var(--dp-border)" : "0",
-                  }}
-                >
-                  <span className="dp-mono dp-num">{b.hora || "--:--"}</span>
-                  <span className="dp-muted" style={{ fontSize: 12 }}>
-                    {b.local} · {fmtDistancia(b.distLocal)}
-                  </span>
-                  <span
-                    className={`dp-pill ${b.dentro ? "ok" : "danger"}`}
-                    title={`${fmtDistancia(b.distGaragem)} da garagem`}
-                  >
-                    {b.dentro ? "local conhecido" : `fora · ${fmtDistancia(b.distGaragem)} da garagem`}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {/* O MAPA com as cercas de 100 m desenhadas (porte do `initPdMap`).
-              Esta aba não lê `gps_carro`, então aqui não há ônibus nem régua
-              pessoa↔carro — só onde a pessoa bateu e se caiu dentro da cerca.
-              A régua completa (veículo 500 m, reserva, não medido) é a da
-              Revisão, e o mapa de lá desenha as três camadas. */}
-          {batidasGps.length > 0 && (
-            <div style={{ marginTop: 12 }}>
-              <MapaBatidas batidas={batidasGps} altura={300} />
-            </div>
-          )}
-        </div>
-
-        {caso ? (
-          <TrilhaCaso caso={caso} />
-        ) : (
-          <p className="dp-muted" style={{ margin: "14px 0 0" }}>
-            Nenhum caso aberto para este dia.
-          </p>
-        )}
-      </aside>
-    </div>
+    <>
+      {!repetido && (
+        <Pilula texto={situacao.texto} tom={TONS[situacao.tom] || TONS.just} titulo={motivo} />
+      )}
+      {dia.status_ponto === "REVISAR" && motivo && (
+        <Pilula texto={motivo.split(" (")[0]} tom="mute" titulo={motivo} />
+      )}
+    </>
   );
 }
 
@@ -601,9 +406,16 @@ export default function Motorista() {
   const [dias, setDias] = useState([]);
   const [gpsBrutos, setGpsBrutos] = useState([]);
   const [casos, setCasos] = useState([]);
+  // O Real manual do DP não vem na `ponto_diario`: é tabela à parte, e quem junta as
+  // duas é o overlay `aplicarRealManual` — a MESMA leitura que a Revisão e a Gordura
+  // fazem antes de abrir o cartão. Sem ela o bloco "4 · Real manual do DP" abriria
+  // VAZIO num dia já cravado, e quem estivesse olhando cravaria por cima.
+  const [reaisManuais, setReaisManuais] = useState([]);
   const [carregandoDias, setCarregandoDias] = useState(false);
   const [diaAberto, setDiaAberto] = useState("");
   const [recarga, setRecarga] = useState(0);
+  // O seletor de colaborador bateu no teto de paginação? (ver TETO_PAGINAS)
+  const [truncado, setTruncado] = useState(false);
 
   /* 1) lista de pessoas (distinct por crachá em `ponto_diario`) + faixa de datas. */
   useEffect(() => {
@@ -625,10 +437,14 @@ export default function Motorista() {
       const linhas = await lerTudoDP360(
         "ponto_diario",
         { colunas: "cracha,nm_funcionario,categoria", ordem: "date_ref.desc,cracha" },
-        60,
+        TETO_PAGINAS,
       );
 
       if (!ativo) return;
+      // O TETO NÃO PODE PASSAR CALADO. `lerTudoDP360` para na última página e devolve o
+      // que deu — sem sinal, o seletor simplesmente não tem a pessoa e quem procura
+      // conclui que ela não existe na base. Mesmo aviso do Abandonos.
+      setTruncado(linhas.length >= TETO_PAGINAS * LINHAS_POR_PAGINA);
       const vistos = new Map();
       for (const l of linhas) {
         const cr = String(l.cracha ?? "").trim();
@@ -704,6 +520,7 @@ export default function Motorista() {
       setDias([]);
       setGpsBrutos([]);
       setCasos([]);
+      setReaisManuais([]);
       return undefined;
     }
     let ativo = true;
@@ -731,8 +548,16 @@ export default function Motorista() {
         filtros: { cracha: alvo, date_ref: `gte.${ini}` },
         ordem: "date_ref.asc",
       }),
+      // O Real manual do DP, para o overlay do cartão. DEGRADA SEM DERRUBAR: é a única
+      // leitura NOVA desta aba e, se o gateway recusar a tabela ou a coluna, um 400
+      // dentro do `Promise.all` mataria a aba inteira (o histórico da pessoa) por causa
+      // de um bloco do pop-up. Sem ela o cartão abre sem o Real cravado — pior que ter,
+      // melhor que aba morta.
+      lerTudoDP360("ponto_real_manual", {
+        filtros: { cracha: alvo, date_ref: `gte.${ini}` },
+      }).catch(() => []),
     ])
-      .then(([linhasDia, linhasGps, linhasCaso]) => {
+      .then(([linhasDia, linhasGps, linhasCaso, linhasRm]) => {
         if (!ativo) return;
         setDias(
           linhasDia
@@ -741,6 +566,7 @@ export default function Motorista() {
         );
         setGpsBrutos(linhasGps.filter(dentroDoPeriodo));
         setCasos(linhasCaso.filter(dentroDoPeriodo));
+        setReaisManuais(linhasRm.filter(dentroDoPeriodo));
       })
       .catch((falha) => {
         if (!ativo) return;
@@ -748,6 +574,7 @@ export default function Motorista() {
         setDias([]);
         setGpsBrutos([]);
         setCasos([]);
+        setReaisManuais([]);
       })
       .finally(() => {
         if (ativo) setCarregandoDias(false);
@@ -760,16 +587,14 @@ export default function Motorista() {
 
   const gpsPorDia = useMemo(() => agregarGpsPorDia(gpsBrutos), [gpsBrutos]);
 
-  const batidasPorDia = useMemo(() => {
+  const realManualPorDia = useMemo(() => {
     const mapa = {};
-    for (const bruta of gpsBrutos) {
-      const b = analisarBatidaGps(bruta);
-      if (!b || !b.dia) continue;
-      (mapa[b.dia] || (mapa[b.dia] = [])).push(b);
+    for (const rm of reaisManuais) {
+      const d = soData(rm.date_ref);
+      if (d) mapa[d] = rm;
     }
-    for (const lista of Object.values(mapa)) lista.sort((a, b) => a.hora.localeCompare(b.hora));
     return mapa;
-  }, [gpsBrutos]);
+  }, [reaisManuais]);
 
   const casoPorDia = useMemo(() => {
     const mapa = {};
@@ -796,6 +621,148 @@ export default function Motorista() {
     () => dias.find((d) => soData(d.date_ref) === diaAberto) || null,
     [dias, diaAberto],
   );
+
+  const casoDoDia = casoPorDia[diaAberto] || null;
+
+  /* ---- a linha que vai para o cartão ----
+     O overlay do Real manual é aplicado AQUI, e não em `dias`: a GRADE continua
+     mostrando a `ponto_diario` crua, exatamente como mostrava antes desta mudança.
+     (Consequência conhecida e deixada de propósito: num dia com Real cravado, a coluna
+     Sugestão da grade segue mostrando a sugestão da view enquanto o cartão mostra o
+     Real. Corrigir isso é mexer no que a aba mostra sobre a pessoa — decisão do dono,
+     não desta mudança.) */
+  const linhaDoCartao = useMemo(
+    () =>
+      diaSelecionado
+        ? aplicarRealManual(diaSelecionado, realManualPorDia[diaAberto] || null)
+        : null,
+    [diaSelecionado, realManualPorDia, diaAberto],
+  );
+
+  /* ---- releitura de UM dia depois de o cartão gravar ----
+     Mesma disciplina da Revisão (`recarregarLinha`): nada de estado otimista — relê a
+     `ponto_diario` CRUA, o `ponto_real_manual` e o `ponto_caso` daquele crachá×dia e
+     troca as três coleções. A linha crua é o que permite DESFAZER o overlay quando o
+     Real manual é apagado; reaproveitar a linha já sobrescrita deixaria `entrada_sug`/
+     `alvo_*` com o valor antigo do DP. Como `diaSelecionado` sai de `dias`, o cartão
+     aberto recebe a linha nova sozinho. */
+  const recarregarDia = useCallback(async (crachaLinha, dia) => {
+    const filtros = { cracha: filtroCracha(crachaLinha), date_ref: `eq.${dia}` };
+    const [diario, rms, listaCasos] = await Promise.all([
+      lerDP360("ponto_diario", { filtros, limite: 5 }),
+      lerDP360("ponto_real_manual", { filtros, limite: 5 }).catch(() => []),
+      lerDP360("ponto_caso", { filtros, limite: 5 }),
+    ]);
+    const nova = diario?.[0] || null;
+    if (nova) setDias((ls) => ls.map((l) => (soData(l.date_ref) === dia ? nova : l)));
+    const trocar = (lista, achado) => {
+      const outros = lista.filter((x) => soData(x.date_ref) !== dia);
+      return achado ? [...outros, achado] : outros;
+    };
+    setReaisManuais((ls) => trocar(ls, rms?.[0] || null));
+    setCasos((ls) => trocar(ls, listaCasos?.[0] || null));
+  }, []);
+
+  /* ---- A CARTA QUE JÁ SAIU, no balão da linha do tempo do cartão ----
+     app.js:5084-5091: aberto o dia, se há aviso enviado o balão mostra "o que mandamos".
+     O texto tem de ser RECONSTRUÍDO — o Transnet não devolve a mensagem e o `ponto_caso`
+     guarda só o carimbo. Quem diz qual modelo saiu é o `tipo`/`origem` do caso, gravados
+     NO ENVIO e congelados (`marcarReavisos`), nunca a leitura de hoje: um dia já
+     corrigido mostraria o texto errado.
+
+     SÓ RECONSTRUÇÃO, NUNCA PRÉVIA (a Revisão faz as duas). Esta aba não envia nada — sem
+     `aoAvisar` não há botão 📣 — e uma prévia de "o que vai sair" prometeria um envio que
+     não existe aqui.
+
+     A MONTAGEM DA CARTA NÃO É REESCRITA: são as MESMAS funções de `../comunicadoTransnet`
+     que o disparo usa, e o modelo continua saindo do `app_config` dentro do cartão. O que
+     está duplicado da Revisão é o ROTEAMENTO (o `if (enviado)` dela) — só porque ele mora
+     dentro do componente dela e este arquivo é o único que esta mudança pode tocar. O
+     lugar dele é `comunicadoTransnet`, como um `previaDoCasoEnviado(linha, caso, gps)`
+     compartilhado pelas três abas.
+
+     O QUE NÃO DÁ PARA RECONSTRUIR AQUI: a carta da GORDURA (`origem='gordura'`). Ela é
+     montada por `mensagemGordura`, que vive dentro da aba Gordura, não é exportada e lê a
+     linha de `ponto_gordura` com as quatro camadas aplicadas — que esta aba não carrega.
+     Copiá-la seria a segunda montagem da mesma carta, exatamente o erro que o cartão
+     compartilhado veio consertar. Nesses dias o balão fica vazio, como já ficava. */
+  const previaAviso = useMemo(() => {
+    const linha = linhaDoCartao;
+    if (!linha || !String(casoDoDia?.aviso_enviado_em ?? "").trim()) return null;
+    if (String(casoDoDia.origem ?? "").trim().toLowerCase() === "gordura") return null;
+
+    const tipo = String(casoDoDia.tipo ?? "").trim().toLowerCase();
+    const categoria = String(linha.categoria || pessoa?.categoria || "").toUpperCase();
+    const ehInterno = categoria.startsWith("INTERNO") || categoria.startsWith("APREND");
+
+    if (tipo === "fora") {
+      const gps = gpsPorDia[diaAberto];
+      if (!gps?.fora) return null;
+      return {
+        chave: "aviso_fora",
+        rotulo: "avisar que bateu fora",
+        // `mensagemBateuFora` lê o resumo da Revisão (`resumoGps`): a batida mais
+        // distante e quantas ficaram fora. Aqui o resumo é o da régua SIMPLES desta aba,
+        // que mede da GARAGEM — o mesmo número que a Revisão usa quando o veículo não
+        // tem âncora medida, e o mesmo que o modelo oficial escreve ("a {DISTANCIA} da
+        // garagem"). Onde havia âncora, a carta que saiu trazia a distância do veículo:
+        // o pedido é o mesmo, o número pode divergir.
+        montar: (tpl) =>
+          mensagemBateuFora(tpl, linha, {
+            fora: gps.fora,
+            maiorDistancia: gps.dist,
+            horaMaisLonge: gps.hora,
+          }),
+      };
+    }
+
+    if (tipo === "exclusao") {
+      return {
+        chave: "pedir_exclusao",
+        rotulo: "pedir exclusão da batida",
+        montar: (tpl) => mensagemPedirExclusao(tpl, linha),
+      };
+    }
+
+    if (ehInterno && ["almoco", "curta", "incompleto"].includes(tipo)) {
+      // {DIVERGENCIA}/{JORNADA} recebem o mesmo valor (main.py `enviar_aviso_interno`).
+      // No modelo "curta" ele é a jornada líquida DO DIA — que é o que `rotaAvisoInterno`
+      // devolve nesse ramo, e sai daqui pelas mesmas duas funções exportadas. Nos outros
+      // dois é a frase do que falta, e ela só vale se a rota de hoje ainda é a mesma que
+      // foi avisada; se mudou, o modelo vai sem a frase em vez de ir com a frase errada.
+      const rota = rotaAvisoInterno(linha, null);
+      const divergencia =
+        tipo === "curta"
+          ? fmtMin(jornadaLiquidaDoDia(linha))
+          : rota.modelo === tipo
+            ? rota.divergencia
+            : "";
+      return {
+        chave: `interno_${tipo}`,
+        rotulo: "aviso de interno/aprendiz",
+        montar: (tpl) => mensagemInterno(tpl, linha, divergencia),
+      };
+    }
+
+    // Cerco/registro incompleto de motorista. A ponta cobrada é a CONGELADA no caso; só
+    // quando ela não foi gravada é que vale a leitura de hoje (`marcacaoAusente`, a
+    // função exportada do cartão — a mesma que a Revisão usa).
+    const ponta = String(casoDoDia.ponta ?? "").trim().toLowerCase();
+    const falta =
+      ponta === "ambos"
+        ? "ENTRADA E SAÍDA"
+        : ponta === "entrada"
+          ? "ENTRADA"
+          : ponta === "saida"
+            ? "SAÍDA"
+            : marcacaoAusente(linha);
+    if (!falta) return null;
+    return {
+      chave: "ocorrencia_motorista",
+      rotulo: "enviar ocorrência",
+      montar: (tpl) => mensagemRevisaoMotorista(tpl, linha, falta),
+    };
+  }, [linhaDoCartao, casoDoDia, pessoa, gpsPorDia, diaAberto]);
 
   /* ─────────────────────────── colunas da grade ───────────────────────────
      MESMAS colunas, MESMA ordem e MESMO conteúdo de célula da tabela que estava
@@ -987,7 +954,7 @@ export default function Motorista() {
     <>
       <div>
         Histórico individual dia a dia: ponto batido, escala, operação, sugestão, GPS e a trilha
-        do caso.
+        do caso. Clique no dia para abrir o cartão dele — o mesmo da Revisão.
         {pessoa ? (
           <>
             {" — "}
@@ -995,6 +962,18 @@ export default function Motorista() {
             {pessoa.categoria ? ` · ${pessoa.categoria}` : ""}
           </>
         ) : null}
+        {/* SUMIR GENTE DO SELETOR EM SILÊNCIO É PIOR QUE DEMORAR. */}
+        {truncado && (
+          <>
+            {" "}
+            <span
+              className="dp-pill danger"
+              title="A leitura do seletor parou no teto de paginação — pode haver colaborador de fora da lista, em geral quem só aparece nos dias mais antigos. Recarregue ou estreite o período."
+            >
+              lista de colaboradores truncada — recarregue
+            </span>
+          </>
+        )}
       </div>
       {!!dias.length && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "8px 0 2px" }}>
@@ -1034,13 +1013,40 @@ export default function Motorista() {
         />
       )}
 
-      {diaSelecionado && (
-        <PainelDia
-          dia={diaSelecionado}
-          pessoa={pessoa}
-          batidasGps={batidasPorDia[diaAberto] || []}
-          caso={casoPorDia[diaAberto] || null}
+      {/* O CARTÃO DO DIA é o compartilhado (`../CartaoDoDia`) — o MESMO que a Revisão e
+          a Gordura abrem, como na ferramenta (app.js:6778). Ele traz de graça a semana,
+          as fontes, o Real manual, o GPS com a régua completa, as viagens do Citatti e a
+          linha do tempo do caso, onde vivem "o que ele pediu" (lido lá dentro, direto da
+          `ponto_ajustes_app`) e o balão da carta. */}
+      {linhaDoCartao && (
+        <CartaoDoDia
+          linha={linhaDoCartao}
+          caso={casoDoDia}
+          // Esta aba não carrega GPS por dia com a régua da Revisão (a coluna da grade
+          // usa a régua simples, de propósito). Mesmo caso da Gordura: o cartão lê
+          // `ponto_gps`/`gps_carro` deste crachá×dia e roda `regrasGps` sozinho.
+          gpsAuto
           aoFechar={() => setDiaAberto("")}
+          aoRecarregar={recarregarDia}
+          previaAviso={previaAviso}
+          // Sem `aoAvisar` não há botão 📣; este texto é o que a linha do tempo mostra no
+          // lugar da prévia, e ele precisa dizer a verdade desta aba — não "nada a pedir".
+          impedimentoAviso="O comunicado não sai desta aba: o envio é da Revisão (motorista/interno) ou da Gordura."
+          selos={<SelosDoDia dia={linhaDoCartao} />}
+          acoesRodape={
+            <BotaoPontoConferido
+              linha={linhaDoCartao}
+              caso={casoDoDia}
+              aoRecarregar={recarregarDia}
+            />
+          }
+          rodapeInfo={
+            <>
+              <b>Real manual</b> e <b>✓ Ponto conferido</b> ficam na base do DP e podem ser
+              desfeitos. O <b>envio da ocorrência</b> não sai daqui: ele é da Revisão
+              (motorista/interno) ou da Gordura.
+            </>
+          }
         />
       )}
     </AbaShell>

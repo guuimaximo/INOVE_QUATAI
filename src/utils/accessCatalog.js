@@ -7,6 +7,10 @@ export const APP_ACCESS_PAGES = [
   { key: "dp360_abandonos", label: "DP360 · Abandonos", category: "DP360", path: "/dp360-abandonos", patterns: ["/dp360-abandonos"] },
   { key: "dp360_banco_horas", label: "DP360 · Banco de Horas", category: "DP360", path: "/dp360-banco-horas", patterns: ["/dp360-banco-horas"] },
   { key: "dp360_resumo", label: "DP360 · Resumo", category: "DP360", path: "/dp360-resumo", patterns: ["/dp360-resumo"] },
+  // Fotos da tela do Transnet (nome, cracha e horario de gente). A chave comeca
+  // com "dp360_" de proposito: o `access.js` barra o cluster inteiro por prefixo,
+  // entao esta pagina ja nasce so para Administrador.
+  { key: "dp360_evidencias", label: "DP360 · Evidências do robô", category: "DP360", path: "/dp360-evidencias", patterns: ["/dp360-evidencias"] },
 
   { key: "tratativas_resumo", label: "Tratativas Resumo", category: "Tratativas", path: "/tratativas-resumo", patterns: ["/tratativas-resumo"] },
   { key: "tratativas_solicitacao", label: "Tratativas Solicitacao", category: "Tratativas", path: "/solicitar", patterns: ["/solicitar"] },

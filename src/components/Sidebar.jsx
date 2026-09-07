@@ -177,6 +177,7 @@ export default function Sidebar() {
           { path: "/dp360-abandonos", label: "Abandonos" },
           { path: "/dp360-banco-horas", label: "Banco de Horas" },
           { path: "/dp360-resumo", label: "Resumo" },
+          { path: "/dp360-evidencias", label: "Evidências do robô" },
         ],
       },
       // INOVE Guard e um CLUSTER: o Monitoramento Vision, que ja existia (path

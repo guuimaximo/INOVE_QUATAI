@@ -96,6 +96,7 @@ const DP360Cluster = lazy(() => import("./pages/dp360/DP360Cluster"));
 const DP360Abandonos = lazy(() => import("./pages/dp360/DP360Abandonos"));
 const DP360BancoHoras = lazy(() => import("./pages/dp360/DP360BancoHoras"));
 const DP360Resumo = lazy(() => import("./pages/dp360/DP360Resumo"));
+const DP360Evidencias = lazy(() => import("./pages/dp360/DP360Evidencias"));
 
 const DesempenhoLancamento = lazy(() => import("./pages/desempenho-diesel/DesempenhoLancamento"));
 const DesempenhoDieselResumo = lazy(() => import("./pages/desempenho-diesel/DesempenhoDieselResumo"));
@@ -247,6 +248,7 @@ export default function App() {
               <Route path="/dp360-abandonos" element={<DP360Abandonos />} />
               <Route path="/dp360-banco-horas" element={<DP360BancoHoras />} />
               <Route path="/dp360-resumo" element={<DP360Resumo />} />
+              <Route path="/dp360-evidencias" element={<DP360Evidencias />} />
               <Route path="/dp360/:aba" element={<DP360Cluster />} />
               <Route path="/controle-especial" element={<Navigate to="/controle-especial/central" replace />} />
               <Route path="/controle-especial/central" element={<ControleEspecialCentral />} />

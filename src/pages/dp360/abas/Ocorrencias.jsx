@@ -50,12 +50,19 @@ import { ArrowRight, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import TabelaDP from "../TabelaDP";
 import { dispararRoboDP360, lerDP360, lerTudoDP360, upsertDP360 } from "../../../services/dp360Api";
+// A RESERVA LANÇADA mora na base do PRÓPRIO INOVE (`reservas_motoristas`), não na
+// base de importação do DP360 — por isso ela não passa pelo gateway `dp360-api`. O
+// leitor de UMA pessoa num dia já existe e é do cartão compartilhado: reusa-se ele,
+// não se abre um segundo caminho para a mesma tabela.
+import { lerReservaDoDia } from "../CartaoDoDia";
 import {
   CONSTANTES,
   batidasDoCartao,
   bloqueioSimulacao,
   difRelogio,
+  faltaAlmoco,
   hm2min,
+  jornadaDoCartao,
   julgaAcoes,
   julgaRef,
   min2hm,
@@ -1372,8 +1379,21 @@ async function gravarDesfazer(reg) {
  * main.py:9542 (marcar_ajustes) — veredito POR OCORRÊNCIA (A:/R: em ajuste_ids).
  * `aceite` fica PENDENTE de propósito: marcar é decisão, lançar é ação posterior.
  * É o caminho do dia MISTO — que não cabe em decisão de dia inteiro.
+ *
+ * O CONTRATO É O CARTÃO QUE O DP VIU, e ele chega pronto do MONTADOR — não é
+ * recalculado aqui. É a mesma escolha de main.py:9573 ("o contrato ja fica guardado
+ * agora: o DP viu o cartao ao marcar, e e esse que vale").
+ *
+ * POR QUE NÃO SIMULAR DE NOVO AQUI (era o que esta função fazia): a segunda conta
+ * não era igual à primeira. Ela usava `reg.escala` como referência — que cai na
+ * gordura (`esc_inicio`/`esc_fim`) quando o cartão não tem escala — enquanto a
+ * prévia da tela usa só `cp.esc_entrada`/`cp.esc_saida` (main.py:9064); e filtrava
+ * `reg.ajustes` CRU, sem tirar o reenvio do mesmo pedido nem o que o Transnet já
+ * efetuou (`pedidosDaPrevia`), que é justamente o que quebra a simulação. Duas
+ * contas para a mesma pergunta é como a ferramenta antiga acabou com três cartões
+ * diferentes na mesma tela — e o que subia para o robô era sempre o do montador.
  */
-async function gravarMarcacao(reg, aceitar, rejeitar) {
+async function gravarMarcacao(reg, aceitar, rejeitar, cartaoDoMontador) {
   const ace = (aceitar || []).map(txt).filter(Boolean);
   const rej = (rejeitar || []).map(txt).filter(Boolean);
   if (!ace.length && !rej.length) throw new Error("Nenhuma marcação.");
@@ -1385,18 +1405,10 @@ async function gravarMarcacao(reg, aceitar, rejeitar) {
     aceito_em: null,
     atualizado_em: agoraISOLocal(),
   });
-  // o contrato guarda o cartão como ele fica ACEITANDO SÓ O QUE FOI MARCADO
-  let depois = "";
-  if (ace.length && !reg.bloqueio) {
-    const aceitos = (reg.ajustes || []).filter((o) => ace.includes(txt(o.id_ocorrencia)));
-    const sim = simulaCartao({
-      batidas: reg.antesBruto,
-      pedidos: aceitos.map(pedidoDoMotor),
-      refs: [hm2min(reg.escala[0]), hm2min(reg.escala[1])].filter((v) => v != null),
-      cartaoFechado: txt(reg.cartao?.status_ponto).toUpperCase() === "SEM_PONTO",
-    });
-    if (!bloqueioSimulacao(sim.notas)) depois = textoBatidas(sim.batidas);
-  }
+  // Sem aceite não há cartão a prometer: recusa não congela `depois` (é a mesma
+  // escolha de `gravarRecusa` — um "depois" numa recusa viraria plano de execução
+  // de um cartão que ninguém aprovou).
+  const depois = ace.length ? txt(cartaoDoMontador) : "";
   return gravaContrato(reg, [...ace, ...rej], reg.antesTexto, depois);
 }
 
@@ -1590,6 +1602,43 @@ function planoDaExecucao(reg) {
     else plano[acao].push(id);
   });
   return plano;
+}
+
+/**
+ * app.js:97 (`decGravada`) — AS MARCAS QUE JÁ ESTÃO GRAVADAS, ocorrência por
+ * ocorrência. Devolve `Map id -> "A" | "R"` (vazio quando não há nada gravado).
+ *
+ * POR QUE ISTO EXISTE, e é a lição de 22/08 da ferramenta: até então só voltava a
+ * marca de dia JÁ APLICADO. Quem marcava um dia misto e reabria o caso via a
+ * PRÉ-MARCAÇÃO AUTOMÁTICA (bate → aceitar, não bate → recusar) no lugar da própria
+ * escolha — e concluía, com razão, que nada tinha sido gravado. Gravou; a tela é
+ * que não mostrava. Pior: o montador projetava o cartão em cima da pré-marcação,
+ * então o DP via um cartão que não era o que estava congelado no contrato.
+ *
+ * SEM PREFIXO (formato antigo, o que `gravarAceite`/`gravarRecusa` escrevem) só diz
+ * lado se o dia FOI decidido — ali o `aceite` diz por todas. Com `aceite` pendente,
+ * id sem prefixo não é marca nenhuma: fica para a pré-marcação do motor decidir.
+ *
+ * IRMÃO DE `planoDaExecucao`: as duas leem `ajuste_ids`, mas respondem perguntas
+ * diferentes — esta diz O QUE O DP MARCOU (e por isso ignora o que não tem prefixo
+ * num dia pendente), aquela diz O QUE O ROBÔ VAI CLICAR (e por isso completa com o
+ * `aceite` do dia). Onde as duas se encontram — marcação gravada, todos os ids com
+ * prefixo — elas concordam por construção.
+ */
+function marcasGravadas(reg) {
+  const ciclo = reg?.ciclo || {};
+  const lado = { aceito: "A", rejeitado: "R" }[txt(ciclo.aceite)] || "";
+  const marcas = new Map();
+  txt(ciclo.ajuste_ids)
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .forEach((b) => {
+      const p = b.slice(0, 2);
+      if (p === "A:" || p === "R:") marcas.set(b.slice(2), p === "A:" ? "A" : "R");
+      else if (lado) marcas.set(b, lado);
+    });
+  return marcas;
 }
 
 /**
@@ -2572,6 +2621,256 @@ function ItemAcao({ item, marca, aoMarcar, travado }) {
   );
 }
 
+/* ══════════════════ O MONTADOR — a mesa do dia ═══════════════════════════════
+ *
+ * UM MOTOR SÓ, E É O `simulaCartao`. A ferramenta antiga chegou a ter TRÊS
+ * respostas para "como o cartão fica" — o `_proj_cartao` do Python, o
+ * `projetaCartao` do JS e o montador — e elas discordavam: DEVANIR 30017485 20/08
+ * saía `…12:22` num quadro e `…12:24` no outro, e o que subia para o robô era o
+ * segundo. Em 24/08 os dois primeiros saíram da tela e ficou só o montador
+ * (app.js:680). Aqui vale a mesma regra: quem responde "como o cartão fica" é ESTE
+ * card, e é por isso que a linha "Depois (simulado)" saiu do quadro da régua e que
+ * `gravarMarcacao` deixou de simular por conta própria — o contrato congelado é o
+ * cartão que está desenhado aqui.
+ *
+ * A COMPARAÇÃO SAI DO MESMO MOTOR: "hoje" é `simulaCartao` com pedido NENHUM e
+ * "fica" é `simulaCartao` com os que estão marcados para ACEITAR. Mesma entrada
+ * (`antesBruto`), mesmas referências. Sem isso, um cartão desenrolado (24:42)
+ * comparado com o cru (00:42) diria "mudou" num dia em que nada mudou.
+ *
+ * O QUE ELE NÃO FAZ: não julga. O veredito de cada pedido é do `julgaAcoes` e
+ * compara com o ALVO, não com o cartão simulado (app.js:26-28) — por isso um dia
+ * com a simulação bloqueada continua tendo veredito, e o card continua na tela
+ * dizendo que a projeção não fecha em vez de sumir.
+ */
+
+/**
+ * O CARTÃO INTEIRO, batida por batida — e é assim de propósito.
+ *
+ * O `Cartao` da grade mostra a primeira, a última e colapsa o miolo num "+2", e o
+ * `LinhaCartao` corta no quarto slot. Nenhum dos dois serve AQUI: "devolver só
+ * entrada e saída ESCONDIA as batidas do meio, e aí aceitar e recusar pintavam o
+ * mesmo cartão — o DP não via o efeito da própria decisão" (app.js:11-13). E o
+ * resultado que ESTOURA os quatro campos é justamente o que precisa aparecer:
+ * escondê-lo seria esconder o motivo de o dia não fechar.
+ *
+ * `contra` = o cartão de hoje; batida que não está lá sai marcada (`.dp-chip.new`).
+ */
+function CartaoInteiro({ batidas, contra = null, vazio = "—" }) {
+  const b = (batidas || []).filter((t) => t != null);
+  if (!b.length) return <span className="dp-chip none">{vazio}</span>;
+  const conhecidas = contra && contra.length ? new Set(contra) : null;
+  return (
+    <span style={FILA}>
+      {b.map((t, i) => (
+        <span
+          key={`${t}-${i}`}
+          className={`dp-chip${conhecidas && !conhecidas.has(t) ? " new" : ""}`}
+          title={conhecidas && !conhecidas.has(t) ? "batida que o ajuste acrescenta" : undefined}
+        >
+          {min2hm(t)}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+// minutos → "9h20". Só formatação; a jornada quem calcula é `jornadaDoCartao`.
+function horasLiquidas(min) {
+  if (min == null || Number.isNaN(min)) return "";
+  const v = Math.max(0, Math.round(min));
+  return `${Math.floor(v / 60)}h${String(v % 60).padStart(2, "0")}`;
+}
+
+// O contexto que decide, do pop-up original (app.js:64-91): o que ele bateu, o que
+// a operação diz, o alvo com a régua, quem começou, o desfecho no Transnet e a
+// reserva. Não é enfeite — é a base para o DP julgar com os próprios olhos, e não
+// só pelo veredito.
+function ContextoDoDia({ reg, reserva }) {
+  const c = reg.caso || {};
+  const g = reg.gordura || {};
+  const real = [txt(g.real_inicio), txt(g.real_fim)];
+  const desfecho = txt(reg.desfecho);
+  const cor = { EFETUADO: "ok", RECUSADO: "erro", PENDENTE: "alerta" }[desfecho] || "neutro";
+  // nível RESERVA vem CRU da `ponto_gordura` (gordura acima de 120 min = provável
+  // standby). É pista, não lançamento: quem manda é o documento do gestor, lido
+  // acima em `reservas_motoristas`.
+  const nivelReserva = [txt(g.nivel_entrada), txt(g.nivel_saida)].includes("RESERVA");
+  return (
+    <div className="oc-mt-ctx">
+      <div className="oc-mt-ctx-c">
+        <span>Operação real</span>
+        <b className="dp-mono dp-num">
+          {real[0] || "—"} – {real[1] || "—"}
+        </b>
+      </div>
+      <div className="oc-mt-ctx-c">
+        <span>Alvo (c/ tolerância {TOLERANCIA_MIN} min)</span>
+        <b className="dp-mono dp-num">
+          {reg.alvoPar?.[0] || "—"} – {reg.alvoPar?.[1] || "—"}
+        </b>
+        <i>
+          fonte: {reg.fonteAlvo || "sem alvo"} · régua: {reg.baseE || "sem base"} /{" "}
+          {reg.baseS || "sem base"}
+        </i>
+      </div>
+      <div className="oc-mt-ctx-c">
+        <span>Origem</span>
+        {/* app.js:59-62 — sem aviso nosso, ele mesmo viu e corrigiu. A diferença
+            decide se a recusa pode virar advertência, então ela é dita por extenso. */}
+        <b>
+          {txt(c.aviso_enviado_em)
+            ? `avisamos em ${fmtDataHora(c.aviso_enviado_em)}`
+            : reg.temAviso
+              ? "avisamos neste dia (ocorrência lançada)"
+              : "iniciativa do colaborador"}
+        </b>
+        {reg.realocado ? <i>pedido veio do dia {paraBR(reg.realocado)}</i> : null}
+      </div>
+      <div className="oc-mt-ctx-c">
+        <span>Transnet · reserva</span>
+        <span style={FILA}>
+          {desfecho ? (
+            <Selo
+              cor={cor}
+              titulo="Desfecho lido do lake — a grade do Transnet é cópia do dia anterior, então um PENDENTE pode estar velho."
+            >
+              {desfecho.toLowerCase()} (leitura do lake)
+            </Selo>
+          ) : (
+            <span className="dp-faint" style={MINI}>
+              sem desfecho no lake
+            </span>
+          )}
+          {reserva ? (
+            <Selo
+              cor="accent"
+              titulo={
+                `Reserva lançada pelo gestor no INOVE (Controle de Reservas)` +
+                `${txt(reserva.hora_entrada) || txt(reserva.hora_saida) ? ` — ${txt(reserva.hora_entrada) || "—"} às ${txt(reserva.hora_saida) || "—"}` : ""}` +
+                `${txt(reserva.cobertura) ? ` · cobertura: ${txt(reserva.cobertura)}` : ""}` +
+                ` · o real vira a união reserva ∪ operação`
+              }
+            >
+              🅡 reserva INOVE
+            </Selo>
+          ) : nivelReserva ? (
+            <Selo
+              cor="alerta"
+              titulo="A gordura classificou a ponta como RESERVA (acima de 120 min): provável standby/prontidão, tempo legítimo. Não há lançamento no Controle de Reservas."
+            >
+              🅡 nível reserva (gordura)
+            </Selo>
+          ) : null}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Montador({ reg, montado, reserva }) {
+  if (!montado) return null;
+  const { travado, atual, fica, bloqueio, contagem, notas } = montado;
+  // VERMELHO SÓ QUANDO PRECISA AJUSTAR (app.js:321): cartão já certo é discreto — o
+  // DP não precisa de alarme para saber que está tudo bem; precisa de alarme quando
+  // o dia VAI MUDAR, e de alarme maior quando ele não fecha.
+  const estado = bloqueio || !montado.fecha ? "falta" : montado.mudou ? "muda" : "ok";
+  const titulo = travado
+    ? "🔒 Como o cartão FICOU"
+    : { falta: "⚠ O cartão não fecha", muda: "⚠ Como o cartão vai ficar", ok: "✓ O cartão já está certo" }[
+        estado
+      ];
+  const total = (reg.acoes || []).length;
+  return (
+    <div className={`oc-mt ${travado ? "travado" : estado}`}>
+      <div className="oc-mt-tit">
+        {titulo}
+        <span className="oc-mt-sub">
+          {travado
+            ? // DIA JÁ DECIDIDO: aqui é o cartão que FICOU (montarRegistros já monta o
+              // `depois` respeitando a decisão, e o contrato congelado manda por cima).
+                // Continuar mostrando a prévia de aceitar tudo num caso fechado é dizer
+                // que o ponto virou algo que ele não virou (app.js:70-72).
+              `decisão gravada: ${reg.decJa.aceito ? "aceito" : "recusado"} em ${reg.decJa.quando}` +
+              `${reg.decJa.subiu ? " · o robô já executou no Transnet" : " · aguardando o robô"}`
+            : `${contagem.A} de ${total} marcado(s) para aceitar` +
+              `${contagem.R ? ` · ${contagem.R} para recusar` : ""}` +
+              `${contagem.sem ? ` · ${contagem.sem} sem marca` : ""}`}
+        </span>
+      </div>
+
+      <div className="oc-mt-l">
+        <span className="oc-mt-k">hoje</span>
+        <CartaoInteiro batidas={atual} vazio="sem cartão" />
+        {reg.fantasmas?.length ? (
+          <span
+            className="dp-faint"
+            style={MINI}
+            title="batidas duplicadas em ≤6 min — o mesmo evento registrado duas vezes; o motor colapsa e mostra a última"
+          >
+            fantasmas: {reg.fantasmas.map(min2hm).join(" · ")}
+          </span>
+        ) : null}
+      </div>
+      <div className="oc-mt-l">
+        <span className="oc-mt-k">{travado ? "ficou" : "fica"}</span>
+        <CartaoInteiro batidas={fica} contra={atual} vazio="—" />
+        <Removidas antes={atual} depois={fica} />
+        {montado.jornada != null ? (
+          <span className="dp-faint" style={MINI}>
+            {horasLiquidas(montado.jornada)} líquidas
+          </span>
+        ) : null}
+        {montado.semAlmoco ? (
+          <Selo cor="alerta" titulo="jornada acima de 6h sem par de intervalo no cartão">
+            falta o almoço
+          </Selo>
+        ) : null}
+      </div>
+
+      {/* CARTÃO TEM QUE FECHAR EM 2 OU 4 (app.js:1090). Três batidas não é cartão —
+          é ponto quebrado, e o Transnet não tem onde guardar a terceira. */}
+      {!montado.fecha ? (
+        <div className="oc-mt-n forte">
+          ✗ <b>{fica.length} batida(s) — o cartão não fecha.</b> Ele tem que ter 2 (entrada e
+          saída) ou 4 (com almoço). Aceite os que batem e recuse o resto — o veredito de cada um
+          já indica.
+        </div>
+      ) : null}
+
+      {/* SIMULAÇÃO BLOQUEADA: avisa que não fecha e NÃO some com o card. O bloqueio é
+          informação de outra natureza (app.js:26-28): o julgamento de cada pedido
+          continua valendo, porque ele compara com o alvo e não com o cartão
+          simulado. O que fica incerto é só "como o cartão fica" — e a resposta a
+          essa pergunta é este card, que segue as suas marcas. */}
+      {bloqueio ? (
+        <div className="oc-mt-n">
+          ⚠ <b>A projeção não fecha:</b> {bloqueio}. O veredito de cada pedido continua valendo (ele
+          compara com o alvo, não com o cartão) — o que fica incerto é como o cartão fica. O card
+          acima é o que segue a sua decisão; enquanto ele não fechar, nada é congelado como
+          contrato.
+        </div>
+      ) : null}
+
+      {notas.length ? (
+        <div className="oc-mt-n dp-faint">o que o motor viu: {notas.join(" · ")}</div>
+      ) : null}
+
+      {/* Marcado para aceitar, mas o Transnet já resolveu: não entra na simulação — o
+          EFETUADO já está DENTRO do cartão de hoje, e reaplicá-lo duplicaria a
+          batida (é o filtro de `pedidosDaPrevia`, main.py:9070). */}
+      {!travado && montado.resolvidos ? (
+        <div className="oc-mt-n dp-faint">
+          {montado.resolvidos} pedido(s) marcado(s) para aceitar já estão EFETUADO/RECUSADO no
+          Transnet — não entram na projeção: o efetuado já está dentro do cartão de hoje.
+        </div>
+      ) : null}
+
+      <ContextoDoDia reg={reg} reserva={reserva} />
+    </div>
+  );
+}
+
 function Detalhe({
   reg,
   aoFechar,
@@ -2590,16 +2889,131 @@ function Detalhe({
   // estava gravada; trocá-la agora deixaria o banco e o Transnet contando histórias
   // diferentes sobre o mesmo dia da mesma pessoa.
   const gravando = gravandoProp || disparando;
-  // marcação por ocorrência: começa com o que o MOTOR julgou (julgaAcoes.ok)
+  // MARCAÇÃO POR OCORRÊNCIA. A MARCA GRAVADA MANDA; só o que não tem marca é que
+  // cai na pré-marcação do MOTOR (julgaAcoes.ok). Reabrir um dia já marcado e
+  // repintar tudo pelo veredito faz o DP julgar duas vezes a mesma coisa — e a
+  // segunda opinião pode sair diferente da que já está gravada (app.js:141-144).
   const inicial = useMemo(() => {
+    const gravadas = marcasGravadas(reg);
     const m = {};
     (reg?.acoes || []).forEach((it, i) => {
-      m[i] = it.ok === true ? "A" : it.ok === false ? "R" : "";
+      const jaMarcada = (it.ids || []).map((id) => gravadas.get(txt(id))).find(Boolean);
+      // Sem régua (ok === null) NÃO se marca nada: a ferramenta não pode empurrar
+      // "aceitar" num dia sem base nenhuma — quem decide é o operador (app.js:137).
+      m[i] = jaMarcada || (it.ok === true ? "A" : it.ok === false ? "R" : "");
     });
     return m;
-  }, [reg?.acoes]);
+  }, [reg?.acoes, reg?.ciclo]);
   const [marcas, setMarcas] = useState(inicial);
   useEffect(() => setMarcas(inicial), [inicial]);
+
+  /* ── O MONTADOR: como o cartão fica com as marcas que estão na tela AGORA ────
+   * Recalculado a cada clique, sempre pelo mesmo `simulaCartao`. Ver o bloco de
+   * comentário do componente `Montador`, acima. */
+  const montado = useMemo(() => {
+    if (!reg) return null;
+    const cp = reg.cartao || {};
+    // MESMAS refs da prévia (main.py:9064): a escala do CARTÃO, e só ela. São elas
+    // que desempatam o AM/PM e ancoram a inserção num dia sem cartão.
+    const refs = [hm2min(cp.esc_entrada), hm2min(cp.esc_saida)].filter((v) => v != null);
+    const fechado = txt(cp.status_ponto).toUpperCase() === "SEM_PONTO";
+    const roda = (pedidos) =>
+      simulaCartao({ batidas: reg.antesBruto, pedidos, refs, cartaoFechado: fechado });
+    // main.py:9088 — "sem cartão" tem DUAS causas e a nota do simulador só conhece
+    // uma. É a mesma troca de texto que `montarRegistros` faz.
+    const arruma = (lista) =>
+      (lista || [])
+        .filter((n) => !String(n).startsWith("_fantasma"))
+        .map((n) =>
+          fechado && String(n).includes("aguardando o dia fechar")
+            ? "não bateu ponto no dia — nada a conferir"
+            : n,
+        );
+
+    // "hoje", pelo mesmo motor e com a mesma entrada do "fica".
+    const atual = roda([]).batidas;
+
+    const contagem = { A: 0, R: 0, sem: 0 };
+    (reg.acoes || []).forEach((_, i) => {
+      const v = marcas[i];
+      contagem[v === "A" ? "A" : v === "R" ? "R" : "sem"] += 1;
+    });
+    const idsA = new Set(
+      (reg.acoes || []).flatMap((it, i) => (marcas[i] === "A" ? it.ids || [] : [])).map(txt),
+    );
+    const resolvidos = (reg.ajustes || []).filter(
+      (o) =>
+        idsA.has(txt(o.id_ocorrencia)) &&
+        ["EFETUADO", "RECUSADO"].includes(txt(o.situacao_ajuste).toUpperCase()),
+    ).length;
+
+    const monta = ({ fica, notas, bloqueio, aceitos, travado }) => ({
+      travado,
+      atual,
+      fica,
+      notas,
+      bloqueio,
+      contagem,
+      resolvidos,
+      jornada: jornadaDoCartao(fica).liquida,
+      semAlmoco: faltaAlmoco(fica),
+      fecha: [2, 4].includes(fica.length),
+      mudou: textoBatidas(atual) !== textoBatidas(fica),
+      // O CONTRATO SÓ EXISTE QUANDO O CARTÃO FECHA (app.js:1330, `cartaoOk`): sem
+      // aceite não há o que prometer, e um cartão de 3 batidas nunca pode virar
+      // plano de execução — o Transnet não tem onde guardar a terceira.
+      contrato:
+        !travado && aceitos && !bloqueio && [2, 4].includes(fica.length)
+          ? textoBatidas(fica)
+          : "",
+    });
+
+    // DIA JÁ DECIDIDO: aqui é o cartão que FICOU — `montarRegistros` já monta o
+    // `depois` respeitando a decisão (e o contrato congelado manda por cima). Nada
+    // de prévia num caso fechado. O bloqueio vem PRONTO de lá (`reg.bloqueio`) em
+    // vez de ser recalculado: `reg.notas` já ganhou o motivo do `julgaRef` depois
+    // de o bloqueio ter sido medido, e remedir aqui poderia dar outra resposta.
+    if (reg.decJa) {
+      return monta({
+        fica: reg.depois || [],
+        notas: arruma(reg.notas),
+        bloqueio: reg.bloqueio,
+        aceitos: 0,
+        travado: true,
+      });
+    }
+
+    const aceitos = pedidosDaPrevia(reg.ajustes || []).filter((o) =>
+      idsA.has(txt(o.id_ocorrencia)),
+    );
+    const sim = roda(aceitos.map(pedidoDoMotor));
+    const notas = arruma(sim.notas);
+    return monta({
+      fica: sim.batidas,
+      notas,
+      bloqueio: bloqueioSimulacao(notas),
+      aceitos: aceitos.length,
+      travado: false,
+    });
+  }, [reg, marcas]);
+
+  /* ── A RESERVA LANÇADA, do Controle de Reservas do INOVE ────────────────────
+   * Leitura de UMA pessoa num dia, só quando o caso abre — a tabela não está (nem
+   * deve estar) na allowlist do gateway do DP360, e o leitor já existe no cartão
+   * compartilhado. Ele engole o próprio erro e devolve null: sem reserva (ou sem
+   * permissão) o selo simplesmente não aparece. */
+  const [reserva, setReserva] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    setReserva(null);
+    if (!reg?.cracha || !reg?.iso) return undefined;
+    lerReservaDoDia(reg.cracha, reg.iso).then((r) => {
+      if (vivo) setReserva(r);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [reg?.cracha, reg?.iso]);
 
   if (!reg) return null;
   const c = reg.caso;
@@ -2621,6 +3035,17 @@ function Detalhe({
   // aceitar precisa de cartão simulável e de dia não-misto; recusar, não (main.py).
   const travaAceite = motivoForaDoLote(reg, "aceitar");
   const travaRecusa = motivoSemDecisao(reg);
+  // MARCAR NÃO É DECIDIR O DIA, e por isso a trava dele é a de baixo — as quatro de
+  // `motivoSemDecisao`, nunca as três de `motivoForaDoLote`. É de propósito: o dia
+  // MISTO e o dia com a simulação bloqueada são exatamente os que só se resolvem
+  // por ocorrência, e a marcação deixa o `aceite` PENDENTE. O botão repete a trava
+  // que `aoMarcar` já aplica, para o motivo aparecer antes do clique.
+  const travaMarcar = motivoSemDecisao(reg);
+  // O DIA JÁ MARCADO (A:/R: gravado, `aceite` ainda pendente) — quantos de cada
+  // lado o robô teria para clicar. Sai de `planoDaExecucao`, que é o espelho do
+  // bot: aqui todos os ids têm prefixo, então ele e as marcas restauradas dizem a
+  // mesma coisa.
+  const marcadoAntes = !reg.decJa && marcasGravadas(reg).size ? planoDaExecucao(reg) : null;
 
   return (
     <div className="dp-card" style={{ margin: "0 20px 20px", borderColor: "var(--dp-accent)" }}>
@@ -2664,6 +3089,22 @@ function Detalhe({
                 {reg.fonteAlvo || "sem alvo"}) · resumo do motor:{" "}
                 {reg.resumoAcoes?.resumo || "—"}
               </div>
+              {/* A DECISÃO JÁ TOMADA VEM PRIMEIRO e cala o veredito automático
+                  (app.js:258-267): reabrir um dia marcado e pedir o veredito de novo
+                  faz o DP julgar duas vezes a mesma coisa, e a segunda opinião pode
+                  sair diferente da que já está gravada. As marcas abaixo são as DELE. */}
+              {marcadoAntes ? (
+                <div className="oc-mt-marcado">
+                  <b>✓ Você já marcou este dia</b> — {marcadoAntes.aceitar.length} para aceitar e{" "}
+                  {marcadoAntes.rejeitar.length} para recusar, gravados em{" "}
+                  <span className="dp-mono">ajuste_ids</span>.{" "}
+                  <span className="dp-muted">
+                    O <span className="dp-mono">aceite</span> continua <b>pendente</b>: marcar é
+                    decidir, lançar é o passo seguinte — o robô só executa aceite/rejeitado. Abaixo
+                    está o que você escolheu; mexa só se quiser mudar.
+                  </span>
+                </div>
+              ) : null}
               <ul style={{ listStyle: "none", margin: "8px 0 0", padding: 0 }}>
                 {reg.acoes.map((it, i) => (
                   <ItemAcao
@@ -2675,11 +3116,24 @@ function Detalhe({
                   />
                 ))}
               </ul>
+              {/* O CARD DO MONTADOR fica GRUDADO nas marcas e ACIMA do botão que
+                  grava: é ele que responde "como o cartão fica seguindo as suas
+                  marcas", e o contrato congelado é exatamente o que está desenhado
+                  nele. Ver o cabeçalho do componente `Montador`. */}
+              <Montador reg={reg} montado={montado} reserva={reserva} />
               <div style={{ ...FILA, marginTop: 8 }}>
                 <BotaoAcao
-                  titulo="Grava A:/R: por ocorrência em ajuste_ids (main.py:marcar_ajustes). O aceite do dia continua PENDENTE: marcar é decidir, lançar é outro passo."
-                  disabled={Boolean(reg.decJa) || gravando || (!aceitarIds.length && !rejeitarIds.length)}
-                  onClick={() => aoMarcar(reg, aceitarIds, rejeitarIds)}
+                  titulo={
+                    travaMarcar
+                      ? `Não dá para marcar: ${travaMarcar}`
+                      : "Grava A:/R: por ocorrência em ajuste_ids (main.py:marcar_ajustes) e congela como contrato o cartão que está no card acima. O aceite do dia continua PENDENTE: marcar é decidir, lançar é outro passo."
+                  }
+                  disabled={
+                    Boolean(travaMarcar) ||
+                    gravando ||
+                    (!aceitarIds.length && !rejeitarIds.length)
+                  }
+                  onClick={() => aoMarcar(reg, aceitarIds, rejeitarIds, montado?.contrato)}
                 >
                   Gravar marcação por ocorrência ({aceitarIds.length}A / {rejeitarIds.length}R)
                 </BotaoAcao>
@@ -2687,6 +3141,20 @@ function Detalhe({
                   é por aqui que o dia MISTO se decide
                 </span>
               </div>
+              {/* "ACEITAR O DIA" NÃO OLHA AS MARCAS — ele aceita TUDO, e o contrato
+                  dele é a prévia de aceitar tudo (`reg.depoisTexto`). Quando as
+                  marcas dizem outra coisa, o botão de baixo faria um cartão
+                  diferente do que está desenhado aqui em cima: em vez de esconder
+                  isso (ou de desenhar um segundo cartão), a tela diz qual botão
+                  respeita a marcação. */}
+              {!reg.decJa && rejeitarIds.length > 0 && !travaAceite ? (
+                <div className="oc-mt-n dp-faint" style={{ marginTop: 6 }}>
+                  ⚠ “Aceitar o dia”, no rodapé, ignora as marcas e aceita as{" "}
+                  {reg.acoes.length} ocorrência(s) — o cartão dele seria{" "}
+                  <span className="dp-mono">{reg.depoisTexto || "—"}</span>. Para valer o que está
+                  marcado aqui, use <b>Gravar marcação por ocorrência</b>.
+                </div>
+              ) : null}
               <ul style={{ listStyle: "none", margin: "10px 0 0", padding: 0 }}>
                 {reg.ajustes.map((o, i) => (
                   <li key={txt(o.id_ocorrencia) || i} className="dp-faint" style={{ ...MINI, ...FILA }}>
@@ -2732,6 +3200,13 @@ function Detalhe({
             O cartão e a régua
           </div>
           <div style={{ marginTop: 8 }}>
+            {/* O CARTÃO CRU, que é o que congela em `ponto_antes`. Aqui ele é
+                AUDITORIA (a fonte e os fantasmas); quem responde "como o cartão
+                fica" é o card do montador, na coluna ao lado — e é por isso que a
+                linha "Depois (simulado)" saiu daqui. Ela mostrava a prévia de
+                ACEITAR TUDO ao lado de um montador que segue as marcas: dois
+                cartões para o mesmo dia na mesma tela, que é o defeito que a
+                ferramenta antiga levou meses para tirar (app.js:80-84). */}
             <Linha rotulo={`Antes (${reg.antesFonte})`}>
               <span style={FILA}>
                 <Cartao batidas={reg.antes} vazio="sem cartão" />
@@ -2744,12 +3219,6 @@ function Detalhe({
                     fantasmas: {reg.fantasmas.map(min2hm).join(" · ")}
                   </span>
                 ) : null}
-              </span>
-            </Linha>
-            <Linha rotulo="Depois (simulado)">
-              <span style={FILA}>
-                <Cartao batidas={reg.depois} vazio="não mexeu" contra={reg.antes} />
-                <Removidas antes={reg.antes} depois={reg.depois} />
               </span>
             </Linha>
             <Linha rotulo="Escala">
@@ -3256,7 +3725,7 @@ export default function Ocorrencias() {
   );
 
   const aoMarcar = useCallback(
-    (reg, aceitarIds, rejeitarIds) => {
+    (reg, aceitarIds, rejeitarIds, cartaoDoMontador) => {
       const trava = motivoSemDecisao(reg);
       if (trava) {
         setRecado(`Não dá para marcar: ${trava}.`);
@@ -3266,16 +3735,26 @@ export default function Ocorrencias() {
         setRecado("Nenhuma marcação.");
         return;
       }
+      // O CARTÃO VAI NA CONFIRMAÇÃO porque é ELE que fica congelado como contrato —
+      // é o que o DP acabou de ver no card do montador, e é o que o robô vai
+      // conferir contra a tela do Transnet. Sem cartão utilizável, não se promete
+      // nada: o `depois` fica vazio e o dia espera gente.
+      const contrato = txt(cartaoDoMontador);
       if (
         !confirmar(
           `MARCAR POR OCORRÊNCIA o dia ${reg.dataBR} de ${reg.nome}.\n\n` +
             `Aceitar: ${aceitarIds.join(", ") || "—"}\nRejeitar: ${rejeitarIds.join(", ") || "—"}\n\n` +
+            `Cartão que fica congelado como contrato (o do card do montador): ` +
+            `${reg.antesTexto || "—"} → ${
+              contrato ||
+              "— (nada congelado: sem aceite, ou a projeção não fecha em 2/4 batidas)"
+            }\n\n` +
             `Grava ajuste_ids com A:/R: e mantém aceite=pendente — marcar é decidir, lançar é outro passo.`,
         )
       )
         return;
       executarGravacao(`Marcação gravada (${reg.nome} · ${reg.dataBR})`, () =>
-        gravarMarcacao(reg, aceitarIds, rejeitarIds),
+        gravarMarcacao(reg, aceitarIds, rejeitarIds, contrato),
       );
     },
     [executarGravacao],

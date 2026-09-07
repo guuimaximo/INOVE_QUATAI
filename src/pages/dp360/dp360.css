@@ -1232,6 +1232,93 @@
 }
 .dp360 .oc-fora-nota:focus { border-color: var(--dp-warn-ink); }
 
+/* ═════════ OCORRÊNCIAS — o card do MONTADOR, no caso aberto (prefixo `oc-`) ═════════
+ * ACRÉSCIMO: nada aqui reescreve regra existente. O prefixo `oc-` é de Ocorrências.
+ *
+ * Este é o card que responde "como o cartão fica seguindo as suas marcas", e a cor
+ * dele é INFORMAÇÃO, não enfeite — a mesma escala do original (app.js:321):
+ *   ok      · cartão já certo → discreto. Ninguém precisa de alarme para saber que
+ *             está tudo bem; precisa de alarme quando o dia VAI MUDAR.
+ *   muda    · âmbar: o cartão muda com as marcas atuais.
+ *   falta   · vermelho: não fecha em 2/4 batidas, ou a projeção está bloqueada.
+ *   travado · o dia já foi decidido: isto não é prévia, é o cartão que FICOU.
+ * Ele fica ENCOSTADO na lista de ocorrências, acima do botão que grava, porque é o
+ * efeito da marca que está logo acima dele — separado, viraria outro quadro que
+ * ninguém liga ao clique que acabou de dar.
+ */
+.dp360 .oc-mt {
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--dp-border-strong);
+  border-radius: 12px;
+  background: var(--dp-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.dp360 .oc-mt.ok { border-color: var(--dp-border); background: var(--dp-surface-2); }
+.dp360 .oc-mt.muda { border-color: #e8d5a8; background: var(--dp-warn-bg); }
+.dp360 .oc-mt.falta { border-color: var(--dp-danger-line); background: var(--dp-danger-bg); }
+.dp360 .oc-mt.travado { border-color: var(--dp-border-strong); background: var(--dp-surface-2); }
+.dp360 .oc-mt-tit {
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dp360 .oc-mt.muda .oc-mt-tit { color: var(--dp-warn-ink); }
+.dp360 .oc-mt.falta .oc-mt-tit { color: var(--dp-danger-ink); }
+.dp360 .oc-mt.ok .oc-mt-tit { color: var(--dp-ok-ink); }
+.dp360 .oc-mt-sub { font-size: 11px; font-weight: 600; color: var(--dp-muted); }
+/* hoje / fica: a chave em largura fixa deixa os dois cartões alinhados coluna a
+   coluna — é assim que se lê o efeito da marca sem contar batida. */
+.dp360 .oc-mt-l { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.dp360 .oc-mt-k {
+  width: 34px;
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dp-faint);
+}
+.dp360 .oc-mt-n { font-size: 11px; font-weight: 600; line-height: 1.5; }
+.dp360 .oc-mt-n.forte { color: var(--dp-danger-ink); }
+/* O contexto que decide (operação, alvo, origem, Transnet/reserva). Grade que se
+   adapta: no painel largo são quatro colunas; apertado, empilha. */
+.dp360 .oc-mt-ctx {
+  margin-top: 3px;
+  padding-top: 7px;
+  border-top: 1px dashed var(--dp-border-strong);
+  display: grid;
+  gap: 6px 12px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.dp360 .oc-mt-ctx-c { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.dp360 .oc-mt-ctx-c > span:first-child {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dp-faint);
+}
+.dp360 .oc-mt-ctx-c > b { font-size: 12px; font-weight: 700; }
+.dp360 .oc-mt-ctx-c > i { font-size: 10px; font-style: normal; color: var(--dp-muted); }
+/* A marcação JÁ GRAVADA fala antes do veredito automático: quem já decidiu não pode
+   ser convidado a decidir de novo sem saber que existe decisão. */
+.dp360 .oc-mt-marcado {
+  margin: 6px 0 2px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--dp-accent-soft);
+  color: var(--dp-accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
 /* ═══════════ REFEIÇÃO — os dois caminhos da importação (prefixo `rf-`) ═══════════
  * ACRÉSCIMO: nada aqui reescreve regra existente. O prefixo `rf-` é da Refeição.
  *

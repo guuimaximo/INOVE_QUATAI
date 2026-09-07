@@ -209,28 +209,40 @@ muda a vida de quem usa — diferença de cor, ícone ou ordem de coluna não co
 salvo quando a cor **é** o veredito. O que não deu para confirmar está marcado
 como suspeita.
 
-| # | Tela | Buraco | Onde (ferramenta) | Tam. |
-|---|---|---|---|---|
-| 1 | Ocorrências | ~~`conferir (so leitura)` não era disparado~~ **feito** — dois escopos (caso aberto e linhas marcadas), escopo vazio recusado | `bot_ajustes_app.py:718` | — |
-| 2 | Ocorrências | ~~`capturar a grade` não é disparado~~ **REMOVIDO a pedido do dono, e a premissa era falsa**: a `ponto_ajustes_app` vem do importador diário (view `7_vw_ponto_ajustes_app_046`, cabeçalho: "SUBSTITUI A CAPTURA AO VIVO") — a ocorrência entra sozinha. O botão só adiantaria o dia de hoje, não tem ensaio (o yml roda sem `--confirmar`) e não congela a prova | `importador_supabase.py:234` | — |
-| 3 | Refeição | ~~robô reescreve as pontas do snapshot D-1~~ **resolvido**: dia com `conferido_em`/`correcao_final_em` sai do lote | `main.py:2856` | — |
-| 4 | Folgas | picker de motivo do dia `S/PONTO` (14 códigos do Transnet). É o único dia que não fecha sozinho, e o motivo marcado no desktop aparece lá e não aqui | `app.js:3682`, `main.py:7016` | grande |
-| 5 | Gordura | o alvo que a carta cobra não usa a cascata por ponta do `_contrato_alvo` (rm > alvo congelado > régua > sug > cartão, iterando até fechar cartão cronológico) — o Real manual do DP não vence a carta | `main.py:5932` | médio |
-| 6 | Folgas | seleção múltipla + lançamento em lote: a tela conta "N folgas a lançar" e não oferece como lançar as N | `app.js:3740` | grande |
-| 7 | Pop-up | faixa "Semana dele" — a trava contra inserir ponto no dia de folga de alguém | `main.py:797`, `app.js:5044` | médio |
-| 8 | Revisão | "✅ Lançar ajuste" (correção em lote). O `sugBloqueio` já está portado e a Refeição já dispara o robô `ponto` — falta ligar | `main.py:2820` | médio |
-| 9 | Ocorrências | fechar o caso à mão quando o robô não consegue ("lancei à mão", "Transnet não aceita o dia") — sem isso a fila só cresce | `main.py:8289` | peq |
-| 10 | Gordura | coluna "Status atual" do ciclo: o DP monta o lote sem ver quem já foi avisado (reaviso reinicia as 48 h) nem quem venceu | `app.js:4322` | médio |
-| 11 | Refeição | não sai arquivo nenhum: quem não tem cartão completo fica sem refeição e sem caminho manual | `main.py:2705` | médio |
-| 12 | Pop-up | rota "pedir exclusão de batida indevida" — o modelo é editável no Config e **nada o envia** | `app.js:4927` | médio |
-| 13 | Banco de Horas | "com a folha fechada" calculado só sobre a competência carregada, e o padrão é a mais nova (a aberta) | `main.py:7219` | médio |
-| 14 | Folgas | marcar o dia como reserva — sem isso a célula fica vermelha `S/OPER.` para sempre (a cor é o veredito) | `main.py:4443` | médio |
-| 15 | Gordura | ~~cravar o Real manual sem sair da Gordura~~ **feito**: o pop-up do dia virou o `CartaoDoDia`, compartilhado com a Revisão, e o Real manual veio junto | `app.js:4279` | — |
+**TODOS OS 15 FORAM FEITOS** (06-07/09/2026). O que cada um virou está no commit
+correspondente; a lista fica aqui como registro do que existia:
 
-Menores, confirmados: Banco de Horas sem o modo "por mês" (a curva do passivo);
-Resumo sem "todas as competências" e com o drill-down cortado em 400 sem saída;
-Config sem "↩ Padrão" e sem o teste de modelos (o da ferramenta pega `{Nome}`
-minúsculo, que passaria até o colaborador); Refeição sem o "incluir Abaixo 27min".
+1. Ocorrências · `conferir (so leitura)` — **feito**, dois escopos, escopo vazio recusado.
+2. Ocorrências · `capturar a grade` — **removido**: a premissa era falsa (o importador
+   diário substitui a captura ao vivo), não tem ensaio e não congela a prova.
+3. Refeição · o robô reescrevia as pontas de um retrato velho — **travado**: dia já
+   mexido no Transnet sai do lote.
+4. Folgas · picker de motivo do dia `S/PONTO` — **feito**, os 14 códigos, `04` manual e
+   fora da fila, na mesma chave `app_config` da ferramenta.
+5. Gordura · cascata por ponta com iteração entrada × saída — **feito**. Medido: 509 de
+   8.000 linhas só fecham por causa da iteração.
+6. Folgas · seleção múltipla e lançamento em lote — **feito**, um montador de CSV só.
+7. Cartão · faixa "Semana dele" — **feito**, acima das colunas (dentro de uma, cairia
+   abaixo da dobra e a trava não travaria nada).
+8. Revisão · "Lançar ajuste" (correção em lote) — **feito**, reusando `sugBloqueio` e o
+   CSV da Refeição.
+9. Ocorrências · fechar o caso à mão — **feito**, dois desfechos; `nao_da` não carimba
+   `correcao_final_em` (dizer que corrigiu seria mentir no histórico).
+10. Gordura · coluna "Status atual" do ciclo — **feito**, na ordem de testes do original.
+11. Refeição · arquivo `.txt` de batidas PIS — **feito**, 34 caracteres conferidos byte a
+    byte contra o `_monta_batida`.
+12. Cartão · rota "pedir exclusão de batida" — **feito**, sem alvo e com o cartão CRU no
+    retrato (o limpo descarta a batida que a exclusão vai apagar).
+13. Banco de Horas · saldo "com a folha fechada" — **feito**, leitura própria. A
+    separação vale 9.359,8 h e inverte o sinal do passivo.
+14. Folgas · marcar o dia como reserva — **feito**, com o DELETE varrendo as duas grafias
+    de crachá (o desktop grava cru, a tela grava com 8).
+15. Gordura · cravar o Real sem sair da tela — **feito** pelo `CartaoDoDia` compartilhado.
+
+Menores, também feitos: Banco de Horas por mês; Resumo com "todas as competências" e
+drill-down sem teto cego; valor da hora editável; Config com "↩ Padrão" e o teste de
+modelos (que pega `{Nome}` minúsculo — no INOVE isso é pior que na ferramenta, porque a
+minúscula sai literal na carta); Refeição com "incluir Abaixo 27min".
 
 Suspeitas (não confirmadas): categoria em branco some das Folgas (o pivô da
 ferramenta trata vazio como INTERNO); o seletor do Motorista para no teto de

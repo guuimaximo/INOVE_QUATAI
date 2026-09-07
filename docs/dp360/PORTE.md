@@ -225,7 +225,7 @@ como suspeita.
 | 12 | Pop-up | rota "pedir exclusão de batida indevida" — o modelo é editável no Config e **nada o envia** | `app.js:4927` | médio |
 | 13 | Banco de Horas | "com a folha fechada" calculado só sobre a competência carregada, e o padrão é a mais nova (a aberta) | `main.py:7219` | médio |
 | 14 | Folgas | marcar o dia como reserva — sem isso a célula fica vermelha `S/OPER.` para sempre (a cor é o veredito) | `main.py:4443` | médio |
-| 15 | Gordura | cravar o Real manual sem sair da Gordura — é o que destrava a linha barrada por alvo | `app.js:4279` | médio |
+| 15 | Gordura | ~~cravar o Real manual sem sair da Gordura~~ **feito**: o pop-up do dia virou o `CartaoDoDia`, compartilhado com a Revisão, e o Real manual veio junto | `app.js:4279` | — |
 
 Menores, confirmados: Banco de Horas sem o modo "por mês" (a curva do passivo);
 Resumo sem "todas as competências" e com o drill-down cortado em 400 sem saída;

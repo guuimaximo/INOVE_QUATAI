@@ -710,18 +710,39 @@ const alvoQuatroSlots = (caso) =>
  *     transforma no MIOLO de um cartão de quatro (`16:10 · 21:31 · 22:01 · 26:10`).
  *     Guardar a posição antiga não deixava o 16:10 entrar em lugar nenhum.
  *
- * `null` = o cartão não é possível, e o motivo é o do próprio Python (`valida`).
+ * CARTÃO IMPOSSÍVEL? ENTÃO VALE O ALVO (montador.py:387, "cartão incompleto reparado pela
+ * sugestão da Revisão"). Foi o dono quem apontou: "mas aí vamos pegar o alvo — por isso o
+ * alvo é importante". E é isso mesmo: o pedido diz o que a PESSOA quer mexer, mas quem diz
+ * como o dia TEM de ficar é a régua que a Revisão apurou e publicou (as quatro sugestões do
+ * `ponto_diario`). Quando aplicar o pedido ao pé da letra produz cartão que não existe —
+ * uma inserção numa ponta que já tem batida deixa o cartão com 3 —, o alvo é a resposta, e
+ * não a recusa.
+ *
+ * A trava é a mesma do Python: só entra com as QUATRO sugestões preenchidas e só se elas
+ * formarem um cartão válido. Sugestão pela metade não vira alvo — slot vazio não se
+ * inventa (LIÇÃO 21).
+ *
+ * `null` = nem o pedido nem o alvo formam cartão, e o motivo é o do próprio `valida`.
  */
-function projetarNosSlots(slotsHoje, hojeMin, simMin, almocoLancado, cat) {
+function projetarNosSlots(slotsHoje, hojeMin, simMin, almocoLancado, cat, sugestao) {
   const antes = (hojeMin || []).map(min2hm);
   const depois = (simMin || []).map(min2hm);
   const igual = antes.length === depois.length && antes.every((h, i) => h === depois[i]);
-  if (igual) return { slots: slotsHoje || ["", "", "", ""], problema: "" };
+  if (igual) return { slots: slotsHoje || ["", "", "", ""], problema: "", fonte: "cartão" };
   const problema = validaCartao(simMin || [], cat);
-  return { slots: problema ? null : quatroSlots(simMin, almocoLancado), problema };
+  if (!problema) return { slots: quatroSlots(simMin, almocoLancado), problema: "", fonte: "pedido" };
+
+  const sug = (sugestao || []).map(horaSlot);
+  if (sug.every(Boolean)) {
+    // desenrola a virada, como o `_desenrola` do montador antes de validar
+    const mins = sug.map(hm2min);
+    for (let i = 1; i < mins.length; i += 1) while (mins[i] < mins[i - 1]) mins[i] += 1440;
+    if (!validaCartao(mins, cat)) return { slots: mins.map(min2hm), problema: "", fonte: "revisão" };
+  }
+  return { slots: null, problema, fonte: "" };
 }
 
-function cartaoFinal(slotsHoje, caso, slotsPedido, problemaPedido) {
+function cartaoFinal(slotsHoje, caso, slotsPedido, problemaPedido, fontePedido) {
   const hoje = slotsHoje || ["", "", "", ""];
   const alvo = alvoQuatroSlots(caso);
   // `slotsPedido === null` = a projeção não cabe em quatro campos; então não há terceiro
@@ -742,6 +763,8 @@ function cartaoFinal(slotsHoje, caso, slotsPedido, problemaPedido) {
     naoFecha: slotsPedido === null && !alvo.some(Boolean),
     // o motivo é o do Python (`valida`): "3 batidas (motorista: 2 ou 4)", "almoço de N min"
     problema: txt(problemaPedido),
+    // de onde saiu o desenho: alvo congelado, cartão de hoje, pedido, ou a régua da Revisão
+    fonte: alvo.some(Boolean) ? "aviso" : txt(fontePedido),
   };
 }
 
@@ -1085,8 +1108,9 @@ function montarRegistros(base) {
     const encaixado = encaixaEmQuatro(sim, cat).fica;
     const proj = projetarNosSlots(
       slotsHoje, hoje, encaixado, [caso.alvo_alm_saida, caso.alvo_alm_volta], cat,
+      [cp.entrada_sug, cp.almoco_saida_sug, cp.almoco_volta_sug, cp.saida_sug],
     );
-    const final = cartaoFinal(slotsHoje, caso, proj.slots, proj.problema);
+    const final = cartaoFinal(slotsHoje, caso, proj.slots, proj.problema, proj.fonte);
 
     // ── monitor de avisos (main.py:4283-4361) ───────────────────────────────
     // ids ainda PENDENTES no Transnet que a nossa decisão NÃO cobre
@@ -2174,17 +2198,29 @@ function CartaoAlvo({ alvo, legenda = false }) {
     <span
       style={legenda ? PILHA : undefined}
       title={
-        alvo.congelado
-          ? "O cartão como fica quando a correção for lançada. Os horários destacados são os que o aviso congelou."
-          : "O cartão como fica se o pedido for aceito. Ainda não há alvo congelado: ele vira definitivo quando a decisão for gravada."
+        {
+          aviso: "O cartão como fica quando a correção for lançada. Os horários destacados são os que o aviso congelou.",
+          revisão:
+            "O PEDIDO NÃO FECHA SOZINHO — aplicá-lo ao pé da letra deixaria o cartão impossível. Então vale o ALVO: as quatro sugestões que a Revisão apurou e publicou para este dia. Não foi isto que o colaborador pediu; é o que o dia tem de virar.",
+          cartão: "O pedido não muda nada neste cartão — ele fica como está.",
+        }[alvo.fonte] ||
+        "O cartão como fica se o pedido for aceito. Ainda não há alvo congelado: ele vira definitivo quando a decisão for gravada."
       }
     >
       <LinhaCartao horas={alvo.slots} mudou={alvo.mudou} />
+      {alvo.fonte === "revisão" ? (
+        <span className="dp-pill mute" style={MINI} title="montador.py:387 — cartão incompleto reparado pela sugestão da Revisão.">
+          alvo da Revisão
+        </span>
+      ) : null}
       {legenda ? (
         <span className="dp-faint" style={MINI}>
-          {alvo.congelado
-            ? "o cartão como fica depois de lançado · destacado = pedido · normal = fica como está"
-            : "como fica se o pedido for aceito · destacado = o que muda · normal = fica como está"}
+          {{
+            aviso: "o cartão como fica depois de lançado · destacado = pedido · normal = fica como está",
+            revisão: "o pedido não fecha o cartão — vale a régua que a Revisão publicou para o dia",
+            cartão: "o pedido não muda nada · o cartão fica como está",
+          }[alvo.fonte] ||
+            "como fica se o pedido for aceito · destacado = o que muda · normal = fica como está"}
         </span>
       ) : null}
     </span>

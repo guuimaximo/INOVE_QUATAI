@@ -440,9 +440,30 @@ const LIMITE_CHAMADAS = 8; // teto do CONJUNTO das tabelas: a Edge Function é a
 const TABELAS_LAKE = [
   { chave: "diario", tabela: "ponto_diario", colData: "date_ref", colunas: COLS_DIARIO },
   { chave: "gordura", tabela: "ponto_gordura", colData: "data_ref", colunas: COLS_GORDURA },
-  // sem recorte de colunas: o real manual é a régua do DP e a tela usa a linha inteira
-  { chave: "realManual", tabela: "ponto_real_manual", colData: "date_ref", colunas: undefined },
 ];
+
+/**
+ * O REAL MANUAL NÃO ENTRA NA VARREDURA POR DIA — ele cabe INTEIRO numa requisição.
+ *
+ * Ele é escrito à mão pelo DP, não pelo importador: a tabela toda tem 386 linhas (medido
+ * em 09/09/2026, cobrindo 29/07 a 02/09). Pedir uma requisição por dia para isso gastava
+ * 161 chamadas para trazer, somadas, algumas centenas de linhas — um terço de todo o
+ * custo da tela para a menor das três tabelas.
+ * Sem recorte de colunas: o real manual é a régua do DP e a tela usa a linha inteira.
+ */
+const TABELA_REAL = { chave: "realManual", tabela: "ponto_real_manual", colData: "date_ref" };
+
+/**
+ * DIA VELHO NÃO SE PERGUNTA. O lake é uma janela deslizante de 120 dias (ver
+ * `RETENCAO_DIAS`), e o Transnet deixa abrir pedido para dia muito mais antigo: 43 dos 161
+ * dias em cena hoje estão FORA da janela, e em cada um deles as três tabelas devolvem
+ * lista vazia — 129 requisições para não trazer nada.
+ * A margem de 10 dias é de propósito: se a retenção mudar um pouco, é melhor gastar meia
+ * dúzia de chamadas do que sumir com o cartão de um dia que existe.
+ */
+const IDADE_MAXIMA_LAKE = RETENCAO_DIAS + 10;
+const diasDeIdade = (iso) =>
+  Math.round((Date.now() - new Date(`${iso}T12:00:00`).getTime()) / 86400000);
 
 // Roda `tarefa` sobre `itens` com no máximo `limite` em voo ao mesmo tempo.
 async function emPool(itens, limite, tarefa) {
@@ -474,19 +495,30 @@ async function lerLakePorPares(pares, aoAvancar) {
 
   const trabalhos = [];
   porDia.forEach((crachas, iso) => {
+    if (diasDeIdade(iso) > IDADE_MAXIMA_LAKE) return;   // fora da janela do lake
     const lista = [...crachas].join(",");
     TABELAS_LAKE.forEach((t) => trabalhos.push({ t, iso, lista }));
   });
+  const diasEmCena = [...porDia.keys()].filter((iso) => diasDeIdade(iso) <= IDADE_MAXIMA_LAKE);
 
   // PROGRESSO HONESTO: o total de dias é sabido AQUI, antes de qualquer chamada. Um dia só
   // conta como lido quando TODAS as tabelas dele voltaram — contar leitura solta faria a
   // barra correr mais rápido do que o trabalho.
-  const totalDias = porDia.size;
-  const faltamNoDia = new Map([...porDia.keys()].map((iso) => [iso, TABELAS_LAKE.length]));
+  const totalDias = diasEmCena.length;
+  const faltamNoDia = new Map(diasEmCena.map((iso) => [iso, TABELAS_LAKE.length]));
   let diasFeitos = 0;
   aoAvancar?.(0, totalDias);
 
   const out = { diario: [], gordura: [], realManual: [] };
+  // uma requisição só, em paralelo com a varredura, cobrindo a janela inteira em cena
+  const dias = [...diasEmCena].sort();
+  const real = dias.length
+    ? lerTudoDP360(TABELA_REAL.tabela, {
+        ordem: "date_ref.asc",
+        filtros: { date_ref: `gte.${dias[0]}` },
+      }).catch(() => [])
+    : Promise.resolve([]);
+
   await emPool(trabalhos, LIMITE_CHAMADAS, async ({ t, iso, lista }) => {
     try {
       const linhas = await lerTudoDP360(t.tabela, {
@@ -506,6 +538,7 @@ async function lerLakePorPares(pares, aoAvancar) {
       }
     }
   });
+  out.realManual = await real;
   return out;
 }
 

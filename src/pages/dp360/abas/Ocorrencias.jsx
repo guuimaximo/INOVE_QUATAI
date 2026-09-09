@@ -410,6 +410,10 @@ const COLS_DIARIO =
   "cracha,date_ref,todas_batidas,batidas_limpas,jornada_liquida_min,entrada,saida," +
   "saida_almoco,volta_almoco,esc_entrada,esc_saida,entrada_sug,saida_sug," +
   "almoco_saida_sug,almoco_volta_sug,status_ponto,motivo,nm_funcao,categoria,almoco_travado," +
+  // `tem_ponto` é a régua da FERRAMENTA para "este dia chegou do Transnet?"
+  // (main.py:7067 monta o seletor de datas com ela; processar_ponto.py:29 filtra as
+  // linhas da Revisão pelo mesmo campo). É ela que decide o que entra na fila.
+  "tem_ponto," +
   // o carimbo de ONDE a view tirou o almoço do dia (CARTAO_PRESERVADO, MODULO_REFEICAO,
   // MATRIZ_PARADO...): é o que a tela mostra ao completar um cartão de 3 batidas
   "fonte_almoco";
@@ -1049,7 +1053,7 @@ function montarRegistros(base) {
     lista.sort((a, b) => txt(a.capturado_em).localeCompare(txt(b.capturado_em))),
   );
 
-  const registros = [];
+  let registros = [];
   chaves.forEach(({ cracha, iso }, k) => {
     const grupo = grupos.get(k) || [];
     const casoBruto = mapaCaso.get(k) || null;
@@ -1394,9 +1398,40 @@ function montarRegistros(base) {
     });
   });
 
+  /* ── SÓ OS DIAS QUE ESTÃO COM PONTO (09/09/2026, decisão do dono) ─────────────
+   * Dia cujo cartão ainda não foi importado entrava na fila mesmo assim: as batidas vinham
+   * do `ponto_antes` do próprio pedido (o retrato da grade do Transnet), mas sem cartão não
+   * há sugestão, não há gordura, não há almoço apurado — e o caso chegava ao DP sem régua
+   * nenhuma, dizendo "o ponto deste dia não chegou do Transnet". Em 09/09 eram seis dias
+   * assim (03/09 a 08/09), com ZERO linha de `tem_ponto` em 369 por dia.
+   *
+   * A RÉGUA É A DA FERRAMENTA, não uma inventada aqui: o dia chegou quando existe ao menos
+   * uma linha com `tem_ponto = true` naquele `date_ref` (main.py:7067 usa exatamente isso
+   * para montar o seletor de datas). É régua de DIA, não de pessoa — quem não bateu num dia
+   * que chegou continua na fila, com o "Dia sem ponto — lançar a ocorrência" inteiro.
+   *
+   * E o que sai NÃO some calado: a contagem sobe para o resumo da aba. Pendência escondida
+   * é o que esta tela passou a existir para não fazer. */
+  const diasComPonto = new Set(
+    (diario || []).filter((l) => ehVerdadeiro(l.tem_ponto)).map((l) => normData(l.date_ref)).filter(Boolean),
+  );
+  /* DIA VELHO DEMAIS PARA O LAKE NÃO É DIA QUE NÃO CHEGOU. O pedido entra pela data em que
+   * foi CAPTURADO (janela de 70 dias), mas o Transnet deixa pedir ajuste de dia muito mais
+   * antigo — e para esses o lake nem é lido (`IDADE_MAXIMA_LAKE`). Eles já têm a trava certa
+   * na coluna do alvo ("o dia saiu da base"); esconder aqui seria trocar um aviso por um
+   * sumiço. */
+  const noLake = (iso) => diasDeIdade(iso) <= IDADE_MAXIMA_LAKE;
+  const semPontoNoDia = (r) => noLake(r.iso) && !diasComPonto.has(r.iso);
+  const esperandoPonto = registros.filter(semPontoNoDia).length;
+  registros = registros.filter((r) => !semPontoNoDia(r));
+  // vai na LISTA, não só nas linhas: quando TODOS os casos estão esperando o ponto, não
+  // sobra linha nenhuma para carregar o número — e é justamente aí que ele importa.
+  registros.esperandoPonto = esperandoPonto;
+
   registros.forEach((r) => {
     r.diaStatus = statusDoDia(r);
     r.realocados = realocados;
+    r.esperandoPonto = esperandoPonto;
   });
   registros.sort((a, b) => b.iso.localeCompare(a.iso) || a.nome.localeCompare(b.nome));
   return registros;
@@ -5080,6 +5115,14 @@ export default function Ocorrencias() {
           {base?.descartados ? (
             <span className="dp-faint" title="Linhas de ponto_ajustes_app sem tipo_ajuste (avisos, advertências, atestados). Não são pedido do colaborador.">
               {" "}· {base.descartados} descartada(s)
+            </span>
+          ) : null}
+          {registros.esperandoPonto ? (
+            <span
+              className="dp-faint"
+              title="Casos de dias cujo cartão ainda não foi importado (nenhuma linha com tem_ponto no dia). Sem cartão não há sugestão, gordura nem almoço apurado — eles voltam sozinhos quando o ponto do dia subir."
+            >
+              {" "}· {registros.esperandoPonto} esperando o ponto do dia
             </span>
           ) : null}
           {registros[0]?.realocados ? (

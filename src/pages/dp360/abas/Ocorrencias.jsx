@@ -736,7 +736,7 @@ const alvoQuatroSlots = (caso) =>
  *
  * `null` = nem o pedido nem o alvo formam cartão, e o motivo é o do próprio `valida`.
  */
-function projetarNosSlots(slotsHoje, hojeMin, simMin, almocoLancado, cat, sugestao) {
+function projetarNosSlots(slotsHoje, hojeMin, simMin, almocoLancado, cat, ...reguas) {
   const antes = (hojeMin || []).map(min2hm);
   const depois = (simMin || []).map(min2hm);
   const igual = antes.length === depois.length && antes.every((h, i) => h === depois[i]);
@@ -744,12 +744,17 @@ function projetarNosSlots(slotsHoje, hojeMin, simMin, almocoLancado, cat, sugest
   const problema = validaCartao(simMin || [], cat);
   if (!problema) return { slots: quatroSlots(simMin, almocoLancado), problema: "", fonte: "pedido" };
 
-  const sug = (sugestao || []).map(horaSlot);
-  if (sug.every(Boolean)) {
+  // AS RÉGUAS, NA ORDEM DA CASCATA: o Real manual do DP primeiro (é o topo em todo o
+  // resto da tela — `refDaPonta` —, e é ele que o DP crava quando a view não apurou), e só
+  // depois a sugestão publicada pela Revisão. Cada uma vale INTEIRA ou não vale: régua pela
+  // metade não completa cartão, porque slot vazio não se inventa (LIÇÃO 21).
+  for (const [fonte, bruta] of reguas) {
+    const quatro = (bruta || []).map(horaSlot);
+    if (!quatro.every(Boolean)) continue;
     // desenrola a virada, como o `_desenrola` do montador antes de validar
-    const mins = sug.map(hm2min);
+    const mins = quatro.map(hm2min);
     for (let i = 1; i < mins.length; i += 1) while (mins[i] < mins[i - 1]) mins[i] += 1440;
-    if (!validaCartao(mins, cat)) return { slots: mins.map(min2hm), problema: "", fonte: "revisão" };
+    if (!validaCartao(mins, cat)) return { slots: mins.map(min2hm), problema: "", fonte };
   }
   return { slots: null, problema, fonte: "" };
 }
@@ -1120,7 +1125,8 @@ function montarRegistros(base) {
     const encaixado = encaixaEmQuatro(sim, cat).fica;
     const proj = projetarNosSlots(
       slotsHoje, hoje, encaixado, [caso.alvo_alm_saida, caso.alvo_alm_volta], cat,
-      [cp.entrada_sug, cp.almoco_saida_sug, cp.almoco_volta_sug, cp.saida_sug],
+      ["Real manual", [rm.entrada, rm.alm_saida, rm.alm_volta, rm.saida]],
+      ["revisão", [cp.entrada_sug, cp.almoco_saida_sug, cp.almoco_volta_sug, cp.saida_sug]],
     );
     const final = cartaoFinal(slotsHoje, caso, proj.slots, proj.problema, proj.fonte);
 
@@ -2214,15 +2220,17 @@ function CartaoAlvo({ alvo, legenda = false }) {
           aviso: "O cartão como fica quando a correção for lançada. Os horários destacados são os que o aviso congelou.",
           revisão:
             "O PEDIDO NÃO FECHA SOZINHO — aplicá-lo ao pé da letra deixaria o cartão impossível. Então vale o ALVO: as quatro sugestões que a Revisão apurou e publicou para este dia. Não foi isto que o colaborador pediu; é o que o dia tem de virar.",
+          "Real manual":
+            "O PEDIDO NÃO FECHA SOZINHO. Então vale a régua que o DP cravou à mão na Revisão (ponto_real_manual) — o topo da cascata, acima da sugestão da view.",
           cartão: "O pedido não muda nada neste cartão — ele fica como está.",
         }[alvo.fonte] ||
         "O cartão como fica se o pedido for aceito. Ainda não há alvo congelado: ele vira definitivo quando a decisão for gravada."
       }
     >
       <LinhaCartao horas={alvo.slots} mudou={alvo.mudou} />
-      {alvo.fonte === "revisão" ? (
-        <span className="dp-pill mute" style={MINI} title="montador.py:387 — cartão incompleto reparado pela sugestão da Revisão.">
-          alvo da Revisão
+      {alvo.fonte === "revisão" || alvo.fonte === "Real manual" ? (
+        <span className="dp-pill mute" style={MINI} title="montador.py:387 — cartão incompleto reparado pela régua do dia.">
+          {alvo.fonte === "revisão" ? "alvo da Revisão" : "alvo do Real manual"}
         </span>
       ) : null}
       {legenda ? (
@@ -2230,6 +2238,7 @@ function CartaoAlvo({ alvo, legenda = false }) {
           {{
             aviso: "o cartão como fica depois de lançado · destacado = pedido · normal = fica como está",
             revisão: "o pedido não fecha o cartão — vale a régua que a Revisão publicou para o dia",
+            "Real manual": "o pedido não fecha o cartão — vale o Real manual que o DP cravou",
             cartão: "o pedido não muda nada · o cartão fica como está",
           }[alvo.fonte] ||
             "como fica se o pedido for aceito · destacado = o que muda · normal = fica como está"}

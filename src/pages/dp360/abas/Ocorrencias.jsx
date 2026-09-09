@@ -4030,6 +4030,8 @@ export default function Ocorrencias() {
   const [eixoStatus, setEixoStatus] = useState("PENDENTE");
   const [eixoData, setEixoData] = useState("TODAS");
   const [aberto, setAberto] = useState(null);
+  // o chip clicado na aba "Advertências e correções" (TODOS · advertido · corrigido)
+  const [sitDisc, setSitDisc] = useState("TODOS");
   const [gravando, setGravando] = useState(false);
   const [recado, setRecado] = useState("");
   const [versao, setVersao] = useState(0);
@@ -4164,9 +4166,19 @@ export default function Ocorrencias() {
     return { PENDENTE: pendentes, TODOS: noRecorteDeData.length };
   }, [noRecorteDeData, temEixos]);
 
-  const linhas = useMemo(
+  const naAba = useMemo(
     () => (temEixos ? noRecorteDeData.filter(porEixoStatus(eixoStatus)) : daAba),
     [daAba, noRecorteDeData, temEixos, eixoStatus],
+  );
+
+  /* ── AS CONTAGENS SÃO O FILTRO (app.js:3009) ──────────────────────────────────
+   * Régua da ferramenta, dita lá com todas as letras: "elas já diziam quanto tem de cada
+   * coisa e não faziam nada — clicar era o passo óbvio que faltava". Na aba de Advertências
+   * e correções são dois desfechos e mais nada: ⚠ advertido e 🔧 corrigido. Clicar de novo
+   * no mesmo chip volta para todos. */
+  const linhas = useMemo(
+    () => (abaAtiva === "disc" && sitDisc !== "TODOS" ? naAba.filter((r) => r.situacao === sitDisc) : naAba),
+    [naAba, abaAtiva, sitDisc],
   );
 
   // Filtro que sobrevive à navegação é como se abre uma aba que parece vazia — e como se
@@ -4174,6 +4186,7 @@ export default function Ocorrencias() {
   const zerar = () => {
     setEixoStatus("PENDENTE");
     setEixoData("TODAS");
+    setSitDisc("TODOS");
     setAberto(null);
     setSelIds([]);
     setDec({});
@@ -5068,13 +5081,9 @@ export default function Ocorrencias() {
       <span className="dp-muted dp-num" style={MINI} title={AVISO_CONFERIR}>
         {selIds.length ? `${selIds.length} marcada(s) na ✔` : "marque linhas para conferir no Transnet (só leitura)"}
       </span>
-      <BotaoAcao
-        titulo="Lê o cartão ao vivo de cada dia marcado e mostra o resultado no run. Não grava nada."
-        disabled={!selIds.length || gravando || disparando}
-        onClick={() => aoConferirRobo(marcados, false)}
-      >
-        🔍 Conferir marcados — ensaio
-      </BotaoAcao>
+      {/* SEM ENSAIO (decisão do dono, 09/09/2026). Este botão já é só leitura no Transnet —
+          o ensaio dele só mudava se o carimbo cai no NOSSO banco, e para isso existe a
+          confirmação, que diz exatamente o que vai ser gravado. */}
       <BotaoAcao
         tom="ok"
         titulo="Lê o cartão ao vivo e, no que bater com o combinado, carimba conferido_em no NOSSO banco. O Transnet continua intocado."
@@ -5083,6 +5092,35 @@ export default function Ocorrencias() {
       >
         🔒 Conferir marcados e fechar no nosso banco
       </BotaoAcao>
+    </div>
+  ) : abaAtiva === "disc" ? (
+    <div style={{ ...FILA, gap: 6 }}>
+      {[
+        ["TODOS", "Todos", naAba.length],
+        ["advertido", "⚠ advertido", naAba.filter((r) => r.situacao === "advertido").length],
+        ["corrigido", "🔧 corrigido", naAba.filter((r) => r.situacao === "corrigido").length],
+      ].map(([id, rotulo, n]) => (
+        <button
+          key={id}
+          type="button"
+          className="dp-btn"
+          aria-pressed={sitDisc === id}
+          style={sitDisc === id ? { borderColor: "var(--dp-accent)", color: "var(--dp-accent)" } : undefined}
+          title={
+            id === "TODOS"
+              ? "Tudo o que já virou desfecho nesta porta."
+              : id === "advertido"
+                ? "A advertência subiu; o ponto ainda não foi corrigido."
+                : "O ponto foi corrigido (correcao_final_em carimbado)."
+          }
+          onClick={() => setSitDisc((atual) => (atual === id ? "TODOS" : id))}
+        >
+          {rotulo} <b className="dp-num">{n}</b>
+        </button>
+      ))}
+      <span className="dp-faint dp-num" style={MINI}>
+        {sitDisc === "TODOS" ? `${naAba.length} caso(s)` : `${linhas.length} de ${naAba.length}`}
+      </span>
     </div>
   ) : null;
 

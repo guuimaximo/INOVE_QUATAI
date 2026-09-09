@@ -3705,6 +3705,8 @@ export default function Ocorrencias() {
   const [cartaoDia, setCartaoDia] = useState(null);
   const [abrindoCartao, setAbrindoCartao] = useState(false);
   const [progresso, setProgresso] = useState(null);
+  // recarga que NÃO tira a lista da tela (ver `buscar`)
+  const [atualizando, setAtualizando] = useState(false);
   // Gravou alguma coisa DENTRO do cartão? A releitura da aba custa a varredura do lake por
   // dia — vale a pena UMA vez, ao fechar, e não a cada campo salvo.
   const cartaoGravou = useRef(false);
@@ -3730,20 +3732,38 @@ export default function Ocorrencias() {
     return () => window.removeEventListener("keydown", aoTeclar);
   }, [aberto]);
 
-  const carregar = useCallback(async () => {
-    setCarregando(true);
+  /**
+   * DUAS RECARGAS, E A DIFERENÇA É A TELA — NÃO A CONSULTA.
+   *
+   * `carregar` é a de ENTRAR: não há o que mostrar, então o indicador toma a tela.
+   * `atualizarSilencioso` é a de DEPOIS DE GRAVAR: a lista já está lá, o DP acabou de
+   * decidir uma linha, e apagar tudo para remontar do zero é a pior hora de tirar a tela
+   * dele — some o lugar onde ele estava, a rolagem volta pro topo e ele espera olhando
+   * vazio. Aqui a lista FICA, com o dado velho, e só um "atualizando" discreto aparece na
+   * barra até o dado novo chegar por baixo.
+   *
+   * A consulta é a mesma nas duas: quem decide não pode ficar com base desatualizada.
+   */
+  const buscar = useCallback(async (silencioso) => {
+    if (silencioso) setAtualizando(true);
+    else setCarregando(true);
     setProgresso(null);
     try {
-      const dados = await carregarOcorrencias((feitos, total) => setProgresso({ feitos, total }));
+      const dados = await carregarOcorrencias(
+        silencioso ? undefined : (feitos, total) => setProgresso({ feitos, total }),
+      );
       setBase(dados);
       setErro("");
     } catch (falha) {
       setErro(falha?.message || "Falha ao consultar a base DP360.");
     } finally {
       setCarregando(false);
+      setAtualizando(false);
       setProgresso(null);
     }
   }, []);
+  const carregar = useCallback(() => buscar(false), [buscar]);
+  const atualizarSilencioso = useCallback(() => buscar(true), [buscar]);
 
   useEffect(() => {
     let ativo = true;
@@ -3852,7 +3872,7 @@ export default function Ocorrencias() {
         // depois de gravar é oferecer um segundo clique sobre um dado velho.
         setDec({});
         setVersao((v) => v + 1);
-        await carregar();
+        await atualizarSilencioso();
       } catch (e) {
         // o erro REAL do gateway (o dp360Api já desembrulha o motivo do 4xx)
         setRecado(`Falhou: ${e?.message || e}`);
@@ -3860,7 +3880,7 @@ export default function Ocorrencias() {
         setGravando(false);
       }
     },
-    [carregar],
+    [atualizarSilencioso],
   );
 
   const aoAceitar = useCallback(
@@ -4129,14 +4149,14 @@ export default function Ocorrencias() {
             ` O resultado por dia NÃO volta sozinho: a evidência fica no run.`,
           r?.painel || "",
         );
-        await carregar();
+        await atualizarSilencioso();
       } catch (e) {
         avisar("erro", `Falhou: ${e?.message || "Não foi possível disparar o robô."}`);
       } finally {
         setDisparando(false);
       }
     },
-    [carregar],
+    [atualizarSilencioso],
   );
 
   /* ── EXECUÇÃO: manda ao robô uma decisão JÁ GRAVADA, um crachá+dia por vez ──
@@ -4185,7 +4205,7 @@ export default function Ocorrencias() {
           ` O resultado não volta sozinho: a prova fica no run.`;
         setResultadoRobo({ tipo: "ok", texto, painel: r?.painel || "" });
         setRecado(texto);
-        await carregar();
+        await atualizarSilencioso();
       } catch (e) {
         const motivo = e?.message || "Não foi possível disparar o robô.";
         setResultadoRobo({ tipo: "erro", texto: `Falhou: ${motivo}` });
@@ -4194,7 +4214,7 @@ export default function Ocorrencias() {
         setDisparando(false);
       }
     },
-    [carregar],
+    [atualizarSilencioso],
   );
 
   /* ── CONFERÊNCIA: lê o cartão ao vivo, NÃO mexe no Transnet ────────────────
@@ -4248,7 +4268,7 @@ export default function Ocorrencias() {
           ` ${valendo ? "O bot carimba conferido_em durante o run — recarregue daqui a pouco." : "A leitura fica no log do run."}`;
         if (noCasoAberto) setResultadoRobo({ tipo: "ok", texto, painel: r?.painel || "" });
         setRecado(texto);
-        await carregar();
+        await atualizarSilencioso();
       } catch (e) {
         const motivo = e?.message || "Não foi possível disparar o robô.";
         if (noCasoAberto) setResultadoRobo({ tipo: "erro", texto: `Falhou: ${motivo}` });
@@ -4257,7 +4277,7 @@ export default function Ocorrencias() {
         setDisparando(false);
       }
     },
-    [carregar],
+    [atualizarSilencioso],
   );
 
   /* ══ O LOTE: MARCAR SUGESTÃO → APLICAR DECISÕES (app.js:2092 e :315) ═════════
@@ -4401,14 +4421,14 @@ export default function Ocorrencias() {
         // a marcação só se apaga quando ela virou disparo de verdade; no ensaio ela
         // continua ali, que é o ponto do ensaio (conferir e então mandar valendo).
         if (valendo) setDec({});
-        await carregar();
+        await atualizarSilencioso();
       } catch (e) {
         setRecado(`Falhou: ${e?.message || "não foi possível disparar o robô."}`);
       } finally {
         setDisparando(false);
       }
     },
-    [linhas, dec, carregar],
+    [linhas, dec, atualizarSilencioso],
   );
 
   const aplicarDecisoes = useCallback(() => {
@@ -4844,8 +4864,15 @@ export default function Ocorrencias() {
       )}
       {/* O RECADO é a resposta ao último clique — fica sempre visível, nunca atrás de botão. */}
       {recado ? <Selo cor={recado.startsWith("Falhou") ? "erro" : "ok"} quebra>{recado}</Selo> : null}
-      {gravando || disparando ? (
-        <Selo cor="alerta">{gravando ? "gravando…" : "disparando o robô…"}</Selo>
+      {/* O QUE ESTÁ ACONTECENDO, COM PALAVRA. Gravar, disparar e reler são três esperas
+          diferentes e o DP precisa saber em qual delas está — principalmente na terceira,
+          que é a longa (a releitura varre o lake dia a dia) e agora acontece SEM tirar a
+          lista da tela. Círculo sozinho não diz nada; aqui ele vem com o nome. */}
+      {gravando || disparando || atualizando ? (
+        <Selo cor="alerta">
+          <span className="dp-espera-circulo mini" aria-hidden="true" />
+          {gravando ? "gravando…" : disparando ? "disparando o robô…" : "carregando de novo…"}
+        </Selo>
       ) : null}
     </>
   );

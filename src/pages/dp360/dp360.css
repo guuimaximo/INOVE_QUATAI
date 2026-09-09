@@ -2201,3 +2201,13 @@
 .dp360 .oc-aba.on { color: var(--dp-accent); border-bottom-color: var(--dp-accent); }
 .dp360 .oc-aba .n { font-variant-numeric: tabular-nums; opacity: 0.75; }
 .dp360 .oc-eixo { margin-left: 14px; max-width: 320px; }
+/* O MESMO círculo, do tamanho de um texto — para a espera que acontece COM a tela cheia
+   (gravar, disparar, reler). Ele anda ao lado da palavra, nunca sozinho. */
+.dp360 .dp-espera-circulo.mini {
+  width: 11px;
+  height: 11px;
+  border-width: 2px;
+  display: inline-block;
+  vertical-align: -1px;
+  margin-right: 5px;
+}

@@ -2158,7 +2158,7 @@ export default function CartaoDoDia({
                 </thead>
                 <tbody>
                   <LinhaFonte
-                    rotulo={escalaProg ? "Escala (programada nas viagens)" : "Escala"}
+                    rotulo={escalaProg ? "Escala (das viagens)" : "Escala"}
                     ini={g.esc_inicio || linha.esc_entrada || escalaProg?.ini}
                     fim={g.esc_fim || linha.esc_saida || escalaProg?.fim}
                     cor="#94a3b8"
@@ -2223,6 +2223,19 @@ export default function CartaoDoDia({
                 </table>
               </div>
               {carregando && <p className="dp-faint" style={{ margin: "6px 0 0" }}>Carregando fontes…</p>}
+              {/* DITO POR EXTENSO, e não só no rótulo (pedido do dono, 09/09/2026): a linha
+                  de cima não é a escala publicada, e quem lê o dia precisa saber disso sem
+                  passar o mouse em cima. */}
+              {!carregando && escalaProg && (
+                <p className="dp-faint" style={{ margin: "6px 0 0" }}>
+                  ⚠ <b>Este dia veio sem escala</b> na linha do ponto (<span className="dp-mono">esc_entrada</span>/
+                  <span className="dp-mono">esc_saida</span> e <span className="dp-mono">programado_entrada</span>/
+                  <span className="dp-mono">programado_saida</span> vazias). A escala acima foi tirada das{" "}
+                  <b>viagens programadas</b> — início programado da primeira, fim programado da última. Ela
+                  não inclui apresentação nem recolhimento, então costuma ficar alguns minutos mais estreita
+                  que a publicada.
+                </p>
+              )}
               {/* POR QUE NÃO HÁ FONTE — e a resposta não é sempre a mesma (09/09/2026).
                   A frase acusava "interno/aprendiz" em TODO dia sem fonte, e o dono estranhou
                   com razão num MOTORISTA: a própria linha do dia dizia `teve_operacao = true`.

@@ -414,6 +414,10 @@ const COLS_DIARIO =
   // (main.py:7067 monta o seletor de datas com ela; processar_ponto.py:29 filtra as
   // linhas da Revisão pelo mesmo campo). É ela que decide o que entra na fila.
   "tem_ponto," +
+  // O ALVO PUBLICADO PELA REVISÃO — é ele que a correção lança, e ele já vem com a
+  // ponta batida preservada ("só a ponta errada muda"). `*_ref` é a régua interna da
+  // view e serve de reserva; `*_sug` é o último degrau.
+  "alvo_entrada,alvo_saida,alvo_saida_almoco,alvo_volta_almoco,alvo_entrada_ref,alvo_saida_ref," +
   // o carimbo de ONDE a view tirou o almoço do dia (CARTAO_PRESERVADO, MODULO_REFEICAO,
   // MATRIZ_PARADO...): é o que a tela mostra ao completar um cartão de 3 batidas
   "fonte_almoco";
@@ -856,7 +860,53 @@ function fechaComAlmocoDoDia(fica, cartao, categoria) {
   };
 }
 
-function cartaoFinal(slotsHoje, caso, slotsPedido, problemaPedido, fontePedido, trava) {
+/* ══ O QUE A CORREÇÃO LANÇA — O ALVO PUBLICADO PELA REVISÃO (09/09/2026) ═══════════
+ *
+ * Régua da ferramenta, e é ela que estava faltando aqui. Duas coisas diferentes se chamam
+ * "alvo" no DP360:
+ *
+ *   · `ponto_caso.alvo_*`  — o que PEDIMOS no aviso, congelado no dia do envio;
+ *   · `ponto_diario.alvo_*` — o que a REVISÃO PUBLICA para o dia, recalculado, e que já
+ *     vem com a ponta batida preservada quando ela está dentro da régua ("só a ponta errada
+ *     muda"). O próprio Python anota a medição: 2.720 dias em que o publicado difere da
+ *     referência interna e nos 2.720 o final É a batida do motorista — 218h53.
+ *
+ * QUEM É LANÇADO É O PUBLICADO: `corrigir_pontos` diz "REGRA SIMPLES E AUDITÁVEL: lança
+ * exatamente a coluna Pedimos (alvo)", e essa coluna sai de `_aplica_alvo`, que lê o alvo
+ * publicado da Revisão. O congelado do aviso vira COMPARAÇÃO — quando os dois divergem, a
+ * ferramenta alerta "pedimos X, vai lançar Y" (app/ui/app.js:1850) em vez de esconder um
+ * dos dois.
+ *
+ * Esta tela desenhava o congelado por cima do cartão, slot a slot. No ALECSANDRO 30061220 ·
+ * 01/09 isso dava "20:03 — — 20:33": o aviso congelou `alvo_entrada = 20:03`, que é a
+ * batida do ALMOÇO dele. O publicado do mesmo dia é 13:43 · 20:03 · 20:33 · 23:32 — as
+ * batidas viraram o par de almoço e o que falta é entrada e saída (`acao_sugerida =
+ * PEDIR_ENTRADA_E_SAIDA`). O dono foi direto: "o alvo não tem nada, na ferramenta isso já
+ * foi superado".
+ *
+ * O REAL MANUAL DO DP ENTRA POR CIMA, como em todo o resto (é o topo da cascata da régua e,
+ * nas palavras do pop-up do cartão, "o alvo da correção").
+ *
+ * Slot que ninguém publicou fica com o que está no cartão de hoje — nada se inventa. */
+function alvoPublicado(cp, rm, slotsHoje) {
+  const hoje = slotsHoje || ["", "", "", ""];
+  const cascata = [
+    [rm?.entrada, cp?.alvo_entrada, cp?.alvo_entrada_ref, cp?.entrada_sug],
+    [rm?.alm_saida, cp?.alvo_saida_almoco, cp?.almoco_saida_sug],
+    [rm?.alm_volta, cp?.alvo_volta_almoco, cp?.almoco_volta_sug],
+    [rm?.saida, cp?.alvo_saida, cp?.alvo_saida_ref, cp?.saida_sug],
+  ];
+  const slots = cascata.map((degraus, i) => {
+    for (const v of degraus) {
+      const h = horaSlot(v);
+      if (h) return h;
+    }
+    return hoje[i] || "";
+  });
+  return slots.some(Boolean) ? slots : null;
+}
+
+function cartaoFinal(slotsHoje, caso, slotsPedido, problemaPedido, fontePedido, trava, cp, rm) {
   const hoje = slotsHoje || ["", "", "", ""];
   const alvo = alvoQuatroSlots(caso);
   // `slotsPedido === null` = a projeção não cabe em quatro campos; então não há terceiro
@@ -890,9 +940,13 @@ function cartaoFinal(slotsHoje, caso, slotsPedido, problemaPedido, fontePedido, 
    * Aqui a coluna é uma só — "o cartão final" —, então quem manda nela é quem VAI lançar:
    * o robô `ajustes` quando há pedido a aceitar, a correção quando não há. */
   const pedidoManda = !recusado && pedido.some(Boolean) && txt(fontePedido) !== "cartão";
+  // SEM AVISO NÃO HÁ CORREÇÃO: na porta do pedido quem lança é sempre o robô `ajustes`,
+  // então o publicado da Revisão não entra — ele é o cartão da CADEIA DE CORREÇÃO.
+  const temAviso = Boolean(txt(caso?.aviso_enviado_em) || alvo.some(Boolean));
+  const publicado = temAviso ? alvoPublicado(cp, rm, hoje) : null;
   const slots = pedidoManda
-    ? pedido.map((v, i) => v || alvo[i] || hoje[i] || "")
-    : alvo.map((v, i) => v || pedido[i] || hoje[i] || "");
+    ? pedido.map((v, i) => v || publicado?.[i] || alvo[i] || hoje[i] || "")
+    : (publicado || alvo.map((v, i) => v || pedido[i] || hoje[i] || ""));
   return {
     slots,
     // mudou = sai diferente do cartão de hoje (destacado); igual = fica como está
@@ -901,10 +955,14 @@ function cartaoFinal(slotsHoje, caso, slotsPedido, problemaPedido, fontePedido, 
     // sem nada congelado, o que está desenhado é PROJEÇÃO do pedido em aberto —
     // vira alvo de verdade quando a decisão é gravada.
     congelado: alvo.some(Boolean),
-    // O ALVO DO AVISO, sempre que existir: é o que a CADEIA DE CORREÇÃO lançaria neste dia.
-    // Fica ao lado do cartão final em vez de por cima dele — são duas perguntas diferentes.
+    // O QUE PEDIMOS NO AVISO, sempre que existir. Não é mais o cartão final: é a
+    // COMPARAÇÃO — "cobramos X e vamos lançar Y?" —, o mesmo alerta que a ferramenta dá
+    // (app/ui/app.js:1850). O alvo do aviso foi congelado no envio e a base mudou desde
+    // então; quem lança é o publicado.
     alvoAviso: alvo.some(Boolean) ? alvo : null,
     difereDoAviso: alvo.some(Boolean) && alvo.some((v, i) => Boolean(v) && v !== slots[i]),
+    // de onde saiu o cartão desenhado, para a legenda não prometer o robô errado
+    publicado: Boolean(publicado) && !pedidoManda,
     // SÓ QUANDO NÃO HÁ ALVO CONGELADO. Com alvo congelado o cartão final é o do aviso —
     // dado gravado, não projeção —, e o aviso "não fecha" estava passando por cima dele.
     naoFecha: slotsPedido === null && !alvo.some(Boolean),
@@ -912,7 +970,13 @@ function cartaoFinal(slotsHoje, caso, slotsPedido, problemaPedido, fontePedido, 
     problema: txt(problemaPedido),
     // de onde saiu o desenho: o pedido (ou a régua que o completou), o cartão de hoje, ou —
     // no dia recusado — o alvo congelado no aviso
-    fonte: pedidoManda ? txt(fontePedido) : alvo.some(Boolean) ? "aviso" : txt(fontePedido),
+    fonte: pedidoManda
+      ? txt(fontePedido)
+      : publicado
+        ? "revisão publicada"
+        : alvo.some(Boolean)
+          ? "aviso"
+          : txt(fontePedido),
     // e, quando não há desenho nenhum, o que está travando
     trava: txt(trava),
   };
@@ -1282,7 +1346,7 @@ function montarRegistros(base) {
         : !hoje.length && !sim.length
           ? "cartão vazio e o pedido não produziu batida"
           : "";
-    const final = cartaoFinal(slotsHoje, caso, proj.slots, proj.problema, proj.fonte, travaCartao);
+    const final = cartaoFinal(slotsHoje, caso, proj.slots, proj.problema, proj.fonte, travaCartao, cp, rm);
 
     // ── monitor de avisos (main.py:4283-4361) ───────────────────────────────
     // ids ainda PENDENTES no Transnet que a nossa decisão NÃO cobre
@@ -2420,7 +2484,9 @@ function CartaoAlvo({ alvo, legenda = false }) {
       title={
         {
           aviso: "DIA RECUSADO: quem lança é a cadeia de correção, e o que ela lança é o ALVO que o aviso congelou. Os horários destacados são os que mudam.",
-          pedido: "O cartão como fica quando o pedido for ACEITO — é o que o robô `ajustes` deixa no Transnet, clicando aceitar na ocorrência. Se o dia for RECUSADO, quem vale é o alvo do aviso, na linha de baixo.",
+          pedido: "O cartão como fica quando o pedido for ACEITO — é o que o robô `ajustes` deixa no Transnet, clicando aceitar na ocorrência. Se o dia for RECUSADO, quem vale é o alvo publicado pela Revisão.",
+          "revisão publicada":
+            "O cartão que a CORREÇÃO lança: o alvo publicado pela Revisão para este dia (ponto_diario.alvo_*), com o Real manual do DP por cima quando existe. Ele já preserva a ponta que está dentro da régua — só a ponta errada muda. O alvo congelado no aviso aparece embaixo, para comparar.",
           revisão:
             "O PEDIDO NÃO FECHA SOZINHO — aplicá-lo ao pé da letra deixaria o cartão impossível. Então vale o ALVO: as quatro sugestões que a Revisão apurou e publicou para este dia. Não foi isto que o colaborador pediu; é o que o dia tem de virar.",
           "Real manual":
@@ -2440,6 +2506,7 @@ function CartaoAlvo({ alvo, legenda = false }) {
         <span className="dp-faint" style={MINI}>
           {{
             aviso: "dia recusado — a correção lança o alvo congelado no aviso · destacado = o que muda",
+            "revisão publicada": "é o que a correção lança · alvo publicado pela Revisão (a ponta que já está certa fica)",
             revisão: "o pedido não fecha o cartão — vale a régua que a Revisão publicou para o dia",
             "Real manual": "o pedido não fecha o cartão — vale o Real manual que o DP cravou",
             cartão: "o pedido não muda nada · o cartão fica como está",
@@ -2463,9 +2530,9 @@ function AlvoDoAviso({ alvo }) {
   return (
     <span
       style={{ ...FILA, marginTop: 2 }}
-      title="Alvo congelado no aviso (ponto_caso.alvo_*): é o cartão que a cadeia de advertência/correção lançaria se o dia fosse RECUSADO. Aceitar o pedido não lança isto."
+      title="O que PEDIMOS no aviso (ponto_caso.alvo_*), congelado no dia do envio. A correção lança o alvo PUBLICADO pela Revisão, que é recalculado — quando os dois divergem, confira antes: a advertência cobra o horário do aviso."
     >
-      <span className="dp-faint" style={MINI}>se recusar, a correção lança:</span>
+      <span className="dp-faint" style={MINI}>pedimos no aviso:</span>
       <LinhaCartao horas={alvo.alvoAviso} />
     </span>
   );
@@ -2848,8 +2915,8 @@ function Montador({ reg, montado, almoco }) {
           <span className="oc-mt-k">alvo</span>
           <CartaoAlvo alvo={reg.alvo} />
           <span className="dp-faint" style={MINI}>
-            {reg.alvo.fonte === "aviso"
-              ? "dia recusado — é o que a correção lança · destacado = o que muda"
+            {["aviso", "revisão publicada"].includes(reg.alvo.fonte)
+              ? "é o que a CORREÇÃO lança · alvo publicado pela Revisão · destacado = o que muda"
               : "é o que o robô lança ao ACEITAR · destacado = o que muda · normal = fica como está"}
           </span>
           <AlvoDoAviso alvo={reg.alvo} />

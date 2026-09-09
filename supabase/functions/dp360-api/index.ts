@@ -192,7 +192,15 @@ const ROBOS: Record<string, { arquivo: string; inputs: Record<string, string[] |
   ajustes: {
     arquivo: "ajustes.yml",
     inputs: {
-      modo: ["conferir (so leitura)", "capturar a grade", "executar decisoes"],
+      // "cancelar pedidos" (ajustes.yml:20) consulta a grade AO VIVO, recusa só os IDs
+      // ainda pendentes dos crachás/dias mandados e só depois fecha o caso. O workflow
+      // EXIGE seleção (`exit 2` com casos vazio), então ele nunca vira "a fila inteira".
+      modo: [
+        "conferir (so leitura)",
+        "capturar a grade",
+        "cancelar pedidos",
+        "executar decisoes",
+      ],
       casos: null,
       confirmar: ["true", "false"],
     },

@@ -65,6 +65,18 @@ const PRAZO_HORAS = 48;                        // main.py PRAZO_HORAS
 // dp360-api ROBOS.ajustes.inputs.modo — strings EXATAS: o gateway compara com a
 // lista e devolve 400 em qualquer variação. Nunca montar por concatenação.
 const MODO_EXECUTAR = "executar decisoes";
+/**
+ * ajustes.yml:20 — o cancelamento em lote do "Pedido do colaborador".
+ *
+ * Ele NAO e uma recusa gravada aqui e executada depois: o robo abre a GRADE AO VIVO do
+ * Transnet, pareia por crachá + data, recusa só os IDs que a leitura de agora ainda mostra
+ * pendentes, e só então fecha o caso como `cancelado`. Por isso ele não depende da foto
+ * D-1 do lake para saber se ainda existe ocorrência aberta lá.
+ *
+ * E se a grade mudar no meio e algum ID não confirmar, o caso FICA em "A decidir" — some
+ * da fila só o que foi provado resolvido. É o contrário do fechamento otimista.
+ */
+const MODO_CANCELAR = "cancelar pedidos";
 const MODO_CONFERIR = "conferir (so leitura)";
 
 // O terceiro modo do robô, "capturar a grade", NÃO tem botão aqui: a
@@ -4276,6 +4288,76 @@ export default function Ocorrencias() {
    *
    * Dia NÃO marcado → decisão de dia inteiro, com a trava do lote de sempre.
    */
+  /* ── CANCELAR SELECIONADOS (docs/ALTERACAO_FILA_OCORRENCIAS_SUPABASE.md) ────
+   * A SELEÇÃO É A MESMA CAIXINHA, E O LADO NÃO IMPORTA. As caixas de Aceitar e Rejeitar
+   * dizem, aqui, apenas QUAIS colaboradores e dias entram no lote — cancelar não é
+   * "rejeitar em massa": é desistir do pedido no Transnet e fechar o caso.
+   *
+   * Por isso ele também não passa pelas travas do lote de decisão: elas existem para
+   * proteger quem vai DECIDIR (dia misto, simulação bloqueada, recusa que vira
+   * advertência). Cancelar não decide nada e não adverte ninguém.
+   *
+   * Quem confere se ainda há o que recusar é o ROBÔ, na grade ao vivo — a tela nunca
+   * afirma isso a partir do lake, que é foto de D-1.
+   */
+  const aoCancelarSelecionados = useCallback(
+    async (valendo) => {
+      const lista = linhas.filter((r) => dec[r.k]);
+      if (!lista.length) {
+        setRecado("Marque nas caixinhas quais dias entram no cancelamento.");
+        return;
+      }
+      const casos = casosDeRegistros(lista);
+      if (!casos) {
+        avisar(
+          "Sem crachá+dia para escopar o robô — disparo cancelado. Escopo vazio faria o workflow rodar a fila inteira.",
+        );
+        return;
+      }
+      const nomes =
+        lista.slice(0, 12).map((r) => `· ${r.nome} ${r.dataBR}`).join("\n") +
+        (lista.length > 12 ? `\n… e mais ${lista.length - 12}` : "");
+      if (
+        !confirmar(
+          `${valendo ? "CANCELAR DE VERDADE no Transnet" : "ENSAIO (o robô lê a grade e NÃO clica)"}: ` +
+            `${lista.length} crachá+dia.\n\n${nomes}\n\n` +
+            "O robô abre a grade AO VIVO, pareia por crachá + data e RECUSA no Transnet só os " +
+            "IDs que ainda estiverem pendentes. Dia que já não tem pendência lá, ele não toca.\n" +
+            `Robô: ajustes · modo "${MODO_CANCELAR}" · casos = ${lista.length} crachá+dia (só estes).\n\n` +
+            `${
+              valendo
+                ? "O caso só é fechado como CANCELADO quando TODOS os IDs achados naquele dia confirmarem a recusa. Se a grade mudar no meio e algum não confirmar, o dia CONTINUA em \"A decidir\" — pendência real não se esconde."
+                : "Nada é clicado no Transnet e nada é gravado aqui."
+            }`,
+        )
+      )
+        return;
+
+      setDisparando(true);
+      setRecado("");
+      try {
+        const r = await dispararRoboDP360("ajustes", {
+          modo: MODO_CANCELAR,
+          casos,
+          confirmar: valendo ? "true" : "false",
+        });
+        const texto =
+          `${valendo ? "Cancelamento" : "Ensaio do cancelamento"} disparado — ${lista.length} crachá+dia.` +
+          " O resultado não volta sozinho: a prova fica no run.";
+        setRecado(texto + (r?.painel ? ` ${r.painel}` : ""));
+        // a marcação só se apaga quando ela virou disparo de verdade; no ensaio ela
+        // continua ali, que é o ponto do ensaio (conferir e então mandar valendo).
+        if (valendo) setDec({});
+        await carregar();
+      } catch (e) {
+        setRecado(`Falhou: ${e?.message || "não foi possível disparar o robô."}`);
+      } finally {
+        setDisparando(false);
+      }
+    },
+    [linhas, dec, carregar],
+  );
+
   const aplicarDecisoes = useCallback(() => {
     const alvo = linhas.filter((r) => dec[r.k]);
     if (!alvo.length) { setRecado("Marque Aceitar ou Rejeitar em ao menos uma linha."); return; }
@@ -4533,6 +4615,29 @@ export default function Ocorrencias() {
       >
         {contDec.total ? `✓ Aplicar decisões (${contDec.ac}✓ ${contDec.rj}✗)` : "✓ Aplicar decisões"}
       </BotaoAcao>
+      {/* CANCELAR usa a MESMA marcação, ignorando o lado — e vive só na porta do pedido:
+          na do aviso, desistir é "Cancelar aviso", dentro do caso, e é outra coisa (lá
+          existe aviso nosso, e cancelar mexe no prazo das 48 h). */}
+      {porta === "pedido" ? (
+        <>
+          <span className="oc-sep" aria-hidden="true" />
+          <BotaoAcao
+            titulo="O robô abre a grade ao vivo e mostra o que RECUSARIA nos dias marcados. Não clica em nada e não grava."
+            disabled={!contDec.total || gravando || disparando}
+            onClick={() => aoCancelarSelecionados(false)}
+          >
+            🤖 Cancelar — ensaio
+          </BotaoAcao>
+          <BotaoAcao
+            tom="erro"
+            titulo="Recusa no Transnet os IDs ainda pendentes dos dias marcados e fecha o caso como cancelado. O lado da caixinha (aceitar/rejeitar) é ignorado: aqui ela é só a seleção."
+            disabled={!contDec.total || gravando || disparando}
+            onClick={() => aoCancelarSelecionados(true)}
+          >
+            ✗ Cancelar selecionados ({contDec.total})
+          </BotaoAcao>
+        </>
+      ) : null}
       <span className="dp-muted dp-num" style={MINI}>
         {contDec.total ? "nada gravado até aplicar" : "marque nas caixinhas da coluna Decisão"}
       </span>

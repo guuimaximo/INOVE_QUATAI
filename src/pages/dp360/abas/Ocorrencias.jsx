@@ -27,6 +27,10 @@ import { ArrowRight, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import TabelaDP from "../TabelaDP";
 import { dispararRoboDP360, lerDP360, lerTudoDP360, upsertDP360 } from "../../../services/dp360Api";
+// A TRILHA DO ROBÔ mora no projeto do PRÓPRIO INOVE (`dp360_robo_execucao`), não na base
+// de importação — por isso o cliente normal, e não o gateway. Leitura só de Administrador
+// (a policy exige nível admin), que é quem abre esta tela.
+import { supabase } from "../../../supabase";
 // O CARTÃO DO DIA é o pop-up COMPARTILHADO — o MESMO da Revisão e da Gordura. Ele já lê
 // sozinho gordura, ajustes, reserva e GPS do crachá×dia, e traz o REAL MANUAL, que é o
 // topo da cascata da régua. Daqui não vai prop nova nenhuma.
@@ -4203,6 +4207,35 @@ export default function Ocorrencias() {
 
   // O recado do robô é DAQUELE caso: trocar de caso sem limpar faria o resultado de um
   // disparo aparecer no rodapé de outra pessoa.
+  /* ── O ROBÔ ESTÁ RODANDO? ENTÃO A TELA AVISA (09/09/2026, pedido do dono) ─────
+   * "Execução pendente" dizia que 63 casos esperavam o bot e a tela não dizia se o bot
+   * estava a caminho — e a saída natural de quem não sabe é clicar de novo, que no Transnet
+   * significa lançar duas vezes na ficha de alguém.
+   *
+   * A fonte é a trilha do disparo (`dp360_robo_execucao`), gravada pelo gateway ANTES do
+   * POST no GitHub: `run_status` vem do run casado (queued · in_progress · completed) e
+   * `run_conclusao` do desfecho. Ela é do INOVE, não do lake.
+   *
+   * HONESTIDADE DO STATUS: ele é o do momento do casamento e não se atualiza sozinho — por
+   * isso a faixa mostra a HORA do disparo e o link do run, em vez de afirmar "está rodando
+   * agora" com um dado que pode ter envelhecido. Sem trilha (ou sem permissão), some. */
+  const [execRobo, setExecRobo] = useState([]);
+  const lerExecucoes = useCallback(async () => {
+    try {
+      const desde = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+      const { data } = await supabase
+        .from("dp360_robo_execucao")
+        .select("id,robo,confirmar,disparado_em,autor_nome,run_url,run_status,run_conclusao")
+        .gte("disparado_em", desde)
+        .order("disparado_em", { ascending: false })
+        .limit(5);
+      setExecRobo(data || []);
+    } catch {
+      setExecRobo([]);
+    }
+  }, []);
+  useEffect(() => { lerExecucoes(); }, [lerExecucoes, versao]);
+
   const abrir = (reg) => {
     setResultadoRobo(null);
     setErroCartao("");
@@ -5256,6 +5289,34 @@ export default function Ocorrencias() {
           ) : null}
         </span>
       )}
+      {/* O ROBÔ A CAMINHO — antes do recado, porque muda o que a pessoa deve fazer agora. */}
+      {execRobo.map((x) => {
+        const rodando = ["queued", "in_progress"].includes(txt(x.run_status));
+        const falhou = txt(x.run_status) === "completed" && txt(x.run_conclusao) !== "success";
+        if (!rodando && !falhou) return null;
+        return (
+          <Selo
+            key={x.id}
+            cor={rodando ? "alerta" : "erro"}
+            quebra
+            titulo={
+              `Trilha do disparo (dp360_robo_execucao #${x.id}). O status é o do run no momento em que ele foi casado com o disparo — ` +
+              "abra o run para ver como está agora. Enquanto houver robô a caminho, não dispare de novo o mesmo escopo."
+            }
+          >
+            {rodando ? "⚙ robô a caminho" : "⚠ o robô terminou mal"} · {txt(x.robo)}
+            {x.confirmar ? "" : " (ensaio)"} · disparado {fmtDataHora(x.disparado_em)}
+            {txt(x.autor_nome) ? ` por ${txt(x.autor_nome)}` : ""}
+            {falhou ? ` · ${txt(x.run_conclusao) || "sem conclusão"}` : ""}
+            {txt(x.run_url) ? (
+              <>
+                {" "}
+                <a href={x.run_url} target="_blank" rel="noreferrer">ver o run</a>
+              </>
+            ) : null}
+          </Selo>
+        );
+      })}
       {/* O RECADO é a resposta ao último clique — fica sempre visível, nunca atrás de botão. */}
       {recado ? <Selo cor={recado.startsWith("Falhou") ? "erro" : "ok"} quebra>{recado}</Selo> : null}
       {/* O QUE ESTÁ ACONTECENDO, COM PALAVRA. Gravar, disparar e reler são três esperas

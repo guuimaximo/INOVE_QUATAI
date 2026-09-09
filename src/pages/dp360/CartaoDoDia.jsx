@@ -2181,9 +2181,26 @@ export default function CartaoDoDia({
                 </table>
               </div>
               {carregando && <p className="dp-faint" style={{ margin: "6px 0 0" }}>Carregando fontes…</p>}
+              {/* POR QUE NÃO HÁ FONTE — e a resposta não é sempre a mesma (09/09/2026).
+                  A frase acusava "interno/aprendiz" em TODO dia sem fonte, e o dono estranhou
+                  com razão num MOTORISTA: a própria linha do dia dizia `teve_operacao = true`.
+                  O que falta ali não é operação, é a APURAÇÃO — `ponto_gordura` não tem linha
+                  para o dia (`tem_gordura = false`), o que acontece quando o ponto do dia
+                  ainda não foi importado (`tem_ponto = false`). Agora a linha do dia responde. */}
               {!carregando && !g.op_inicio && !g.sst_vinculo && !g.val_inicio && (
                 <p className="dp-faint" style={{ margin: "6px 0 0" }}>
-                  Sem operação apurada neste dia (interno/aprendiz não tem Citatti, SST nem bilhetagem).
+                  {ehVerdadeiro(linha.teve_operacao) ? (
+                    <>
+                      Este dia <b>teve operação</b> (a linha do dia marca <span className="dp-mono">teve_operacao</span>),
+                      mas ela ainda <b>não foi apurada</b>: não há linha em <span className="dp-mono">ponto_gordura</span>
+                      {ehVerdadeiro(linha.tem_ponto) ? "" : " — e o ponto deste dia também não foi importado"}.
+                      Sem apuração não há Citatti, SST nem bilhetagem para mostrar aqui.
+                    </>
+                  ) : String(linha.categoria ?? "").toUpperCase() === "MOTORISTA" ? (
+                    "Sem operação apurada neste dia."
+                  ) : (
+                    "Sem operação apurada neste dia (interno/aprendiz não tem Citatti, SST nem bilhetagem)."
+                  )}
                 </p>
               )}
             </section>

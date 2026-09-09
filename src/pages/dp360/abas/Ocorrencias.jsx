@@ -409,7 +409,10 @@ const COLS_AJUSTES =
 const COLS_DIARIO =
   "cracha,date_ref,todas_batidas,batidas_limpas,jornada_liquida_min,entrada,saida," +
   "saida_almoco,volta_almoco,esc_entrada,esc_saida,entrada_sug,saida_sug," +
-  "almoco_saida_sug,almoco_volta_sug,status_ponto,motivo,nm_funcao,categoria,almoco_travado";
+  "almoco_saida_sug,almoco_volta_sug,status_ponto,motivo,nm_funcao,categoria,almoco_travado," +
+  // o carimbo de ONDE a view tirou o almoço do dia (CARTAO_PRESERVADO, MODULO_REFEICAO,
+  // MATRIZ_PARADO...): é o que a tela mostra ao completar um cartão de 3 batidas
+  "fonte_almoco";
 
 // `real_inicio`/`real_fim` NÃO são enfeite: é deles que sai o degrau "gordura" da cascata
 // do alvo (ver `alvoDaGordura`). `alvo_entrada`/`alvo_saida` NÃO entram aqui porque NÃO
@@ -803,6 +806,50 @@ function projetarNosSlots(slotsHoje, hojeMin, simMin, almocoLancado, cat, ...reg
     if (!validaCartao(mins, cat)) return { slots: mins.map(min2hm), problema: "", fonte };
   }
   return { slots: null, problema, fonte: "" };
+}
+
+/* ══ O CARTÃO DE 3 BATIDAS — O QUE FALTA É O ALMOÇO, NÃO A DECISÃO (09/09/2026) ═══════
+ *
+ * "O motor ou coloca 4 pontos ou 2 pontos, e não 3" (o dono). O montador faz hoje o MESMO
+ * que a ferramenta (`montador.py`: no MOTORISTA o encaixe em quatro só roda quando já há
+ * 4+ batidas, o conserto pelo GPS é desligado — "no MOTORISTA o almoço foi inserido por
+ * NÓS" — e a LIÇÃO 21 proíbe inventar slot). Então o cartão de 3 não é defeito do porte: é
+ * um dia a que falta a OUTRA PONTA DO ALMOÇO, e a tela passa a dizer QUAL batida falta.
+ *
+ * DE ONDE VEM O ALMOÇO — e só dali: da SUGESTÃO DO DIA (`almoco_saida_sug` /
+ * `almoco_volta_sug`), que a view `vw_ponto_revisao_motorista` apura pela cascata
+ * CARTAO_PRESERVADO → MODULO_REFEICAO → MATRIZ_PARADO(_BATIDO/_MAIOR) → MATRIZ_MEIO_JORNADA
+ * e carimba em `fonte_almoco`. NÃO é o Citatti da aba Refeição lido à parte: o módulo de
+ * refeição entra NESSA cascata (MODULO_REFEICAO) quando carimbou, e aí já chega aqui pelas
+ * colunas do dia. Quando a view não acha base ela NÃO INVENTA (`fonte_almoco` nulo,
+ * `almoco_faixa` SEM_BASE) e o dia vai para a mão do DP — aqui também: devolve `null`.
+ *
+ * ISTO NÃO VIRA CONTRATO. O `montado.contrato` congela o que o robô `ajustes` deixa no
+ * Transnet ao aceitar a ocorrência — e ele não lança almoço. Congelar aqui a batida do
+ * almoço faria a conferência acusar divergência contra o cartão vivo. É leitura. */
+function fechaComAlmocoDoDia(fica, cartao, categoria) {
+  const mins = (fica || []).filter((v) => v != null);
+  if (mins.length !== 3) return null;
+  const ini = hm2min(horaSlot(cartao?.almoco_saida_sug));
+  const fim = hm2min(horaSlot(cartao?.almoco_volta_sug));
+  if (ini == null || fim == null) return null;
+  // a batida do meio é a ponta do almoço que ELE bateu; a que falta é a outra
+  const meio = mins[1];
+  const perto = (a, b) => Math.min(Math.abs(a - b), 1440 - Math.abs(a - b)) <= CONSTANTES.TOL_FANTASMA;
+  const falta = perto(meio, ini) ? fim : perto(meio, fim) ? ini : null;
+  if (falta == null) return null;
+  let v = falta;
+  while (v < mins[0]) v += 1440;                 // desenrola para o dia deste cartão
+  const cheio = [...mins, v].sort((a, b) => a - b);
+  // só vale se fechar de verdade (mesmo `valida` do Python: ordem, 4 slots, almoço possível)
+  if (validaCartao(cheio, categoria)) return null;
+  return {
+    cartao: cheio,
+    falta: v,
+    lado: falta === fim ? "volta do almoço" : "saída para o almoço",
+    par: `${min2hm(ini)}–${min2hm(fim)}`,
+    fonte: txt(cartao?.fonte_almoco),
+  };
 }
 
 function cartaoFinal(slotsHoje, caso, slotsPedido, problemaPedido, fontePedido, trava) {
@@ -2695,7 +2742,7 @@ function ItemAcao({ item, marca, aoMarcar, travado }) {
  * ALVO, não com o cartão simulado — por isso um dia com a simulação bloqueada continua
  * tendo veredito, e o card continua na tela dizendo que a projeção não fecha.
  */
-function Montador({ reg, montado }) {
+function Montador({ reg, montado, almoco }) {
   if (!montado) return null;
   const { travado, atual, fica, bloqueio, contagem, notas } = montado;
   // VERMELHO SÓ QUANDO PRECISA AJUSTAR (app.js:321): cartão já certo é discreto.
@@ -2761,6 +2808,33 @@ function Montador({ reg, montado }) {
         <div className="oc-mt-n forte">
           ✗ <b>{fica.length} batida(s) — o cartão não fecha.</b> Ele tem que ter 2 (entrada e saída)
           ou 4 (com almoço). Aceite os que batem e recuse o resto.
+        </div>
+      ) : null}
+
+      {/* E QUANDO O QUE FALTA É O ALMOÇO, A TELA DIZ QUAL BATIDA FALTA E DE ONDE ELA SAI. */}
+      {!montado.fecha && almoco ? (
+        <div className="oc-mt-n">
+          ▸ <b>O que falta é a {almoco.lado}, não a decisão.</b> O almoço apurado deste dia
+          (Revisão · {almoco.fonte || "sem carimbo"} · {almoco.par}) fecha o dia em 4:
+          <span style={{ ...FILA, marginTop: 4 }}>
+            <LinhaCartao
+              horas={almoco.cartao.map(min2hm)}
+              mudou={almoco.cartao.map((v) => v === almoco.falta)}
+            />
+            <span className="dp-faint" style={MINI}>
+              não entra no contrato: o robô daqui só aceita/recusa a ocorrência — a batida do
+              almoço quem põe é a Refeição.
+            </span>
+          </span>
+        </div>
+      ) : null}
+
+      {/* SEM ALMOÇO APURADO a view NÃO INVENTA (`fonte_almoco` nulo, faixa SEM_BASE) — e a
+          tela também não. Diz por que o dia não fecha e para onde ir. */}
+      {!montado.fecha && !almoco && fica.length === 3 ? (
+        <div className="oc-mt-n dp-faint">
+          falta uma ponta do almoço, e a Revisão não apurou almoço para este dia (sem base):
+          quem crava é o DP, no <b>Cartão do dia</b> — seção “Real manual do DP”.
         </div>
       ) : null}
 
@@ -3340,6 +3414,12 @@ function Detalhe({
     return monta({ fica: sim.batidas, notas, bloqueio: bloqueioSimulacao(notas), aceitos: aceitos.length, travado: false });
   }, [reg, marcas]);
 
+  // o cartão de 3 batidas fecha com o almoço apurado do dia? (leitura, nunca contrato)
+  const almocoFecha = useMemo(
+    () => fechaComAlmocoDoDia(montado?.fica, reg?.cartao, reg?.categoria),
+    [montado?.fica, reg?.cartao, reg?.categoria],
+  );
+
   /* ── "E SE FOSSEM ALTERAÇÕES?" — NÃO depende das marcas: reprojeta os pedidos COMO
    * VIERAM, com a operação certa. Por isso mora fora do `montado`. */
   const comoAlteracao = useMemo(() => projecaoComoAlteracao(reg), [reg]);
@@ -3549,7 +3629,7 @@ function Detalhe({
                   {/* O CARD DO MONTADOR fica GRUDADO nas marcas e ACIMA do botão que grava:
                       é ele que responde "como o cartão fica seguindo as suas marcas", e o
                       contrato congelado é exatamente o que está desenhado nele. */}
-                  <Montador reg={reg} montado={montado} />
+                  <Montador reg={reg} montado={montado} almoco={almocoFecha} />
                   <ComoAlteracao reg={reg} proj={comoAlteracao} gravando={gravando} aoAplicar={aoComoAlteracao} />
                   <div style={{ ...FILA, marginTop: 8 }}>
                     <BotaoAcao

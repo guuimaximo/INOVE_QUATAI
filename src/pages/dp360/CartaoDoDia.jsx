@@ -1523,6 +1523,44 @@ export default function CartaoDoDia({
     };
   }, [cracha, dia, semGpsProprio, gorduraDaTela]);
 
+  /* ── A ESCALA QUE NÃO VEIO NA LINHA DO DIA (09/09/2026) ──────────────────────
+   * `esc_entrada`/`esc_saida` chegam VAZIAS em algumas linhas — em 02/09 foram 69 de 369,
+   * quase todas folga, mas 8 delas com ponto batido. Aí a tabela de fontes simplesmente
+   * não desenhava a linha "Escala" (o `LinhaFonte` some quando as duas pontas são nulas), e
+   * o DP lia "ele não tem escala" — que não é verdade.
+   *
+   * A ESCALA EXISTE: cada viagem carrega o seu PROGRAMADO, e a apresentação/saída dele é o
+   * início programado da PRIMEIRA e o fim programado da ÚLTIMA. GENIVAL 30060654 · 02/09:
+   * linha do dia sem `esc_*`, viagens dizendo 03:45 → 11:50 (e o almoço programado
+   * 10:10 → 10:40, que o `ponto_intervalo` já trazia sozinho — prova de que a escala do dia
+   * existe na origem e é a coluna do `ponto_diario` que ficou para trás).
+   *
+   * A leitura só acontece quando falta — e degrada calada: sem viagens, a linha continua
+   * sem aparecer, como antes. */
+  const semEscalaNoDia =
+    hm2min(g.esc_inicio || linha.esc_entrada) == null &&
+    hm2min(g.esc_fim || linha.esc_saida) == null;
+  const [escalaProg, setEscalaProg] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    setEscalaProg(null);
+    if (!semEscalaNoDia || !cracha || !dia) return undefined;
+    lerDP360("viagens_qh", {
+      colunas: "matricula,data,inicioprogramado,fimprogramado",
+      filtros: { matricula: `in.(${variantesCracha(cracha).join(",")})`, data: `eq.${dia}` },
+      ordem: "inicioprogramado.asc",
+      limite: 200,
+    })
+      .then((linhas) => {
+        if (!vivo) return;
+        const ini = horaDoTs((linhas || [])[0]?.inicioprogramado);
+        const fins = (linhas || []).map((x) => horaDoTs(x.fimprogramado)).filter(Boolean);
+        if (ini || fins.length) setEscalaProg({ ini, fim: fins[fins.length - 1] || "" });
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [semEscalaNoDia, cracha, dia]);
+
   /* ---- A SEMANA DELE (main.py:797 `get_semana`) ----
      Leitura própria e independente do resto: se ela falhar, a faixa some e o cartão
      continua inteiro. Sete dias de UM crachá — `in.(...)` nas duas colunas, uma
@@ -2120,11 +2158,15 @@ export default function CartaoDoDia({
                 </thead>
                 <tbody>
                   <LinhaFonte
-                    rotulo="Escala"
-                    ini={g.esc_inicio || linha.esc_entrada}
-                    fim={g.esc_fim || linha.esc_saida}
+                    rotulo={escalaProg ? "Escala (programada nas viagens)" : "Escala"}
+                    ini={g.esc_inicio || linha.esc_entrada || escalaProg?.ini}
+                    fim={g.esc_fim || linha.esc_saida || escalaProg?.fim}
                     cor="#94a3b8"
-                    titulo="Escala publicada — apresentação e saída."
+                    titulo={
+                      escalaProg
+                        ? "A linha do dia veio SEM escala (esc_entrada/esc_saida vazias). Esta é a escala PROGRAMADA nas viagens: início programado da primeira e fim programado da última. Serve para ler o dia — o alvo continua saindo da operação apurada."
+                        : "Escala publicada — apresentação e saída."
+                    }
                   />
                   {/* A reserva lançada é FONTE: ela alarga a operação real (união
                       reserva ∪ operação). Some sozinha quando não há lançamento. */}

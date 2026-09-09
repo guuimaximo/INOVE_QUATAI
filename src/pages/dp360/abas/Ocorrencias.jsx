@@ -759,7 +759,7 @@ function projetarNosSlots(slotsHoje, hojeMin, simMin, almocoLancado, cat, ...reg
   return { slots: null, problema, fonte: "" };
 }
 
-function cartaoFinal(slotsHoje, caso, slotsPedido, problemaPedido, fontePedido) {
+function cartaoFinal(slotsHoje, caso, slotsPedido, problemaPedido, fontePedido, trava) {
   const hoje = slotsHoje || ["", "", "", ""];
   const alvo = alvoQuatroSlots(caso);
   // `slotsPedido === null` = a projeção não cabe em quatro campos; então não há terceiro
@@ -782,6 +782,8 @@ function cartaoFinal(slotsHoje, caso, slotsPedido, problemaPedido, fontePedido) 
     problema: txt(problemaPedido),
     // de onde saiu o desenho: alvo congelado, cartão de hoje, pedido, ou a régua da Revisão
     fonte: alvo.some(Boolean) ? "aviso" : txt(fontePedido),
+    // e, quando não há desenho nenhum, o que está travando
+    trava: txt(trava),
   };
 }
 
@@ -944,6 +946,7 @@ function montarRegistros(base) {
     if (!grupo.length && !temAvisoCaso) return;
 
     const cp = mapaDiario.get(k) || {};
+    const temLinhaDoDia = mapaDiario.has(k);
     const g = mapaGordura.get(k) || {};
     const rm = mapaReal.get(k) || {};
     const caso = casoBruto || {};
@@ -1128,7 +1131,19 @@ function montarRegistros(base) {
       ["Real manual", [rm.entrada, rm.alm_saida, rm.alm_volta, rm.saida]],
       ["revisão", [cp.entrada_sug, cp.almoco_saida_sug, cp.almoco_volta_sug, cp.saida_sug]],
     );
-    const final = cartaoFinal(slotsHoje, caso, proj.slots, proj.problema, proj.fonte);
+    // POR QUE NÃO HÁ CARTÃO — a coluna vazia não explicava nada, e "sem batida nem
+    // pedido" (o rótulo que eu tinha posto) era falso: TODOS têm pedido. O que falta é
+    // o DIA: sem linha no `ponto_diario` não há escala, e sem escala o motor não tem onde
+    // ancorar a batida pedida (é a escala que desempata AM/PM e ancora a inserção num dia
+    // sem cartão) — então a simulação devolve zero batida e a coluna fica muda.
+    const travaCartao = !temLinhaDoDia
+      ? "o dia não está na base do DP — sem escala, o pedido não tem onde ancorar"
+      : txt(cp.status_ponto).toUpperCase() === "SEM_PONTO"
+        ? "o ponto deste dia não chegou do Transnet"
+        : !hoje.length && !sim.length
+          ? "cartão vazio e o pedido não produziu batida"
+          : "";
+    const final = cartaoFinal(slotsHoje, caso, proj.slots, proj.problema, proj.fonte, travaCartao);
 
     // ── monitor de avisos (main.py:4283-4361) ───────────────────────────────
     // ids ainda PENDENTES no Transnet que a nossa decisão NÃO cobre
@@ -2200,16 +2215,29 @@ function Removidas({ antes, depois }) {
  * toca nele). Ver `cartaoFinal`.
  */
 function CartaoAlvo({ alvo, legenda = false }) {
+  // O QUE ESTÁ TRAVANDO, DITO NA LINHA. Antes a coluna mostrava só a pílula do defeito
+  // (ou um traço), e para saber por quê era preciso abrir o caso. O motivo é curto: cabe
+  // ao lado.
   if (alvo?.naoFecha)
     return (
-      <span className="dp-pill warn" title="O cartão que sai deste pedido não é um cartão possível (montador.py `valida`), e o robô não lança cartão impossível. Abra o caso: aqui é decisão por ocorrência, não do dia inteiro.">
-        {alvo.problema || "cartão impossível"}
+      <span style={PILHA}>
+        <span className="dp-pill warn" title="O cartão que sai deste pedido não é um cartão possível (montador.py `valida`), e o robô não lança cartão impossível.">
+          {alvo.problema || "cartão impossível"}
+        </span>
+        <span className="dp-faint" style={MINI}>
+          {alvo.trava || "sem régua publicada para completar — decida por ocorrência"}
+        </span>
       </span>
     );
   if (!alvo?.temAlvo)
     return (
-      <span className="dp-faint" title="Este dia não tem batida nem pedido — não há cartão final a desenhar.">
-        —
+      <span style={PILHA}>
+        <span className="dp-pill mute" title="Não há cartão final a desenhar para este dia.">
+          sem cartão
+        </span>
+        <span className="dp-faint" style={MINI}>
+          {alvo?.trava || "o pedido não produziu batida neste dia"}
+        </span>
       </span>
     );
   return (

@@ -2167,3 +2167,37 @@
 @media (prefers-reduced-motion: reduce) {
   .dp360 .dp-espera-circulo { animation: dp-espera-respira 1.8s ease-in-out infinite; }
 }
+
+/* ═════════ AS ABAS DA PORTA (prefixo `oc-aba`) ═════════
+ * Eram pílulas `dp-chip-f` iguais às dos eixos, em fila: sete botões com a mesma forma
+ * e o mesmo contador, sem nada dizendo que os dois últimos eram um FILTRO DENTRO do
+ * primeiro. Agora as abas são uma trilha só, com sublinhado no ativo, e o eixo é o
+ * `<select>` da ferramenta, encostado nelas. */
+.dp360 .oc-abas {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  border-bottom: 1px solid var(--dp-border);
+}
+.dp360 .oc-aba {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dp-muted);
+  padding: 7px 12px 8px;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  transition: 0.15s;
+  white-space: nowrap;
+}
+.dp360 .oc-aba:hover { color: var(--dp-ink); background: var(--dp-surface-2); }
+.dp360 .oc-aba.on { color: var(--dp-accent); border-bottom-color: var(--dp-accent); }
+.dp360 .oc-aba .n { font-variant-numeric: tabular-nums; opacity: 0.75; }
+.dp360 .oc-eixo { margin-left: 14px; max-width: 320px; }

@@ -691,15 +691,74 @@ const alvoQuatroSlots = (caso) =>
  * o montador, e só ele. Esta função responde outra pergunta — "o que foi pedido, e como o
  * dia fica quando isso for lançado" — usando exclusivamente dado gravado.
  */
-function cartaoFinal(slotsHoje, caso) {
+/**
+ * O CARTÃO DEPOIS DO PEDIDO, NOS MESMOS COMPARTIMENTOS DO CARTÃO DE HOJE.
+ *
+ * Não dá para slotar a simulação com `quatroSlots`: ele é o molde da GORDURA ("duas
+ * batidas são as pontas") e o cartão de hoje é lido por marca E/S (`slotsDoCartao`). Os
+ * dois discordam justamente no cartão de 2 batidas — e aí a tela mostrava AS MESMAS HORAS
+ * EM POSIÇÕES DIFERENTES nas colunas "Ponto (bateu)" e "Alvo", que é o defeito que o
+ * `slotsDoCartao` foi escrito para matar (MARCELO 06/09: bateu `05:05 · 14:42 · — · —`,
+ * alvo `05:05 · — · — · 14:42`, sem pedido nenhum ter mudado nada).
+ *
+ * Então aqui não se re-slota nada: parte-se do cartão de hoje JÁ SLOTADO e aplica-se a
+ * diferença. Quem saiu do cartão esvazia o seu compartimento; quem entrou ocupa o
+ * compartimento vazio em que ele CABE pela ordem do relógio (nenhuma hora antes dele pode
+ * ser maior, nenhuma depois pode ser menor) — que é como o Transnet guarda o cartão.
+ */
+function projetarNosSlots(slotsHoje, hojeMin, simMin) {
+  const slots = [...(slotsHoje || ["", "", "", ""])];
+  const antes = (hojeMin || []).map(min2hm);
+  const depois = (simMin || []).map(min2hm);
+  const saiu = antes.filter((h) => !depois.includes(h));
+  const entrou = depois.filter((h) => !antes.includes(h));
+  if (!saiu.length && !entrou.length) return slots;
+
+  const fila = [...entrou].sort((a, b) => hm2min(a) - hm2min(b));
+  // 1) o que saiu do cartão some do compartimento onde estava
+  for (let i = 0; i < 4; i += 1) if (slots[i] && saiu.includes(slots[i])) slots[i] = "";
+  // 2) o que entrou ocupa o vazio em que cabe pela ordem do relógio
+  let sobrou = false;
+  fila.forEach((hora) => {
+    // o cartão de hoje pode já ter a hora por outra fonte (`cp.entrada` apurado, sem
+    // batida crua correspondente) — repetir aqui desenhava `14:40 · 14:40` (MARCO
+    // AURELIO 05/09).
+    if (slots.includes(hora)) return;
+    const m = hm2min(hora);
+    for (let i = 0; i < 4; i += 1) {
+      if (slots[i]) continue;
+      const antesOk = slots.slice(0, i).every((v) => !v || hm2min(v) <= m);
+      const depoisOk = slots.slice(i + 1).every((v) => !v || hm2min(v) >= m);
+      if (antesOk && depoisOk) {
+        slots[i] = hora;
+        return;
+      }
+    }
+    sobrou = true;
+  });
+  // NÃO CABE = NÃO SE DESENHA. O Transnet tem quatro campos; cartão que fecharia em cinco
+  // não tem representação, e desenhar quatro dos cinco seria mostrar um cartão que ninguém
+  // vai lançar. É a mesma recusa do montador ("o Transnet não tem onde guardar a terceira").
+  return sobrou ? null : slots;
+}
+
+function cartaoFinal(slotsHoje, caso, slotsPedido) {
   const hoje = slotsHoje || ["", "", "", ""];
   const alvo = alvoQuatroSlots(caso);
-  const slots = alvo.map((v, i) => v || hoje[i] || "");
+  // `slotsPedido === null` = a projeção não cabe em quatro campos; então não há terceiro
+  // degrau, e a coluna cai no cartão de hoje (com o aviso vindo de `naoFecha`).
+  const pedido = slotsPedido || ["", "", "", ""];
+  // A CASCATA: alvo congelado → o que o pedido faz com o cartão → o que já está lá.
+  const slots = alvo.map((v, i) => v || pedido[i] || hoje[i] || "");
   return {
     slots,
-    // pedido (destacado) vs herdado (normal)
+    // mudou = sai diferente do cartão de hoje (destacado); igual = fica como está
     mudou: slots.map((v, i) => Boolean(v) && v !== (hoje[i] || "")),
-    temAlvo: alvo.some(Boolean),
+    temAlvo: slots.some(Boolean),
+    // sem nada congelado, o que está desenhado é PROJEÇÃO do pedido em aberto —
+    // vira alvo de verdade quando a decisão é gravada.
+    congelado: alvo.some(Boolean),
+    naoFecha: slotsPedido === null,
   };
 }
 
@@ -1029,7 +1088,12 @@ function montarRegistros(base) {
 
     // os DOIS cartões da tela — montados aqui e nunca recalculados adiante
     const slotsHoje = slotsDoCartao({ cp, caso, lim });
-    const final = cartaoFinal(slotsHoje, caso);
+    // NA PORTA "PEDIDO" NUNCA HÁ ALVO CONGELADO — é a definição da porta: não avisamos
+    // ninguém, então o `ponto_caso` não guardou alvo. A coluna dizia "sem alvo congelado"
+    // em 100% das linhas, e o DP decide sem ver o que vai ser lançado. O terceiro degrau
+    // da cascata é o cartão COM O PEDIDO APLICADO — o mesmo `sim` que o montador desenha,
+    // e que já respeita a decisão depois que ela é gravada.
+    const final = cartaoFinal(slotsHoje, caso, projetarNosSlots(slotsHoje, hoje, sim));
 
     // ── monitor de avisos (main.py:4283-4361) ───────────────────────────────
     // ids ainda PENDENTES no Transnet que a nossa decisão NÃO cobre
@@ -2101,18 +2165,33 @@ function Removidas({ antes, depois }) {
  * toca nele). Ver `cartaoFinal`.
  */
 function CartaoAlvo({ alvo, legenda = false }) {
+  if (alvo?.naoFecha)
+    return (
+      <span className="dp-pill warn" title="Com este pedido o cartão fecharia em mais de quatro batidas, e o Transnet só tem quatro campos. Abra o caso: é decisão por ocorrência, não do dia inteiro.">
+        não fecha em 4
+      </span>
+    );
   if (!alvo?.temAlvo)
     return (
-      <span className="dp-faint" title="O aviso deste dia não congelou alvo nenhum no caso.">
-        sem alvo congelado
+      <span className="dp-faint" title="Este dia não tem batida nem pedido — não há cartão final a desenhar.">
+        —
       </span>
     );
   return (
-    <span style={legenda ? PILHA : undefined}>
+    <span
+      style={legenda ? PILHA : undefined}
+      title={
+        alvo.congelado
+          ? "O cartão como fica quando a correção for lançada. Os horários destacados são os que o aviso congelou."
+          : "O cartão como fica se o pedido for aceito. Ainda não há alvo congelado: ele vira definitivo quando a decisão for gravada."
+      }
+    >
       <LinhaCartao horas={alvo.slots} mudou={alvo.mudou} />
       {legenda ? (
         <span className="dp-faint" style={MINI}>
-          o cartão como fica depois de lançado · destacado = pedido · normal = fica como está
+          {alvo.congelado
+            ? "o cartão como fica depois de lançado · destacado = pedido · normal = fica como está"
+            : "como fica se o pedido for aceito · destacado = o que muda · normal = fica como está"}
         </span>
       ) : null}
     </span>
@@ -4478,40 +4557,41 @@ export default function Ocorrencias() {
 
   const resumo = (
     <>
-      {/* ABAS da porta (segundo nível) + os eixos de "A decidir", numa linha só. O contador
-          de cada uma sai de `linhasDaAba`, a MESMA função que enche a grade. */}
+      {/* AS ABAS SÃO ABAS, O EIXO É UM SELETOR (app.js:2110 `#dfstatus`).
+          Eram sete pílulas idênticas em fila — as cinco abas e os dois eixos com a mesma
+          forma, a mesma cor e o mesmo contador —, e nada dizia que as duas últimas eram
+          um filtro DENTRO da primeira, não irmãs dela. Aqui as abas viram uma trilha só,
+          com sublinhado no ativo, e o eixo volta a ser o `<select>` que a ferramenta usa,
+          encostado à direita delas. */}
       <span className="oc-linha-abas">
-        {abasDaPorta.map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => trocarAba(id)}
-            className={`dp-chip-f${id === abaAtiva ? " on" : ""}`}
-          >
-            {label}
-            <Contador n={cont.aba[`${porta}:${id}`] ?? 0} />
-          </button>
-        ))}
+        <span className="oc-abas" role="tablist">
+          {abasDaPorta.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={id === abaAtiva}
+              onClick={() => trocarAba(id)}
+              className={`oc-aba${id === abaAtiva ? " on" : ""}`}
+            >
+              {label}
+              <Contador n={cont.aba[`${porta}:${id}`] ?? 0} />
+            </button>
+          ))}
+        </span>
         {temEixos ? (
-          <>
-            <span className="oc-sep" aria-hidden="true" />
+          <select
+            className="oc-sel oc-eixo"
+            value={eixoStatus}
+            onChange={(e) => setEixoStatus(e.target.value)}
+            title="O que a aba “A decidir” mostra. O que o Transnet já efetuou ou recusou nunca aparece aqui — isso vive nas abas de desfecho."
+          >
             {EIXOS_CONF.map(([id, rotulo]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setEixoStatus(id)}
-                className={`dp-chip-f${eixoStatus === id ? " on" : ""}`}
-                title={
-                  id === "PENDENTE"
-                    ? "Só o que ainda aguarda a SUA decisão."
-                    : "Inclui as decisões que o robô ainda não executou. O que o Transnet já efetuou ou recusou nunca aparece aqui — isso vive nas abas de desfecho."
-                }
-              >
-                {rotulo}
-                <Contador n={contEixo[id]} />
-              </button>
+              <option key={id} value={id}>
+                {rotulo} ({contEixo[id]})
+              </option>
             ))}
-          </>
+          </select>
         ) : null}
       </span>
       <span style={{ flex: 1 }} />
@@ -4559,7 +4639,12 @@ export default function Ocorrencias() {
             e dois botões — amassado na barra do lote viraria só mais um botão de veredito.
             SÓ NAS CAIXAS DE ENTRADA: nas abas de desfecho o dia já teve um fim, e oferecer
             ali um lançamento novo é convidar a reabrir o que foi fechado. */}
-        {grade.semPonto && semPontoNaTela.length ? (
+        {/* SÓ APARECE QUANDO HÁ DIA MARCADO. Ele vivia aberto no topo da tela, com o
+            título, a explicação e a pílula "marque na grade (✔)" — três linhas de texto
+            acima da grade em toda visita, para uma ação que começa NA GRADE, na coluna ✔.
+            Marcou, o painel aparece com o seletor de tipo e os dois botões; sem marca, a
+            grade começa onde deve começar. */}
+        {grade.semPonto && semPontoMarcados.length ? (
           <div className="oc-lote-linha">
             <LancarDiaSemPonto
               regs={semPontoMarcados}

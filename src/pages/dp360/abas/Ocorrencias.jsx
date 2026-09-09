@@ -2802,11 +2802,26 @@ function BarraRobo({ reg, disparando, gravando, aoExecutar, aoConferir, aoFechar
   const trava = motivoSemExecucao(reg);
   const plano = trava ? null : planoDaExecucao(reg);
   const travaConf = motivoSemConferencia(reg);
+  // MESMO MOTIVO, UMA FRASE. Executar e conferir esperam a MESMA coisa — a decisão
+  // gravada —, e a linha do robô dizia duas vezes, em dois selos compridos lado a lado:
+  // "executar: nenhuma decisão gravada — decidir e executar são dois passos" e
+  // "conferir: nenhuma decisão gravada — o bot só confere o que foi decidido". Duas
+  // frases para um impedimento só é o que fazia o rodapé parecer um parágrafo.
+  // A causa é o pedaço antes do travessão; o resto é a explicação de cada verbo. Mesma
+  // causa = um impedimento só, e aí vale a frase da execução, que já diz o que fazer.
+  const causa = (m) => txt(m).split(" — ")[0];
+  const travaUnica = trava && travaConf && causa(trava) === causa(travaConf) ? trava : "";
   return (
     <div className="dp-det-bot">
       <div className="oc-robo">
         <b>Robô</b>
         <span className="dp-faint">escopo: {reg.nome} · {reg.dataBR} (1 crachá+dia)</span>
+        {travaUnica ? (
+          <Selo cor="alerta" quebra titulo="O robô executa e confere a MESMA fila: decisão gravada. Decidir e executar são dois passos.">
+            {travaUnica}
+          </Selo>
+        ) : (
+        <>
         {trava ? (
           <Selo cor="alerta" quebra titulo="O robô só executa decisão já gravada — decidir e executar são dois passos.">
             executar: {trava}
@@ -2842,6 +2857,8 @@ function BarraRobo({ reg, disparando, gravando, aoExecutar, aoConferir, aoFechar
               🔒 Conferir e fechar no nosso banco
             </button>
           </>
+        )}
+        </>
         )}
         {/* SÓ NA PORTA DO AVISO: advertir e cancelar pressupõem aviso registrado neste
             crachá+dia. Num pedido do colaborador nem desligados eles devem aparecer — botão
@@ -3269,9 +3286,13 @@ function Detalhe({
                 🅡 nível reserva (gordura)
               </Selo>
             ) : null}
-            <span className="dp-faint">
-              operação real {txt(g.real_inicio) || "—"} – {txt(g.real_fim) || "—"}
-            </span>
+            {/* Sem fonte de operação, isto virava "operação real — – —": três traços que
+                ocupam a linha para dizer que não há nada a dizer. */}
+            {txt(g.real_inicio) || txt(g.real_fim) ? (
+              <span className="dp-faint">
+                operação real {txt(g.real_inicio) || "—"} – {txt(g.real_fim) || "—"}
+              </span>
+            ) : null}
           </div>
 
           <div className="oc-det-grid">
@@ -3462,8 +3483,12 @@ function Detalhe({
           {/* DECISÃO DO DIA. As duas recusas são botões DIFERENTES de propósito: "recusar" e
               "advertir" nunca podem sair do mesmo clique. */}
           <div className="dp-card" style={{ marginTop: 12, background: "var(--dp-surface-2)" }}>
-            <div className="dp-muted" style={ROTULO_CARD}>
-              Decisão do dia inteiro — grava em ponto_caso · a execução é o passo seguinte
+            {/* NOME DE TABELA NÃO É TÍTULO. `ponto_caso` dizia onde grava para quem
+                nunca vai abrir o banco, e roubava a linha do que o título tem de dizer:
+                que esta decisão vale o DIA INTEIRO, e que executar vem depois. */}
+            <div className="dp-muted" style={ROTULO_CARD}
+              title="Grava a decisão do dia em ponto_caso. Gravar não executa: quem mexe no Transnet é o robô, no passo seguinte.">
+              Decisão do dia inteiro <span className="dp-faint">· a execução é o passo seguinte</span>
             </div>
             <div style={{ ...FILA, marginTop: 8 }}>
               {reg.decJa ? (

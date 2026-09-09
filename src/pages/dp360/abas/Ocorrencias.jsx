@@ -30,6 +30,7 @@ import { dispararRoboDP360, lerDP360, lerTudoDP360, upsertDP360 } from "../../..
 // O CARTÃO DO DIA é o pop-up COMPARTILHADO — o MESMO da Revisão e da Gordura. Ele já lê
 // sozinho gordura, ajustes, reserva e GPS do crachá×dia, e traz o REAL MANUAL, que é o
 // topo da cascata da régua. Daqui não vai prop nova nenhuma.
+import { encaixaEmQuatro, validaCartao } from "../regrasMontador";
 import CartaoDoDia, {
   agoraUtc,
   aplicarRealManual,
@@ -692,57 +693,35 @@ const alvoQuatroSlots = (caso) =>
  * dia fica quando isso for lançado" — usando exclusivamente dado gravado.
  */
 /**
- * O CARTÃO DEPOIS DO PEDIDO, NOS MESMOS COMPARTIMENTOS DO CARTÃO DE HOJE.
+ * O CARTÃO DEPOIS DO PEDIDO, EM QUATRO COMPARTIMENTOS.
  *
- * Não dá para slotar a simulação com `quatroSlots`: ele é o molde da GORDURA ("duas
- * batidas são as pontas") e o cartão de hoje é lido por marca E/S (`slotsDoCartao`). Os
- * dois discordam justamente no cartão de 2 batidas — e aí a tela mostrava AS MESMAS HORAS
- * EM POSIÇÕES DIFERENTES nas colunas "Ponto (bateu)" e "Alvo", que é o defeito que o
- * `slotsDoCartao` foi escrito para matar (MARCELO 06/09: bateu `05:05 · 14:42 · — · —`,
- * alvo `05:05 · — · — · 14:42`, sem pedido nenhum ter mudado nada).
+ * Quem decide QUEM É QUEM já é o montador: o encaixe (`encaixaEmQuatro`) escolhe a
+ * primeira batida, o par de almoço plausível e a última, e joga o resto fora. Aqui só
+ * resta pôr o resultado nos campos — e a forma é a mesma que o montador usa (`quatroSlots`:
+ * duas batidas são as pontas, quatro entram em ordem).
  *
- * Então aqui não se re-slota nada: parte-se do cartão de hoje JÁ SLOTADO e aplica-se a
- * diferença. Quem saiu do cartão esvazia o seu compartimento; quem entrou ocupa o
- * compartimento vazio em que ele CABE pela ordem do relógio (nenhuma hora antes dele pode
- * ser maior, nenhuma depois pode ser menor) — que é como o Transnet guarda o cartão.
+ * DUAS TENTATIVAS ANTES DESTA, e as duas erraram por querer preservar posição:
+ *   · slotar a simulação com `quatroSlots` SEM olhar o cartão de hoje mostrava as mesmas
+ *     horas em posições diferentes nas colunas "bateu" e "alvo" quando o pedido não mudava
+ *     nada (MARCELO 06/09). Por isso o pedido que não muda nada devolve o desenho de hoje,
+ *     intacto;
+ *   · preservar o compartimento de cada batida quebrava quando o PAPEL da batida muda:
+ *     HENDESON 02/09 bateu duas vezes (pontas, `21:31 · — · — · 22:01`) e o pedido as
+ *     transforma no MIOLO de um cartão de quatro (`16:10 · 21:31 · 22:01 · 26:10`).
+ *     Guardar a posição antiga não deixava o 16:10 entrar em lugar nenhum.
+ *
+ * `null` = o cartão não é possível, e o motivo é o do próprio Python (`valida`).
  */
-function projetarNosSlots(slotsHoje, hojeMin, simMin) {
-  const slots = [...(slotsHoje || ["", "", "", ""])];
+function projetarNosSlots(slotsHoje, hojeMin, simMin, almocoLancado, cat) {
   const antes = (hojeMin || []).map(min2hm);
   const depois = (simMin || []).map(min2hm);
-  const saiu = antes.filter((h) => !depois.includes(h));
-  const entrou = depois.filter((h) => !antes.includes(h));
-  if (!saiu.length && !entrou.length) return slots;
-
-  const fila = [...entrou].sort((a, b) => hm2min(a) - hm2min(b));
-  // 1) o que saiu do cartão some do compartimento onde estava
-  for (let i = 0; i < 4; i += 1) if (slots[i] && saiu.includes(slots[i])) slots[i] = "";
-  // 2) o que entrou ocupa o vazio em que cabe pela ordem do relógio
-  let sobrou = false;
-  fila.forEach((hora) => {
-    // o cartão de hoje pode já ter a hora por outra fonte (`cp.entrada` apurado, sem
-    // batida crua correspondente) — repetir aqui desenhava `14:40 · 14:40` (MARCO
-    // AURELIO 05/09).
-    if (slots.includes(hora)) return;
-    const m = hm2min(hora);
-    for (let i = 0; i < 4; i += 1) {
-      if (slots[i]) continue;
-      const antesOk = slots.slice(0, i).every((v) => !v || hm2min(v) <= m);
-      const depoisOk = slots.slice(i + 1).every((v) => !v || hm2min(v) >= m);
-      if (antesOk && depoisOk) {
-        slots[i] = hora;
-        return;
-      }
-    }
-    sobrou = true;
-  });
-  // NÃO CABE = NÃO SE DESENHA. O Transnet tem quatro campos; cartão que fecharia em cinco
-  // não tem representação, e desenhar quatro dos cinco seria mostrar um cartão que ninguém
-  // vai lançar. É a mesma recusa do montador ("o Transnet não tem onde guardar a terceira").
-  return sobrou ? null : slots;
+  const igual = antes.length === depois.length && antes.every((h, i) => h === depois[i]);
+  if (igual) return { slots: slotsHoje || ["", "", "", ""], problema: "" };
+  const problema = validaCartao(simMin || [], cat);
+  return { slots: problema ? null : quatroSlots(simMin, almocoLancado), problema };
 }
 
-function cartaoFinal(slotsHoje, caso, slotsPedido) {
+function cartaoFinal(slotsHoje, caso, slotsPedido, problemaPedido) {
   const hoje = slotsHoje || ["", "", "", ""];
   const alvo = alvoQuatroSlots(caso);
   // `slotsPedido === null` = a projeção não cabe em quatro campos; então não há terceiro
@@ -758,7 +737,11 @@ function cartaoFinal(slotsHoje, caso, slotsPedido) {
     // sem nada congelado, o que está desenhado é PROJEÇÃO do pedido em aberto —
     // vira alvo de verdade quando a decisão é gravada.
     congelado: alvo.some(Boolean),
-    naoFecha: slotsPedido === null,
+    // SÓ QUANDO NÃO HÁ ALVO CONGELADO. Com alvo congelado o cartão final é o do aviso —
+    // dado gravado, não projeção —, e o aviso "não fecha" estava passando por cima dele.
+    naoFecha: slotsPedido === null && !alvo.some(Boolean),
+    // o motivo é o do Python (`valida`): "3 batidas (motorista: 2 ou 4)", "almoço de N min"
+    problema: txt(problemaPedido),
   };
 }
 
@@ -1093,7 +1076,17 @@ function montarRegistros(base) {
     // em 100% das linhas, e o DP decide sem ver o que vai ser lançado. O terceiro degrau
     // da cascata é o cartão COM O PEDIDO APLICADO — o mesmo `sim` que o montador desenha,
     // e que já respeita a decisão depois que ela é gravada.
-    const final = cartaoFinal(slotsHoje, caso, projetarNosSlots(slotsHoje, hoje, sim));
+    // O ENCAIXE ANTES DA PROJEÇÃO. Cartão que sai da simulação com 5 batidas não é
+    // "cartão que não fecha": é cartão com batida sobrando, e o montador da ferramenta
+    // encaixa as quatro (primeira · par de almoço plausível · última) e descarta o resto
+    // (montador.py:417). Sem este passo a coluna dizia "não fecha em 4" e não mostrava
+    // alvo nenhum — e o dono foi direto ao ponto: "tem que fazer fechar em 4, por isso
+    // tem o montador".
+    const encaixado = encaixaEmQuatro(sim, cat).fica;
+    const proj = projetarNosSlots(
+      slotsHoje, hoje, encaixado, [caso.alvo_alm_saida, caso.alvo_alm_volta], cat,
+    );
+    const final = cartaoFinal(slotsHoje, caso, proj.slots, proj.problema);
 
     // ── monitor de avisos (main.py:4283-4361) ───────────────────────────────
     // ids ainda PENDENTES no Transnet que a nossa decisão NÃO cobre
@@ -2167,8 +2160,8 @@ function Removidas({ antes, depois }) {
 function CartaoAlvo({ alvo, legenda = false }) {
   if (alvo?.naoFecha)
     return (
-      <span className="dp-pill warn" title="Com este pedido o cartão fecharia em mais de quatro batidas, e o Transnet só tem quatro campos. Abra o caso: é decisão por ocorrência, não do dia inteiro.">
-        não fecha em 4
+      <span className="dp-pill warn" title="O cartão que sai deste pedido não é um cartão possível (montador.py `valida`), e o robô não lança cartão impossível. Abra o caso: aqui é decisão por ocorrência, não do dia inteiro.">
+        {alvo.problema || "cartão impossível"}
       </span>
     );
   if (!alvo?.temAlvo)
@@ -3128,7 +3121,13 @@ function Detalhe({
         ["EFETUADO", "RECUSADO"].includes(txt(o.situacao_ajuste).toUpperCase()),
     ).length;
 
-    const monta = ({ fica, notas, bloqueio, aceitos, travado }) => ({
+    const monta = ({ fica: cru, notas: notasCru, bloqueio, aceitos, travado }) => {
+      // montador.py:417 — passo 4. O `simulaCartao` é a PRÉVIA (aplica os pedidos); quem
+      // diz como o cartão FICA é o montador, e ele encaixa as quatro quando sobra batida.
+      const enc = encaixaEmQuatro(cru, reg.categoria);
+      const fica = enc.fica;
+      const notas = enc.nota ? [...notasCru, enc.nota] : notasCru;
+      return {
       travado, atual, fica, notas, bloqueio, contagem, resolvidos,
       jornada: jornadaDoCartao(fica).liquida,
       semAlmoco: faltaAlmoco(fica),
@@ -3137,7 +3136,8 @@ function Detalhe({
       // O CONTRATO SÓ EXISTE QUANDO O CARTÃO FECHA (app.js:1330): sem aceite não há o que
       // prometer, e um cartão de 3 batidas nunca pode virar plano de execução.
       contrato: !travado && aceitos && !bloqueio && [2, 4].includes(fica.length) ? textoBatidas(fica) : "",
-    });
+      };
+    };
 
     // DIA JÁ DECIDIDO: aqui é o cartão que FICOU — `montarRegistros` já monta o `depois`
     // respeitando a decisão (e o contrato congelado manda por cima). Nada de prévia num

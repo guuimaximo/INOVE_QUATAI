@@ -1258,8 +1258,13 @@ function montarRegistros(base) {
       ? diasDeIdade > RETENCAO_DIAS
         ? `o dia saiu da base do DP (ela guarda ${RETENCAO_DIAS} dias; este tem ${diasDeIdade}) — sem escala, o pedido não tem onde ancorar`
         : "o dia não está na base do DP — sem escala, o pedido não tem onde ancorar"
+      // SEM_PONTO AGORA QUER DIZER OUTRA COISA. Enquanto dia não-importado entrava na fila,
+      // esta frase era verdade duas vezes: o dia não tinha chegado. Com o filtro de
+      // `tem_ponto` (o dia só entra quando chegou), o que sobra aqui é a pessoa que não
+      // bateu num dia que ESTÁ na base — falta, folga ou atestado. Dizer "não chegou do
+      // Transnet" mandaria o DP esperar uma carga que já veio.
       : txt(cp.status_ponto).toUpperCase() === "SEM_PONTO"
-        ? "o ponto deste dia não chegou do Transnet"
+        ? "ele não bateu ponto neste dia — o dia está na base"
         : !hoje.length && !sim.length
           ? "cartão vazio e o pedido não produziu batida"
           : "";

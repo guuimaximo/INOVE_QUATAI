@@ -811,8 +811,23 @@ function cartaoFinal(slotsHoje, caso, slotsPedido, problemaPedido, fontePedido, 
   // `slotsPedido === null` = a projeção não cabe em quatro campos; então não há terceiro
   // degrau, e a coluna cai no cartão de hoje (com o aviso vindo de `naoFecha`).
   const pedido = slotsPedido || ["", "", "", ""];
-  // A CASCATA: alvo congelado → o que o pedido faz com o cartão → o que já está lá.
-  const slots = alvo.map((v, i) => v || pedido[i] || hoje[i] || "");
+  /* QUEM MANDA DEPENDE DA DECISÃO, porque são DOIS robôs diferentes (09/09/2026, apontado
+   * pelo dono no caso EDUARDO 30054702 · 21/08):
+   *   · ACEITAR chama o robô `ajustes`, que só clica ACEITAR na ocorrência do Transnet —
+   *     o cartão vira O QUE ELE PEDIU (ali: 03:20), nunca o alvo do aviso;
+   *   · RECUSAR é que manda o dia para advertir/corrigir, e aí sim quem é lançado é o
+   *     ALVO congelado no aviso (ali: 02:58).
+   * O alvo congelado vinha ganhando nos dois casos, e a tela prometia 02:58 num dia que ia
+   * virar 03:20 — discordando do próprio card do montador, no mesmo pop-up. Agora o alvo do
+   * aviso continua desenhado, mas em linha PRÓPRIA (`alvoAviso`), dita como o que a
+   * CORREÇÃO lançaria. */
+  // REABERTO NÃO É RECUSADO: a recusa do ciclo anterior não manda no aviso novo — é a mesma
+  // regra de `casoDoCiclo`/`decisaoJaTomada`, que zeram a decisão quando o aviso reabre.
+  const recusado = txt(caso?.aceite) === "rejeitado" && !ehReaberto(caso);
+  const pedidoManda = !recusado && pedido.some(Boolean);
+  const slots = pedidoManda
+    ? pedido.map((v, i) => v || alvo[i] || hoje[i] || "")
+    : alvo.map((v, i) => v || pedido[i] || hoje[i] || "");
   return {
     slots,
     // mudou = sai diferente do cartão de hoje (destacado); igual = fica como está
@@ -821,13 +836,18 @@ function cartaoFinal(slotsHoje, caso, slotsPedido, problemaPedido, fontePedido, 
     // sem nada congelado, o que está desenhado é PROJEÇÃO do pedido em aberto —
     // vira alvo de verdade quando a decisão é gravada.
     congelado: alvo.some(Boolean),
+    // O ALVO DO AVISO, sempre que existir: é o que a CADEIA DE CORREÇÃO lançaria neste dia.
+    // Fica ao lado do cartão final em vez de por cima dele — são duas perguntas diferentes.
+    alvoAviso: alvo.some(Boolean) ? alvo : null,
+    difereDoAviso: alvo.some(Boolean) && alvo.some((v, i) => Boolean(v) && v !== slots[i]),
     // SÓ QUANDO NÃO HÁ ALVO CONGELADO. Com alvo congelado o cartão final é o do aviso —
     // dado gravado, não projeção —, e o aviso "não fecha" estava passando por cima dele.
     naoFecha: slotsPedido === null && !alvo.some(Boolean),
     // o motivo é o do Python (`valida`): "3 batidas (motorista: 2 ou 4)", "almoço de N min"
     problema: txt(problemaPedido),
-    // de onde saiu o desenho: alvo congelado, cartão de hoje, pedido, ou a régua da Revisão
-    fonte: alvo.some(Boolean) ? "aviso" : txt(fontePedido),
+    // de onde saiu o desenho: o pedido (ou a régua que o completou), o cartão de hoje, ou —
+    // no dia recusado — o alvo congelado no aviso
+    fonte: pedidoManda ? txt(fontePedido) : alvo.some(Boolean) ? "aviso" : txt(fontePedido),
     // e, quando não há desenho nenhum, o que está travando
     trava: txt(trava),
   };
@@ -1261,6 +1281,10 @@ function montarRegistros(base) {
       ciclo,
       cartao: cp,
       gordura: g,
+      // O REAL MANUAL DO DP já era lido aqui para montar a régua (`refDaPonta`), mas morria
+      // dentro do cálculo: o pop-up do caso não tinha como dizer se alguém já cravou o
+      // horário — e ele é o TOPO da cascata, acima do alvo do aviso e da sugestão do dia.
+      realManual: rm,
       ajustes: grupo,
       nAjustes: grupo.length,
       realocado: txt(primeiro._realocadoDe),
@@ -2294,7 +2318,8 @@ function CartaoAlvo({ alvo, legenda = false }) {
       style={legenda ? PILHA : undefined}
       title={
         {
-          aviso: "O cartão como fica quando a correção for lançada. Os horários destacados são os que o aviso congelou.",
+          aviso: "DIA RECUSADO: quem lança é a cadeia de correção, e o que ela lança é o ALVO que o aviso congelou. Os horários destacados são os que mudam.",
+          pedido: "O cartão como fica quando o pedido for ACEITO — é o que o robô `ajustes` deixa no Transnet, clicando aceitar na ocorrência. Se o dia for RECUSADO, quem vale é o alvo do aviso, na linha de baixo.",
           revisão:
             "O PEDIDO NÃO FECHA SOZINHO — aplicá-lo ao pé da letra deixaria o cartão impossível. Então vale o ALVO: as quatro sugestões que a Revisão apurou e publicou para este dia. Não foi isto que o colaborador pediu; é o que o dia tem de virar.",
           "Real manual":
@@ -2313,14 +2338,34 @@ function CartaoAlvo({ alvo, legenda = false }) {
       {legenda ? (
         <span className="dp-faint" style={MINI}>
           {{
-            aviso: "o cartão como fica depois de lançado · destacado = pedido · normal = fica como está",
+            aviso: "dia recusado — a correção lança o alvo congelado no aviso · destacado = o que muda",
             revisão: "o pedido não fecha o cartão — vale a régua que a Revisão publicou para o dia",
             "Real manual": "o pedido não fecha o cartão — vale o Real manual que o DP cravou",
             cartão: "o pedido não muda nada · o cartão fica como está",
           }[alvo.fonte] ||
-            "como fica se o pedido for aceito · destacado = o que muda · normal = fica como está"}
+            "como fica se o pedido for ACEITO · destacado = o que muda · normal = fica como está"}
         </span>
       ) : null}
+      {legenda ? <AlvoDoAviso alvo={alvo} /> : null}
+    </span>
+  );
+}
+
+/* O ALVO DO AVISO, EM LINHA PRÓPRIA (09/09/2026).
+ *
+ * Ele não é mais o cartão final — aceitar o pedido lança O QUE ELE PEDIU —, mas continua
+ * sendo o que a cadeia de advertência/correção lançaria neste dia. Some quando o dia foi
+ * recusado (aí ele JÁ é o cartão desenhado acima) e quando bate com o final, para não
+ * desenhar duas vezes o mesmo cartão. */
+function AlvoDoAviso({ alvo }) {
+  if (!alvo?.alvoAviso || !alvo.difereDoAviso || alvo.fonte === "aviso") return null;
+  return (
+    <span
+      style={{ ...FILA, marginTop: 2 }}
+      title="Alvo congelado no aviso (ponto_caso.alvo_*): é o cartão que a cadeia de advertência/correção lançaria se o dia fosse RECUSADO. Aceitar o pedido não lança isto."
+    >
+      <span className="dp-faint" style={MINI}>se recusar, a correção lança:</span>
+      <LinhaCartao horas={alvo.alvoAviso} />
     </span>
   );
 }
@@ -2694,14 +2739,19 @@ function Montador({ reg, montado }) {
           <Selo cor="alerta" titulo="jornada acima de 6h sem par de intervalo no cartão">falta o almoço</Selo>
         ) : null}
       </div>
-      {/* O ALVO, no MESMO desenho da grade e do papel: o cartão final depois de lançado. */}
+      {/* O ALVO, no MESMO desenho da grade e do papel: o cartão final depois de lançado.
+          A legenda dizia "é o que o robô lança" sem dizer QUAL robô — e no dia com aviso ela
+          desenhava o alvo da CORREÇÃO logo abaixo de um "fica" que era o do ACEITE. */}
       {reg.alvo.temAlvo ? (
         <div className="oc-mt-l">
           <span className="oc-mt-k">alvo</span>
           <CartaoAlvo alvo={reg.alvo} />
           <span className="dp-faint" style={MINI}>
-            é o que o robô lança · destacado = pedido · normal = fica como está
+            {reg.alvo.fonte === "aviso"
+              ? "dia recusado — é o que a correção lança · destacado = o que muda"
+              : "é o que o robô lança ao ACEITAR · destacado = o que muda · normal = fica como está"}
           </span>
+          <AlvoDoAviso alvo={reg.alvo} />
         </div>
       ) : null}
 
@@ -3194,7 +3244,7 @@ function RelatorioCaso({ reg, montado }) {
 function Detalhe({
   reg, aoFechar, gravando: gravandoProp, aoAceitar, aoRejeitar, aoDesfazer, aoMarcar,
   aoAplicarMarcados, disparando, aoExecutar, aoConferir, aoFecharAMao, aoAbrirCartao,
-  abrindoCartao, aoComoAlteracao, aoLancarDia, resultadoRobo,
+  abrindoCartao, erroCartao, aoComoAlteracao, aoLancarDia, resultadoRobo,
 }) {
   // ENQUANTO O DISPARO ESTÁ NO AR, A DECISÃO NÃO MUDA. O robô já levou a decisão gravada;
   // trocá-la agora deixaria o banco e o Transnet contando histórias diferentes sobre o
@@ -3310,6 +3360,12 @@ function Detalhe({
   if (!reg) return null;
   const c = reg.caso;
   const g = reg.gordura || {};
+  // ponto_real_manual: as quatro pontas cravadas à mão pelo DP, com quem e quando.
+  const rmDia = reg.realManual || {};
+  const realManual = [rmDia.entrada, rmDia.alm_saida, rmDia.alm_volta, rmDia.saida].map((v) => txt(v));
+  const temRealManual = realManual.some(Boolean);
+  const rmQuem = txt(rmDia.definido_por);
+  const rmQuando = txt(rmDia.definido_em);
   const etapas = [
     ["Aviso enviado", c.aviso_enviado_em],
     ["Aviso conferido no Transnet", c.aviso_conferido_em],
@@ -3387,6 +3443,13 @@ function Detalhe({
             </button>
           </div>
         </div>
+
+        {/* O CARTÃO DO DIA NÃO ABRIU? O MOTIVO FICA AQUI, e não atrás do pop-up. */}
+        {erroCartao ? (
+          <div className="oc-mt-n forte" style={{ marginTop: 8 }} role="alert">
+            ⚠ <b>O cartão do dia não abriu:</b> {erroCartao}
+          </div>
+        ) : null}
 
         <div className="rv-corpo oc-det-corpo">
           {/* O CONTEXTO, EM UMA LINHA. Ele repetia o alvo que já está em dois outros lugares
@@ -3580,6 +3643,26 @@ function Detalhe({
                     {" "}· tolerância {TOLERANCIA_MIN} min
                   </span>
                 </Linha>
+                {/* O REAL MANUAL DO DP — o topo da cascata da régua. Ficava invisível aqui:
+                    para saber se alguém já tinha cravado o horário (e qual), era preciso abrir
+                    o Cartão do dia. Ele manda no veredito por ponta logo abaixo, então é nesta
+                    lista que ele tem de aparecer. */}
+                <Linha rotulo="Real manual do DP">
+                  {temRealManual ? (
+                    <span style={PILHA}>
+                      <LinhaCartao horas={realManual} />
+                      <span className="dp-faint" style={MINI}>
+                        cravado {rmQuem ? `por ${rmQuem}` : "à mão"}
+                        {rmQuando ? ` em ${fmtDataHora(rmQuando)}` : ""} · manda na régua do veredito
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="dp-faint" style={MINI}>
+                      não cravado · vale a régua da linha acima. Para cravar sem sair daqui, abra o{" "}
+                      <b>Cartão do dia</b> (botão no topo) — seção “Real manual do DP”.
+                    </span>
+                  )}
+                </Linha>
                 <Linha rotulo="Veredito por ponta"><PontasES reg={reg} /></Linha>
                 <Linha rotulo="Situação"><CelulaSituacao reg={reg} /></Linha>
                 {reg.notas?.length ? (
@@ -3737,6 +3820,10 @@ export default function Ocorrencias() {
   const [resultadoRobo, setResultadoRobo] = useState(null);
   const [cartaoDia, setCartaoDia] = useState(null);
   const [abrindoCartao, setAbrindoCartao] = useState(false);
+  // POR QUE O CARTÃO DO DIA NÃO ABRIU, DITO ONDE SE CLICOU (09/09/2026). O motivo ia só para
+  // o `recado`, que é desenhado no topo da ABA — atrás do modal do caso. Daí "clico e não
+  // acontece nada": a tela respondia num lugar que o próprio pop-up cobre.
+  const [erroCartao, setErroCartao] = useState("");
   const [progresso, setProgresso] = useState(null);
   // recarga que NÃO tira a lista da tela (ver `buscar`)
   const [atualizando, setAtualizando] = useState(false);
@@ -3888,6 +3975,7 @@ export default function Ocorrencias() {
   // disparo aparecer no rodapé de outra pessoa.
   const abrir = (reg) => {
     setResultadoRobo(null);
+    setErroCartao("");
     setAberto((atual) => (atual?.k === reg.k ? null : reg));
   };
   const regAberto = aberto ? registros.find((r) => r.k === aberto.k) || aberto : null;
@@ -4072,16 +4160,21 @@ export default function Ocorrencias() {
     if (!reg) return;
     setAbrindoCartao(true);
     setRecado("");
+    setErroCartao("");
     try {
       const dados = await lerCartaoDoDia(reg.cracha, reg.iso);
       if (!dados) {
-        setRecado(`Sem linha em ponto_diario para ${reg.nome} · ${reg.dataBR} — não há cartão do dia para abrir.`);
+        const motivo = `Sem linha em ponto_diario para ${reg.nome} · ${reg.dataBR} — não há cartão do dia para abrir.`;
+        setRecado(motivo);
+        setErroCartao(motivo);
         return;
       }
       cartaoGravou.current = false;
       setCartaoDia(dados);
     } catch (e) {
-      setRecado(`Falhou: ${e?.message || e}`);
+      const motivo = `Falhou: ${e?.message || e}`;
+      setRecado(motivo);
+      setErroCartao(motivo);
     } finally {
       setAbrindoCartao(false);
     }
@@ -4966,6 +5059,7 @@ export default function Ocorrencias() {
           aoFecharAMao={aoFecharAMao}
           aoAbrirCartao={abrirCartaoDoDia}
           abrindoCartao={abrindoCartao}
+          erroCartao={erroCartao}
           aoComoAlteracao={aoComoAlteracao}
           aoLancarDia={aoLancarDiaSemPonto}
           resultadoRobo={resultadoRobo}

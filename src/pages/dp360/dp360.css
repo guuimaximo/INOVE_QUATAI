@@ -2012,3 +2012,9 @@
     display: none !important;
   }
 }
+
+/* Detalhe do caso em MODAL (era card no fim da página). Reusa a caixa do cartão
+   do dia — mesma altura máxima, mesmo corpo rolante — para as duas telas não
+   terem dois jeitos de abrir a mesma coisa. */
+.dp360 .oc-det-modal { max-width: 1180px; }
+.dp360 .oc-det-corpo { padding: 0 2px; }

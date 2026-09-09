@@ -1334,8 +1334,22 @@ async function gravaContrato(reg, ids, antes, depois) {
 async function gravarAceite(reg) {
   const agora = agoraISOLocal();
   const ids = idsDoDia(reg);
-  // o "depois" só é congelado quando dá para confiar nele (sem nota grave)
-  const aviso = await gravaContrato(reg, ids, reg.antesTexto, reg.bloqueio ? "" : reg.depoisTexto);
+  // O "DEPOIS" SÓ É CONGELADO QUANDO O CARTÃO FECHA EM 2 OU 4.
+  //
+  // Faltava a segunda metade da trava, e o próprio arquivo já sabia disso: o
+  // montador recusa cartão de 3 batidas dizendo "o Transnet não tem onde guardar a
+  // terceira". Aqui só se olhava `bloqueio` — e uma simulação de 3 batidas NÃO gera
+  // nota (o simulador só reclama acima de 4), então passava, virava contrato e
+  // viraria plano de execução do robô sobre o cartão de alguém.
+  // É a mesma regra de app.js:193 (`contratoDoDia`): "meia projeção não é contrato —
+  // é chute, e o bot usaria isso pra REESCREVER o ponto de alguém".
+  const cartaoFecha = [2, 4].includes((reg.depois || []).length);
+  const aviso = await gravaContrato(
+    reg,
+    ids,
+    reg.antesTexto,
+    reg.bloqueio || !cartaoFecha ? "" : reg.depoisTexto,
+  );
   await upsertDP360("ponto_caso", {
     ...chaveDoCaso(reg),
     aceite: "aceito",
@@ -1678,6 +1692,15 @@ function motivoSemDecisao(reg) {
   // VENCIDO: segue só a cadeia advertência → correção. Nunca aceite/recusa, nunca lote.
   if (reg.situacaoAviso === "vencido")
     return "aviso vencido — segue só a cadeia advertência → correção";
+  // DIA JÁ FECHADO — o PEDIDO POSTERIOR. O colaborador abriu o pedido DEPOIS de o dia
+  // já ter sido julgado, advertido e corrigido. Aceitar aqui DESFAZ a correção que já
+  // foi lançada, e re-advertir seria punir duas vezes o mesmo fato.
+  // O estado `posterior` tinha sido portado só como rótulo: a tela desenhava o selo
+  // bonito e deixava o botão Aceitar ligado. Na ferramenta a única saída é recusar
+  // (main.py:2222 `recusar_posterior`, e o modal de app.js:2184 existe só para
+  // explicar isso).
+  if (txt(reg.caso?.correcao_final_em) || reg.situacaoAviso === "posterior")
+    return "o dia já foi corrigido — pedido posterior só se recusa, nunca se aceita";
   return "";
 }
 
@@ -3788,7 +3811,20 @@ function Detalhe({
   const marcadoAntes = !reg.decJa && marcasGravadas(reg).size ? planoDaExecucao(reg) : null;
 
   return (
-    <div className="dp-card" style={{ margin: "0 20px 20px", borderColor: "var(--dp-accent)" }}>
+    /* MODAL, como na ferramenta (`app.js:638 abreDetalheDia` monta em `modal-root`).
+       Era um card no fim da página: com 40 linhas na grade, clicar numa linha não
+       fazia nada VISÍVEL — o detalhe nascia fora da tela e ninguém rolava até ele.
+       O cabeçalho fica fixo e só o corpo rola, senão o X sai de vista. */
+    <div
+      className="rv-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Caso de ${reg.nome} em ${reg.dataBR}`}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) aoFechar();
+      }}
+    >
+    <div className="dp-card rv-box oc-det-modal" style={{ borderColor: "var(--dp-accent)" }}>
       <div
         style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}
       >
@@ -3829,6 +3865,8 @@ function Detalhe({
           </button>
         </div>
       </div>
+
+      <div className="rv-corpo oc-det-corpo">
 
       <div
         style={{
@@ -4209,6 +4247,8 @@ function Detalhe({
           visível só no papel — é o mesmo caso aberto, então não há como o papel contar uma
           história diferente da que está na tela. */}
       <RelatorioCaso reg={reg} />
+      </div>
+    </div>
     </div>
   );
 }
@@ -4228,6 +4268,17 @@ export default function Ocorrencias() {
   const [eixoStatus, setEixoStatus] = useState("PENDENTE");
   const [eixoData, setEixoData] = useState("TODAS");
   const [aberto, setAberto] = useState(null);
+
+  // Esc fecha o caso, como qualquer pop-up. Sem isto o único jeito de sair é achar
+  // o X — e agora que o detalhe é modal, ficar preso nele é pior que antes.
+  useEffect(() => {
+    if (!aberto) return undefined;
+    const aoTeclar = (e) => {
+      if (e.key === "Escape") setAberto(null);
+    };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [aberto]);
   const [gravando, setGravando] = useState(false);
   const [recado, setRecado] = useState("");
   const [selIds, setSelIds] = useState([]);

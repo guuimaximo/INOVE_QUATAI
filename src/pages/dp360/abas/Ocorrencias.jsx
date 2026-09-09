@@ -3118,16 +3118,11 @@ function BarraRobo({ reg, disparando, gravando, aoExecutar, aoConferir, aoFechar
           <>
             <span className="oc-sep" aria-hidden="true" />
             <BotaoExecucao tom="erro" motivo={MOTIVO_ADVERTIR}>Advertir e corrigir</BotaoExecucao>
-            <BotaoExecucao motivo={MOTIVO_CANCELAR}>Cancelar aviso</BotaoExecucao>
-          </>
-        ) : (
-          /* DESISTIR DESTE PEDIDO, sem fechar o caso e ir marcar a caixinha na grade. VAI
-             VALENDO, e é assim na ferramenta: `app.js:308` chama `cancelar_pedidos_lote`
-             com `confirmar=true` direto, e quem segura é o `confirm()`. Ensaio aqui seria
-             passo a mais para ver o que já está desenhado na tela. Só na porta do PEDIDO:
-             na do aviso, desistir é "Cancelar aviso", que é outra coisa. */
-          <>
-            <span className="oc-sep" aria-hidden="true" />
+            {/* DESISTIR DA OCORRÊNCIA DELE sem fechar o caso e ir marcar a caixinha na
+                grade. VAI VALENDO: é assim na ferramenta (`app/ui/app.js:308` chama
+                `cancelar_pedidos_lote` com confirmar=true direto, e quem segura é o
+                `confirm()`). NÃO é o "Cancelar aviso" ao lado — aquele desfaz a NOSSA
+                ocorrência no Transnet (`--cancelar-enviadas`) e segue fora do ar. */}
             <button
               type="button"
               className="dp-btn"
@@ -3138,8 +3133,9 @@ function BarraRobo({ reg, disparando, gravando, aoExecutar, aoConferir, aoFechar
             >
               ✗ Cancelar este pedido
             </button>
+            <BotaoExecucao motivo={MOTIVO_CANCELAR}>Cancelar aviso</BotaoExecucao>
           </>
-        )}
+        ) : null}
         {disparando ? <span className="dp-pill accent">disparando…</span> : null}
       </div>
       {resultado ? (
@@ -4923,19 +4919,15 @@ export default function Ocorrencias() {
       >
         {contDec.total ? `✓ Aplicar decisões (${contDec.ac}✓ ${contDec.rj}✗)` : "✓ Aplicar decisões"}
       </BotaoAcao>
-      {/* CANCELAR usa a MESMA marcação, ignorando o lado — e vive só na porta do pedido:
-          na do aviso, desistir é "Cancelar aviso", dentro do caso, e é outra coisa (lá
-          existe aviso nosso, e cancelar mexe no prazo das 48 h). */}
-      {porta === "pedido" ? (
+      {/* CANCELAR usa a MESMA marcação, ignorando o lado — e vive na porta do AVISO
+          (decisão do dono, 09/09/2026: "o cancelamento não é no pedido do colaborador, tem
+          que ter no enviamos para ajuste"). É lá que a ocorrência é RESPOSTA a um aviso
+          nosso, e desistir dela é o que acontece na prática.
+          SEM ENSAIO, como na ferramenta: `app/ui/app.js:308` chama `cancelar_pedidos_lote`
+          com confirmar=true direto e quem segura é o `confirm()`. */}
+      {porta === "aviso" ? (
         <>
           <span className="oc-sep" aria-hidden="true" />
-          <BotaoAcao
-            titulo="O robô abre a grade ao vivo e mostra o que RECUSARIA nos dias marcados. Não clica em nada e não grava."
-            disabled={!contDec.total || gravando || disparando}
-            onClick={() => aoCancelarSelecionados(false)}
-          >
-            🤖 Cancelar — ensaio
-          </BotaoAcao>
           <BotaoAcao
             tom="erro"
             titulo="Recusa no Transnet os IDs ainda pendentes dos dias marcados e fecha o caso como cancelado. O lado da caixinha (aceitar/rejeitar) é ignorado: aqui ela é só a seleção."

@@ -2018,3 +2018,129 @@
    terem dois jeitos de abrir a mesma coisa. */
 .dp360 .oc-det-modal { max-width: 1180px; }
 .dp360 .oc-det-corpo { padding: 0 2px; }
+
+/* ═══════════════ DP360 · Ocorrências — a reescrita (prefixo `oc-`) ═══════════
+   Só acréscimo: as classes antigas continuam onde estavam.
+   `.oc-portas` / `.oc-porta` ficaram sem uso quando a porta virou seletor da 1ª barra
+   (a moldura passou a ser a mesma da Gordura, dentro do AbaShell); `.oc-mt-ctx*` idem,
+   quando o contexto do dia virou uma linha só. Ficam para não quebrar quem as reusar.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── O LOTE NA LINHA: as duas caixinhas exclusivas (app.js `decCheckboxes`) ──
+   Elas são a coluna "Decisão" inteira, então precisam ser legíveis de longe e dizer o
+   lado pela COR, não só pelo texto — o DP percorre a coluna, não lê palavra por palavra. */
+.oc-dec {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.oc-dec-cb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 5px;
+  border: 1px solid var(--dp-border);
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: pointer;
+  user-select: none;
+  background: var(--dp-surface);
+  color: var(--dp-muted-ink);
+}
+.oc-dec-cb input { margin: 0; cursor: pointer; }
+.oc-dec-cb.ok.on {
+  color: var(--dp-ok-ink);
+  border-color: var(--dp-ok-ink);
+  background: var(--dp-ok-bg, transparent);
+}
+.oc-dec-cb.x.on {
+  color: var(--dp-danger-ink);
+  border-color: var(--dp-danger-ink);
+  background: var(--dp-danger-bg, transparent);
+}
+/* Caixinha travada: apagada, mas AINDA VISÍVEL. Sumir com ela faria o DP procurar o botão
+   que não existe; o motivo está no `title`. */
+.oc-dec-cb.off {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.oc-dec-cb.off input { cursor: not-allowed; }
+
+/* ── O DIA JÁ MARCADO: os selos ✓N ✗N e a caixinha "lançar" (app.js `seloLancar`) ──
+   Este é o estado do MEIO — marcado por ocorrência, `aceite` ainda pendente. Ele tem de se
+   distinguir das caixinhas de cima à primeira vista: aqui não se decide de novo, só se
+   escolhe QUAIS dias vão na próxima rodada. */
+.oc-vbadge {
+  display: inline-flex;
+  align-items: center;
+  min-width: 26px;
+  justify-content: center;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid transparent;
+}
+.oc-vbadge.certo { color: var(--dp-ok-ink); border-color: var(--dp-ok-ink); }
+.oc-vbadge.errado { color: var(--dp-danger-ink); border-color: var(--dp-danger-ink); }
+.oc-lancar-chk {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  color: var(--dp-accent);
+}
+.oc-lancar-chk input { margin: 0; cursor: pointer; }
+.oc-lancar-chk.off { opacity: 0.45; cursor: not-allowed; color: var(--dp-muted-ink); }
+.oc-lancar-chk.off input { cursor: not-allowed; }
+
+/* ── O ROBÔ EM UMA LINHA ──────────────────────────────────────────────────────
+   Na ferramenta os botões de robô moram na barra, numa linha. Aqui eles ocupavam mais
+   altura que a decisão inteira. O que não encolheu: ensaio e valendo continuam botões
+   separados, e a trava continua escrita quando o botão não existe. */
+.oc-robo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 0 2px;
+}
+.oc-robo > b { font-size: 12px; }
+
+/* ── O CONTEXTO DO DIA, em uma linha ─────────────────────────────────────────
+   Era um bloco de quatro colunas que repetia o alvo já mostrado em outros dois lugares.
+   Ficou o que não está em lugar nenhum: a origem, a resposta do Transnet e a reserva. */
+.oc-ctx {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--dp-surface-2);
+  font-size: 12px;
+}
+
+/* As duas colunas do caso aberto: o pedido de um lado, o cartão e a régua do outro. */
+.oc-det-grid {
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+}
+
+/* Um pedido do colaborador, com o veredito do motor e o rádio A/R/nada. */
+.oc-item {
+  background: var(--dp-surface-2);
+  border-radius: 8px;
+  padding: 7px 10px;
+  margin-bottom: 6px;
+}

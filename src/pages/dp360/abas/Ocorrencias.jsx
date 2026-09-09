@@ -875,7 +875,21 @@ function cartaoFinal(slotsHoje, caso, slotsPedido, problemaPedido, fontePedido, 
   // REABERTO NÃO É RECUSADO: a recusa do ciclo anterior não manda no aviso novo — é a mesma
   // regra de `casoDoCiclo`/`decisaoJaTomada`, que zeram a decisão quando o aviso reabre.
   const recusado = txt(caso?.aceite) === "rejeitado" && !ehReaberto(caso);
-  const pedidoManda = !recusado && pedido.some(Boolean);
+  /* SÓ GANHA DO ALVO O PEDIDO QUE MUDA ALGUMA COISA (09/09/2026 — regressão que eu mesmo
+   * abri hoje de manhã e o dono pegou no ALECSANDRO 30061220 · 01/09: "mandamos ajuste,
+   * está vencido, o alvo não tem nada").
+   *
+   * Dia com aviso e SEM pedido (ou com pedido que não altera o cartão) não vira nada por
+   * aceite nenhum: ele segue para advertência e correção, e o que a correção lança é o
+   * ALVO congelado no aviso — que era justamente o que sumia da coluna. `projetarNosSlots`
+   * já carimba isso: fonte "cartão" quer dizer "a simulação deu igual ao cartão de hoje",
+   * que é o caso de quem não pediu nada.
+   *
+   * A ferramenta separa as duas perguntas em campos diferentes (app/ui/app.js:1867 desenha
+   * "Ponto no cartão hoje", "Alvo (o que pedimos no aviso)" e "Como o ponto vai ficar").
+   * Aqui a coluna é uma só — "o cartão final" —, então quem manda nela é quem VAI lançar:
+   * o robô `ajustes` quando há pedido a aceitar, a correção quando não há. */
+  const pedidoManda = !recusado && pedido.some(Boolean) && txt(fontePedido) !== "cartão";
   const slots = pedidoManda
     ? pedido.map((v, i) => v || alvo[i] || hoje[i] || "")
     : alvo.map((v, i) => v || pedido[i] || hoje[i] || "");

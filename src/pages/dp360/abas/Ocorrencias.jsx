@@ -4633,6 +4633,81 @@ export default function Ocorrencias() {
     [atualizarSilencioso],
   );
 
+  /* ── EXECUTAR EM LOTE — o passo que faltava (09/09/2026) ─────────────────────
+   * O dono, olhando 63 casos parados: "mas não podia ficar em pronto para executar, tinha
+   * que ter executado lá — alguma coisa aconteceu". Aconteceu isto: na FERRAMENTA o
+   * "Aplicar decisões" grava E dispara o bot no mesmo clique (`app/ui/app.js:377`:
+   * `executar_decisoes` logo depois dos `confirmar_*`, sob o aviso "Aplicar no Transnet
+   * agora — isso altera o ponto de verdade"). O porte parou na gravação e mandou executar
+   * caso a caso, no pop-up: 64 decisões viraram 64 aberturas que ninguém faz. A fila
+   * decidiu e parou.
+   *
+   * UM DISPARO, N CASOS — não N disparos: o robô `ajustes` recebe a lista de crachá+dia no
+   * `casos` (é o mesmo caminho do cancelamento em lote), então o escopo continua fechado e
+   * o run é um só. As travas são as MESMAS de um caso (`motivoSemExecucao`), linha a linha,
+   * e uma linha travada recusa o lote inteiro em vez de sair calada. */
+  const aoExecutarLote = useCallback(
+    async (regs) => {
+      const lista = (regs || []).filter(Boolean);
+      if (!lista.length) { setRecado("Marque as linhas que o robô deve executar."); return; }
+      const bloqueados = lista.map((r) => ({ r, motivo: motivoSemExecucao(r) })).filter((x) => x.motivo);
+      if (bloqueados.length) {
+        setRecado(
+          `Lote recusado — ${bloqueados.length} caso(s) não podem ir ao robô: ` +
+            bloqueados.slice(0, 6).map((x) => `${x.r.nome} ${x.r.dataBR} (${x.motivo})`).join(" · ") +
+            (bloqueados.length > 6 ? " …" : "") + ".",
+        );
+        return;
+      }
+      const casos = casosDeRegistros(lista);
+      if (!casos) {
+        setRecado("Sem crachá+dia para escopar o robô — disparo cancelado. Escopo vazio faria o workflow rodar a fila inteira.");
+        return;
+      }
+      const soma = lista.reduce(
+        (acc, r) => {
+          const p = planoDaExecucao(r);
+          return { a: acc.a + p.aceitar.length, r: acc.r + p.rejeitar.length, j: acc.j + p.jaResolvidos.length };
+        },
+        { a: 0, r: 0, j: 0 },
+      );
+      const comAviso = lista.filter((r) => r.temAviso && txt(r.ciclo.aceite) === "rejeitado"
+        && txt(r.ciclo.correcao_status) !== "dispensada").length;
+      if (!confirmar(
+        `EXECUTAR DE VERDADE no Transnet — ${lista.length} crachá+dia.
+
+` +
+          lista.slice(0, 12).map((r) => `· ${r.nome} ${r.dataBR}`).join("\n") +
+          (lista.length > 12 ? `\n… e mais ${lista.length - 12}` : "") + "\n\n" +
+          `O robô vai aceitar ${soma.a} e rejeitar ${soma.r} ocorrência(s)` +
+          `${soma.j ? ` (${soma.j} o Transnet já resolveu — só confere)` : ""}.\n` +
+          `Robô: ajustes · modo "${MODO_EXECUTAR}" · casos = ${lista.length} crachá+dia (só estes), em UM disparo.\n` +
+          "Ele carimba conferido_em em ponto_caso — é esse carimbo que tira o caso de \"Execução pendente\".\n\n" +
+          (comAviso
+            ? `ATENÇÃO: ${comAviso} recusa(s) MANTÊM o caso na cadeia de advertência e correção — mas o robô NÃO envia a advertência nem corrige o cartão. Isso continua fora desta tela.`
+            : "A advertência e a correção do cartão continuam fora desta tela."),
+      )) return;
+
+      setDisparando(true);
+      setRecado("");
+      try {
+        const r = await dispararRoboDP360("ajustes", { modo: MODO_EXECUTAR, casos, confirmar: "true" });
+        setRecado(
+          `Execução disparada — ${lista.length} crachá+dia (${soma.a} aceitar / ${soma.r} rejeitar).` +
+            " O resultado não volta sozinho: a prova fica no run." + (r?.painel ? ` ${r.painel}` : ""),
+        );
+        setSelIds([]);
+        await lerExecucoes();
+        await atualizarSilencioso();
+      } catch (e) {
+        setRecado(`Falhou: ${e?.message || "não foi possível disparar o robô."}`);
+      } finally {
+        setDisparando(false);
+      }
+    },
+    [atualizarSilencioso, lerExecucoes],
+  );
+
   /* ── CONFERÊNCIA: lê o cartão ao vivo, NÃO mexe no Transnet ────────────────
    * Dois escopos, um handler: as linhas MARCADAS na ✔ e o CASO ABERTO. O `confirmar` não
    * liga escrita no Transnet — liga a escrita no NOSSO banco. */
@@ -4894,7 +4969,8 @@ export default function Ocorrencias() {
         (rj.length
           ? `Nas recusas de dia inteiro: correcao_status="dispensada" — nenhum destes dias tem aviso, então nenhuma vira advertência.\n`
           : "") +
-        `\nNÃO roda o robô: o disparo é sempre de UM caso, no caso aberto.`,
+        `\nAo terminar de gravar, o robô é disparado para ESTES mesmos casos — um disparo só, ` +
+        `como na ferramenta. Isso altera o ponto de verdade no Transnet.`,
     )) return;
 
     executarGravacao(`${alvo.length} caso(s) gravado(s)`, async () => {
@@ -4908,9 +4984,27 @@ export default function Ocorrencias() {
         const a = dec[reg.k] === "aceitar" ? await gravarAceite(reg) : await gravarRecusa(reg, "rejeitar");
         if (a) avisos.push(a);
       }
+      // GRAVAR E EXECUTAR NO MESMO CLIQUE, como na ferramenta (app/ui/app.js:377). O
+      // disparo vem DEPOIS da gravação e só do que gravou: o robô lê a decisão do banco,
+      // então mandá-lo antes seria mandá-lo executar o que ainda não está lá.
+      pendenteDeExecucao.current = alvo;
       return avisos.join(" · ");
     });
   }, [linhas, dec, executarGravacao]);
+
+  /* O DISPARO SAI DO EFEITO, não de dentro da gravação: `executarGravacao` já recarrega a
+   * aba, e disparar no meio dela deixaria dois estados de "ocupado" brigando pelo mesmo
+   * botão. Aqui a fila esvazia assim que a gravação termina. */
+  const pendenteDeExecucao = useRef(null);
+  useEffect(() => {
+    if (gravando || disparando) return;
+    const fila = pendenteDeExecucao.current;
+    if (!fila?.length) return;
+    pendenteDeExecucao.current = null;
+    // relê os registros pelo `k`: o lote acabou de gravar e o estado deles mudou
+    const atuais = fila.map((r) => registros.find((x) => x.k === r.k) || r);
+    aoExecutarLote(atuais);
+  }, [gravando, disparando, registros, aoExecutarLote]);
 
   /* ── colunas de cada grade (formato do TabelaDP: id/titulo/valor/render) ── */
 
@@ -5141,6 +5235,16 @@ export default function Ocorrencias() {
       <span className="dp-muted dp-num" style={MINI} title={AVISO_CONFERIR}>
         {selIds.length ? `${selIds.length} marcada(s) na ✔` : "marque linhas para conferir no Transnet (só leitura)"}
       </span>
+      {/* O QUE ESTAVA FALTANDO: mandar o robô executar o que já foi decidido. Sem ele a aba
+          só sabia CONFERIR — e conferir não executa nada. */}
+      <BotaoAcao
+        tom="erro"
+        titulo="Dispara o robô UMA vez para todos os dias marcados: ele aceita ou rejeita no Transnet o que a decisão gravada manda, e carimba conferido_em. Escreve no ponto de verdade."
+        disabled={!selIds.length || gravando || disparando}
+        onClick={() => aoExecutarLote(marcados)}
+      >
+        ▶ Executar marcados ({selIds.length})
+      </BotaoAcao>
       {/* SEM ENSAIO (decisão do dono, 09/09/2026). Este botão já é só leitura no Transnet —
           o ensaio dele só mudava se o carimbo cai no NOSSO banco, e para isso existe a
           confirmação, que diz exatamente o que vai ser gravado. */}

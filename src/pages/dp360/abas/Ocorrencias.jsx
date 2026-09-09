@@ -3049,7 +3049,7 @@ function ForaDoRobo({ reg, ocupado, aoFecharAMao }) {
  * O que NÃO encolheu: ensaio e valendo continuam BOTÕES SEPARADOS (um checkbox marcado por
  * engano vira decisão de verdade na ficha de um trabalhador), o escopo continua escrito, e
  * a trava continua dita por extenso quando o botão não existe. */
-function BarraRobo({ reg, disparando, gravando, aoExecutar, aoConferir, aoFecharAMao, resultado }) {
+function BarraRobo({ reg, disparando, gravando, aoExecutar, aoConferir, aoFecharAMao, aoCancelar, resultado }) {
   const trava = motivoSemExecucao(reg);
   const plano = trava ? null : planoDaExecucao(reg);
   const travaConf = motivoSemConferencia(reg);
@@ -3120,7 +3120,26 @@ function BarraRobo({ reg, disparando, gravando, aoExecutar, aoConferir, aoFechar
             <BotaoExecucao tom="erro" motivo={MOTIVO_ADVERTIR}>Advertir e corrigir</BotaoExecucao>
             <BotaoExecucao motivo={MOTIVO_CANCELAR}>Cancelar aviso</BotaoExecucao>
           </>
-        ) : null}
+        ) : (
+          /* DESISTIR DESTE PEDIDO, sem fechar o caso e ir marcar a caixinha na grade. VAI
+             VALENDO, e é assim na ferramenta: `app.js:308` chama `cancelar_pedidos_lote`
+             com `confirmar=true` direto, e quem segura é o `confirm()`. Ensaio aqui seria
+             passo a mais para ver o que já está desenhado na tela. Só na porta do PEDIDO:
+             na do aviso, desistir é "Cancelar aviso", que é outra coisa. */
+          <>
+            <span className="oc-sep" aria-hidden="true" />
+            <button
+              type="button"
+              className="dp-btn"
+              style={{ color: "var(--dp-danger-ink)" }}
+              disabled={disparando || gravando}
+              title="Recusa no Transnet os IDs deste crachá+dia que ainda estiverem pendentes na grade AO VIVO e fecha o caso como cancelado. Não é rejeitar: cancelar não decide nada e não adverte ninguém."
+              onClick={() => aoCancelar([reg], true, true)}
+            >
+              ✗ Cancelar este pedido
+            </button>
+          </>
+        )}
         {disparando ? <span className="dp-pill accent">disparando…</span> : null}
       </div>
       {resultado ? (
@@ -3318,7 +3337,7 @@ function RelatorioCaso({ reg, montado }) {
 function Detalhe({
   reg, aoFechar, gravando: gravandoProp, aoAceitar, aoRejeitar, aoDesfazer, aoMarcar,
   aoAplicarMarcados, disparando, aoExecutar, aoConferir, aoFecharAMao, aoAbrirCartao,
-  abrindoCartao, erroCartao, aoComoAlteracao, aoLancarDia, resultadoRobo,
+  abrindoCartao, erroCartao, aoComoAlteracao, aoLancarDia, aoCancelar, resultadoRobo,
 }) {
   // ENQUANTO O DISPARO ESTÁ NO AR, A DECISÃO NÃO MUDA. O robô já levou a decisão gravada;
   // trocá-la agora deixaria o banco e o Transnet contando histórias diferentes sobre o
@@ -3865,6 +3884,7 @@ function Detalhe({
               aoExecutar={aoExecutar}
               aoConferir={aoConferir}
               aoFecharAMao={aoFecharAMao}
+              aoCancelar={aoCancelar}
               resultado={resultadoRobo}
             />
           </div>
@@ -4580,16 +4600,24 @@ export default function Ocorrencias() {
    * afirma isso a partir do lake, que é foto de D-1.
    */
   const aoCancelarSelecionados = useCallback(
-    async (valendo) => {
-      const lista = linhas.filter((r) => dec[r.k]);
+    async (valendo, regs = null, noCasoAberto = false) => {
+      // DOIS ESCOPOS, UM HANDLER: as linhas MARCADAS na grade, ou o CASO ABERTO (que manda
+      // a si mesmo). O recado do caso aberto vai para o rodapé do pop-up — o `recado` da
+      // aba fica ATRÁS do modal, e ali "clico e não acontece nada" outra vez.
+      const dizer = (texto, erro = false) => {
+        if (noCasoAberto) setResultadoRobo({ tipo: erro ? "erro" : "ok", texto });
+        else setRecado(texto);
+      };
+      const lista = regs?.length ? regs.filter(Boolean) : linhas.filter((r) => dec[r.k]);
       if (!lista.length) {
-        setRecado("Marque nas caixinhas quais dias entram no cancelamento.");
+        dizer("Marque nas caixinhas quais dias entram no cancelamento.", true);
         return;
       }
       const casos = casosDeRegistros(lista);
       if (!casos) {
-        avisar(
+        dizer(
           "Sem crachá+dia para escopar o robô — disparo cancelado. Escopo vazio faria o workflow rodar a fila inteira.",
+          true,
         );
         return;
       }
@@ -4623,13 +4651,14 @@ export default function Ocorrencias() {
         const texto =
           `${valendo ? "Cancelamento" : "Ensaio do cancelamento"} disparado — ${lista.length} crachá+dia.` +
           " O resultado não volta sozinho: a prova fica no run.";
-        setRecado(texto + (r?.painel ? ` ${r.painel}` : ""));
+        if (noCasoAberto) setResultadoRobo({ tipo: "ok", texto, painel: r?.painel || "" });
+        else setRecado(texto + (r?.painel ? ` ${r.painel}` : ""));
         // a marcação só se apaga quando ela virou disparo de verdade; no ensaio ela
         // continua ali, que é o ponto do ensaio (conferir e então mandar valendo).
-        if (valendo) setDec({});
+        if (valendo && !regs?.length) setDec({});
         await atualizarSilencioso();
       } catch (e) {
-        setRecado(`Falhou: ${e?.message || "não foi possível disparar o robô."}`);
+        dizer(`Falhou: ${e?.message || "não foi possível disparar o robô."}`, true);
       } finally {
         setDisparando(false);
       }
@@ -5142,6 +5171,7 @@ export default function Ocorrencias() {
           erroCartao={erroCartao}
           aoComoAlteracao={aoComoAlteracao}
           aoLancarDia={aoLancarDiaSemPonto}
+          aoCancelar={(regs, valendo, noCasoAberto) => aoCancelarSelecionados(valendo, regs, noCasoAberto)}
           resultadoRobo={resultadoRobo}
         />
       </AbaShell>

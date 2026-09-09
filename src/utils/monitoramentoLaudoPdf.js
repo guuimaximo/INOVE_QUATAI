@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import logoInove from "../assets/logoInovaQuatai.png";
+import { assinarUrlsVision } from "./visionStorage";
 
 function esc(value) {
   return String(value ?? "")
@@ -197,9 +198,16 @@ export async function gerarLaudoInovePdf(row) {
 
   const actionColor = toneFromAction(row.acao_prevista);
 
-  const cadImg = await imageToDataUrl(row.img_cadastro_url);
-  const camImg = await imageToDataUrl(row.img_camera_url);
-  const mapaImg = await imageToDataUrl(row.mapa_facial_visual_url);
+  // O bucket do Vision e privado: as URLs guardadas na tabela precisam ser
+  // assinadas antes do fetch, senao o laudo sai sem as imagens.
+  const assinadas = await assinarUrlsVision([
+    row.img_cadastro_url,
+    row.img_camera_url,
+    row.mapa_facial_visual_url,
+  ]);
+  const cadImg = await imageToDataUrl(assinadas[row.img_cadastro_url]);
+  const camImg = await imageToDataUrl(assinadas[row.img_camera_url]);
+  const mapaImg = await imageToDataUrl(assinadas[row.mapa_facial_visual_url]);
 
   pdf.setProperties({
     title: `Laudo Inove ${row.prefixo || ""}`,

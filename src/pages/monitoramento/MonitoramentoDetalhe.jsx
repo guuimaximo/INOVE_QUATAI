@@ -16,6 +16,7 @@ import {
 import { supabase } from "../../supabase";
 import { InovePageHeader, InoveSection } from "../../components/InovePage";
 import { gerarLaudoInovePdf } from "../../utils/monitoramentoLaudoPdf";
+import { assinarUrlsVision } from "../../utils/visionStorage";
 
 // Nome legivel da variante de imagem usada pela biometria (sem jargao tecnico).
 function nomeVarianteLegivel(variante) {
@@ -152,6 +153,8 @@ export default function MonitoramentoDetalhe() {
   const navigate = useNavigate();
   const location = useLocation();
   const [row, setRow] = useState(null);
+  // URLs assinadas do bucket privado, indexadas pela URL guardada na tabela.
+  const [imagens, setImagens] = useState({});
   const [loading, setLoading] = useState(true);
   const [salvandoPdf, setSalvandoPdf] = useState(false);
   const [lista, setLista] = useState([]);
@@ -164,7 +167,20 @@ export default function MonitoramentoDetalhe() {
     (async () => {
       setLoading(true);
       const { data, error } = await supabase.from("vision_inspecoes").select("*").eq("id", id).single();
-      if (!error && data) setRow(data);
+      if (!error && data) {
+        setRow(data);
+        // O bucket do Vision e privado: as URLs guardadas na tabela nao abrem
+        // sozinhas. Assina aqui, junto do carregamento, para a tela nao piscar
+        // "sem imagem" enquanto as assinaturas nao chegam.
+        setImagens(
+          await assinarUrlsVision([
+            data.img_cadastro_url,
+            data.img_camera_url,
+            data.img_camera_tratada_url,
+            data.img_crop_biometria_url,
+          ]),
+        );
+      }
       setLoading(false);
     })();
   }, [id]);
@@ -239,9 +255,10 @@ export default function MonitoramentoDetalhe() {
 
   const veredito = vereditoLegivel(row.categoria);
   const sim = interpretarSimilaridade(row.similaridade_arcface);
-  const imagemTratadaUrl = row.img_camera_tratada_url || row.img_camera_url;
+  const assinada = (u) => (u ? imagens[u] ?? null : null);
+  const imagemTratadaUrl = assinada(row.img_camera_tratada_url) || assinada(row.img_camera_url);
   const varianteUsadaLabel = nomeVarianteLegivel(row.variante_imagem_usada_biometria || row.melhor_variante_biometrica);
-  const cropUsadoUrl = row.img_crop_biometria_url;
+  const cropUsadoUrl = assinada(row.img_crop_biometria_url);
   const temNav = idx >= 0 && lista.length > 1;
 
   return (
@@ -358,8 +375,8 @@ export default function MonitoramentoDetalhe() {
 
       {/* Imagens / evidencias */}
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
-        <MediaCard title="Foto Cadastro" subtitle="Referencia do cadastro" url={row.img_cadastro_url} tone="blue" />
-        <MediaCard title="Foto Camera" subtitle="Captura usada na analise" url={row.img_camera_url} tone="slate" />
+        <MediaCard title="Foto Cadastro" subtitle="Referencia do cadastro" url={assinada(row.img_cadastro_url)} tone="blue" />
+        <MediaCard title="Foto Camera" subtitle="Captura usada na analise" url={assinada(row.img_camera_url)} tone="slate" />
         <MediaCard title="Imagem Tratada" subtitle={varianteUsadaLabel || "Tratada para biometria"} url={imagemTratadaUrl} tone="emerald" />
         <MediaCard title="Rosto Comparado" subtitle="Recorte exato avaliado" url={cropUsadoUrl} fallbackLabel="Sem recorte de rosto" tone="amber" />
       </div>

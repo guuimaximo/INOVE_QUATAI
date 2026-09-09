@@ -26,7 +26,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import TabelaDP from "../TabelaDP";
-import { dispararRoboDP360, lerDP360, lerTudoDP360, upsertDP360 } from "../../../services/dp360Api";
+import {
+  dispararRoboDP360,
+  lerDP360,
+  lerTudoDP360,
+  statusRoboDP360,
+  upsertDP360,
+} from "../../../services/dp360Api";
 // A TRILHA DO ROBÔ mora no projeto do PRÓPRIO INOVE (`dp360_robo_execucao`), não na base
 // de importação — por isso o cliente normal, e não o gateway. Leitura só de Administrador
 // (a policy exige nível admin), que é quem abre esta tela.
@@ -4221,18 +4227,39 @@ export default function Ocorrencias() {
    * agora" com um dado que pode ter envelhecido. Sem trilha (ou sem permissão), some. */
   const [execRobo, setExecRobo] = useState([]);
   const lerExecucoes = useCallback(async () => {
-    try {
-      const desde = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
-      const { data } = await supabase
+    /* DUAS FONTES, E A SEGUNDA É A QUE FALTAVA (09/09/2026, o dono: "não do INOVE, mas da
+     * ferramenta"). A trilha só conhece o que sai daqui; o robô também é disparado pelo app
+     * do PC, direto no GitHub. Para quem olha a fila tanto faz quem mandou — o que importa é
+     * se tem bot no Transnet agora. Então o GITHUB manda, e a trilha entra só para dizer
+     * QUEM disparou quando o run saiu daqui. */
+    const [trilha, runs] = await Promise.all([
+      supabase
         .from("dp360_robo_execucao")
-        .select("id,robo,confirmar,disparado_em,autor_nome,run_url,run_status,run_conclusao")
-        .gte("disparado_em", desde)
+        .select("id,robo,confirmar,disparado_em,autor_nome,run_id,run_url")
+        .gte("disparado_em", new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString())
         .order("disparado_em", { ascending: false })
-        .limit(5);
-      setExecRobo(data || []);
-    } catch {
-      setExecRobo([]);
-    }
+        .limit(20)
+        .then((r) => r.data || [])
+        .catch(() => []),
+      statusRoboDP360(6).catch(() => []),
+    ]);
+    const porRun = new Map((trilha || []).map((x) => [String(x.run_id ?? ""), x]));
+    setExecRobo(
+      (runs || []).map((x) => {
+        const daqui = porRun.get(String(x.id ?? ""));
+        return {
+          id: x.id,
+          robo: x.nome || "robô",
+          confirmar: daqui ? daqui.confirmar : true,
+          disparado_em: x.comecou_em,
+          autor_nome: daqui?.autor_nome || (x.ator ? `${x.ator} (GitHub)` : ""),
+          daqui: Boolean(daqui),
+          run_url: x.url,
+          run_status: x.status,
+          run_conclusao: x.conclusao,
+        };
+      }),
+    );
   }, []);
   useEffect(() => { lerExecucoes(); }, [lerExecucoes, versao]);
 
@@ -5300,13 +5327,14 @@ export default function Ocorrencias() {
             cor={rodando ? "alerta" : "erro"}
             quebra
             titulo={
-              `Trilha do disparo (dp360_robo_execucao #${x.id}). O status é o do run no momento em que ele foi casado com o disparo — ` +
-              "abra o run para ver como está agora. Enquanto houver robô a caminho, não dispare de novo o mesmo escopo."
+              `Run #${x.id} do repo do robô, lido AGORA no GitHub — vale para qualquer origem, inclusive o que a ` +
+              "ferramenta do PC dispara sem passar pelo INOVE. Enquanto houver robô rodando, não dispare de novo o mesmo escopo."
             }
           >
-            {rodando ? "⚙ robô a caminho" : "⚠ o robô terminou mal"} · {txt(x.robo)}
-            {x.confirmar ? "" : " (ensaio)"} · disparado {fmtDataHora(x.disparado_em)}
+            {rodando ? "⚙ robô rodando agora" : "⚠ o robô terminou mal"} · {txt(x.robo)}
+            {x.confirmar ? "" : " (ensaio)"} · começou {fmtDataHora(x.disparado_em)}
             {txt(x.autor_nome) ? ` por ${txt(x.autor_nome)}` : ""}
+            {x.daqui ? "" : " · disparado fora do INOVE (ferramenta)"}
             {falhou ? ` · ${txt(x.run_conclusao) || "sem conclusão"}` : ""}
             {txt(x.run_url) ? (
               <>

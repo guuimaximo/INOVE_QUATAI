@@ -1054,6 +1054,60 @@ serve(async (req: Request) => {
      mandando o número na mão. Aqui só se alcança o que a própria trilha do
      INOVE registrou.                                                          */
 
+  /* ── robo_status: TEM ROBO RODANDO AGORA? (09/09/2026) ────────────────────
+     A trilha do INOVE (`dp360_robo_execucao`) so conhece o que sai DAQUI, e o
+     dono foi direto ao ponto: "nao do INOVE, mas da ferramenta". O robo tambem e
+     disparado pelo app do PC, que fala com o GitHub sem passar por este gateway —
+     e para quem esta olhando a fila tanto faz quem mandou: o que importa e que ha
+     um bot mexendo no Transnet agora.
+
+     Entao a fonte aqui e o GITHUB, que e a verdade dos dois lados. Somente
+     LEITURA: lista os runs do repo do robo. Nao dispara, nao cancela, nao escreve.
+     O gate de Administrador do topo desta funcao ja vale para esta acao.
+
+     Devolve o que a tela precisa dizer numa linha: nome do workflow, status,
+     conclusao, quando comecou, quem disparou e o link do run.                  */
+  if (acao === "robo_status") {
+    const token = tokenGitHub();
+    if (!token) return json({ ok: true, runs: [], nota: "robô não configurado nesta função" });
+    const dono = Deno.env.get("DP360_GITHUB_OWNER") ?? "guuimaximo";
+    const repo = Deno.env.get("DP360_GITHUB_REPO") ?? "DP360";
+    // janela curta: o que interessa e o agora e o passado recente que ainda explica a fila
+    const horas = Math.min(Math.max(Number(corpo.horas ?? 6) || 6, 1), 48);
+    const desde = Date.now() - horas * 60 * 60 * 1000;
+    try {
+      const r = await fetch(
+        `https://api.github.com/repos/${dono}/${repo}/actions/runs?per_page=30`,
+        { headers: cabecalhoGitHub(token) },
+      );
+      if (!r.ok) return json({ ok: false, error: `o GitHub recusou a consulta (HTTP ${r.status})` }, 502);
+      const corpoGh = await r.json();
+      const runs = (Array.isArray(corpoGh?.workflow_runs) ? corpoGh.workflow_runs : [])
+        .filter((x: Record<string, unknown>) => {
+          const t = Date.parse(String(x?.run_started_at ?? x?.created_at ?? ""));
+          const rodando = String(x?.status ?? "") !== "completed";
+          return rodando || (Number.isFinite(t) && t >= desde);
+        })
+        .slice(0, 20)
+        .map((x: Record<string, unknown>) => ({
+          id: x?.id ?? null,
+          nome: String(x?.name ?? x?.display_title ?? ""),
+          status: String(x?.status ?? ""),              // queued | in_progress | completed
+          conclusao: String(x?.conclusion ?? ""),       // success | failure | cancelled...
+          comecou_em: String(x?.run_started_at ?? x?.created_at ?? ""),
+          atualizado_em: String(x?.updated_at ?? ""),
+          ator: String(
+            (x?.triggering_actor as Record<string, unknown> | undefined)?.login
+              ?? (x?.actor as Record<string, unknown> | undefined)?.login ?? "",
+          ),
+          url: String(x?.html_url ?? ""),
+        }));
+      return json({ ok: true, runs, repo: `${dono}/${repo}` });
+    } catch (error) {
+      return json({ ok: false, error: mensagemSegura(error) }, 502);
+    }
+  }
+
   const acoesDaProva = new Set(["robo_casar", "robo_artefatos", "robo_arquivar", "evidencia_url"]);
   if (acoesDaProva.has(acao)) {
     const token = tokenGitHub();

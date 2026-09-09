@@ -168,6 +168,16 @@ export function dispararRoboDP360(robo, inputs) {
   return chamar({ action: "robo", robo, inputs });
 }
 
+/**
+ * Os runs do robô no GitHub — de QUALQUER origem, inclusive os que a ferramenta
+ * do PC dispara sem passar por aqui. Somente leitura: é a resposta para "tem bot
+ * mexendo no Transnet agora?", que a trilha do INOVE sozinha não sabe dar.
+ */
+export async function statusRoboDP360(horas = 6) {
+  const dados = await chamar({ action: "robo_status", horas });
+  return dados.runs || [];
+}
+
 /** DELETE — o servidor recusa sem filtro, de propósito. */
 export function apagarDP360(tabela, filtros) {
   return gravar(tabela, "delete", { filtros });

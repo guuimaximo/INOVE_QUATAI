@@ -59,6 +59,19 @@ import {
 /* ─────────────────────────── constantes do domínio ───────────────────────── */
 
 const JANELA_DIAS = 70;                        // PORTE.md §4
+/**
+ * O QUE A BASE DO DP GUARDA — janela DESLIZANTE de 120 dias.
+ *
+ * Medido em 09/09/2026: `ponto_diario` tem exatamente 120 dias corridos, sem um buraco,
+ * de 12/05 a 08/09. Não é falha de importação: o dia envelhece e sai.
+ *
+ * Isso importa aqui porque o Transnet deixa o colaborador abrir pedido para dia MUITO
+ * antigo, e a captura traz esses pedidos hoje. Aí o pedido existe e o DIA não — 457 linhas
+ * assim, todas em 43 dias anteriores a 12/05, e em nenhum deles a tabela tem uma única
+ * linha, de ninguém. Sem o dia não há escala, e sem escala o motor não tem onde ancorar a
+ * batida pedida: a simulação volta vazia e a coluna do alvo fica muda.
+ */
+const RETENCAO_DIAS = 120;
 const TOLERANCIA_MIN = CONSTANTES.TOL_AJUSTE_MIN; // main.py:9959 — do MOTOR, não cópia
 const PRAZO_HORAS = 48;                        // main.py PRAZO_HORAS
 
@@ -1136,8 +1149,11 @@ function montarRegistros(base) {
     // o DIA: sem linha no `ponto_diario` não há escala, e sem escala o motor não tem onde
     // ancorar a batida pedida (é a escala que desempata AM/PM e ancora a inserção num dia
     // sem cartão) — então a simulação devolve zero batida e a coluna fica muda.
+    const diasDeIdade = Math.round((Date.now() - new Date(`${iso}T12:00:00`).getTime()) / 86400000);
     const travaCartao = !temLinhaDoDia
-      ? "o dia não está na base do DP — sem escala, o pedido não tem onde ancorar"
+      ? diasDeIdade > RETENCAO_DIAS
+        ? `o dia saiu da base do DP (ela guarda ${RETENCAO_DIAS} dias; este tem ${diasDeIdade}) — sem escala, o pedido não tem onde ancorar`
+        : "o dia não está na base do DP — sem escala, o pedido não tem onde ancorar"
       : txt(cp.status_ponto).toUpperCase() === "SEM_PONTO"
         ? "o ponto deste dia não chegou do Transnet"
         : !hoje.length && !sim.length

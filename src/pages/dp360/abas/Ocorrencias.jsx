@@ -4519,25 +4519,13 @@ export default function Ocorrencias() {
           afirmação falsa sobre o trabalho do DP — parece fila vazia, é fila desconhecida. No
           lugar vai a barra, que conta DIA LIDO SOBRE DIA EM CENA. */}
       {carregando ? (
-        <span style={{ ...FILA, gap: 8 }}>
-          <span
-            className={`oc-prog${progresso ? "" : " indeterminada"}`}
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={progresso?.total || undefined}
-            aria-valuenow={progresso?.feitos}
-            aria-label="Lendo a base DP360"
-          >
-            <span
-              className="oc-prog-fill"
-              style={progresso?.total ? { width: `${Math.round((progresso.feitos / progresso.total) * 100)}%` } : undefined}
-            />
-          </span>
-          <span className="dp-muted dp-num" style={MINI}>
-            {progresso?.total
-              ? `lendo o cartão de cada dia — ${progresso.feitos} de ${progresso.total}`
-              : "lendo o estado do DP…"}
-          </span>
+        /* A BARRA MUDOU DE LUGAR, não sumiu: ela agora é a do `AbaShell`, no meio da tela
+           (com o mesmo `progresso`). Duas barras contando a MESMA coisa a 100px uma da
+           outra é ruído — aqui fica só a frase, que é o que falta na linha do resumo. */
+        <span className="dp-muted dp-num" style={MINI}>
+          {progresso?.total
+            ? `lendo o cartão de cada dia — ${progresso.feitos} de ${progresso.total}`
+            : "lendo o estado do DP…"}
         </span>
       ) : (
         <span className="dp-muted dp-num">
@@ -4565,7 +4553,7 @@ export default function Ocorrencias() {
 
   return (
     <>
-      <AbaShell carregando={carregando} erro={erro} filtros={filtros} resumo={resumo}>
+      <AbaShell carregando={carregando} progresso={progresso} erro={erro} filtros={filtros} resumo={resumo}>
         {/* DIA SEM PONTO — PAINEL, não botão de lote (app.js:2952). Não é parte do fluxo de
             decisão: estes dias não têm pedido para julgar, e o painel tem um seletor de tipo
             e dois botões — amassado na barra do lote viraria só mais um botão de veredito.

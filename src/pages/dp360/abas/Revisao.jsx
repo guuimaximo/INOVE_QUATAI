@@ -140,7 +140,6 @@ function classeLinha(r, bloqueio) {
 }
 
 // Quadradinho da legenda de cores da linha.
-const ESTILO_LEGENDA = { width: 12, height: 12, borderRadius: 3, display: "inline-block" };
 
 // Coluna "Avisado?" — porte de app.js `fmtCol("rv_enviado")`. O aviso da Revisão
 // já era gravado em ponto_caso, mas a tela antiga nunca mostrou: não dava pra
@@ -1129,9 +1128,6 @@ export default function Revisao() {
   const [categorias, setCategorias] = useState(CATEGORIAS_PADRAO);
   const [datas, setDatas] = useState([]);
   const [data, setData] = useState("");
-  // Dias que TÊM linha na base mas ainda não têm ponto importado. Não entram no
-  // seletor (é a regra do original); viram aviso, para ninguém procurar ontem.
-  const [datasSemPonto, setDatasSemPonto] = useState([]);
   const [lotesDatas, setLotesDatas] = useState(PAGINAS_POR_LOTE);
   const [carregandoDatas, setCarregandoDatas] = useState(true);
 
@@ -1162,9 +1158,8 @@ export default function Revisao() {
     )
       .then((rows) => {
         if (!ativo) return;
-        const { datas: dts, semPonto, categorias: cats } = datasComPonto(rows);
+        const { datas: dts, categorias: cats } = datasComPonto(rows);
         setDatas(dts);
-        setDatasSemPonto(semPonto);
         if (cats.length) setCategorias(cats);
         setData((atual) => (atual && dts.includes(atual) ? atual : dts[0] || ""));
         setErro("");
@@ -1346,11 +1341,6 @@ export default function Revisao() {
       return true;
     });
   }, [linhas, busca, filtro, gpsPorCracha]);
-
-  const comSugestao = useMemo(
-    () => linhas.filter((l) => temSugestaoUtil(l, bloqueios[chaveDia(l.cracha, l.date_ref)])).length,
-    [linhas, bloqueios],
-  );
 
   /* ---- o lote do "✅ Lançar ajuste" ----
      Sai das linhas VISÍVEIS (o filtro e a busca da barra são a seleção, como já
@@ -1950,55 +1940,6 @@ export default function Revisao() {
         </>
       }
     >
-      {/* O dia sem ponto importado NÃO entra no seletor (regra do original,
-          main.py:7067). Mas some em silêncio lá, e aí ninguém entende por que
-          ontem não está na lista — então ele aparece aqui, como aviso. */}
-      {datasSemPonto.length > 0 && (
-        <div className="dp-resumo" style={{ borderColor: "var(--dp-danger-line)" }}>
-          <span className="dp-pill danger">ponto ainda não importado</span>{" "}
-          <b>{datasSemPonto.slice(0, 5).map(fmtData).join(" · ")}</b>
-          {datasSemPonto.length > 5 ? ` e mais ${datasSemPonto.length - 5}` : ""} — esses dias já têm
-          escala na base, mas nenhuma batida chegou do Transnet, então não entram no seletor. Não é
-          gente que faltou: é dia que não chegou.
-        </div>
-      )}
-
-      {/* O que grava e o que ainda não — a distinção que importa é: nada aqui FALA com o
-          trabalhador. Real manual e ponto conferido mexem só na base do DP. */}
-      <div className="dp-resumo">
-        <span className="dp-pill ok">✓ grava</span> <b>Real manual do DP</b> (ponto_real_manual) e{" "}
-        <b>ponto conferido</b> (ponto_caso) — abra o cartão da linha. Os dois ficam na base do DP e
-        podem ser desfeitos.{" "}
-        <span className="dp-pill danger">📣 fala com o trabalhador</span> <b>Enviar ocorrência</b> e{" "}
-        <b>avisar quem bateu fora</b> montam o CSV do Transnet e disparam o robô — sempre com{" "}
-        <b>Ensaio</b> antes do envio de verdade. O envio de verdade abre/atualiza o caso do dia (e
-        com ele o prazo de 48 h); o ensaio não abre nada. <b>Bateu fora</b> abre caso com
-        origem <span className="dp-mono">fora</span> — é justificativa, não ajuste, e é a origem
-        que mantém essa diferença.{" "}
-        <span className="dp-pill danger">✍ escreve no cartão</span> <b>Lançar ajuste</b> manda o
-        alvo que a view já resolveu para o robô do <b>Cartão de Ponto</b>, que reescreve o cartão
-        inteiro daquele dia — é o desfecho de quem <i>não</i> tem o que perguntar ao colaborador.
-        Também com <b>Ensaio</b> antes.
-      </div>
-
-      {/* ---- legenda das cores da linha + contagem de sugestões ---- */}
-      <div className="dp-resumo flex flex-wrap items-center gap-3">
-        <span className="flex items-center gap-1.5">
-          <i style={{ ...ESTILO_LEGENDA, background: "var(--dp-ok-bg)" }} /> ponto OK
-        </span>
-        <span className="flex items-center gap-1.5">
-          <i style={{ ...ESTILO_LEGENDA, background: "var(--dp-warn-bg)" }} /> invertido ou com sugestão utilizável
-        </span>
-        <span className="flex items-center gap-1.5">
-          <i style={{ ...ESTILO_LEGENDA, background: "var(--dp-accent-soft)" }} /> falta marcação identificada
-        </span>
-        <span className="flex items-center gap-1.5">
-          <i style={{ ...ESTILO_LEGENDA, background: "var(--dp-danger-bg)" }} /> sem sugestão e sem ponta
-          identificada
-        </span>
-        {!!comSugestao && <span style={{ marginLeft: "auto" }}>{comSugestao} com sugestão utilizável</span>}
-      </div>
-
       {/* ---- grade (a compartilhada: ⚙ colunas, fixar, redimensionar, CSV, preferência
               salva em `tbl_p2`). O filtro é da aba; a grade só ordena o que recebe. ---- */}
       <TabelaDP

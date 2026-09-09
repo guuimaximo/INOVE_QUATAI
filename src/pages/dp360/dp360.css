@@ -1035,34 +1035,6 @@
  * progresso. Só a primeira fase — as três tabelas do estado do DP, antes de existir
  * lista de dias — é indeterminada, e aí a listra anda sozinha sem prometer número.
  */
-.dp360 .oc-prog {
-  position: relative;
-  width: 180px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--dp-surface-2);
-  border: 1px solid var(--dp-border);
-  overflow: hidden;
-}
-.dp360 .oc-prog-fill {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--dp-accent);
-  transition: width 0.2s linear;
-}
-.dp360 .oc-prog.indeterminada .oc-prog-fill {
-  width: 40%;
-  animation: oc-prog-anda 1.1s ease-in-out infinite;
-}
-@keyframes oc-prog-anda {
-  0% { transform: translateX(-110%); }
-  100% { transform: translateX(260%); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .dp360 .oc-prog.indeterminada .oc-prog-fill { animation: none; width: 100%; opacity: 0.5; }
-}
-
 /* ═════════ OCORRÊNCIAS — o cartão em quatro slots (prefixo `oc-`) ═════════
  * ACRÉSCIMO: nada aqui reescreve regra existente.
  *
@@ -2143,4 +2115,55 @@
   border-radius: 8px;
   padding: 7px 10px;
   margin-bottom: 6px;
+}
+
+/* ═════════ O ESPERAR, NO MEIO DA TELA (prefixo `dp-espera`) ═════════
+ * Ocupa a altura que a grade ocuparia, para a tela não "pular" quando os dados
+ * chegam e para o indicador cair onde o olho já está — no meio, não na barra. */
+.dp360 .dp-espera {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 42vh;
+  padding: 32px 12px;
+}
+.dp360 .dp-espera-circulo {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 3px solid var(--dp-border);
+  border-top-color: var(--dp-accent);
+  animation: dp-espera-gira 0.8s linear infinite;
+}
+@keyframes dp-espera-gira {
+  to { transform: rotate(360deg); }
+}
+.dp360 .dp-espera-txt { font-size: 13px; color: var(--dp-muted); }
+.dp360 .dp-espera-barra {
+  width: 220px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--dp-surface-2);
+  border: 1px solid var(--dp-border);
+  overflow: hidden;
+}
+.dp360 .dp-espera-barra > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--dp-accent);
+  transition: width 0.2s linear;
+}
+.dp360 .dp-espera-sub { font-size: 11px; color: var(--dp-faint); }
+/* MENOS MOVIMENTO, NÃO MENOS SINAL. A primeira versão parava o giro E apagava o arco
+   colorido — sobrava um anel cinza inerte, que não diz nada. Aqui a rotação sai e entra
+   uma respiração lenta de opacidade; o arco de cor continua. */
+@keyframes dp-espera-respira {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dp360 .dp-espera-circulo { animation: dp-espera-respira 1.8s ease-in-out infinite; }
 }

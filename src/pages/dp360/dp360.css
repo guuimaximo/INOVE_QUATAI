@@ -2157,15 +2157,17 @@
   transition: width 0.2s linear;
 }
 .dp360 .dp-espera-sub { font-size: 11px; color: var(--dp-faint); }
-/* MENOS MOVIMENTO, NÃO MENOS SINAL. A primeira versão parava o giro E apagava o arco
-   colorido — sobrava um anel cinza inerte, que não diz nada. Aqui a rotação sai e entra
-   uma respiração lenta de opacidade; o arco de cor continua. */
-@keyframes dp-espera-respira {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
+/* MENOS MOVIMENTO, NÃO MENOS SINAL — e "menos" não é "nenhum" (09/09/2026).
+   A versão anterior trocava o giro por uma respiração de opacidade, e o dono viu o que
+   sobrava na prática: um anel parado piscando, que não parece carregando, parece travado.
+   Ele estava com "Efeitos de animação" desligado no Windows, então caía sempre aqui.
+
+   Agora quem pede menos movimento continua sendo atendido — a bolinha gira DEVAGAR (o
+   dobro do tempo por volta) e sem a pulsação. O que a preferência do sistema evita é
+   movimento rápido e repetitivo; um giro lento e contínuo diz "estou trabalhando" sem
+   virar estroboscópio. */
 @media (prefers-reduced-motion: reduce) {
-  .dp360 .dp-espera-circulo { animation: dp-espera-respira 1.8s ease-in-out infinite; }
+  .dp360 .dp-espera-circulo { animation-duration: 1.8s; }
 }
 
 /* ═════════ AS ABAS DA PORTA (prefixo `oc-aba`) ═════════

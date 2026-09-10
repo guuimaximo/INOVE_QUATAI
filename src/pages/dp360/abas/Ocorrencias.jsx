@@ -2540,41 +2540,33 @@ function PontasES({ reg }) {
  * está, não pode — tem que estar apenas no que eu colocar". Marcar no caso é dizer O QUE
  * cada pedido merece; marcar aqui é dizer QUAIS dias vão nesta rodada.
  */
-/* A COLUNA "DECISÃO" SÓ EXISTE NA FILA (10/09/2026), e lá ela não decide: diz o veredito
- * que já está gravado e oferece o DESFAZER enquanto o robô não subiu. As caixinhas de
- * aceitar/rejeitar e o "lançar" saíram — quem decide é o caso, com o cartão à vista.
- * Linha sem veredito nesta coluna é anomalia (a fila só recebe decidido); quando aparece,
- * ela diz o que fazer em vez de oferecer um atalho que decide às cegas. */
+/* A ÚLTIMA COLUNA DA FILA É AÇÃO, NÃO VEREDITO (10/09/2026). O veredito tem coluna própria
+ * ao lado; repeti-lo aqui era a mesma resposta em dois lugares. O que só esta coluna sabe é
+ * o passo: já subiu ao Transnet, ou ainda espera o disparo — e, enquanto espera, o Desfazer.
+ * As caixinhas de aceitar/rejeitar e o "lançar" saíram: quem decide é o caso. */
 function CelulaDecisao({ reg, gravando, aoAbrir, aoDesfazer }) {
-  if (reg.decJa) {
-    return (
-      <div style={PILHA}>
-        {reg.decJa.subiu ? (
-          <Selo cor="ok" titulo={`Executado no Transnet em ${reg.decJa.quando} — o dia está travado. Para mexer, use Desfazer.`}>
-            🔒 enviado · {reg.decJa.aceito ? "aceito" : "recusado"}
-          </Selo>
-        ) : (
-          <>
-            <Selo titulo={`Marcado em ${reg.decJa.quando}. Ainda não subiu: marque a ✔ desta linha e use “Executar marcados”.`}>
-              ✓ decidido · {reg.decJa.aceito ? "aceito" : "recusado"} — aguardando bot
-            </Selo>
-            <div style={FILA}>
-              {/* O DISPARO É O LOTE DESTA ABA, não um botão por linha: marque a ✔ e use
-                  "Executar marcados". Este botão mandava abrir o caso para executar de lá —
-                  e o caso não executa mais nada desde que virou só veredito. */}
-              <BotaoAcao
-                titulo="Desfaz a decisão e devolve o caso para “A decidir” (main.py:desfazer_decisao). Só vale enquanto o bot não executou."
-                onClick={(e) => { e.stopPropagation(); aoDesfazer(reg); }}
-                disabled={gravando}
-              >
-                ↩ Desfazer
-              </BotaoAcao>
-            </div>
-          </>
-        )}
-      </div>
+  if (reg.decJa)
+    return reg.decJa.subiu ? (
+      <span style={PILHA}>
+        <Selo cor="ok" titulo={`O bot carimbou conferido_em em ${reg.decJa.quando} — o dia está travado. Para mexer, use Desfazer antes de conferir.`}>
+          🔒 subiu ao Transnet
+        </Selo>
+        <span className="dp-faint" style={MINI}>{reg.decJa.quando}</span>
+      </span>
+    ) : (
+      <span style={PILHA}>
+        <span className="dp-faint" style={MINI}>
+          aguardando lançamento · marque a ✔ e use “Executar marcados”
+        </span>
+        <BotaoAcao
+          titulo="Desfaz a decisão e devolve o caso para “A decidir” (main.py:desfazer_decisao). Só vale enquanto o bot não executou."
+          onClick={(e) => { e.stopPropagation(); aoDesfazer(reg); }}
+          disabled={gravando}
+        >
+          ↩ Desfazer
+        </BotaoAcao>
+      </span>
     );
-  }
 
   const marcado = selosDaMarcacao(reg);
   return (
@@ -4743,7 +4735,7 @@ export default function Ocorrencias() {
   };
   const colDecisao = (largura) => ({
     id: "dec",
-    titulo: "Decisão",
+    titulo: "Ação",
     largura,
     ordenavel: false,
     valor: (r) => (r.decJa ? (r.decJa.aceito ? "aceito" : "recusado") : "a decidir"),
@@ -4815,7 +4807,7 @@ export default function Ocorrencias() {
   const COLS_LISTA = [colColaborador, colDia, colSituacao, colBateu, colAlvo, colPontas, colQuando, colAjustes];
 
   // Execução pendente: é aqui que mora o DESFAZER (o bot ainda não executou).
-  const COLS_EXEC = [colColaborador, colDia, colBateu, colVaiLancar, colVeredito, colQuando, colDecisao(150)];
+  const COLS_EXEC = [colColaborador, colDia, colBateu, colVaiLancar, colVeredito, colQuando, colDecisao(200)];
 
   const COLS_CANCEL = [colColaborador, colDia, colOque, {
     id: "quando", titulo: "Cancelado em", largura: 150, classe: "dp-num",

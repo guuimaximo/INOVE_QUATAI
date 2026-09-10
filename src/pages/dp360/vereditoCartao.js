@@ -174,7 +174,7 @@ export const PONTAS_MANUAIS = ["entrada", "saida"];
 export const ORIGENS = {
   manual: { rotulo: "cravado à mão", cor: "accent", ajuda: "você digitou no campo à mão — é o topo da precedência." },
   pedido: { rotulo: "pedido aceito", cor: "ok", ajuda: "é o horário que ele pediu e você aceitou; quem lança é o robô `ajustes`." },
-  alvo: { rotulo: "do alvo", cor: "accent", ajuda: "a ponta estava vazia e foi completada com o alvo publicado pela Revisão." },
+  alvo: { rotulo: "do alvo", cor: "accent", ajuda: "é o alvo publicado pela Revisão — o que a correção vai lançar nesta ponta." },
   encaixe: { rotulo: "encaixe do montador", cor: "mute", ajuda: "sobrou batida no cartão e o montador encaixou as quatro (montador.py:417)." },
   batida: { rotulo: "batida dele", cor: "mute", ajuda: "já está no cartão e ninguém mexeu nesta ponta — fica como está." },
   refeicao: { rotulo: "🔒 travado", cor: "mute", ajuda: "a refeição do motorista vem da apuração do dia e não muda por marcação nenhuma." },
@@ -325,6 +325,24 @@ export function montaCompartimentos({
    * mexeria no cartão. */
   const semPedido = acoes.every((it) => horaDoPedido(it) == null);
 
+  /* ══ O DIA QUE VAI PARA A CORREÇÃO FICA NO ALVO — INTEIRO (10/09/2026) ══════
+   *
+   * Dito pelo dono com todas as letras: "o vencido que não respondeu fica no alvo que
+   * colocamos". E vale igual para o dia RECUSADO: a tabela do desfecho é a mesma — recusa
+   * com aviso e vencido sem resposta saem pelos robôs `comunicado` e `ponto`, e o que o
+   * `ponto` escreve é o alvo.
+   *
+   * A batida dele NÃO pode mandar nesses dias, e o CLAUDINEI 30060664 · 02/09 é a prova:
+   * bateu 01:00 · 10:59 · 16:32 · 17:02, e o alvo é 10:59 · 16:32 · 17:02 · 25:03 (a
+   * jornada que virou a meia-noite). Deixando as pontas na batida dele, o cartão saía
+   * 01:00 …17:02 — a saída repetindo a volta do almoço, e nem fechava. O alvo é justamente
+   * o cartão certo do dia; foi ele que a gente cobrou no aviso.
+   *
+   * O botão "completar com o alvo" continua existindo, e só para o OUTRO caso: o dia que
+   * termina ACEITO e tem ponta sem batida. Ali quem escolhe é o DP. */
+  const recusou = acoes.some((_, i) => marcaDaOcorrencia(reg, marcas, i) === "R");
+  const alvoManda = semPedido || recusou;
+
   // o horário que a MARCAÇÃO aceitou em cada compartimento (a primeira, havendo mais de uma)
   const aceito = {};
   acoes.forEach((it, i) => {
@@ -380,9 +398,12 @@ export function montaCompartimentos({
     }
     if (mao[c.chave] != null) return { ...base, min: mao[c.chave], origem: "manual" };
     if (aceito[c.chave] != null) return { ...base, min: aceito[c.chave], origem: "pedido" };
+    // o dia da correção: o alvo manda na ponta inteira, tenha ela batida ou não
+    if (alvoManda && regua[i] != null)
+      return { ...base, min: regua[i], origem: regua[i] === hoje[i] ? "batida" : "alvo" };
     const vazia = hoje[i] == null;
-    if (vazia && (completar[c.chave] || semPedido) && regua[i] != null)
-      return { ...base, min: regua[i], origem: "alvo", porClique: Boolean(completar[c.chave]) };
+    if (vazia && completar[c.chave] && regua[i] != null)
+      return { ...base, min: regua[i], origem: "alvo", porClique: true };
     if (hoje[i] != null) return { ...base, min: hoje[i], origem: "batida" };
     return { ...base, min: null, origem: "falta" };
   });
@@ -433,6 +454,7 @@ export function montaCompartimentos({
     almoco,
     contagem,
     semPedido,
+    alvoManda,
     criticas,
     travaMiolo,
     // O DIA É CONSEQUÊNCIA DAS MARCAS: havendo recusa, a recusa manda (é ela que abre a

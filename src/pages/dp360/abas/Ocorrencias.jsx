@@ -3738,7 +3738,9 @@ function Detalhe({ reg, aoFechar, gravando, aoMarcar, aoAbrirCartao, abrindoCart
               ) : (
                 <p className="dp-muted" style={{ margin: "8px 0 0" }}>
                   Nenhum pedido neste crachá+dia — ele não mexeu no ponto depois do aviso.
-                  O cartão ao lado é o que a correção vai lançar.
+                  <b> Não há veredito a dar aqui:</b> o dia segue para advertência e correção,
+                  e o que vai ser lançado é o alvo ao lado — o mesmo que a gente cobrou no aviso.
+                  O disparo é na tela principal.
                 </p>
               )}
               <CravarAMao
@@ -3751,7 +3753,19 @@ function Detalhe({ reg, aoFechar, gravando, aoMarcar, aoAbrirCartao, abrindoCart
 
             {/* ─────────────── DIREITA: O CARTÃO ─────────────── */}
             <div className="dp-card">
-              <div className="dp-muted" style={ROTULO_CARD}>O cartão</div>
+              <div className="dp-muted" style={ROTULO_CARD}>
+                O cartão
+                {/* DIA DA CORREÇÃO: o cartão não é uma projeção do que ele pediu, é o ALVO —
+                    e quem escreve é o robô `ponto`, depois da advertência. Dizer isso aqui
+                    evita a leitura errada de que a batida dele "ficou". */}
+                {v.alvoManda ? (
+                  <span style={{ marginLeft: 8, textTransform: "none", letterSpacing: 0 }}>
+                    <Selo cor="accent" titulo="Este dia vai para a correção (recusado, ou sem pedido nenhum). O que se lança é o alvo publicado pela Revisão — o mesmo que foi cobrado no aviso —, não a batida que está no cartão hoje.">
+                      é o alvo · o que a correção vai lançar
+                    </Selo>
+                  </span>
+                ) : null}
+              </div>
               <div className="oc-vd-blocos">
                 {v.blocos.map((b) => (
                   <BlocoPonta
@@ -3993,8 +4007,7 @@ export default function Ocorrencias() {
     r.situacaoAviso === "vencido" ? "vencido" : r.nAjustes ? "resp" : "semresp";
   const linhas = useMemo(() => {
     if (abaAtiva === "disc" && sitDisc !== "TODOS") return naAba.filter((r) => r.situacao === sitDisc);
-    if (respFiltro !== "TODOS" && porta === "aviso")
-      return naAba.filter((r) => respostaDe(r) === respFiltro);
+    if (respFiltro !== "TODOS") return naAba.filter((r) => respostaDe(r) === respFiltro);
     return naAba;
   }, [naAba, abaAtiva, sitDisc, respFiltro, porta]);
 
@@ -4862,19 +4875,19 @@ export default function Ocorrencias() {
    * O que sobrou em lote nesta aba é o que NÃO é decisão: cancelar o pedido (desistir dele
    * no Transnet) e lançar dia sem ponto. Os dois continuam onde estavam. */
   const vencidosMarcados = marcados.filter((r) => r.situacaoAviso === "vencido");
+  /* A MESMA BARRA NAS DUAS PORTAS (pedido do dono, 10/09/2026). O corte é o mesmo — o que
+   * dá para julgar —, e o chip que não tem ninguém não é desenhado: na porta do pedido todo
+   * mundo mandou ajuste, então sobra "Todos" e a tela fica igual à do aviso sem chip vazio. */
   const contaResposta = (id) => naAba.filter((r) => respostaDe(r) === id).length;
-  const chipsResposta =
-    porta === "aviso"
-      ? [
-          ["TODOS", "Todos", naAba.length, "Tudo o que está esperando veredito nesta porta."],
-          ["resp", "✎ respondeu", contaResposta("resp"),
-            "Ele mexeu no ponto depois do aviso: há pedido para julgar no caso."],
-          ["semresp", "· não respondeu", contaResposta("semresp"),
-            "Ainda dentro das 48h e sem ajuste nenhum — nada a julgar por enquanto."],
-          ["vencido", "⚠ vencido", contaResposta("vencido"),
-            "Passou das 48h sem ele mexer no ponto. A saída é advertência e depois correção."],
-        ]
-      : [];
+  const chipsResposta = [
+    ["TODOS", "Todos", naAba.length, "Tudo o que está esperando veredito nesta porta."],
+    ["resp", "✎ respondeu", contaResposta("resp"),
+      "Ele mexeu no ponto: há pedido para julgar no caso."],
+    ["semresp", "· não respondeu", contaResposta("semresp"),
+      "Nenhum ajuste com horário — nada a julgar. Com aviso nosso, o prazo ainda corre."],
+    ["vencido", "⚠ vencido", contaResposta("vencido"),
+      "Passou das 48h sem ele mexer no ponto. Não se dá veredito: vai para advertência e depois correção, com o alvo."],
+  ].filter(([id, , n]) => id === "TODOS" || n > 0);
   const barraLote = grade.loteDecisao ? (
     <div style={{ ...FILA, gap: 6 }}>
       {/* AS CONTAGENS SÃO O FILTRO (a régua da ferramenta, app.js:3009), e o corte desta aba

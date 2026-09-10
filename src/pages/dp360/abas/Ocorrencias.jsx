@@ -18,9 +18,13 @@
 //   2. RECUSAR ≠ ADVERTIR. Advertência só existe depois de aviso registrado — por
 //      isso a navegação é PORTA (de onde o dia veio) e depois aba.
 //   3. UMA PERGUNTA, UMA RESPOSTA. Um cartão de hoje (`hoje`), um cartão final
-//      (`cartaoFinal`), um lote (`dec`), uma função de linhas (`linhasDaAba`).
+//      (`cartaoFinal`), UMA marcação (`selIds`), uma função de linhas (`linhasDaAba`).
 //      Toda vez que esta tela teve duas respostas para a mesma pergunta, alguém
 //      decidiu pela resposta errada.
+//   4. QUEM DECIDE É O CASO; QUEM LANÇA É A LISTA (10/09/2026). No pop-up, veredito e
+//      mais nada — o cartão se monta ali, com a refeição travada e a origem de cada
+//      ponta. Na lista, nenhuma caixinha de aceitar/rejeitar: ela mostra se ele
+//      respondeu, e a aba "Fila de lançamento" manda o robô no que já foi decidido.
 // ============================================================================
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
@@ -53,6 +57,7 @@ import {
   alvoQuatroSlots,
   horaSlot,
   marcaDaOcorrencia,
+  mioloTravado,
   montaCompartimentos,
   pedidoMiraOMiolo,
   slotsDoCartao,
@@ -161,17 +166,22 @@ const PORTAS = [
 const PORTA_DE = (id) => PORTAS.find((p) => p.id === id) || PORTAS[0];
 
 // app.js:134 (P5ABAS) — o caminho é o mesmo nas duas portas: decidir → executar → desfecho.
+/* CADA ESTADO É UMA ABA, e a linha não repete o estado (desenho de 10/09/2026).
+ * "Execução pendente" virou "Fila de lançamento": o nome antigo não dizia se o caso estava
+ * esperando VOCÊ mandar ou o robô responder, e o dono leu a fila como "o robô não rodou"
+ * quando ela era, na verdade, "ninguém mandou". A fila esvazia por CONFIRMAÇÃO (o
+ * `conferido_em` do bot), nunca por disparo. */
 const ABAS = {
   pedido: [
     ["conf", "A decidir"],
-    ["exec", "Execução pendente"],
+    ["exec", "Fila de lançamento"],
     ["ok", "Ponto OK"],
     ["recusados", "Recusados"],
     ["fechado", "Ponto fechado"],
   ],
   aviso: [
     ["aguard", "A decidir"],
-    ["exec", "Execução pendente"],
+    ["exec", "Fila de lançamento"],
     ["ok", "Ponto OK"],
     ["disc", "Advertências e correções"],
     ["cancel", "Cancelamento"],
@@ -1599,7 +1609,8 @@ async function gravaContrato(reg, ids, antes, depois) {
  * ACEITAR O DIA É ACEITAR TUDO, e é por isso que o contrato dele é a projeção de aceitar
  * tudo — calculada AQUI, no clique, e não guardada num campo que outra parte da tela
  * pudesse desenhar como se fosse "o cartão". Quem tem marcação por ocorrência não passa
- * por aqui: passa por `aplicarMarcados`.
+ * por aqui: passa pelo veredito do caso (`gravarMarcacao`), que grava as marcas e o lado do
+ * dia de uma vez.
  */
 async function gravarAceite(reg) {
   const agora = agoraISOLocal();
@@ -1653,56 +1664,43 @@ async function gravarRecusa(reg, modo) {
  * (main.py:9573: "o DP viu o cartao ao marcar, e e esse que vale"). Uma segunda simulação
  * com outra entrada é como esta tela acabou com três cartões para o mesmo dia.
  */
+/* ══ O VEREDITO É UM ATO SÓ (10/09/2026) ═════════════════════════════════════
+ *
+ * Marcar por ocorrência gravava `ajuste_ids` com A:/R: e deixava `aceite = "pendente"` de
+ * propósito: na ferramenta o segundo passo era o `aplicar_marcados` do lote. E foi essa
+ * espera que já custou caro duas vezes — cinco casos de 20/08 ficaram decididos e
+ * invisíveis (30017485, 30060990, 30060654, 30061228, 30060192), porque o robô só executa
+ * `aceite ∈ (aceito, rejeitado)` e ninguém promoveu a marcação.
+ *
+ * Agora não existe segundo passo: a tela principal não decide mais nada, então guardar a
+ * marcação com o aceite pendente seria guardá-la sem porta de saída OUTRA VEZ. O veredito
+ * grava as marcas E o lado do dia no mesmo ato, e o caso cai na "Fila de lançamento".
+ *
+ * O QUE ELE NÃO TOCA: `correcao_status`. Escrever "dispensada" aqui fecharia a porta da
+ * correção que o DP registrou no caso (RICHARD 30061188 07/08) — e é a ausência dela que
+ * manda a recusa COM aviso para advertência e correção. O lado do dia segue a regra do
+ * `decidir_ajustes`: havendo recusa, a recusa manda. */
 async function gravarMarcacao(reg, aceitar, rejeitar, cartaoDoMontador) {
   const ace = (aceitar || []).map(txt).filter(Boolean);
   const rej = (rejeitar || []).map(txt).filter(Boolean);
   if (!ace.length && !rej.length) throw new Error("Nenhuma marcação.");
+  const agora = agoraISOLocal();
   await upsertDP360("ponto_caso", {
     ...chaveDoCaso(reg),
-    aceite: "pendente",
+    aceite: rej.length ? "rejeitado" : "aceito",
     ajuste: rej.length ? "errado" : "certo",
     ajuste_ids: [...ace.map((i) => `A:${i}`), ...rej.map((i) => `R:${i}`)].join(","),
-    aceito_em: null,
-    atualizado_em: agoraISOLocal(),
+    aceito_em: agora,
+    atualizado_em: agora,
   });
   // Sem aceite não há cartão a prometer: recusa não congela `depois`.
   const depois = ace.length ? txt(cartaoDoMontador) : "";
   return gravaContrato(reg, [...ace, ...rej], reg.antesTexto, depois);
 }
 
-/**
- * ══ A PORTA DE SAÍDA DA MARCAÇÃO (main.py:9649 aplicar_marcados) ══════════════
- *
- * Promove MARCADO → DECIDIDO, e SÓ ISSO: o `aceite` muda, `ajuste_ids` e
- * `correcao_status` ficam como estavam.
- *
- * POR QUE ELA TEM DE EXISTIR, e é a lição de 25/08 da ferramenta: marcar por ocorrência
- * grava `ajuste_ids` com A:/R: e deixa o `aceite` pendente — de propósito. Sem este
- * segundo passo a decisão fica GUARDADA SEM PORTA DE SAÍDA: o robô só executa
- * aceite ∈ (aceito, rejeitado), então o dia marcado nunca sobe. Foram 5 casos do dia 20/08
- * decididos e invisíveis (30017485, 30060990, 30060654, 30061228, 30060192).
- *
- * POR QUE NÃO SE REDECIDE POR CIMA: `confirmar_errados` regravaria
- * `correcao_status='dispensada'` e apagaria a intenção de corrigir que o DP registrou no
- * caso aberto (RICHARD 30061188 07/08). E `confirmar_certos`/`confirmar_errados`
- * reescrevem `ajuste_ids` com TODOS os ids SEM prefixo — apagariam as marcas A/R, que é
- * justamente o que distingue o que ele aceitou do que ele recusou num dia misto.
- *
- * O lado do dia segue a mesma regra do `decidir_ajustes`: havendo recusa, a recusa manda
- * (é ela que abre advertência/correção).
- */
-async function aplicarMarcados(reg) {
-  const m = selosDaMarcacao(reg);
-  if (!m) return ""; // sem marcação por ocorrência, ou já aplicado
-  const rej = m.nR > 0;
-  await upsertDP360("ponto_caso", {
-    ...chaveDoCaso(reg),
-    aceite: rej ? "rejeitado" : "aceito",
-    ajuste: rej ? "errado" : "certo",
-    atualizado_em: agoraISOLocal(),
-  });
-  return "";
-}
+/* A PROMOÇÃO SEPARADA (main.py:9649 `aplicar_marcados`) SAIU DAQUI em 10/09/2026: com o
+ * veredito gravando o aceite no mesmo ato (ver `gravarMarcacao`), não há mais estado
+ * intermediário para promover. A lição que ela carregava está lá, onde agora importa. */
 
 /* ── A SAÍDA PARA O QUE O ROBÔ NÃO CONSEGUE (main.py:8289) ────────────────────
  * Até existir isto, um lançamento recusado não tinha fim: voltava à fila em TODA rodada,
@@ -2136,9 +2134,10 @@ function marcasGravadas(reg) {
 /**
  * app.js:272 (`seloLancar`) — O DIA ESTÁ MARCADO E AINDA NÃO FOI LANÇADO.
  *
- * Devolve `{ nA, nR, lado }` ou null. É o estado do meio, que a tela não tinha: A:/R:
- * gravado e `aceite` ainda pendente. Sem ele, o trabalho feito no caso aberto era
- * invisível na grade — e a porta de saída (`aplicarMarcados`) não tinha onde ser oferecida.
+ * Devolve `{ nA, nR, lado }` ou null. Era o estado do meio — A:/R: gravado e `aceite` ainda
+ * pendente — e desde 10/09/2026 o veredito não o produz mais: ele grava as marcas e o lado
+ * do dia no mesmo ato. Sobrevive para LER o que a ferramenta do PC marcou e ainda não
+ * lançou, que continua chegando por ela.
  *
  * `ciclo`, não `caso`: no ciclo reaberto as marcas do ciclo velho não valem.
  */
@@ -2541,7 +2540,12 @@ function PontasES({ reg }) {
  * está, não pode — tem que estar apenas no que eu colocar". Marcar no caso é dizer O QUE
  * cada pedido merece; marcar aqui é dizer QUAIS dias vão nesta rodada.
  */
-function CelulaDecisao({ reg, dec, gravando, aoDecidir, aoAbrir, aoDesfazer }) {
+/* A COLUNA "DECISÃO" SÓ EXISTE NA FILA (10/09/2026), e lá ela não decide: diz o veredito
+ * que já está gravado e oferece o DESFAZER enquanto o robô não subiu. As caixinhas de
+ * aceitar/rejeitar e o "lançar" saíram — quem decide é o caso, com o cartão à vista.
+ * Linha sem veredito nesta coluna é anomalia (a fila só recebe decidido); quando aparece,
+ * ela diz o que fazer em vez de oferecer um atalho que decide às cegas. */
+function CelulaDecisao({ reg, gravando, aoAbrir, aoDesfazer }) {
   if (reg.decJa) {
     return (
       <div style={PILHA}>
@@ -2551,20 +2555,15 @@ function CelulaDecisao({ reg, dec, gravando, aoDecidir, aoAbrir, aoDesfazer }) {
           </Selo>
         ) : (
           <>
-            <Selo titulo={`Marcado em ${reg.decJa.quando}. Ainda não subiu: falta rodar o robô.`}>
+            <Selo titulo={`Marcado em ${reg.decJa.quando}. Ainda não subiu: marque a ✔ desta linha e use “Executar marcados”.`}>
               ✓ decidido · {reg.decJa.aceito ? "aceito" : "recusado"} — aguardando bot
             </Selo>
             <div style={FILA}>
-              {/* O disparo mora no CASO ABERTO, nunca na grade: é lá que a pessoa, o dia e
-                  o que o robô vai clicar aparecem por extenso antes de qualquer clique. */}
+              {/* O DISPARO É O LOTE DESTA ABA, não um botão por linha: marque a ✔ e use
+                  "Executar marcados". Este botão mandava abrir o caso para executar de lá —
+                  e o caso não executa mais nada desde que virou só veredito. */}
               <BotaoAcao
-                titulo="Abre o caso: a execução no Transnet fica no rodapé do detalhe, com o escopo de um crachá+dia."
-                onClick={(e) => { e.stopPropagation(); aoAbrir(reg); }}
-              >
-                🤖 Executar…
-              </BotaoAcao>
-              <BotaoAcao
-                titulo="Desfaz a decisão e devolve o caso para a fila (main.py:desfazer_decisao). Só vale enquanto o bot não executou."
+                titulo="Desfaz a decisão e devolve o caso para “A decidir” (main.py:desfazer_decisao). Só vale enquanto o bot não executou."
                 onClick={(e) => { e.stopPropagation(); aoDesfazer(reg); }}
                 disabled={gravando}
               >
@@ -2578,85 +2577,58 @@ function CelulaDecisao({ reg, dec, gravando, aoDecidir, aoAbrir, aoDesfazer }) {
   }
 
   const marcado = selosDaMarcacao(reg);
-  if (marcado) {
-    const trava = motivoSemDecisao(reg);
-    return (
-      <div style={PILHA}>
-        <div style={FILA}>
-          {marcado.nA ? <span className="oc-vbadge certo">✓{marcado.nA}</span> : null}
-          {marcado.nR ? <span className="oc-vbadge errado">✗{marcado.nR}</span> : null}
-          <span className="dp-faint" style={MINI}>marcado por ocorrência</span>
-        </div>
-        <label
-          className={`oc-lancar-chk${trava ? " off" : ""}`}
-          onClick={(e) => e.stopPropagation()}
-          title={
-            trava ||
-            `Inclui este dia no próximo “Aplicar decisões”. O lado (${marcado.lado}) já veio do que você marcou no caso — aplicar só PROMOVE a marcação, sem redecidir.`
-          }
-        >
-          <input
-            type="checkbox"
-            disabled={Boolean(trava) || gravando}
-            checked={dec === marcado.lado}
-            onChange={(e) => aoDecidir(reg, e.target.checked ? marcado.lado : "")}
-          />
-          lançar
-        </label>
-      </div>
-    );
-  }
-
-  const travaAceitar = motivoForaDoLote(reg, "aceitar");
-  const travaRejeitar = motivoForaDoLote(reg, "rejeitar");
-  // exclusividade: marcar uma desmarca a outra (app.js `onDecChange`)
-  const caixa = (lado, rotulo, trava, classe) => (
-    <label
-      className={`oc-dec-cb ${classe}${dec === lado ? " on" : ""}${trava ? " off" : ""}`}
-      onClick={(e) => e.stopPropagation()}
-      title={trava || `Marca este dia para ${rotulo.toLowerCase()} no próximo “Aplicar decisões”. Nada é gravado agora.`}
-    >
-      <input
-        type="checkbox"
-        disabled={Boolean(trava) || gravando}
-        checked={dec === lado}
-        onChange={(e) => aoDecidir(reg, e.target.checked ? lado : "")}
-      />
-      {rotulo}
-    </label>
-  );
   return (
     <div style={PILHA}>
-      <div className="oc-dec">
-        {caixa("aceitar", "Aceitar", travaAceitar, "ok")}
-        {caixa("rejeitar", "Rejeitar", travaRejeitar, "x")}
-      </div>
-      {reg.diaStatus === "misto" ? (
-        <button
-          type="button"
-          className="dp-btn"
-          style={{ color: "var(--dp-warn-ink)" }}
-          onClick={(e) => { e.stopPropagation(); aoAbrir(reg); }}
-          title="Uma ponta certa e outra errada: a decisão correta é por ocorrência, e ela mora no caso aberto."
-        >
-          dia misto — decidir no caso ▸
-        </button>
-      ) : travaAceitar && travaRejeitar ? (
-        <span className="dp-faint" style={MINI}>{travaAceitar}</span>
-      ) : (
-        <span className="dp-faint" style={MINI}>
-          {reg.diaStatus === "certo"
-            ? "sugestão: aceitar"
-            : reg.diaStatus === "errado"
-              ? `sugestão: rejeitar${reg.temAviso ? " (com aviso: abra o caso)" : ""}`
-              : ""}
-        </span>
-      )}
+      <span className="dp-faint" style={MINI}>
+        {marcado ? "marcado por ocorrência — grave o veredito no caso" : "sem veredito — decida no caso"}
+      </span>
+      <button
+        type="button"
+        className="dp-btn"
+        onClick={(e) => { e.stopPropagation(); aoAbrir(reg); }}
+        title="Abre o caso: é lá que o cartão se monta e o veredito é gravado."
+      >
+        abrir o caso ▸
+      </button>
     </div>
   );
 }
 
 // app.js:3972 — PRAZO = 48h desde `aviso_enviado_em`.
+/* RESPONDEU OU NÃO — a pergunta que a coluna "Situação" não respondia (10/09/2026).
+ *
+ * Vencido SEM resposta e vencido TENDO respondido pedem coisas opostas do DP: o primeiro
+ * segue para advertência e correção sem nada a julgar; o segundo tem pedido para julgar. Os
+ * dois apareciam como "Vencido", e a diferença só saía abrindo o caso.
+ *
+ * A pílula diz a resposta (e quantos ajustes vieram); o prazo desce para a linha de baixo,
+ * onde é contexto — e não compete com ela. */
+function CelulaResposta({ reg }) {
+  const n = reg.nAjustes || 0;
+  // SEM AVISO NOSSO NÃO EXISTE "RESPONDEU": na porta do pedido ele mandou o ajuste por
+  // conta, e não há prazo correndo. Dizer "respondeu" ali seria inventar uma pergunta
+  // nossa que nunca foi feita.
+  if (!reg.temAviso)
+    return (
+      <span style={PILHA}>
+        <Selo titulo="Ele mandou o ajuste por conta — não houve aviso nosso neste dia, então não há prazo de 48h correndo.">
+          pedido dele
+        </Selo>
+        <span className="dp-faint" style={MINI}>sem aviso nosso</span>
+      </span>
+    );
+  return (
+    <span style={PILHA}>
+      <Selo cor={n ? "accent" : "erro"} titulo={n
+        ? `${n} ajuste(s) capturado(s) do app neste crachá+dia — há pedido para julgar.`
+        : "Ele não mexeu no ponto depois do aviso. Sem pedido não há o que julgar: o dia segue para advertência e correção."}>
+        {n ? `respondeu · ${n} ajuste${n > 1 ? "s" : ""}` : "não respondeu"}
+      </Selo>
+      <span className="dp-faint" style={MINI}><CelulaPrazo reg={reg} /></span>
+    </span>
+  );
+}
+
 function CelulaPrazo({ reg }) {
   if (!reg.monitora) return <span className="dp-faint">—</span>;
   if (reg.situacaoAviso === "advertido")
@@ -2957,17 +2929,29 @@ function ResumoDoCartao({ v }) {
   );
 }
 
-/* ════════════ O QUE SAIU DO POP-UP — E ESPERA A TELA PRINCIPAL ═══════════════════════
+/* ════════════ O QUE SAIU DO POP-UP — E O QUE AINDA NÃO TEM CASA ══════════════════════
  *
  * Daqui até o `RelatorioCaso` moram as peças que o pop-up NÃO desenha mais: `Montador`,
- * `ComoAlteracao`, `LancarDiaSemPonto`, `ForaDoRobo` e `BarraRobo`. Nenhuma delas foi
- * apagada de propósito — a ordem do dono foi "REMOVA do modal, não mova agora". Elas
- * continuam definidas aqui, com os motivos e as anedotas que carregam, para a tarefa que
- * as leva para a tela principal.
+ * `ComoAlteracao`, `LancarDiaSemPonto`, `ForaDoRobo` e `BarraRobo`. Nenhuma foi apagada de
+ * propósito — a ordem do dono foi "REMOVA do modal, não mova agora".
  *
- * A ÚNICA ainda usada na tela é a `LancarDiaSemPonto` (a barra de lote da grade). As outras
- * três não são chamadas por ninguém até essa tarefa acontecer — se você está lendo isto e a
- * tela principal já tem os botões do robô, aqui é onde se apaga o que sobrou.
+ * DEPOIS DA TELA PRINCIPAL (10/09/2026), duas já estão cobertas e não voltam:
+ *   · `BarraRobo` — executar e conferir são o lote da "Fila de lançamento", e o estado do
+ *     robô é a faixa no topo da lista, lida do GitHub;
+ *   · `Montador` — quem monta o cartão agora é `montaCompartimentos`, com a origem de cada
+ *     ponta à vista. Duas respostas para "como o cartão fica" foi exatamente o defeito que
+ *     a anedota do DEVANIR registra.
+ * `LancarDiaSemPonto` segue viva, na barra de lote da grade.
+ *
+ * AS DUAS QUE FICARAM SEM BOTÃO EM LUGAR NENHUM — e o dono precisa decidir onde ficam:
+ *   · `ComoAlteracao` ("✎ Recusar os pedidos e corrigir o ponto assim"): recusa as
+ *     ocorrências e crava o cartão no `ponto_real_manual`. Hoje o DP faz o mesmo em dois
+ *     passos — crava no Cartão do dia (botão no topo do pop-up) e recusa no veredito;
+ *   · `ForaDoRobo` ("fechar à mão", main.py:8289): encerra o caso que o robô não conseguiu.
+ *     O caminho seguro existe na fila ("Conferir marcados e fechar no nosso banco"), que só
+ *     carimba quando o cartão ao vivo bate; o que não existe mais é fechar SEM conferir.
+ * Enquanto não houver essa decisão, elas ficam aqui — com os motivos e as anedotas que
+ * carregam. Apagar antes seria decidir no lugar dele.
  */
 
 /* ══════════════════ O MONTADOR — a mesa do dia ═══════════════════════════════
@@ -3870,6 +3854,9 @@ export default function Ocorrencias() {
   const [aberto, setAberto] = useState(null);
   // o chip clicado na aba "Advertências e correções" (TODOS · advertido · corrigido)
   const [sitDisc, setSitDisc] = useState("TODOS");
+  // A CONTAGEM É O FILTRO também em "A decidir" — e aqui o corte é a RESPOSTA dele, porque
+  // é ela que separa quem tem pedido para julgar de quem só tem prazo correndo.
+  const [respFiltro, setRespFiltro] = useState("TODOS");
   const [gravando, setGravando] = useState(false);
   const [recado, setRecado] = useState("");
   const [versao, setVersao] = useState(0);
@@ -3888,17 +3875,13 @@ export default function Ocorrencias() {
   // dia — vale a pena UMA vez, ao fechar, e não a cada campo salvo.
   const cartaoGravou = useRef(false);
 
-  /* ══ O LOTE, E É UM SÓ (app.js:208 `DEC`) ═══════════════════════════════════
-   * `dec` = { k -> "aceitar" | "rejeitar" }. É PRÉ-DECISÃO: enquanto ninguém aplica,
-   * `ponto_caso` não muda. Ele é preenchido pelas caixinhas da linha, pelo "lançar" do dia
-   * já marcado e pelo "⌁ Marcar sugestão"; e é consumido por "✓ Aplicar decisões". Um
-   * estado, três entradas, uma saída.
-   *
-   * `selIds` (a ✔ da grade) NÃO decide nada. Ela sobrevive para as duas ações que agem
-   * sobre linhas sem julgar nenhuma: CONFERIR no Transnet (só leitura) e LANÇAR DIA SEM
-   * PONTO. Antes os dois mecanismos coexistiam e se ignoravam — "marcar sugestão" enchia um
-   * e "aceitar marcados" consumia o outro. */
-  const [dec, setDec] = useState({});
+  /* ══ A MARCAÇÃO DA GRADE, E É UMA SÓ ════════════════════════════════════════
+   * `selIds` (a ✔ da grade) NÃO decide nada — e desde 10/09/2026 é a ÚNICA marcação da
+   * tela. Ela escopa o que age sobre linhas sem julgar nenhuma: executar o que já foi
+   * decidido, conferir no Transnet (só leitura), cancelar o pedido e lançar dia sem ponto.
+   * O `dec` (as caixinhas de aceitar/rejeitar) morreu com o lote de decisão: dois mecanismos
+   * de marcação coexistiam e se ignoravam — "marcar sugestão" enchia um, "conferir marcados"
+   * consumia o outro —, e o que decide agora é o veredito do caso. */
   const [selIds, setSelIds] = useState([]);
 
   // Esc fecha o caso, como qualquer pop-up.
@@ -4014,10 +3997,14 @@ export default function Ocorrencias() {
    * coisa e não faziam nada — clicar era o passo óbvio que faltava". Na aba de Advertências
    * e correções são dois desfechos e mais nada: ⚠ advertido e 🔧 corrigido. Clicar de novo
    * no mesmo chip volta para todos. */
-  const linhas = useMemo(
-    () => (abaAtiva === "disc" && sitDisc !== "TODOS" ? naAba.filter((r) => r.situacao === sitDisc) : naAba),
-    [naAba, abaAtiva, sitDisc],
-  );
+  const respostaDe = (r) =>
+    r.situacaoAviso === "vencido" ? "vencido" : r.nAjustes ? "resp" : "semresp";
+  const linhas = useMemo(() => {
+    if (abaAtiva === "disc" && sitDisc !== "TODOS") return naAba.filter((r) => r.situacao === sitDisc);
+    if (respFiltro !== "TODOS" && porta === "aviso")
+      return naAba.filter((r) => respostaDe(r) === respFiltro);
+    return naAba;
+  }, [naAba, abaAtiva, sitDisc, respFiltro, porta]);
 
   // Filtro que sobrevive à navegação é como se abre uma aba que parece vazia — e como se
   // aplica uma decisão de outra aba sem ver a linha.
@@ -4025,9 +4012,9 @@ export default function Ocorrencias() {
     setEixoStatus("PENDENTE");
     setEixoData("TODAS");
     setSitDisc("TODOS");
+    setRespFiltro("TODOS");
     setAberto(null);
     setSelIds([]);
-    setDec({});
   };
   const trocarPorta = (id) => {
     setPorta(id);
@@ -4106,10 +4093,9 @@ export default function Ocorrencias() {
       try {
         const aviso = await tarefa();
         setRecado(aviso ? `${rotulo} — ${aviso}` : `${rotulo} ✓`);
+        // A ✔ é PRÉ-AÇÃO sobre o estado que acabou de mudar: mantê-la depois de gravar é
+        // oferecer um segundo clique sobre um dado velho.
         setSelIds([]);
-        // As marcas do lote são PRÉ-DECISÃO sobre o estado que acabou de mudar: mantê-las
-        // depois de gravar é oferecer um segundo clique sobre um dado velho.
-        setDec({});
         setVersao((v) => v + 1);
         await atualizarSilencioso();
       } catch (e) {
@@ -4206,32 +4192,16 @@ export default function Ocorrencias() {
           `Aceitar: ${aceitarIds.join(", ") || "—"}\nRejeitar: ${rejeitarIds.join(", ") || "—"}\n\n` +
           `Cartão congelado como contrato (o do card do montador): ${reg.antesTexto || "—"} → ` +
           `${contrato || "— (nada congelado: sem aceite, ou a projeção não fecha em 2/4)"}\n\n` +
-          `Grava ajuste_ids com A:/R: e mantém aceite=pendente. Marcar é decidir; para LANÇAR, ` +
-          `use depois "Lançar esta marcação" NA TELA PRINCIPAL (o pop-up do caso é só veredito) ` +
-          `— é ela que promove a decisão sem redecidir por cima.`,
+          `Grava ajuste_ids com A:/R: e o dia como ${rejeitarIds.length ? "RECUSADO" : "ACEITO"} ` +
+          `(havendo recusa, a recusa manda). correcao_status NÃO é tocado — a porta da correção fica aberta.
+
+` +
+          `O caso sai de "A decidir" e cai na FILA DE LANÇAMENTO. Nada vai ao Transnet agora: ` +
+          `o robô é disparado de lá, com a ✔ e o botão "Executar marcados".`,
       )) return;
       executarGravacao(`Marcação gravada (${reg.nome} · ${reg.dataBR})`, () =>
         gravarMarcacao(reg, aceitarIds, rejeitarIds, contrato),
       );
-    },
-    [executarGravacao],
-  );
-
-  /** A promoção de UM caso — a mesma que o lote faz em massa (main.py:aplicar_marcados). */
-  const aoAplicarMarcados = useCallback(
-    (reg) => {
-      const m = selosDaMarcacao(reg);
-      if (!m) { setRecado("Este dia não tem marcação por ocorrência para lançar."); return; }
-      const trava = motivoSemDecisao(reg);
-      if (trava) { setRecado(`Não dá para lançar a marcação: ${trava}.`); return; }
-      if (!confirmar(
-        `LANÇAR A MARCAÇÃO do dia ${reg.dataBR} de ${reg.nome} (${reg.cracha}).\n\n` +
-          `${m.nA} aceitar · ${m.nR} recusar, já gravados em ajuste_ids.\n` +
-          `Grava só o aceite=${m.lado === "rejeitar" ? "rejeitado" : "aceito"} (havendo recusa, a recusa manda). ` +
-          `ajuste_ids e correcao_status NÃO são tocados — a intenção que você registrou fica.\n\n` +
-          `Depois disso o robô pode executar. NÃO roda o robô aqui.`,
-      )) return;
-      executarGravacao(`Marcação lançada (${reg.nome} · ${reg.dataBR})`, () => aplicarMarcados(reg));
     },
     [executarGravacao],
   );
@@ -4510,7 +4480,7 @@ export default function Ocorrencias() {
           `O robô vai aceitar ${soma.a} e rejeitar ${soma.r} ocorrência(s)` +
           `${soma.j ? ` (${soma.j} o Transnet já resolveu — só confere)` : ""}.\n` +
           `Robô: ajustes · modo "${MODO_EXECUTAR}" · casos = ${lista.length} crachá+dia (só estes), em UM disparo.\n` +
-          "Ele carimba conferido_em em ponto_caso — é esse carimbo que tira o caso de \"Execução pendente\".\n\n" +
+          "Ele carimba conferido_em em ponto_caso — é esse carimbo que tira o caso da \"Fila de lançamento\".\n\n" +
           (comAviso
             ? `ATENÇÃO: ${comAviso} recusa(s) MANTÊM o caso na cadeia de advertência e correção — mas o robô NÃO envia a advertência nem corrige o cartão. Isso continua fora desta tela.`
             : "A advertência e a correção do cartão continuam fora desta tela."),
@@ -4570,7 +4540,7 @@ export default function Ocorrencias() {
           `O robô abre o CARTÃO ao vivo e compara com o contrato congelado.\n` +
           `EM NENHUM DOS DOIS BOTÕES ele muda alguma coisa no Transnet.\n\n` +
           `${valendo
-            ? "Valendo, o que bater é fechado NO NOSSO BANCO: conferido_em, aviso_conferido_em e o veredito — e o dia que o Transnet não aceita vira correcao_status='ponto_fechado'. É esse carimbo que tira o caso de \"Execução pendente\"."
+            ? "Valendo, o que bater é fechado NO NOSSO BANCO: conferido_em, aviso_conferido_em e o veredito — e o dia que o Transnet não aceita vira correcao_status='ponto_fechado'. É esse carimbo que tira o caso da \"Fila de lançamento\"."
             : "No ensaio nada é gravado: nem no Transnet, nem no nosso banco."}\n\n` +
           `Robô: ajustes · modo "${MODO_CONFERIR}" · casos = ${lista.length} crachá+dia (só estes).`,
       )) return;
@@ -4599,87 +4569,18 @@ export default function Ocorrencias() {
     [atualizarSilencioso],
   );
 
-  /* ══ O LOTE: MARCAR SUGESTÃO → APLICAR DECISÕES (app.js:2092 e :315) ═════════
+  /* O LOTE DE DECISÃO FOI EMBORA (10/09/2026) — e com ele "Marcar sugestão", "Aplicar
+   * decisões" e o disparo que vinha grudado na gravação.
    *
-   * `dec` é preenchido de três jeitos e consumido por um só. O que ele NUNCA faz é propor o
-   * que o clique depois recusaria: cada linha passa por `motivoForaDoLote` com a ação
-   * sugerida ANTES de ser marcada, e a trava é revalidada na hora de aplicar — a tela pode
-   * ter recarregado no meio, e o que valia então pode não valer mais.
+   * Os três serviam a uma tela que decidia de fora: a sugestão marcava dezenas de dias pelo
+   * `diaStatus`, o aplicar gravava tudo e já mandava o robô no mesmo clique. Ninguém via o
+   * cartão que aquela decisão produzia — e o cartão é o contrato que o robô vai escrever no
+   * Transnet. Agora o veredito é no caso, um por um, e ele já grava o lado do dia — o caso
+   * cai na aba "Fila de lançamento", onde o disparo é explícito.
    *
-   * O BOTÃO DIZ O QUE O PRÓXIMO CLIQUE FAZ (app.js:2131): com algo marcado, vira
-   * "Desmarcar (N)". O escopo é o que está EM TELA (`linhas`), como no original. */
-  const contDec = useMemo(() => {
-    let ac = 0;
-    let rj = 0;
-    linhas.forEach((r) => {
-      if (dec[r.k] === "aceitar") ac += 1;
-      else if (dec[r.k] === "rejeitar") rj += 1;
-    });
-    return { ac, rj, total: ac + rj };
-  }, [linhas, dec]);
+   * A ✔ da grade (`selIds`) é o que escopa os lotes que restaram: executar, conferir,
+   * cancelar e lançar dia sem ponto. Nenhum deles julga nada. */
 
-  const aoDecidirLinha = useCallback((reg, lado) => {
-    setDec((m) => {
-      const novo = { ...m };
-      if (lado) novo[reg.k] = lado;
-      else delete novo[reg.k];
-      return novo;
-    });
-  }, []);
-
-  const marcarSugestao = useCallback(() => {
-    const chaves = linhas.map((r) => r.k);
-    const jaMarcadas = chaves.filter((k) => dec[k]).length;
-    if (jaMarcadas) {
-      setDec((m) => {
-        const novo = { ...m };
-        chaves.forEach((k) => delete novo[k]);
-        return novo;
-      });
-      setRecado(`${jaMarcadas} marcação(ões) desfeita(s) — nada tinha sido gravado.`);
-      return;
-    }
-    const novo = {};
-    let fora = 0;
-    let semSugestao = 0;
-    linhas.forEach((r) => {
-      // DIA JÁ MARCADO por ocorrência: a sugestão dele é o LADO QUE ELE MESMO ESCOLHEU, não
-      // o veredito do dia — aplicar vai PROMOVER a marcação, não redecidir por cima.
-      const marcado = selosDaMarcacao(r);
-      if (marcado) {
-        if (motivoSemDecisao(r)) { fora += 1; return; }
-        novo[r.k] = marcado.lado;
-        return;
-      }
-      const acao = r.diaStatus === "certo" ? "aceitar" : r.diaStatus === "errado" ? "rejeitar" : "";
-      if (!acao) { semSugestao += 1; return; }
-      if (motivoForaDoLote(r, acao)) { fora += 1; return; }
-      novo[r.k] = acao;
-    });
-    const ac = Object.values(novo).filter((v) => v === "aceitar").length;
-    const rj = Object.values(novo).length - ac;
-    setDec(novo);
-    setRecado(
-      ac + rj
-        ? `Marcado: ${ac} para aceitar, ${rj} para recusar. NADA foi gravado — confira as linhas e use “Aplicar decisões”.` +
-            (fora ? ` ${fora} fora do lote (misto, vencido, sem simulação ou com aviso).` : "") +
-            (semSugestao ? ` ${semSugestao} sem veredito para sugerir.` : "")
-        : "Nenhuma linha desta lista tem veredito que possa entrar em lote.",
-    );
-  }, [linhas, dec]);
-
-  /**
-   * APLICA O LOTE — e o caminho depende do estado de cada linha (app.js:315).
-   *
-   * Dia JÁ MARCADO por ocorrência → `aplicar_marcados`: PROMOVE. Redecidir por cima com
-   * `confirmar_certos`/`confirmar_errados` reescreveria `ajuste_ids` sem os prefixos (o dia
-   * misto perderia o que foi aceito e o que foi recusado) e regravaria `correcao_status`,
-   * apagando a intenção de corrigir. Por isso a trava dele é `motivoSemDecisao`, NÃO
-   * `motivoForaDoLote`: um dia misto é exatamente o que se marca por ocorrência, e barrá-lo
-   * aqui deixaria a marcação outra vez sem porta de saída.
-   *
-   * Dia NÃO marcado → decisão de dia inteiro, com a trava do lote de sempre.
-   */
   /* ── CANCELAR SELECIONADOS (docs/ALTERACAO_FILA_OCORRENCIAS_SUPABASE.md) ────
    * A SELEÇÃO É A MESMA CAIXINHA, E O LADO NÃO IMPORTA. As caixas de Aceitar e Rejeitar
    * dizem, aqui, apenas QUAIS colaboradores e dias entram no lote — cancelar não é
@@ -4701,9 +4602,9 @@ export default function Ocorrencias() {
         if (noCasoAberto) setResultadoRobo({ tipo: erro ? "erro" : "ok", texto });
         else setRecado(texto);
       };
-      const lista = regs?.length ? regs.filter(Boolean) : linhas.filter((r) => dec[r.k]);
+      const lista = regs?.length ? regs.filter(Boolean) : [];
       if (!lista.length) {
-        dizer("Marque nas caixinhas quais dias entram no cancelamento.", true);
+        dizer("Marque na ✔ da grade quais dias entram no cancelamento.", true);
         return;
       }
       const casos = casosDeRegistros(lista);
@@ -4746,9 +4647,9 @@ export default function Ocorrencias() {
           " O resultado não volta sozinho: a prova fica no run.";
         if (noCasoAberto) setResultadoRobo({ tipo: "ok", texto, painel: r?.painel || "" });
         else setRecado(texto + (r?.painel ? ` ${r.painel}` : ""));
-        // a marcação só se apaga quando ela virou disparo de verdade; no ensaio ela
-        // continua ali, que é o ponto do ensaio (conferir e então mandar valendo).
-        if (valendo && !regs?.length) setDec({});
+        // a ✔ só se apaga quando o cancelamento saiu de verdade — e não quando o disparo
+        // veio do caso aberto, que não usa a marcação da grade.
+        if (valendo && !regs?.length) setSelIds([]);
         await atualizarSilencioso();
       } catch (e) {
         dizer(`Falhou: ${e?.message || "não foi possível disparar o robô."}`, true);
@@ -4756,92 +4657,12 @@ export default function Ocorrencias() {
         setDisparando(false);
       }
     },
-    [linhas, dec, atualizarSilencioso],
+    [atualizarSilencioso],
   );
-
-  const aplicarDecisoes = useCallback(() => {
-    const alvo = linhas.filter((r) => dec[r.k]);
-    if (!alvo.length) { setRecado("Marque Aceitar ou Rejeitar em ao menos uma linha."); return; }
-
-    const promover = alvo.filter((r) => selosDaMarcacao(r));
-    const novos = alvo.filter((r) => !selosDaMarcacao(r));
-
-    const bloqueados = [
-      ...promover.map((r) => ({ r, motivo: motivoSemDecisao(r) })),
-      ...novos.map((r) => ({ r, motivo: motivoForaDoLote(r, dec[r.k]) })),
-    ].filter((x) => x.motivo);
-    if (bloqueados.length) {
-      setRecado(
-        `Lote recusado — ${bloqueados.length} linha(s) não podem entrar: ` +
-          bloqueados.slice(0, 6).map((x) => `${x.r.nome} ${x.r.dataBR} (${x.motivo})`).join(" · ") +
-          (bloqueados.length > 6 ? " …" : "") + ". Tire a marca dessas linhas ou abra cada caso.",
-      );
-      return;
-    }
-
-    const ac = novos.filter((r) => dec[r.k] === "aceitar");
-    const rj = novos.filter((r) => dec[r.k] === "rejeitar");
-    const lista = (regs) =>
-      regs.slice(0, 8).map((r) => `· ${r.nome} ${r.dataBR}`).join("\n") +
-      (regs.length > 8 ? `\n… e mais ${regs.length - 8}` : "");
-    if (!confirmar(
-      `APLICAR ${alvo.length} decisão(ões):\n\n` +
-        (promover.length
-          ? `LANÇAR A MARCAÇÃO (${promover.length}) — já decididos por ocorrência, só promove:\n${lista(promover)}\n\n`
-          : "") +
-        (ac.length ? `ACEITAR o dia (${ac.length}):\n${lista(ac)}\n\n` : "") +
-        (rj.length ? `REJEITAR e ENCERRAR (${rj.length}):\n${lista(rj)}\n\n` : "") +
-        (promover.length
-          ? `Nos marcados, só o aceite muda: ajuste_ids e correcao_status ficam como estão.\n`
-          : "") +
-        (rj.length
-          ? `Nas recusas de dia inteiro: correcao_status="dispensada" — nenhum destes dias tem aviso, então nenhuma vira advertência.\n`
-          : "") +
-        `\nAo terminar de gravar, o robô é disparado para ESTES mesmos casos — um disparo só, ` +
-        `como na ferramenta. Isso altera o ponto de verdade no Transnet.`,
-    )) return;
-
-    executarGravacao(`${alvo.length} caso(s) gravado(s)`, async () => {
-      const avisos = [];
-      // um a um: o upsert em lote esconderia qual linha falhou
-      for (const reg of promover) {
-        const a = await aplicarMarcados(reg);
-        if (a) avisos.push(a);
-      }
-      for (const reg of novos) {
-        const a = dec[reg.k] === "aceitar" ? await gravarAceite(reg) : await gravarRecusa(reg, "rejeitar");
-        if (a) avisos.push(a);
-      }
-      // GRAVAR E EXECUTAR NO MESMO CLIQUE, como na ferramenta (app/ui/app.js:377). O
-      // disparo vem DEPOIS da gravação e só do que gravou: o robô lê a decisão do banco,
-      // então mandá-lo antes seria mandá-lo executar o que ainda não está lá.
-      pendenteDeExecucao.current = alvo;
-      return avisos.join(" · ");
-    });
-  }, [linhas, dec, executarGravacao]);
-
-  /* O DISPARO SAI DO EFEITO, não de dentro da gravação: `executarGravacao` já recarrega a
-   * aba, e disparar no meio dela deixaria dois estados de "ocupado" brigando pelo mesmo
-   * botão. Aqui a fila esvazia assim que a gravação termina. */
-  const pendenteDeExecucao = useRef(null);
-  useEffect(() => {
-    if (gravando || disparando) return;
-    const fila = pendenteDeExecucao.current;
-    if (!fila?.length) return;
-    pendenteDeExecucao.current = null;
-    // relê os registros pelo `k`: o lote acabou de gravar e o estado deles mudou
-    const atuais = fila.map((r) => registros.find((x) => x.k === r.k) || r);
-    aoExecutarLote(atuais);
-  }, [gravando, disparando, registros, aoExecutarLote]);
 
   /* ── colunas de cada grade (formato do TabelaDP: id/titulo/valor/render) ── */
 
-  const acoesDecisao = {
-    gravando,
-    aoDecidir: aoDecidirLinha,
-    aoAbrir: abrir,
-    aoDesfazer,
-  };
+  const acoesDecisao = { gravando, aoAbrir: abrir, aoDesfazer };
 
   const colColaborador = {
     id: "nome",
@@ -4871,6 +4692,48 @@ export default function Ocorrencias() {
     valor: (r) => r.diaStatus || r.veredito || "",
     render: (r) => <PontasES reg={r} />,
   };
+  const colResposta = {
+    id: "resp",
+    titulo: "Situação",
+    largura: 190,
+    ordenavel: true,
+    valor: (r) => `${r.nAjustes ? 1 : 0}|${r.restam == null ? 9999 : Math.round(r.restam)}`,
+    render: (r) => <CelulaResposta reg={r} />,
+  };
+  // NA FILA A COLUNA NÃO É O ALVO, É O CONTRATO: o alvo é o que a correção faria; aqui já
+  // existe decisão gravada, e o que o robô vai fazer valer é o cartão congelado.
+  const colVaiLancar = {
+    id: "vailancar",
+    titulo: "Vai lançar",
+    largura: 268,
+    classe: "oc-cel-cartao",
+    valor: (r) => (r.alvo.temAlvo ? r.alvo.slots.filter(Boolean).join(" ") : ""),
+    render: (r) => <CartaoAlvo alvo={r.alvo} />,
+  };
+  // O VEREDITO NÃO É O QUE VAI SER LANÇADO — é o julgamento dos pedidos dele. Os dois
+  // convivem na fila: a coluna acima diz o cartão, esta diz a decisão que o robô carrega.
+  const colVeredito = {
+    id: "ver",
+    titulo: "Veredito",
+    largura: 200,
+    valor: (r) => (r.decJa ? (r.decJa.aceito ? "aceito" : "recusado") : ""),
+    render: (r) => {
+      const p = planoDaExecucao(r);
+      return (
+        <span style={PILHA}>
+          <Selo cor={r.decJa?.aceito ? "ok" : "erro"}>
+            {r.decJa?.aceito ? "aceito" : "recusado"}
+          </Selo>
+          <span className="dp-faint" style={MINI}>
+            {p.aceitar.length ? `aceita ${p.aceitar.length}` : ""}
+            {p.aceitar.length && p.rejeitar.length ? " · " : ""}
+            {p.rejeitar.length ? `recusa ${p.rejeitar.length}` : ""}
+            {r.temAviso && !r.decJa?.aceito ? " · vai para correção" : ""}
+          </span>
+        </span>
+      );
+    },
+  };
   const colSituacao = {
     id: "sit",
     titulo: "Situação",
@@ -4883,8 +4746,8 @@ export default function Ocorrencias() {
     titulo: "Decisão",
     largura,
     ordenavel: false,
-    valor: (r) => (r.decJa ? (r.decJa.aceito ? "aceito" : "recusado") : dec[r.k] || "a decidir"),
-    render: (r) => <CelulaDecisao reg={r} dec={dec[r.k] || ""} {...acoesDecisao} />,
+    valor: (r) => (r.decJa ? (r.decJa.aceito ? "aceito" : "recusado") : "a decidir"),
+    render: (r) => <CelulaDecisao reg={r} {...acoesDecisao} />,
   });
   // ── O CARTÃO EM QUATRO COMPARTIMENTOS ────────────────────────────────────
   // LARGURA FIXA E IGUAL NAS DUAS: `oc-slots` divide a célula em quatro colunas de `1fr`,
@@ -4930,33 +4793,18 @@ export default function Ocorrencias() {
   // app.js:183 (COLS_CONF) — Pedidos: quem · dia · veredito por ponta · decisão · ajustes.
   // O CARTÃO ENTRA AQUI TAMBÉM: o alvo é o cartão final, e ele responde "como o dia fica"
   // sem abrir o caso — que é a pergunta que trazia o DP ao pop-up em toda linha.
-  const COLS_PEDIDO = [colColaborador, colDia, colBateu, colAlvo, colPontas, colDecisao(230), colAjustes];
+  /* A DECISÃO SAIU DA GRADE (10/09/2026). Ela é do caso — é lá que o cartão se monta com a
+   * refeição travada, a origem de cada ponta e o manual. Decidir de fora é decidir sem ver
+   * o cartão que a decisão produz, e foi assim que a tela acabou com dois lugares para a
+   * mesma coisa. `colDecisao` e o lote de decisão continuam definidos porque a aba da FILA
+   * ainda usa o Desfazer. */
+  const COLS_PEDIDO = [colColaborador, colDia, colBateu, colAlvo, colPontas, colResposta, colAjustes];
 
   // app.js:2647 (COLS_ENV) — Meus avisos. Aqui o ajuste é RESPOSTA a um aviso nosso: o
   // assunto é o dia todo, e o alvo tem os quatro compartimentos.
-  const COLS_AVISO = [
-    colColaborador, colDia, colOque, colBateu, colAlvo, colAjustes,
-    {
-      id: "prazo", titulo: "Prazo (48h)", largura: 140,
-      valor: (r) => (r.restam == null ? "" : Math.round(r.restam)),
-      render: (r) => <CelulaPrazo reg={r} />,
-    },
-    {
-      id: "acao", titulo: "Decisão", largura: 240, ordenavel: false,
-      valor: (r) => r.situacaoAviso,
-      render: (r) =>
-        r.situacaoAviso === "vencido" ? (
-          <div style={PILHA}>
-            <BotaoExecucao tom="erro" motivo={MOTIVO_VENCIDO}>⚠ Vencido — advertir e corrigir</BotaoExecucao>
-            <span style={{ ...MINI, color: "var(--dp-danger-ink)" }}>
-              não entra em lote — só a cadeia advertência → correção
-            </span>
-          </div>
-        ) : (
-          <CelulaDecisao reg={r} dec={dec[r.k] || ""} {...acoesDecisao} />
-        ),
-    },
-  ];
+  // A coluna "Decisão" saiu daqui pelo mesmo motivo da porta do pedido: decidir é no caso.
+  // O prazo virou a segunda linha da Situação, onde ele é contexto da resposta.
+  const COLS_AVISO = [colColaborador, colDia, colOque, colBateu, colAlvo, colResposta, colAjustes];
 
   const COLS_COMENT = [colColaborador, colDia, colOque, colBateu, {
     id: "quando", titulo: "Enviado em", largura: 140, classe: "dp-num",
@@ -4967,7 +4815,7 @@ export default function Ocorrencias() {
   const COLS_LISTA = [colColaborador, colDia, colSituacao, colBateu, colAlvo, colPontas, colQuando, colAjustes];
 
   // Execução pendente: é aqui que mora o DESFAZER (o bot ainda não executou).
-  const COLS_EXEC = [colColaborador, colDia, colSituacao, colBateu, colAlvo, colQuando, colDecisao(240)];
+  const COLS_EXEC = [colColaborador, colDia, colBateu, colVaiLancar, colVeredito, colQuando, colDecisao(150)];
 
   const COLS_CANCEL = [colColaborador, colDia, colOque, {
     id: "quando", titulo: "Cancelado em", largura: 150, classe: "dp-num",
@@ -5014,49 +4862,77 @@ export default function Ocorrencias() {
 
   /* 3ª BARRA (só nas abas que agem em lote): ações à esquerda, ferramentas à direita — a
      mesma forma da ferramenta. Ela vive no `acoes` do TabelaDP, que é a barra do ⚙. */
+  /* A ABA DE ENTRADA NÃO DECIDE (10/09/2026). Saíram daqui "Marcar sugestão" e "Aplicar
+   * decisões": os dois davam veredito sem ver o cartão que o veredito produz — e é o cartão
+   * que vira contrato para o robô. A decisão é no caso, um de cada vez, com a refeição
+   * travada e a origem de cada ponta à vista.
+   *
+   * O que sobrou em lote nesta aba é o que NÃO é decisão: cancelar o pedido (desistir dele
+   * no Transnet) e lançar dia sem ponto. Os dois continuam onde estavam. */
+  const vencidosMarcados = marcados.filter((r) => r.situacaoAviso === "vencido");
+  const contaResposta = (id) => naAba.filter((r) => respostaDe(r) === id).length;
+  const chipsResposta =
+    porta === "aviso"
+      ? [
+          ["TODOS", "Todos", naAba.length, "Tudo o que está esperando veredito nesta porta."],
+          ["resp", "✎ respondeu", contaResposta("resp"),
+            "Ele mexeu no ponto depois do aviso: há pedido para julgar no caso."],
+          ["semresp", "· não respondeu", contaResposta("semresp"),
+            "Ainda dentro das 48h e sem ajuste nenhum — nada a julgar por enquanto."],
+          ["vencido", "⚠ vencido", contaResposta("vencido"),
+            "Passou das 48h sem ele mexer no ponto. A saída é advertência e depois correção."],
+        ]
+      : [];
   const barraLote = grade.loteDecisao ? (
-    <div style={{ ...FILA, gap: 8 }}>
-      <BotaoAcao
-        titulo={
-          contDec.total
-            ? "Tira a marcação de todos os dias desta lista. Nada tinha sido gravado."
-            : "Marca em cada linha o veredito sugerido (certo→aceitar, errado→rejeitar); dia já marcado por ocorrência recebe o lado que VOCÊ escolheu lá dentro. NÃO grava. Dia misto, aviso vencido, dia sem simulação confiável e recusa de dia COM aviso continuam fora."
-        }
-        disabled={gravando || !linhas.length}
-        onClick={marcarSugestao}
-      >
-        {contDec.total ? `⌁ Desmarcar (${contDec.total})` : "⌁ Marcar sugestão"}
-      </BotaoAcao>
-      <BotaoAcao
-        tom="ok"
-        titulo="Grava o lote: dia já marcado por ocorrência é PROMOVIDO (aplicar_marcados, sem redecidir); dia novo recebe aceite=aceito ou aceite=rejeitado+dispensada. NÃO roda o robô."
-        disabled={!contDec.total || gravando}
-        onClick={aplicarDecisoes}
-      >
-        {contDec.total ? `✓ Aplicar decisões (${contDec.ac}✓ ${contDec.rj}✗)` : "✓ Aplicar decisões"}
-      </BotaoAcao>
-      {/* CANCELAR usa a MESMA marcação, ignorando o lado — e vive na porta do AVISO
-          (decisão do dono, 09/09/2026: "o cancelamento não é no pedido do colaborador, tem
-          que ter no enviamos para ajuste"). É lá que a ocorrência é RESPOSTA a um aviso
-          nosso, e desistir dela é o que acontece na prática.
-          SEM ENSAIO, como na ferramenta: `app/ui/app.js:308` chama `cancelar_pedidos_lote`
-          com confirmar=true direto e quem segura é o `confirm()`. */}
+    <div style={{ ...FILA, gap: 6 }}>
+      {/* AS CONTAGENS SÃO O FILTRO (a régua da ferramenta, app.js:3009), e o corte desta aba
+          é a RESPOSTA: vencido SEM resposta segue para advertência e correção sem nada a
+          julgar; vencido TENDO respondido tem pedido para julgar. Clicar de novo no mesmo
+          chip volta para todos.
+          SÓ NA PORTA DO AVISO: é lá que existe pergunta nossa. Na porta do pedido todo mundo
+          "respondeu" por definição — a lista nasce do ajuste dele —, e os três chips seriam
+          um deles com o total e dois zerados. */}
+      {chipsResposta.map(([id, rotulo, n, dica]) => (
+        <button
+          key={id}
+          type="button"
+          className="dp-btn"
+          aria-pressed={respFiltro === id}
+          style={respFiltro === id ? { borderColor: "var(--dp-accent)", color: "var(--dp-accent)" } : undefined}
+          title={dica}
+          onClick={() => setRespFiltro((atual) => (atual === id ? "TODOS" : id))}
+        >
+          {rotulo} <b className="dp-num">{n}</b>
+        </button>
+      ))}
+      <span className="dp-faint dp-num" style={MINI}>
+        {respFiltro === "TODOS" ? `${naAba.length} caso(s)` : `${linhas.length} de ${naAba.length}`}
+      </span>
+      <span className="oc-sep" aria-hidden="true" />
+      <span className="dp-muted" style={MINI}>
+        abra o caso para dar o veredito — aqui não se decide
+      </span>
+      {/* O QUE NÃO É DECISÃO CONTINUA EM LOTE. Cancelar é desistir do pedido no Transnet, e
+          vive na porta do AVISO (decisão do dono, 09/09/2026: "o cancelamento não é no pedido
+          do colaborador, tem que ter no enviamos para ajuste"). A seleção agora é a ✔ da
+          grade — as caixinhas de aceitar/rejeitar saíram junto com a decisão. */}
       {porta === "aviso" ? (
         <>
-          <span className="oc-sep" aria-hidden="true" />
+          {vencidosMarcados.length ? (
+            <BotaoExecucao tom="erro" motivo={MOTIVO_VENCIDO}>
+              ⚠ Advertir e corrigir ({vencidosMarcados.length})
+            </BotaoExecucao>
+          ) : null}
           <BotaoAcao
             tom="erro"
-            titulo="Recusa no Transnet os IDs ainda pendentes dos dias marcados e fecha o caso como cancelado. O lado da caixinha (aceitar/rejeitar) é ignorado: aqui ela é só a seleção."
-            disabled={!contDec.total || gravando || disparando}
-            onClick={() => aoCancelarSelecionados(true)}
+            titulo="Recusa no Transnet os IDs ainda pendentes dos dias marcados na ✔ e fecha o caso como cancelado. Não é veredito: é desistir do pedido."
+            disabled={!marcados.length || gravando || disparando}
+            onClick={() => aoCancelarSelecionados(true, marcados)}
           >
-            ✗ Cancelar selecionados ({contDec.total})
+            ✗ Cancelar marcados ({marcados.length})
           </BotaoAcao>
         </>
       ) : null}
-      <span className="dp-muted dp-num" style={MINI}>
-        {contDec.total ? "nada gravado até aplicar" : "marque nas caixinhas da coluna Decisão"}
-      </span>
     </div>
   ) : grade.loteConferir ? (
     <div style={{ ...FILA, gap: 8 }}>

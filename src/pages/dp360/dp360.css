@@ -2213,3 +2213,183 @@
   vertical-align: -1px;
   margin-right: 5px;
 }
+
+/* ═════════ OCORRÊNCIAS — O POP-UP SÓ VEREDITO (prefixo `oc-vd-`) ═════════════════════
+ * ACRÉSCIMO: nada aqui reescreve regra existente.
+ *
+ * O pop-up do caso virou duas colunas e um rodapé de um botão. As classes abaixo desenham
+ * os quatro compartimentos do cartão, o campo de cravar à mão, as duas linhas de referência
+ * e o rodapé. Tudo em cima dos tokens que já existem (`--dp-*`) — nenhuma cor nova.
+ * ═══════════════════════════════════════════════════════════════════════════════════ */
+
+/* ── o horário do pedido, na coluna da esquerda: é o dado, então é o maior da linha ── */
+.dp360 .oc-vd-hora-ped { font-size: 14px; font-weight: 700; }
+/* ocorrência que não se marca (miolo travado, ou decisão já gravada): apagada, NUNCA
+   escondida — sumir com ela faria o DP procurar a resposta que não está em lugar nenhum. */
+.dp360 .oc-item-off { opacity: 0.72; }
+.dp360 .oc-vd-motivo {
+  margin-top: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  /* `--dp-muted`, e não `--dp-muted-ink`: esse último aparece em três regras antigas
+     desta folha e NUNCA foi definido — `var()` sem valor cai em `unset`, e a cor acaba
+     sendo a herdada. (Dívida antiga, não mexi nela aqui.) */
+  color: var(--dp-muted);
+}
+
+/* ── CRAVAR À MÃO: dois campos, e o motivo embaixo de cada um ── */
+.dp360 .oc-vd-mao {
+  margin-top: 10px;
+  padding: 8px 10px 9px;
+  border: 1px dashed var(--dp-border-strong);
+  border-radius: 9px;
+  background: var(--dp-surface-2);
+}
+.dp360 .oc-vd-mao-t { font-size: 12px; font-weight: 700; }
+.dp360 .oc-vd-mao-campos { display: flex; gap: 10px; margin: 7px 0 5px; flex-wrap: wrap; }
+.dp360 .oc-vd-campo { display: flex; flex-direction: column; gap: 2px; min-width: 96px; }
+.dp360 .oc-vd-campo > span {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dp-muted);
+}
+.dp360 .oc-vd-campo > input {
+  width: 84px;
+  padding: 4px 7px;
+  border: 1px solid var(--dp-border-strong);
+  border-radius: 7px;
+  font-family: var(--dp-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  background: var(--dp-surface);
+  color: var(--dp-ink);
+}
+.dp360 .oc-vd-campo > input:focus { border-color: var(--dp-accent); outline: none; }
+.dp360 .oc-vd-campo > input.ruim { border-color: var(--dp-danger-line); background: var(--dp-danger-bg); }
+.dp360 .oc-vd-campo > input:disabled { opacity: 0.5; cursor: not-allowed; }
+/* ALTURA RESERVADA: o motivo aparece e desaparece a cada tecla; sem `min-height` os campos
+   pulariam de posição enquanto o DP digita. */
+.dp360 .oc-vd-campo > em {
+  min-height: 14px;
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--dp-danger-ink);
+}
+
+/* ── OS QUATRO COMPARTIMENTOS: grade de quatro, nunca fila que quebra ──
+   É a mesma razão do `.oc-slots`: com `flex-wrap` os blocos quebravam 3+1 e as duas linhas
+   de referência lá embaixo deixavam de bater coluna com coluna. */
+.dp360 .oc-vd-blocos {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.dp360 .oc-vd-bloco {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px 8px 8px;
+  border: 1px solid var(--dp-border);
+  border-radius: 9px;
+  background: var(--dp-surface-2);
+}
+/* ponta que FALTA é o motivo de o cartão não fechar: ela se anuncia. */
+.dp360 .oc-vd-bloco.falta { border-color: var(--dp-danger-line); background: var(--dp-danger-bg); }
+/* miolo travado: discreto de propósito — ele não é uma decisão de ninguém. */
+.dp360 .oc-vd-bloco.travado { border-style: dashed; }
+.dp360 .oc-vd-bloco-r {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dp-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.dp360 .oc-vd-bloco-h { font-size: 19px; font-weight: 700; line-height: 1.15; }
+.dp360 .oc-vd-bloco.falta .oc-vd-bloco-h { color: var(--dp-danger-ink); }
+.dp360 .oc-vd-bloco-d { font-size: 10.5px; font-weight: 600; color: var(--dp-muted); }
+.dp360 .oc-vd-bloco .dp-pill { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.dp360 .oc-vd-undo {
+  border: 0;
+  background: transparent;
+  padding: 0 2px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--dp-muted);
+}
+.dp360 .oc-vd-undo:hover { color: var(--dp-ink); }
+
+.dp360 .oc-vd-completar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+/* ── A CAIXA DE RESUMO: verde fecha, vermelha não fecha ── */
+.dp360 .oc-vd-resumo {
+  margin-top: 9px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--dp-border);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.dp360 .oc-vd-resumo.ok { border-color: var(--dp-ok-ink); background: var(--dp-ok-bg); color: var(--dp-ok-ink); }
+.dp360 .oc-vd-resumo.ruim {
+  border-color: var(--dp-danger-line);
+  background: var(--dp-danger-bg);
+  color: var(--dp-danger-ink);
+}
+
+/* ── AS DUAS LINHAS DE REFERÊNCIA, alinhadas nas MESMAS quatro colunas ──
+   O rótulo tem largura fixa e o cartão ocupa o resto, para "Ponto (bateu)" e "Alvo" se
+   lerem slot contra slot — e contra os blocos de cima. */
+.dp360 .oc-vd-ref {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--dp-surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.dp360 .oc-vd-ref-l { display: flex; align-items: center; gap: 10px; }
+.dp360 .oc-vd-ref-k {
+  width: 110px;
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dp-muted);
+}
+/* A linha cresce além dos 320 px da grade — aqui ela é leitura, não célula —, mas com
+   teto: em 1.180 px de modal, quatro células de `1fr` soltas viram quatro tarjas quase
+   vazias com uma hora perdida no meio de cada uma. */
+.dp360 .oc-vd-ref-l .oc-slots { max-width: 560px; }
+
+/* ── O RODAPÉ: um botão, a frase do dia, e o recado do lançamento à direita ── */
+.dp360 .oc-vd-rodape {
+  margin-top: 12px;
+  padding: 9px 10px;
+  border-top: 1px solid var(--dp-border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.dp360 .oc-vd-rodape-fim { margin-left: auto; }
+
+/* Numa tela estreita as duas colunas do caso já empilham (`auto-fit` do `.oc-det-grid`);
+   os quatro compartimentos viram dois de dois, que ainda se leem em pares. */
+@media (max-width: 700px) {
+  .dp360 .oc-vd-blocos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dp360 .oc-vd-ref-l { align-items: flex-start; flex-direction: column; gap: 3px; }
+}

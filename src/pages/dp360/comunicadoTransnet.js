@@ -713,6 +713,12 @@ export const TEMPLATES_PADRAO = {
     "Prezado(a) {NOME}, crachá {CRACHA}. Seu registro de ponto do dia {DATA} está incompleto: {DIVERGENCIA}. Por favor, ajuste pelo aplicativo de ponto em até 24 horas. Em caso de dúvida, procure seu gestor ou o Departamento Pessoal. Atenciosamente, DP — Quataí Transporte de Passageiros.",
   interno_curta:
     "Prezado(a) {NOME}, crachá {CRACHA}. Seu registro de ponto do dia {DATA} apresenta jornada abaixo do normal ({JORNADA}). Por favor, verifique se todas as batidas foram registradas e, se faltar alguma, ajuste pelo aplicativo de ponto em até 24 horas. Em caso de dúvida, procure seu gestor ou o Departamento Pessoal. Atenciosamente, DP — Quataí Transporte de Passageiros.",
+  // A ADVERTÊNCIA DO PRAZO (main.py:8218) — quem foi avisado e não corrigiu em 48 h. É o
+  // único texto daqui que vai com motivo 103: ele entra na FICHA da pessoa, não é pedido.
+  // Sem este modelo, a carta sairia vazia — e uma advertência em branco na ficha de alguém
+  // é pior do que nenhuma. Por isso ele mora aqui e não só no `app_config`.
+  advertencia_prazo:
+    "Prezado(a) {NOME}, crachá {CRACHA}. Você foi comunicado(a) sobre a pendência no seu registro de ponto do dia {DATA} e não realizou a correção no prazo de 48 horas. Fica registrada esta advertência. O registro correto de ponto é obrigação do colaborador, conforme Art. 74 da CLT. Departamento Pessoal — Quataí Transporte de Passageiros.",
 };
 
 /** `app_config.valor` é jsonb e a ferramenta grava STRING. Texto salvo tem prioridade;

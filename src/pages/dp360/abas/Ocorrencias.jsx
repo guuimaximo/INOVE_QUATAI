@@ -67,6 +67,20 @@ import CartaoDoDia, {
   aplicarRealManual,
   quemEstaUsando,
 } from "../CartaoDoDia";
+// A ADVERTÊNCIA É UM COMUNICADO, e o comunicado desta casa já tem módulo: mesmo CSV do
+// Transnet (Empresa · Crachá · Comunicado), mesmo `cracha8`, mesmo dd/mm/aaaa. O que muda
+// é o MOTIVO — 103, não 102 — e o texto, que é o `advertencia_prazo` da ferramenta.
+import {
+  MOTIVO_ADVERTENCIA,
+  cracha8,
+  csvComunicado,
+  escolherTemplate,
+  preencherTemplate,
+  variaveisPendentes,
+} from "../comunicadoTransnet";
+// E a correção é o MESMO robô `ponto` da Revisão, da Refeição e das Folgas — um CSV de
+// crachá·data·quatro pontas. Nada de formato novo aqui.
+import { csvDoAjustePonto } from "../regrasAjustePonto";
 import {
   CONSTANTES,
   batidasDoCartao,
@@ -132,18 +146,25 @@ const AVISO_CONFERIR =
   "nem valendo. Valendo, fecha só no NOSSO banco (conferido_em) o que bateu. " +
   "Existe porque EFETUADO na grade não prova que os horários mudaram no cartão.";
 
-// ── Os três botões que continuam DESLIGADOS, e por quê ────────────────────
-// Nenhum deles é o robô `ajustes`, e nenhum carimba sozinho: advertencia_enviada_em
-// e correcao_final_em são gravados por QUEM LÊ O RESULTADO do run — coisa que esta
-// tela não faz. Ligar hoje mandaria carta na ficha de alguém sem registrar que saiu.
+/** A chave do texto da advertência no `app_config` — a MESMA que a ferramenta lê
+ *  (`template_advertencia_prazo`, main.py:3031). Editou lá, vale aqui. */
+const CHAVE_TPL_ADVERTENCIA = "template_advertencia_prazo";
+
+// ── A CADEIA DO VENCIDO FOI LIGADA (10/09/2026) ───────────────────────────
+// Pedido do dono, olhando os 12 vencidos marcados: "ele não liberou a opção para advertir e
+// corrigir". Advertir é o robô `comunicado` com motivo 103; corrigir o cartão é o robô
+// `ponto`. Os dois ficaram em botões SEPARADOS, em abas diferentes, porque a ordem é regra
+// ("só corrige quem foi advertido") e esta tela não lê o resultado do run — encadear os dois
+// no mesmo clique mandaria corrigir o ponto de quem talvez não tenha sido advertido.
+// Os carimbos saem no disparo aceito, o mesmo padrão do aviso da Gordura; a prova do
+// Transnet fica no run, e a faixa do topo avisa quando o robô termina mal.
+//
+// Estes dois seguem desligados — e os dois vivem em componentes que o pop-up não desenha
+// mais (ver o bloco "o que saiu do pop-up"):
 const MOTIVO_ADVERTIR =
-  "Ainda não: advertir é o robô `comunicado` (motivo 103) e corrigir o cartão é o robô `ponto`. " +
-  "Quem carimba advertencia_enviada_em/correcao_final_em é quem lê o resultado do run, e esta tela não lê run.";
+  "Este botão é do card antigo do caso. A advertência agora é da tela principal, no lote de vencidos.";
 const MOTIVO_CANCELAR =
   "Ainda não: cancelar a ocorrência enviada é `--cancelar-enviadas`, que o workflow ajustes.yml não expõe.";
-const MOTIVO_VENCIDO =
-  "Ainda não: o vencido não tem decisão gravada para o robô `ajustes` executar (ele não mexeu no ponto), " +
-  "e a saída dele é advertência → correção — robôs `comunicado` e `ponto`.";
 
 // app.js:133 — as duas portas + comunicados. A PORTA DEFINE A CONSEQUÊNCIA.
 const PORTAS = [
@@ -384,6 +405,13 @@ function situacaoDoCaso(veredito, caso, temAviso) {
     return txt(c.conferido_em) ? "recusado" : "recusa_exec_pendente";
   }
   if (txt(c.aceite) === "aceito") return txt(c.conferido_em) ? "ok" : "exec_pendente";
+  /* O VENCIDO ADVERTIDO (10/09/2026). Ele não tem pedido para aceitar nem recusar — o
+   * `aceite` fica PENDENTE —, então nenhuma linha acima o pegava, e depois da advertência
+   * ele sumia das duas abas: saía de "A decidir" (o `situacaoAviso` já diz advertido) e não
+   * entrava em "Advertências e correções", que filtra por ESTA função. Some da tela é o
+   * jeito mais silencioso de perder trabalho — e é justamente o caso que ainda precisa da
+   * correção do ponto. A etapa é a da ferramenta: corrigido > advertido (main.py:4323). */
+  if (txt(c.advertencia_enviada_em)) return "advertido";
   return { certo: "conf_certo", errado: "conf_errado" }[veredito] || "conf";
 }
 
@@ -1867,7 +1895,8 @@ const TIPOS_DIA_SEM_PONTO = [
 const TIPO_DIA_LBL = Object.fromEntries(TIPOS_DIA_SEM_PONTO);
 const rotuloTipoDia = (t) => `${t}-${TIPO_DIA_LBL[txt(t)] || t}`;
 
-// main.py `_ddmm` — o bot preenche a tela do Transnet, que é dd/mm/aaaa.
+// main.py `_ddmm` — o bot preenche a tela do Transnet, que é dd/mm/aaaa. (O
+// `comunicadoTransnet` exporta o mesmo recorte; aqui fica o local, que já existia.)
 const ddmmaaaa = (iso) => {
   const v = txt(iso);
   return v.length >= 10 ? `${v.slice(8, 10)}/${v.slice(5, 7)}/${v.slice(0, 4)}` : v;
@@ -1928,6 +1957,46 @@ function motivoSemDecisao(reg) {
   // vezes o mesmo fato. A única saída é recusar (main.py:2222 `recusar_posterior`).
   if (txt(reg.caso?.correcao_final_em) || reg.situacaoAviso === "posterior")
     return "o dia já foi corrigido — pedido posterior só se recusa, nunca se aceita";
+  return "";
+}
+
+/* ══ O VENCIDO TEM SAÍDA, E SÃO DOIS PASSOS (main.py:3011 `advertir_vencidas_dia` e
+ * :3396 `corrigir_vencidas_lote`) ═══════════════════════════════════════════════════
+ *
+ * A ORDEM É LEI, e a ferramenta a escreve com todas as letras (app.js:2071): "SÓ CORRIGE
+ * QUEM FOI ADVERTIDO. Punir sem consertar é ruim; consertar sem punir apaga a prova de que
+ * a pessoa não cumpriu o prazo."
+ *
+ * POR ISSO SÃO DOIS BOTÕES, EM DUAS ABAS, e não um clique que faz os dois. Lá a fase 2
+ * espera o bot local terminar e lê o resultado dele; aqui o robô roda no GitHub e o disparo
+ * volta na hora, sem o desfecho. Encadear às cegas mandaria corrigir o ponto de quem talvez
+ * não tenha sido advertido — exatamente o que a regra proíbe. Então: em "A decidir" sai a
+ * advertência e o caso vira `advertido`; na aba "Advertências e correções" o DP vê que ela
+ * saiu e manda a correção. O passo do meio é ele.
+ */
+function motivoSemAdvertir(reg) {
+  if (reg?.situacaoAviso !== "vencido") return "não está vencido — a advertência é do prazo";
+  if (txt(reg?.caso?.advertencia_enviada_em)) return "já advertido";
+  if (txt(reg?.caso?.correcao_final_em)) return "o dia já foi corrigido";
+  if (!txt(reg?.cracha)) return "sem crachá";
+  return "";
+}
+
+/** O cartão que a correção vai lançar É O ALVO da tela — o mesmo da coluna e do pop-up. */
+function cartaoDaCorrecao(reg) {
+  const slots = (reg?.alvo?.slots || []).map((v) => txt(v));
+  const mins = slots.map(hm2min).filter((v) => v != null);
+  const problema = validaCartao(mins, reg?.categoria);
+  return { slots, mins, problema };
+}
+
+function motivoSemCorrigirVencido(reg) {
+  if (!txt(reg?.caso?.advertencia_enviada_em))
+    return "ainda não foi advertido — a advertência vem antes";
+  if (txt(reg?.caso?.correcao_final_em)) return "já corrigido";
+  const { slots, problema } = cartaoDaCorrecao(reg);
+  if (!slots.some(Boolean)) return "não há alvo publicado para lançar";
+  if (problema) return problema;
   return "";
 }
 
@@ -4665,6 +4734,202 @@ export default function Ocorrencias() {
     [atualizarSilencioso],
   );
 
+  /* ══ FASE 1 — A ADVERTÊNCIA, UM ENVIO POR DIA ═════════════════════════════
+   * A data é campo do FORMULÁRIO do Transnet (`dtReferenciaPonto`) e vale para o arquivo
+   * inteiro: por isso o lote agrupa por dia, e não manda tudo num CSV só. A ferramenta
+   * mediu — 131 vencidos de uma em uma davam 1h27 de relógio; os mesmos 131 em 14 dias
+   * dão 14 envios.
+   *
+   * FALHA DE UM DIA NÃO CANCELA OS OUTROS (app.js:2045): antes, tropeçar no 7º descartava
+   * os 124 seguintes.
+   *
+   * O CARIMBO É OTIMISTA, e é o mesmo padrão do aviso da Gordura: grava
+   * `advertencia_enviada_em` depois do disparo aceito, não depois da prova do Transnet. A
+   * prova fica no run — e a faixa do robô, no topo desta tela, diz quando ele termina mal. */
+  const aoAdvertirVencidos = useCallback(
+    async (regs) => {
+      const lista = (regs || []).filter(Boolean);
+      const barrados = lista.map((r) => ({ r, motivo: motivoSemAdvertir(r) })).filter((x) => x.motivo);
+      const podem = lista.filter((r) => !motivoSemAdvertir(r));
+      if (!podem.length) {
+        setRecado(
+          "Nenhum dos marcados pode ser advertido" +
+            (barrados.length ? `: ${barrados.slice(0, 4).map((x) => `${x.r.nome} (${x.motivo})`).join(" · ")}` : "."),
+        );
+        return;
+      }
+      const porDia = {};
+      podem.forEach((r) => (porDia[r.iso] = porDia[r.iso] || []).push(r));
+      const dias = Object.keys(porDia).sort();
+
+      setDisparando(true);
+      setRecado("");
+      try {
+        // O MODELO É O DA FERRAMENTA, na mesma chave: quem editar a carta lá encontra a
+        // carta editada aqui. Vazio cai no texto oficial (Art. 74 da CLT).
+        let tpl = "";
+        try {
+          const cfg = await lerDP360("app_config", { filtros: { chave: `eq.${CHAVE_TPL_ADVERTENCIA}` } });
+          tpl = escolherTemplate((cfg || [])[0]?.valor, "advertencia_prazo");
+        } catch {
+          tpl = escolherTemplate("", "advertencia_prazo");
+        }
+        const carta = (reg) =>
+          preencherTemplate(tpl, {
+            NOME: reg.nome,
+            CRACHA: cracha8(reg.cracha),
+            DATA: ddmmaaaa(reg.iso),
+          });
+
+        // CARTA VAZIA OU COM {VARIAVEL} SOBRANDO NÃO SAI. O modelo pode ter sido apagado no
+        // `app_config` ou editado com uma variável que esta rota não preenche — e o que
+        // chegaria na ficha da pessoa seria um comunicado em branco, ou com "{NOME}" escrito.
+        const amostra = podem[0];
+        const pendentes = variaveisPendentes(carta(amostra));
+        if (!txt(carta(amostra)) || pendentes.length) {
+          setRecado(
+            `Não dá para advertir: o modelo (app_config → ${CHAVE_TPL_ADVERTENCIA}) ` +
+              (pendentes.length
+                ? `tem variável que esta tela não preenche: ${pendentes.join(", ")}.`
+                : "está vazio."),
+          );
+          return;
+        }
+        if (!confirmar(
+          `ADVERTIR ${podem.length} pessoa(s) no Transnet, em ${dias.length} envio(s) — um por dia:\n\n` +
+            dias.map((d) => `· ${paraBR(d)} — ${porDia[d].length} pessoa(s)`).join("\n") +
+            `\n\nO MOTIVO É ${MOTIVO_ADVERTENCIA} — isto entra na ficha da pessoa.\n\n` +
+            `Texto que vai sair (exemplo, ${amostra.nome}):\n"${carta(amostra).slice(0, 300)}${carta(amostra).length > 300 ? "…" : ""}"\n\n` +
+            (barrados.length ? `${barrados.length} marcado(s) ficam de fora (${barrados[0].motivo}…).\n\n` : "") +
+            `Depois disto o caso vai para "Advertências e correções". O PONTO AINDA NÃO É ` +
+            `CORRIGIDO: a correção é o segundo passo, lá, e só de quem foi advertido.`,
+        )) return;
+
+        const falhos = [];
+        let advertidos = 0;
+        for (const dia of dias) {
+          const gente = porDia[dia];
+          try {
+            await dispararRoboDP360("comunicado", {
+              csv: csvComunicado(gente.map((r) => ({ cracha: r.cracha, mensagem: carta(r) }))),
+              data: ddmmaaaa(dia),
+              motivo: MOTIVO_ADVERTENCIA,
+              confirmar: "true",
+            });
+            const agora = agoraISOLocal();
+            for (const reg of gente) {
+              await upsertDP360("ponto_caso", {
+                ...chaveDoCaso(reg),
+                advertencia_enviada_em: agora,
+                atualizado_em: agora,
+              });
+            }
+            advertidos += gente.length;
+          } catch (e) {
+            falhos.push(`${paraBR(dia)} (${e?.message || "falhou"})`);
+          }
+        }
+        setSelIds([]);
+        setRecado(
+          advertidos
+            ? `✓ ${advertidos} advertência(s) disparada(s) em ${dias.length - falhos.length} dia(s). ` +
+                (falhos.length ? `${falhos.length} dia(s) falharam: ${falhos.join(" · ")}. ` : "") +
+                `O ponto NÃO foi corrigido: a correção é na aba "Advertências e correções".`
+            : `Falhou: nenhuma advertência saiu. ${falhos.join(" · ")}`,
+        );
+        await atualizarSilencioso();
+      } finally {
+        setDisparando(false);
+      }
+    },
+    [atualizarSilencioso],
+  );
+
+  /* ══ FASE 2 — A CORREÇÃO, E SÓ DE QUEM FOI ADVERTIDO ══════════════════════
+   * O robô é o `ponto`, o mesmo da Revisão: ele REESCREVE o cartão do dia com as quatro
+   * pontas do CSV. O que vai no CSV é o ALVO — o cartão que esta tela mostra na coluna e no
+   * pop-up, e o mesmo que foi cobrado no aviso.
+   *
+   * `correcao_final_em` é carimbado no disparo aceito, como o resto do INOVE faz com este
+   * robô. É otimista de propósito e está dito na confirmação: sem isso o caso ficaria preso
+   * em "advertido" para sempre, que foi o defeito que a saída "fora do robô" nasceu para
+   * remendar. */
+  const aoCorrigirAdvertidos = useCallback(
+    async (regs) => {
+      const lista = (regs || []).filter(Boolean);
+      const barrados = lista.map((r) => ({ r, motivo: motivoSemCorrigirVencido(r) })).filter((x) => x.motivo);
+      const podem = lista.filter((r) => !motivoSemCorrigirVencido(r));
+      if (!podem.length) {
+        setRecado(
+          "Nenhum dos marcados pode ser corrigido" +
+            (barrados.length ? `: ${barrados.slice(0, 4).map((x) => `${x.r.nome} (${x.motivo})`).join(" · ")}` : "."),
+        );
+        return;
+      }
+      const porDia = {};
+      podem.forEach((r) => (porDia[r.iso] = porDia[r.iso] || []).push(r));
+      const dias = Object.keys(porDia).sort();
+
+      // O CARTÃO DE CADA UM NA CONFIRMAÇÃO: é ponto de gente, e o robô ESCREVE — diferente
+      // do `ajustes`, que só clica em pedido que já existe.
+      const linha = (r) => `· ${r.nome} ${r.dataBR}: ${cartaoDaCorrecao(r).slots.filter(Boolean).join(" ")}`;
+      if (!confirmar(
+        `CORRIGIR O PONTO de ${podem.length} dia(s) no Transnet, em ${dias.length} rodada(s):\n\n` +
+          podem.slice(0, 12).map(linha).join("\n") +
+          (podem.length > 12 ? `\n… e mais ${podem.length - 12}` : "") +
+          `\n\nO robô \`ponto\` REESCREVE o cartão do dia com estas pontas. ` +
+          (barrados.length ? `\n${barrados.length} marcado(s) ficam de fora (${barrados[0].motivo}…).` : "") +
+          `\n\nAo disparar, o caso é fechado como CORRIGIDO no nosso banco (correcao_final_em). ` +
+          `A prova do que o Transnet aceitou fica no run do GitHub.`,
+      )) return;
+
+      setDisparando(true);
+      setRecado("");
+      try {
+        const falhos = [];
+        let corrigidos = 0;
+        for (const dia of dias) {
+          const gente = porDia[dia];
+          try {
+            await dispararRoboDP360("ponto", {
+              csv: csvDoAjustePonto(
+                gente.map((r) => {
+                  const [entrada, alm_saida, alm_volta, saida] = cartaoDaCorrecao(r).slots;
+                  return { cracha: cracha8(r.cracha), data: ddmmaaaa(dia), entrada, alm_saida, alm_volta, saida };
+                }),
+              ),
+              data: ddmmaaaa(dia),
+              confirmar: "true",
+            });
+            const agora = agoraISOLocal();
+            for (const reg of gente) {
+              await upsertDP360("ponto_caso", {
+                ...chaveDoCaso(reg),
+                correcao_status: "corrigido",
+                correcao_final_em: agora,
+                atualizado_em: agora,
+              });
+            }
+            corrigidos += gente.length;
+          } catch (e) {
+            falhos.push(`${paraBR(dia)} (${e?.message || "falhou"})`);
+          }
+        }
+        setSelIds([]);
+        setRecado(
+          corrigidos
+            ? `✓ ${corrigidos} ponto(s) mandados para o robô em ${dias.length - falhos.length} rodada(s).` +
+                (falhos.length ? ` ${falhos.length} dia(s) falharam: ${falhos.join(" · ")}.` : "")
+            : `Falhou: nenhuma correção saiu. ${falhos.join(" · ")}`,
+        );
+        await atualizarSilencioso();
+      } finally {
+        setDisparando(false);
+      }
+    },
+    [atualizarSilencioso],
+  );
+
   /* ── colunas de cada grade (formato do TabelaDP: id/titulo/valor/render) ── */
 
   const acoesDecisao = { gravando, aoAbrir: abrir, aoDesfazer };
@@ -4841,6 +5106,9 @@ export default function Ocorrencias() {
     coment: { chave: "p5_com", colunas: COLS_COMENT },
     cancel: { chave: "p5_cancel", colunas: COLS_CANCEL },
     exec: { chave: "p5_exec", colunas: COLS_EXEC, selecionavel: true, loteConferir: true },
+    // A SEGUNDA METADE DA CADEIA DO VENCIDO mora aqui: quem já foi advertido espera a
+    // correção do ponto, e é esta aba que mostra os dois desfechos lado a lado.
+    disc: { chave: "p5_disc", colunas: COLS_LISTA, selecionavel: true, loteCorrigir: true },
   };
   const grade = GRADE[abaAtiva] || { chave: "p5_lista", colunas: COLS_LISTA };
   // A ✔ só existe onde ela SERVE para alguma coisa: conferir no Transnet e lançar dia sem
@@ -4923,10 +5191,19 @@ export default function Ocorrencias() {
           grade — as caixinhas de aceitar/rejeitar saíram junto com a decisão. */}
       {porta === "aviso" ? (
         <>
+          {/* O PRIMEIRO PASSO DA CADEIA DO VENCIDO. Ele não corrige o ponto: adverte, e o
+              caso desce para "Advertências e correções", onde a correção é mandada depois
+              de a advertência ter saído. A ordem é a regra — consertar sem punir apaga a
+              prova de que a pessoa não cumpriu o prazo. */}
           {vencidosMarcados.length ? (
-            <BotaoExecucao tom="erro" motivo={MOTIVO_VENCIDO}>
-              ⚠ Advertir e corrigir ({vencidosMarcados.length})
-            </BotaoExecucao>
+            <BotaoAcao
+              tom="erro"
+              titulo={`Dispara o robô \`comunicado\` com motivo ${MOTIVO_ADVERTENCIA}, um envio por dia, e carimba advertencia_enviada_em. O ponto NÃO é corrigido aqui: a correção é o passo seguinte, na aba "Advertências e correções".`}
+              disabled={gravando || disparando}
+              onClick={() => aoAdvertirVencidos(vencidosMarcados)}
+            >
+              ⚠ Advertir ({vencidosMarcados.length})
+            </BotaoAcao>
           ) : null}
           <BotaoAcao
             tom="erro"
@@ -4994,6 +5271,21 @@ export default function Ocorrencias() {
       <span className="dp-faint dp-num" style={MINI}>
         {sitDisc === "TODOS" ? `${naAba.length} caso(s)` : `${linhas.length} de ${naAba.length}`}
       </span>
+      {/* O SEGUNDO PASSO. Só entra quem tem `advertencia_enviada_em` — a trava está em
+          `motivoSemCorrigirVencido`, e quem for barrado aparece com o motivo. */}
+      {marcados.length ? (
+        <>
+          <span className="oc-sep" aria-hidden="true" />
+          <BotaoAcao
+            tom="erro"
+            titulo="Dispara o robô `ponto`, uma rodada por dia, com o ALVO de cada um — ele REESCREVE o cartão do dia no Transnet. Só de quem já foi advertido."
+            disabled={gravando || disparando}
+            onClick={() => aoCorrigirAdvertidos(marcados)}
+          >
+            🔧 Corrigir o ponto ({marcados.length})
+          </BotaoAcao>
+        </>
+      ) : null}
     </div>
   ) : null;
 

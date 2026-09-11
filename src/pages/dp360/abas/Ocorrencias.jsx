@@ -56,6 +56,7 @@ import {
   alvoPublicado,
   alvoQuatroSlots,
   horaSlot,
+  cartaoCronologico,
   marcaDaOcorrencia,
   mioloTravado,
   montaCompartimentos,
@@ -1149,6 +1150,20 @@ function montarRegistros(base) {
     });
     let notas = arruma(previa.notas);
     let sim = previa.batidas;
+
+    /* A LISTA E O CASO TÊM DE DIZER A MESMA COISA (10/09/2026). Quando o motor desiste —
+     * e ele desiste no cartão de batidas coladas, que é justamente o que o pedido conserta —
+     * a coluna dizia "o pedido não muda nada neste cartão" para um dia que muda inteiro.
+     * MARIVANIA 30060671 · 28/08: a lista mostrava 08:03 · — · — · 08:05 e o pop-up montava
+     * 08:03 · 12:00 · 13:00 · 17:56. A mesma conta do caso responde aqui (`cartaoCronologico`),
+     * e só onde o miolo é livre: no motorista o almoço é o que nós lançamos. */
+    if (!mioloTravado(cat) && ![2, 4].includes((sim || []).length)) {
+      const cron = cartaoCronologico(antesMin, prev.map((o) => ({ hora: txt(o.horario_ajuste) })));
+      if (cron && [2, 4].includes(cron.length)) {
+        sim = cron;
+        notas = arruma([...(previa.notas || []), "leitura cronológica: o pedido desfaz a batida colada"]);
+      }
+    }
 
     // main.py:9098-9122 — O "DEPOIS" TEM QUE RESPEITAR A DECISÃO. Enquanto aberto ele é a
     // prévia; depois de decidido vira EVIDÊNCIA, e evidência que ignora a decisão mente.

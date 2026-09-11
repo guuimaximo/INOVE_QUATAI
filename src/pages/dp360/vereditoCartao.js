@@ -285,6 +285,49 @@ export function criticaOrdem(chave, min, ref) {
   return v - ref <= LIMITE_ESTIRAO ? "" : `depois de ${min2hm(ref)}`;
 }
 
+/**
+ * ══ A LEITURA CRONOLÓGICA — quando o motor desiste, o relógio responde ══════
+ *
+ * Aplica os pedidos às batidas e devolve o cartão EM ORDEM: a alteração (`D/ x P/ y`) tira
+ * o `x` e põe o `y`; a inserção põe. Minutos ordenados, sem repetição.
+ *
+ * POR QUE ELA EXISTE. O `simulaCartao` não respondeu para a MARIVANIA 30060671 · 28/08: as
+ * duas batidas dela (08:03 e 08:05) estão a 2 minutos, o `removeFantasmas` joga a primeira
+ * fora como toque repetido do coletor, sobra UMA e ele devolve "cartão com 1 batida só — o
+ * ponto do dia ainda não fechou", sem cartão nenhum. O motor está certo no que julga: um
+ * cartão de uma batida não fecha. O que ele não vê é que O PEDIDO DELA DESFAZ O PAR COLADO
+ * — a alteração move justamente a batida de 08:05 para 12:00.
+ *
+ * E ORDEM É A LEITURA CERTA porque no Transnet não existe "compartimento": o cartão é uma
+ * lista de batidas, e entrada/saída-almoço/volta/saída é como ela se LÊ. Foi por ler pelo
+ * rótulo que a ocorrência declara — e não pelo relógio — que o 12:00 dela sumia atrás do
+ * 13:00, os dois se dizendo "saída almoço".
+ *
+ * NÃO SUBSTITUI O MOTOR: só responde quando ele não respondeu, e só para quem tem o miolo
+ * livre (interno/aprendiz). No motorista o almoço é o que NÓS lançamos, e não se reordena.
+ *
+ * @param batidas minutos do cartão de hoje (`null` é ignorado)
+ * @param pedidos itens com `hora` — "13:00" ou "D/ 08:05 P/ 12:00"
+ */
+export function cartaoCronologico(batidas, pedidos) {
+  const fora = new Set();
+  const postos = [];
+  (pedidos || []).forEach((it) => {
+    const alt = /D\/\s*(\d{1,2}:\d{2})\s*P\/\s*(\d{1,2}:\d{2})/i.exec(txt(it?.hora));
+    if (alt) {
+      const de = hm2min(alt[1]);
+      if (de != null) fora.add(de);
+    }
+    const m = horaDoPedido(it);
+    if (m != null) postos.push(m);
+  });
+  if (!postos.length) return null;
+  const mins = [...(batidas || []).filter((v) => v != null && !fora.has(v)), ...postos]
+    .filter((v) => v != null)
+    .sort((a, b) => a - b);
+  return [...new Set(mins)];
+}
+
 /* ──────────────────── os quatro compartimentos, montados ─────────────────── */
 
 /**
@@ -378,6 +421,47 @@ export function montaCompartimentos({
    * NO MOTORISTA NADA DISSO VALE: o miolo dele é a refeição que NÓS lançamos, travada, e
    * não se reordena por pedido nenhum. */
   const encaixe = !travaMiolo && (ficaMontador || []).length === 4 ? ficaMontador : null;
+
+  /* ── QUANDO O MOTOR DESISTE, A LEITURA CRONOLÓGICA ────────────────────────
+   * O `simulaCartao` não respondeu para a MARIVANIA: as duas batidas dela (08:03 e 08:05)
+   * estão a 2 minutos, o `removeFantasmas` joga a primeira fora como toque repetido do
+   * coletor, sobra UMA batida e ele devolve "cartão com 1 batida só — o ponto do dia ainda
+   * não fechou", sem cartão nenhum. O motor está certo no que ele julga: um cartão de uma
+   * batida não fecha. O que ele não vê é que O PEDIDO DELA DESFAZ O PAR COLADO — a
+   * alteração move justamente a batida de 08:05 para 12:00.
+   *
+   * Então, para interno/aprendiz, quando o montador não devolve as quatro posições, o
+   * cartão é montado pela ÚNICA leitura que não inventa nada: as batidas dele, menos as que
+   * uma alteração aceita tira, mais as que os pedidos aceitos põem, EM ORDEM.
+   *
+   * E ordem é a leitura certa porque no Transnet não existe "compartimento": o cartão é
+   * uma lista de batidas, e entrada/saída-almoço/volta/saída é como ela se LÊ. Foi por ler
+   * pelo rótulo que a ocorrência declara — e não pelo relógio — que o 12:00 dela sumia
+   * atrás do 13:00, os dois se dizendo "saída almoço". */
+  const cronologico = (() => {
+    if (travaMiolo || encaixe) return null;
+    const fora = new Set();
+    const postos = [];
+    let houveAceite = false;
+    acoes.forEach((it, i) => {
+      if (marcaDaOcorrencia(reg, marcas, i) !== "A") return;
+      houveAceite = true;
+      const alt = /D\/\s*(\d{1,2}:\d{2})\s*P\/\s*(\d{1,2}:\d{2})/i.exec(txt(it?.hora));
+      if (alt) {
+        const de = hm2min(alt[1]);
+        if (de != null) fora.add(de);
+      }
+      const m = horaDoPedido(it);
+      if (m != null) postos.push(m);
+    });
+    if (!houveAceite) return null;
+    const mins = [...hoje.filter((v) => v != null && !fora.has(v)), ...postos]
+      .filter((v) => v != null)
+      .sort((a, b) => a - b);
+    const unicos = [...new Set(mins)];
+    return unicos.length === 4 ? unicos : null;
+  })();
+  const quatro = encaixe || cronologico;
   const origemDoEncaixe = (m, i) =>
     m === hoje[i] ? "batida" : horasAceitas.has(m) ? "pedido" : "encaixe";
 
@@ -407,9 +491,10 @@ export function montaCompartimentos({
 
   const bruto = COMPARTIMENTOS.map((c, i) => {
     const base = { chave: c.chave, rotulo: c.rotulo, ponta: c.ponta, travado: false, porClique: false };
-    // O INTERNO QUE FECHA EM QUATRO: o montador já ordenou o cartão inteiro.
-    if (encaixe && !alvoManda && mao[c.chave] == null)
-      return { ...base, min: encaixe[i], origem: origemDoEncaixe(encaixe[i], i) };
+    // O INTERNO QUE FECHA EM QUATRO: o cartão já está ordenado — pelo montador, ou pela
+    // leitura cronológica quando ele desiste.
+    if (quatro && !alvoManda && mao[c.chave] == null)
+      return { ...base, min: quatro[i], origem: origemDoEncaixe(quatro[i], i) };
     if (MIOLO.includes(c.chave)) {
       if (travaMiolo) {
         // A REFEIÇÃO DE REFERÊNCIA VEM DA IMPORTAÇÃO (as colunas do dia — a mesma fonte da

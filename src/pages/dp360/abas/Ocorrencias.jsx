@@ -53,6 +53,7 @@ import {
   COMPARTIMENTOS,
   MOTIVO_MIOLO,
   ORIGENS,
+  alvoDaEscala,
   alvoPublicado,
   alvoQuatroSlots,
   horaSlot,
@@ -1322,7 +1323,18 @@ function montarRegistros(base) {
      * `["","","",""]` como base é de propósito: aqui o slot que ninguém publicou tem de
      * ficar VAZIO. Passando `slotsHoje`, a batida de hoje se disfarçaria de alvo e o
      * "completar com o alvo" ofereceria a própria batida que está faltando. */
-    const regua = alvoPublicado(cp, rm, ["", "", "", ""]) || alvoQuatroSlots(caso);
+    /* A RÉGUA DO POP-UP, COM O ÚLTIMO DEGRAU (11/09/2026): o alvo publicado pela Revisão,
+     * o alvo congelado no aviso e — quando não existe nenhum dos dois — a ESCALA do dia.
+     * Medido no lake: sem a escala, 36 crachá+dia ficavam sem alvo nenhum, quase todos
+     * interno/aprendiz (o alvo do `ponto_diario` nasce da operação real do motorista, e o
+     * interno não tem operação). Com ela, sobram 3. */
+    const reguaPublicada = alvoPublicado(cp, rm, ["", "", "", ""]);
+    const reguaDoAviso = reguaPublicada ? null : alvoQuatroSlots(caso);
+    const reguaDaEscala = reguaPublicada || reguaDoAviso ? null : alvoDaEscala(cp, cat);
+    const regua = reguaPublicada || reguaDoAviso || reguaDaEscala;
+    // DE ONDE VEIO A RÉGUA — o cartão precisa dizer isso em cada ponta: "do alvo" e "da
+    // escala" são promessas de peso diferente, e a segunda é horário programado, não apurado.
+    const reguaFonte = reguaPublicada ? "publicado" : reguaDoAviso ? "aviso" : reguaDaEscala ? "escala" : "";
 
     // ── monitor de avisos (main.py:4283-4361) ───────────────────────────────
     // ids ainda PENDENTES no Transnet que a nossa decisão NÃO cobre
@@ -1419,6 +1431,7 @@ function montarRegistros(base) {
       depois: sim,
       alvo: final,                          // o cartão FINAL, quatro slots + `mudou`
       regua,                                // as quatro pontas do alvo publicado (o pop-up)
+      reguaFonte,                           // publicado · aviso · escala — a origem dela
       // DIA SEM PONTO = ZERO batida NO CARTÃO (main.py:6199). Sai de `antesCartao`, nunca
       // de `antesMin`: este último cai no `ponto_antes` CONGELADO quando o cartão está
       // vazio, e aí um dia sem batida nenhuma pareceria ter batidas.
@@ -3866,6 +3879,14 @@ function Detalhe({ reg, aoFechar, gravando, aoMarcar, aoAbrirCartao, abrindoCart
               {/* O PEDIDO QUE NÃO COUBE. Aceitar um horário que o cartão não comporta faz o
                   robô inserir a batida assim mesmo — e o cartão do Transnet sai com cinco.
                   Dizer isso aqui é a diferença entre prometer e entregar. */}
+              {/* O ALMOÇO CURTO QUE ELE MESMO BATEU: é fato, não trava o veredito — mas o DP
+                  tem de ver, porque é o gatilho da carta `interno_almoco`. */}
+              {v.avisoAlmoco ? (
+                <div className="oc-vd-critica" style={{ marginTop: 8 }}>
+                  ⚠ {v.avisoAlmoco}. O cartão fecha assim; se for para corrigir, cravar à mão ou
+                  completar com o alvo põe a hora inteira.
+                </div>
+              ) : null}
               {v.foraDoCartao?.length ? (
                 <div className="oc-vd-critica" style={{ marginTop: 8 }}>
                   ⚠ {v.foraDoCartao.join(" · ")} não cabe(m) no cartão de quatro: aceitar assim

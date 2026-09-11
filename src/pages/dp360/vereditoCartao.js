@@ -179,6 +179,7 @@ export const ORIGENS = {
   manual: { rotulo: "cravado à mão", cor: "accent", ajuda: "você digitou no campo à mão — é o topo da precedência." },
   pedido: { rotulo: "pedido aceito", cor: "ok", ajuda: "é o horário que ele pediu e você aceitou; quem lança é o robô `ajustes`." },
   alvo: { rotulo: "do alvo", cor: "accent", ajuda: "é o alvo publicado pela Revisão — o que a correção vai lançar nesta ponta." },
+  escala: { rotulo: "da escala", cor: "alerta", ajuda: "não há batida nem alvo apurado neste dia: o horário é o PROGRAMADO da escala, a jornada combinada com ele. Confira antes de gravar." },
   encaixe: { rotulo: "encaixe do montador", cor: "mute", ajuda: "sobrou batida no cartão e o montador encaixou as quatro (montador.py:417)." },
   batida: { rotulo: "batida dele", cor: "mute", ajuda: "já está no cartão e ninguém mexeu nesta ponta — fica como está." },
   refeicao: { rotulo: "🔒 travado", cor: "mute", ajuda: "a refeição do motorista vem da apuração do dia e não muda por marcação nenhuma." },
@@ -339,6 +340,46 @@ export function cartaoCronologico(batidas, pedidos, cat) {
   return fica.length && !validaCartao(fica, cat) ? fica : unicos;
 }
 
+/**
+ * ══ O ÚLTIMO DEGRAU DO ALVO: A ESCALA ══════════════════════════════════════
+ *
+ * "Essa ferramenta tem que dar o alvo" (dono, 11/09/2026). Medido no lake no mesmo dia,
+ * sobre os 276 crachá+dia pendentes: o pedido resolve 175, o alvo publicado pela Revisão
+ * resolve outros 48, e sobram 36 — quase todos INTERNO/APRENDIZ, porque o alvo do
+ * `ponto_diario` nasce da operação real do motorista (Citatti/GPS/escala) e o interno não
+ * tem operação. Desses 36, TRINTA E SEIS têm escala. Só 3 dias não têm nem uma coisa nem
+ * outra.
+ *
+ * Então a escala é o último degrau: ela é a jornada combinada com a pessoa, e é a mesma
+ * régua que o DP usaria à mão. O cartão sai com a origem "da escala" em cada ponta — quem
+ * olha vê na hora que aquilo não é batida nem alvo apurado, é o programado.
+ *
+ * O MIOLO segue a regra de cada um: no motorista, a refeição apurada do dia (a que NÓS
+ * lançamos) — sem ela o cartão dele fecha em 2, que é legítimo; no interno, UMA HORA no
+ * meio da jornada, que é o descanso que a carta `interno_almoco` cobra dele.
+ */
+export function alvoDaEscala(cartao, categoria) {
+  const cp = cartao || {};
+  const e = hm2min(horaSlot(cp.esc_entrada));
+  const s0 = hm2min(horaSlot(cp.esc_saida));
+  if (e == null || s0 == null) return null;
+  let s = s0;
+  while (s <= e) s += 1440;                       // jornada que vira a meia-noite
+  if (mioloTravado(categoria)) {
+    const as = hm2min(horaSlot(cp.almoco_saida_sug));
+    const av = hm2min(horaSlot(cp.almoco_volta_sug));
+    const dentro = as != null && av != null && as > e && av > as && av < s;
+    return dentro
+      ? [min2hm(e), min2hm(as), min2hm(av), min2hm(s)]
+      : [min2hm(e), "", "", min2hm(s)];
+  }
+  // interno/aprendiz: uma hora no meio, e só quando a jornada comporta
+  if (s - e < ALMOCO_INTERNO_MIN + 120) return [min2hm(e), "", "", min2hm(s)];
+  const meio = Math.round((e + s) / 2);
+  const saida = meio - ALMOCO_INTERNO_MIN / 2;
+  return [min2hm(e), min2hm(saida), min2hm(saida + ALMOCO_INTERNO_MIN), min2hm(s)];
+}
+
 /* ──────────────────── os quatro compartimentos, montados ─────────────────── */
 
 /**
@@ -369,6 +410,8 @@ export function montaCompartimentos({
   ficaMontador = null,
 } = {}) {
   const cat = txt(reg?.categoria).toUpperCase();
+  // "da escala" é horário PROGRAMADO, não apurado — a ponta tem de dizer isso.
+  const origemDaRegua = txt(reg?.reguaFonte) === "escala" ? "escala" : "alvo";
   const travaMiolo = mioloTravado(cat);
   const hoje = (reg?.slotsHoje || ["", "", "", ""]).map((h) => hm2min(h));
   const regua = (reg?.regua || ["", "", "", ""]).map((h) => hm2min(h));
@@ -495,7 +538,7 @@ export function montaCompartimentos({
     mao[chave] = min;
   });
 
-  const bruto = COMPARTIMENTOS.map((c, i) => {
+  const montaBruto = (alvoManda) => COMPARTIMENTOS.map((c, i) => {
     const base = { chave: c.chave, rotulo: c.rotulo, ponta: c.ponta, travado: false, porClique: false };
     // O INTERNO QUE FECHA EM QUATRO: o cartão já está ordenado — pelo montador, ou pela
     // leitura cronológica quando ele desiste.
@@ -515,13 +558,45 @@ export function montaCompartimentos({
     if (aceito[c.chave] != null) return { ...base, min: aceito[c.chave], origem: "pedido" };
     // o dia da correção: o alvo manda na ponta inteira, tenha ela batida ou não
     if (alvoManda && regua[i] != null)
-      return { ...base, min: regua[i], origem: regua[i] === hoje[i] ? "batida" : "alvo" };
+      return { ...base, min: regua[i], origem: regua[i] === hoje[i] ? "batida" : origemDaRegua };
     const vazia = hoje[i] == null;
     if (vazia && completar[c.chave] && regua[i] != null)
-      return { ...base, min: regua[i], origem: "alvo", porClique: true };
+      return { ...base, min: regua[i], origem: origemDaRegua, porClique: true };
     if (hoje[i] != null) return { ...base, min: hoje[i], origem: "batida" };
     return { ...base, min: null, origem: "falta" };
   });
+
+  /* ══ SE O PEDIDO NÃO FECHA, O CARTÃO É O ALVO (dono, 11/09/2026) ═══════════
+   * "Essa ferramenta tem que dar o alvo." Até aqui, quando o pedido dele não montava um
+   * cartão possível, a tela dizia "não fecha — falta a volta do almoço" e parava: o DP
+   * ficava com um dia sem cartão nenhum para lançar, que é justamente o trabalho que ele
+   * veio fazer. Agora, quando o que sai do pedido não fecha E existe alvo que fecha, o
+   * cartão passa a ser o ALVO — o mesmo caminho do dia recusado e do vencido, porque o
+   * desfecho é o mesmo: esse dia vai para a correção, e quem escreve é o robô `ponto`.
+   *
+   * Medido no lake: isso leva a cobertura de 63% para 81% dos crachá+dia pendentes (e a
+   * escala, o último degrau da régua, cobre quase todo o resto). */
+  let bruto = montaBruto(alvoManda);
+  let mandouOAlvo = alvoManda;
+  if (!alvoManda) {
+    const comPedido = bruto.map((b) => b.min).filter((v) => v != null);
+    /* O BOTÃO DO DONO TEM PREFERÊNCIA. Quando o que falta é uma ponta VAZIA e o alvo tem
+     * ela, quem completa é ele, no clique — foi o desenho de 10/09 ("ao invés de não marcar,
+     * põe um botão para completar com o alvo se não tiver batida"). Trocar o cartão inteiro
+     * aqui apagaria esse botão justamente no caso para o qual ele foi feito. O alvo assume
+     * quando o cartão não tem conserto por clique: batida a mais, fora de ordem, almoço
+     * curto — aí não é ponta faltando, é cartão que não existe. */
+    const faltas = bruto.map((b, i) => [b, i]).filter(([b]) => b.origem === "falta");
+    const todasCompletaveis = faltas.length > 0 && faltas.every(([, i]) => regua[i] != null);
+    if (!todasCompletaveis && (validaCartao(comPedido, cat) || comPedido.length < 2)) {
+      const comAlvo = montaBruto(true);
+      const mins = comAlvo.map((b) => b.min).filter((v) => v != null);
+      if (mins.length && !validaCartao(mins, cat)) {
+        bruto = comAlvo;
+        mandouOAlvo = true;
+      }
+    }
+  }
 
   /* ── a virada do dia, como o `_desenrola` do montador ──
    * Compartimento seguinte nunca é menor que o anterior: o 02:10 pedido na saída de um dia
@@ -562,11 +637,29 @@ export function montaCompartimentos({
    *
    * No motorista nada muda: lá o intervalo sai da matriz da Revisão (15 min na faixa de
    * 4-6 h, 30 acima de 6) e quem o lança somos nós, no passo da Refeição. */
+  /* A HORA DO INTERNO VALE PARA O QUE NÓS PROPOMOS — NÃO PARA A BATIDA DELE.
+   * Medido no lake em 11/09/2026, nos cartões OK de interno/aprendiz: o almoço mediano é
+   * mesmo 60 min (a regra do dono bate com a prática), mas almoço ABAIXO de 60 acontece o
+   * tempo todo — 15% dos dias do aprendiz, 37% dos dias do interno acima de 6 h, 52% nos
+   * dias até 4 h. São 1.657 dias já fechados. Tratar isso como "cartão que não fecha"
+   * barraria o ponto real de gente que trabalhou.
+   *
+   * Então: quando o miolo vem da BATIDA dele, 57 minutos é fato, e a tela só AVISA (é para
+   * isso que existe a carta `interno_almoco`). Quando o miolo é proposta NOSSA — alvo,
+   * escala ou cravado à mão —, aí a hora é obrigatória: não se lança para alguém um
+   * intervalo menor do que o direito dele. */
+  const origemMiolo = [bruto[1]?.origem, bruto[2]?.origem];
+  const mioloProposto = origemMiolo.every((o) => ["alvo", "escala", "manual"].includes(o));
+  const almocoCurto = !travaMiolo && mins.length === 4 && mins[2] - mins[1] < ALMOCO_INTERNO_MIN;
   const problema =
     validaCartao(mins, cat) ||
-    (!travaMiolo && mins.length === 4 && mins[2] - mins[1] < ALMOCO_INTERNO_MIN
-      ? `almoço de ${mins[2] - mins[1]} min — o interno tem direito a 1 hora`
+    (almocoCurto && mioloProposto
+      ? `almoço de ${mins[2] - mins[1]} min — não dá para LANÇAR menos de 1 hora para o interno`
       : "");
+  const avisoAlmoco =
+    almocoCurto && !mioloProposto
+      ? `ele fez ${mins[2] - mins[1]} min de almoço — abaixo da hora a que tem direito`
+      : "";
   const { liquida, almoco } = jornadaDoCartao(mins);
   const contagem = { A: 0, R: 0, sem: 0 };
   acoes.forEach((_, i) => {
@@ -585,7 +678,8 @@ export function montaCompartimentos({
     almoco,
     contagem,
     semPedido,
-    alvoManda,
+    alvoManda: mandouOAlvo,
+    avisoAlmoco,
     foraDoCartao,
     criticas,
     travaMiolo,

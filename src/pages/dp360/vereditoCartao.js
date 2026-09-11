@@ -164,6 +164,10 @@ export const COMPARTIMENTOS = [
 
 // os dois do meio são a REFEIÇÃO; as duas pontas são o que o dia tem de ter sempre
 export const MIOLO = ["almSaida", "almVolta"];
+
+/** A hora de almoço do interno/aprendiz (main.py `_TPL.interno_almoco`: "o descanso mínimo
+ *  de 1 hora é um direito do colaborador"). Não vale para motorista. */
+export const ALMOCO_INTERNO_MIN = 60;
 // só as pontas têm campo à mão: o miolo do motorista é travado e o do interno é do montador
 export const PONTAS_MANUAIS = ["entrada", "saida"];
 
@@ -345,16 +349,37 @@ export function montaCompartimentos({
 
   // o horário que a MARCAÇÃO aceitou em cada compartimento (a primeira, havendo mais de uma)
   const aceito = {};
+  const horasAceitas = new Set();
   acoes.forEach((it, i) => {
     if (marcaDaOcorrencia(reg, marcas, i) !== "A") return;
-    const comp = COMPARTIMENTOS.find((c) => c.ponta === txt(it.ponta));
     const m = horaDoPedido(it);
+    if (m != null) horasAceitas.add(m);
+    const comp = COMPARTIMENTOS.find((c) => c.ponta === txt(it.ponta));
     if (!comp || m == null || aceito[comp.chave] != null) return;
     aceito[comp.chave] = m;
   });
 
-  // o miolo do montador — só interno/aprendiz, e só quando ele fechou em quatro
+  /* ══ NO INTERNO, O MONTADOR MANDA NO CARTÃO INTEIRO (10/09/2026) ═══════════
+   *
+   * MARIVANIA 30060671 · 28/08 é o caso que mostrou o defeito. Ela bateu 08:03 e 08:05
+   * (dois toques no relógio, 2 minutos) e mandou três pedidos: ALTERAR a batida de 08:05
+   * para 12:00, INSERIR 13:00 e INSERIR 17:56. Qualquer analista de DP lê isso na hora:
+   * a jornada foi 08:03 → 17:56 com almoço das 12:00 às 13:00, uma hora, a regra do interno.
+   *
+   * A tela lia outra coisa. O motor encaixa cada ocorrência num compartimento pelo que ela
+   * DECLARA, e tanto o 12:00 quanto o 13:00 caíram em "saída almoço" — o primeiro ganhava o
+   * slot, o segundo era descartado em silêncio, e o cartão saía 08:03 · 13:00 · (falta) ·
+   * 17:56. Aceitar os três produzia um cartão que não fecha, com o 12:00 dela sumido.
+   *
+   * O montador já sabia a resposta: `simulaCartao` + `encaixaEmQuatro` põem as batidas
+   * resultantes nas quatro posições POR ORDEM — que é como se lê um cartão. Ele só estava
+   * sendo usado no miolo. Agora, quando o interno fecha em quatro, ele manda nas quatro.
+   *
+   * NO MOTORISTA NADA DISSO VALE: o miolo dele é a refeição que NÓS lançamos, travada, e
+   * não se reordena por pedido nenhum. */
   const encaixe = !travaMiolo && (ficaMontador || []).length === 4 ? ficaMontador : null;
+  const origemDoEncaixe = (m, i) =>
+    m === hoje[i] ? "batida" : horasAceitas.has(m) ? "pedido" : "encaixe";
 
   /* ── o campo à mão: entra ao digitar, e só se a ordem do cartão aceitar ──
    * A referência de cada ponta é o MIOLO (entrada × saída do almoço, saída × volta do
@@ -382,6 +407,9 @@ export function montaCompartimentos({
 
   const bruto = COMPARTIMENTOS.map((c, i) => {
     const base = { chave: c.chave, rotulo: c.rotulo, ponta: c.ponta, travado: false, porClique: false };
+    // O INTERNO QUE FECHA EM QUATRO: o montador já ordenou o cartão inteiro.
+    if (encaixe && !alvoManda && mao[c.chave] == null)
+      return { ...base, min: encaixe[i], origem: origemDoEncaixe(encaixe[i], i) };
     if (MIOLO.includes(c.chave)) {
       if (travaMiolo) {
         // A REFEIÇÃO DE REFERÊNCIA VEM DA IMPORTAÇÃO (as colunas do dia — a mesma fonte da
@@ -390,11 +418,7 @@ export function montaCompartimentos({
         const m = regua[i] != null ? regua[i] : hoje[i];
         return { ...base, travado: true, min: m == null ? null : m, origem: m == null ? "vazio" : "refeicao" };
       }
-      if (encaixe) {
-        const m = encaixe[i];
-        const origem = m === hoje[i] ? "batida" : aceito[c.chave] != null ? "pedido" : "encaixe";
-        return { ...base, min: m, origem };
-      }
+      // (o encaixe do interno já respondeu acima, pelas quatro posições)
     }
     if (mao[c.chave] != null) return { ...base, min: mao[c.chave], origem: "manual" };
     if (aceito[c.chave] != null) return { ...base, min: aceito[c.chave], origem: "pedido" };
@@ -435,7 +459,23 @@ export function montaCompartimentos({
   const mins = blocos.map((b) => b.min).filter((v) => v != null);
   // O CARTÃO POSSÍVEL É O DO MONTADOR (`validaCartao`, montador.py:159): ordem, 2 ou 4 no
   // motorista, 4 no interno, e almoço dentro da faixa. Não há segunda opinião aqui.
-  const problema = validaCartao(mins, cat);
+  /* ══ O ALMOÇO DO INTERNO É DE UMA HORA (dono, 10/09/2026) ═════════════════
+   * "Para interno a regra é totalmente diferente de refeição: é 1 hora e não 30 min."
+   *
+   * O `validaCartao` é o montador — ele diz o que o cartão pode ser FISICAMENTE, e o piso
+   * dele (20 min) só serve para separar almoço de batida colada. A regra do INTERNO é
+   * trabalhista e já está escrita em outro lugar desta casa: o aviso `interno_almoco`
+   * ("o intervalo de almoço ficou abaixo de 1 hora... o descanso mínimo de 1 hora é um
+   * direito do colaborador"). Avisar disso e depois LANÇAR 40 minutos seria a tela
+   * desmentindo a própria carta.
+   *
+   * No motorista nada muda: lá o intervalo sai da matriz da Revisão (15 min na faixa de
+   * 4-6 h, 30 acima de 6) e quem o lança somos nós, no passo da Refeição. */
+  const problema =
+    validaCartao(mins, cat) ||
+    (!travaMiolo && mins.length === 4 && mins[2] - mins[1] < ALMOCO_INTERNO_MIN
+      ? `almoço de ${mins[2] - mins[1]} min — o interno tem direito a 1 hora`
+      : "");
   const { liquida, almoco } = jornadaDoCartao(mins);
   const contagem = { A: 0, R: 0, sem: 0 };
   acoes.forEach((_, i) => {

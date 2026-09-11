@@ -20,7 +20,7 @@
 // Extensão `.js` EXPLÍCITA de propósito: o Vite resolve sem ela, o Node não — e este
 // módulo existe justamente para ser importado por `node` no teste diferencial.
 import { CONSTANTES, hm2min, jornadaDoCartao, min2hm, textoBatidas } from "./regrasPonto.js";
-import { validaCartao } from "./regrasMontador.js";
+import { encaixaEmQuatro, validaCartao } from "./regrasMontador.js";
 
 const txt = (v) => String(v ?? "").trim();
 
@@ -306,10 +306,17 @@ export function criticaOrdem(chave, min, ref) {
  * NÃO SUBSTITUI O MOTOR: só responde quando ele não respondeu, e só para quem tem o miolo
  * livre (interno/aprendiz). No motorista o almoço é o que NÓS lançamos, e não se reordena.
  *
+ * E QUANDO SOBRA BATIDA, QUEM ESCOLHE É O MONTADOR. Medido no lake em 11/09/2026, sobre os
+ * 276 crachá+dia pendentes: o motor fechava 84 (30%); a leitura em ordem levou a 125 (45%);
+ * e passar o que sobrou pelo `encaixaEmQuatro` — o passo do montador que descarta a batida
+ * que sobra (montador.py:417) — levou a 175 (63%). São os cartões de 5, 6 e 8 batidas: o
+ * colaborador manda vários pedidos, a soma passa de quatro, e empilhar tudo não é cartão.
+ *
  * @param batidas minutos do cartão de hoje (`null` é ignorado)
  * @param pedidos itens com `hora` — "13:00" ou "D/ 08:05 P/ 12:00"
+ * @param cat     categoria, para o encaixe saber a régua (motorista fecha em 2 ou 4)
  */
-export function cartaoCronologico(batidas, pedidos) {
+export function cartaoCronologico(batidas, pedidos, cat) {
   const fora = new Set();
   const postos = [];
   (pedidos || []).forEach((it) => {
@@ -325,7 +332,11 @@ export function cartaoCronologico(batidas, pedidos) {
   const mins = [...(batidas || []).filter((v) => v != null && !fora.has(v)), ...postos]
     .filter((v) => v != null)
     .sort((a, b) => a - b);
-  return [...new Set(mins)];
+  const unicos = [...new Set(mins)];
+  if (!validaCartao(unicos, cat)) return unicos;
+  // sobrou batida (ou o cartão não fecha assim): o montador escolhe as quatro
+  const fica = encaixaEmQuatro(unicos, cat)?.fica || [];
+  return fica.length && !validaCartao(fica, cat) ? fica : unicos;
 }
 
 /* ──────────────────── os quatro compartimentos, montados ─────────────────── */
@@ -438,30 +449,25 @@ export function montaCompartimentos({
    * uma lista de batidas, e entrada/saída-almoço/volta/saída é como ela se LÊ. Foi por ler
    * pelo rótulo que a ocorrência declara — e não pelo relógio — que o 12:00 dela sumia
    * atrás do 13:00, os dois se dizendo "saída almoço". */
+  /* UMA CONTA SÓ, e ela mora em `cartaoCronologico` (acima): é a MESMA que a coluna da
+   * grade usa. Duas implementações da mesma leitura é como esta tela já teve três cartões
+   * para o mesmo dia. */
+  const aceitosDoDia = acoes.filter((_, i) => marcaDaOcorrencia(reg, marcas, i) === "A");
   const cronologico = (() => {
-    if (travaMiolo || encaixe) return null;
-    const fora = new Set();
-    const postos = [];
-    let houveAceite = false;
-    acoes.forEach((it, i) => {
-      if (marcaDaOcorrencia(reg, marcas, i) !== "A") return;
-      houveAceite = true;
-      const alt = /D\/\s*(\d{1,2}:\d{2})\s*P\/\s*(\d{1,2}:\d{2})/i.exec(txt(it?.hora));
-      if (alt) {
-        const de = hm2min(alt[1]);
-        if (de != null) fora.add(de);
-      }
-      const m = horaDoPedido(it);
-      if (m != null) postos.push(m);
-    });
-    if (!houveAceite) return null;
-    const mins = [...hoje.filter((v) => v != null && !fora.has(v)), ...postos]
-      .filter((v) => v != null)
-      .sort((a, b) => a - b);
-    const unicos = [...new Set(mins)];
-    return unicos.length === 4 ? unicos : null;
+    if (travaMiolo || encaixe || !aceitosDoDia.length) return null;
+    const lido = cartaoCronologico(hoje, aceitosDoDia, cat) || [];
+    return lido.length === 4 ? lido : null;
   })();
   const quatro = encaixe || cronologico;
+
+  /* O QUE NÃO COUBE NO CARTÃO TEM DE APARECER. Quando sobra batida, o montador escolhe
+   * quatro e DESCARTA o resto — e o resto pode ser um pedido que o DP acabou de aceitar.
+   * O cartão ao lado ficaria bonito e o robô `ajustes` faria outra coisa: ele só clica
+   * "aceitar", e o Transnet insere a batida de qualquer jeito, produzindo um cartão de
+   * cinco. Então a tela diz, em vez de prometer o que não vai acontecer. */
+  const foraDoCartao = quatro
+    ? [...horasAceitas].filter((m) => !quatro.includes(m)).sort((a, b) => a - b).map(min2hm)
+    : [];
   const origemDoEncaixe = (m, i) =>
     m === hoje[i] ? "batida" : horasAceitas.has(m) ? "pedido" : "encaixe";
 
@@ -580,6 +586,7 @@ export function montaCompartimentos({
     contagem,
     semPedido,
     alvoManda,
+    foraDoCartao,
     criticas,
     travaMiolo,
     // O DIA É CONSEQUÊNCIA DAS MARCAS: havendo recusa, a recusa manda (é ela que abre a

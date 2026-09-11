@@ -1158,7 +1158,7 @@ function montarRegistros(base) {
      * 08:03 · 12:00 · 13:00 · 17:56. A mesma conta do caso responde aqui (`cartaoCronologico`),
      * e só onde o miolo é livre: no motorista o almoço é o que nós lançamos. */
     if (!mioloTravado(cat) && ![2, 4].includes((sim || []).length)) {
-      const cron = cartaoCronologico(antesMin, prev.map((o) => ({ hora: txt(o.horario_ajuste) })));
+      const cron = cartaoCronologico(antesMin, prev.map((o) => ({ hora: txt(o.horario_ajuste) })), cat);
       if (cron && [2, 4].includes(cron.length)) {
         sim = cron;
         notas = arruma([...(previa.notas || []), "leitura cronológica: o pedido desfaz a batida colada"]);
@@ -3863,6 +3863,16 @@ function Detalhe({ reg, aoFechar, gravando, aoMarcar, aoAbrirCartao, abrindoCart
                 travado={travado}
                 aoCompletar={(chave) => setCompletar((c) => ({ ...c, [chave]: true }))}
               />
+              {/* O PEDIDO QUE NÃO COUBE. Aceitar um horário que o cartão não comporta faz o
+                  robô inserir a batida assim mesmo — e o cartão do Transnet sai com cinco.
+                  Dizer isso aqui é a diferença entre prometer e entregar. */}
+              {v.foraDoCartao?.length ? (
+                <div className="oc-vd-critica" style={{ marginTop: 8 }}>
+                  ⚠ {v.foraDoCartao.join(" · ")} não cabe(m) no cartão de quatro: aceitar assim
+                  deixa o ponto dele com batida a mais. Recuse esse pedido, ou mande o dia para
+                  a correção — lá o robô escreve as quatro pontas.
+                </div>
+              ) : null}
               <ResumoDoCartao v={v} />
             </div>
           </div>

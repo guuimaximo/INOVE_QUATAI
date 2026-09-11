@@ -2454,3 +2454,17 @@
 .dp-perg-sim.grave {
   background: var(--dp-danger-ink, #c53434); border-color: var(--dp-danger-ink, #c53434);
 }
+
+/* O PEDIDO QUE NÃO CABE NO CARTÃO DE QUATRO (`foraDoCartao`). Fica no card do cartão,
+   colado no resumo: é ali que o DP lê "como o dia fica", e é ali que ele precisa saber
+   que aceitar aquele horário deixa o ponto com batida a mais. */
+.dp360 .oc-vd-critica {
+  padding: 8px 11px;
+  border-radius: 9px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  font-weight: 600;
+  background: var(--dp-warn-bg);
+  color: var(--dp-warn-ink);
+  border: 1px solid var(--dp-border);
+}

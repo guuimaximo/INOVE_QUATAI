@@ -11,6 +11,7 @@ import { AuthContext } from "../../../context/AuthContext";
 import { supabase } from "../../../supabase";
 import { hm2min, min2hm } from "../regrasPonto";
 
+import { usePergunta } from "../Perguntar";
 /* ═══════════════════════════════════════════════════════════════════════════
    Refeição (Passo 1 do DP360)
 
@@ -870,6 +871,10 @@ function LinhaLote({ item }) {
 }
 
 function PainelImportacao({ data, linhas, aoFechar }) {
+  // A confirmação é a da ferramenta, não a do navegador (ver `Perguntar.jsx`): o
+  // `window.confirm` escrevia "inovequatai.onrender.com diz" em cima da pergunta,
+  // ignorava o tema e espremia tudo num bloco só.
+  const [perguntar, caixaPergunta] = usePergunta();
   const { user } = useContext(AuthContext) || {};
   const [cartoes, setCartoes] = useState(null);
   const [casos, setCasos] = useState(null);
@@ -965,7 +970,7 @@ function PainelImportacao({ data, linhas, aoFechar }) {
       ? `LANÇAR DE VERDADE no Transnet o almoço de ${fila.length} motorista(s) em ${fmtData(data)}.`
       : `ENSAIO para ${fila.length} motorista(s) em ${fmtData(data)}: o robô preenche a tela e NÃO clica em Inserir.`;
     if (
-      !window.confirm(
+      !await perguntar(
         `${abertura}\n\n` +
           `O robô reescreve o CARTÃO INTEIRO de cada um: a entrada e a saída voltam ` +
           `exatamente como estão hoje e só o miolo vira a janela de ` +
@@ -1041,7 +1046,7 @@ function PainelImportacao({ data, linhas, aoFechar }) {
     const tambemNoRobo = itens.length - soNoArquivo;
 
     if (
-      !window.confirm(
+      !await perguntar(
         `Baixar o arquivo de batidas de ${fmtData(data)}: ${itens.length} pessoa(s), ` +
           `${itens.length * 2} batidas.\n\n` +
           `O arquivo NÃO reescreve cartão — ele só ACRESCENTA a saída e a volta do ` +
@@ -1143,6 +1148,7 @@ function PainelImportacao({ data, linhas, aoFechar }) {
       onClick={aoFechar}
       role="presentation"
     >
+      {caixaPergunta}
       <div
         className="dp-card"
         style={{ width: 1000, maxWidth: "96vw", padding: 20 }}

@@ -20,6 +20,7 @@ import {
 import { supabase } from "../../supabase";
 import "./dp360.css";
 
+import { usePergunta } from "./Perguntar";
 /* =============================================================================
    RESUMO (DP360) — fusão de DUAS telas da ferramenta original (Sistemas/PONTO):
 
@@ -873,6 +874,10 @@ async function lerReservasDoPeriodo(ini, fim) {
 /* ================================ componente ============================== */
 
 export default function DP360Resumo() {
+  // A confirmação é a da ferramenta, não a do navegador (ver `Perguntar.jsx`): o
+  // `window.confirm` escrevia "inovequatai.onrender.com diz" em cima da pergunta,
+  // ignorava o tema e espremia tudo num bloco só.
+  const [perguntar, caixaPergunta] = usePergunta();
   const { user } = useContext(AuthContext);
   const { profileMap } = useAccessGovernance();
   const podeAcessar = canUserAccessPath(user, "/dp360-resumo", profileMap);
@@ -1177,7 +1182,7 @@ export default function DP360Resumo() {
         + "(app_config.valor_hora_motorista)."
       : "Gravar ZERO na hora do motorista?\n\nOs cartões de dinheiro desta tela e o "
         + "\"Valor gerencial\" da ferramenta antiga deixam de aparecer.";
-    if (!window.confirm(pergunta)) return;
+    if (!await perguntar(pergunta)) return;
     setSalvandoHora(true);
     setAvisoHora(null);
     try {
@@ -1294,6 +1299,7 @@ export default function DP360Resumo() {
 
   return (
     <div className="dp360 -m-4 sm:-m-6">
+      {caixaPergunta}
       <div className="dp-topbar">
         <div className="dp-brand">
           <div className="dp-brand-mark">DP</div>

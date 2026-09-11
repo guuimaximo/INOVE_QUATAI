@@ -60,6 +60,7 @@ import { CONSTANTES, hm2min, min2hm } from "../regrasPonto";
 // do módulo compartilhado com as Folgas — a mesma régua para o mesmo robô.
 import { csvDoAjustePonto, ddmmaaaa, montarLoteAjuste } from "../regrasAjustePonto";
 
+import { usePergunta } from "../Perguntar";
 /* =============================================================================
    Revisão (Passo 2) — porte da tela do DP360 (Sistemas/PONTO: app/ui/app.js
    `viewP2`/`COLS_REV`/`p2RowClass`/`fmtCol`/`pontoDetalhe`).
@@ -313,6 +314,10 @@ function ModalComunicado({
   aoFechar,
   aoConcluir,
 }) {
+  // A confirmação é a da ferramenta, não a do navegador (ver `Perguntar.jsx`): o
+  // `window.confirm` escrevia "inovequatai.onrender.com diz" em cima da pergunta,
+  // ignorava o tema e espremia tudo num bloco só.
+  const [perguntar, caixaPergunta] = usePergunta();
   const [templates, setTemplates] = useState(null);
   const [erro, setErro] = useState("");
   const [disparando, setDisparando] = useState(false);
@@ -420,7 +425,7 @@ function ModalComunicado({
         : `Cada um recebe a mensagem no Transnet e o caso do dia é aberto/atualizado em ` +
           `ponto_caso, com o prazo correndo a partir de agora (o alvo já congelado não é reescrito).`;
     if (
-      !window.confirm(
+      !await perguntar(
         `${cabeca}\n\n${nomes}${resto}\n\n${efeito}\n\n` +
           `Quem executa é o robô, no GitHub Actions. O disparo fica registrado com o seu nome.`,
       )
@@ -477,6 +482,7 @@ function ModalComunicado({
       className="fixed inset-0 flex items-start justify-center overflow-y-auto"
       style={{ background: "rgba(15,20,32,.5)", padding: 16, zIndex: 60 }}
     >
+      {caixaPergunta}
       <div className="dp-card w-full max-w-3xl" style={{ padding: 0 }}>
         <header
           className="flex items-start justify-between gap-3"
@@ -629,6 +635,10 @@ function ModalComunicado({
    ponto de dezenas de pessoas. A confirmação NOMEIA quem vai ser lançado, diz
    quantos cartões e quantos dias, e mostra o cartão que vai ser gravado. */
 function PainelLancarAjuste({ data, lote, aoFechar, aoConcluir }) {
+  // A confirmação é a da ferramenta, não a do navegador (ver `Perguntar.jsx`): o
+  // `window.confirm` escrevia "inovequatai.onrender.com diz" em cima da pergunta,
+  // ignorava o tema e espremia tudo num bloco só.
+  const [perguntar, caixaPergunta] = usePergunta();
   const [disparando, setDisparando] = useState(false);
   const [recado, setRecado] = useState(null);
 
@@ -666,7 +676,7 @@ function PainelLancarAjuste({ data, lote, aoFechar, aoConcluir }) {
           .join(", ")}):`;
 
     if (
-      !window.confirm(
+      !await perguntar(
         `${cabeca}\n\n${linhasNomes}${resto}\n\n` +
           `Cada linha acima é o CARTÃO INTEIRO (entrada · saída almoço · volta almoço · saída) ` +
           `que vai ser gravado no lugar do que está lá hoje — o robô escreve os quatro campos ou nada.\n\n` +
@@ -745,6 +755,7 @@ function PainelLancarAjuste({ data, lote, aoFechar, aoConcluir }) {
       className="fixed inset-0 flex items-start justify-center overflow-y-auto"
       style={{ background: "rgba(15,20,32,.5)", padding: 16, zIndex: 60 }}
     >
+      {caixaPergunta}
       <div className="dp-card w-full max-w-4xl" style={{ padding: 0 }}>
         <header
           className="flex items-start justify-between gap-3"

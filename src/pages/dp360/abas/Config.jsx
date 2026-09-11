@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AbaShell from "./AbaShell";
 import { lerDP360, upsertDP360 } from "../../../services/dp360Api";
 
+import { usePergunta } from "../Perguntar";
 /* ═══════════════════════════════════════════════════════════════════════════
    Config — os textos que a ferramenta manda para o colaborador.
 
@@ -208,6 +209,10 @@ const ESTILO_CAMPO = {
 /* ═════════════════════════════ tela ═════════════════════════════ */
 
 export default function Config() {
+  // A confirmação é a da ferramenta, não a do navegador (ver `Perguntar.jsx`): o
+  // `window.confirm` escrevia "inovequatai.onrender.com diz" em cima da pergunta,
+  // ignorava o tema e espremia tudo num bloco só.
+  const [perguntar, caixaPergunta] = usePergunta();
   const [salvo, setSalvo] = useState({});      // chave -> texto no banco (null = chave não existe)
   const [quando, setQuando] = useState({});    // chave -> atualizado_em, quando a coluna vier
   const [rascunho, setRascunho] = useState({});// chave -> texto em edição
@@ -326,7 +331,7 @@ export default function Config() {
     }
   };
 
-  const salvarTemplate = () => {
+  const salvarTemplate = async () => {
     if (invalidas.length) {
       setAviso({
         chave,
@@ -342,7 +347,7 @@ export default function Config() {
        ainda diz "Salvar", e ninguém é obrigado a saber disso: a confirmação diz o que
        vai acontecer de verdade. */
     if (textoVazio) {
-      if (!window.confirm(
+      if (!await perguntar(
         "O texto está vazio.\n\nSalvar assim APAGA a personalização e o modelo volta "
         + "ao texto oficial — não manda carta em branco para ninguém.\n\nConfirmar?",
       )) return;
@@ -355,9 +360,9 @@ export default function Config() {
   /* "↩ Padrão" (app.js:6810 e :6837). O botão do original grava texto VAZIO e recarrega
      os modelos — vazio é o que devolve o oficial. Mesma coisa aqui, com a mesma
      pergunta antes (`confirm("Voltar essa mensagem ao texto padrão?")`). */
-  const voltarAoPadrao = () => {
+  const voltarAoPadrao = async () => {
     if (ehPadrao) return;
-    if (!window.confirm(
+    if (!await perguntar(
       `Voltar "${rotulo}" ao texto padrão?\n\nA personalização gravada em ${chave} é `
       + "apagada e o modelo oficial (Art. 74 da CLT) volta a valer — inclusive para a "
       + "ferramenta antiga, que lê a mesma chave.",
@@ -396,6 +401,7 @@ export default function Config() {
       resumo="Os textos que a ferramenta envia ao colaborador. O que você salva aqui vai para a tabela app_config e passa a valer no próximo envio — inclusive para a ferramenta antiga, que lê a mesma chave."
       filtros={
         <>
+          {caixaPergunta}
           {TIPOS.map(([id, nome]) => {
             const gravadoNoBanco = String(salvo[chaveTemplate(id)] ?? "").trim();
             return (

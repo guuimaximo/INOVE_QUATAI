@@ -58,6 +58,7 @@ import {
 // O `aplicarRealManual` é o overlay do Real cravado pelo DP, e é ele que faz o
 // dia já decidido na Revisão aparecer aqui com o horário que o DP mandou.
 import { aplicarRealManual, fmtHora } from "../CartaoDoDia";
+import { usePergunta } from "../Perguntar";
 // AS TRAVAS DO LANÇAMENTO NÃO SÃO DESTA TELA — nem da Revisão. Elas moram em
 // `../regrasAjustePonto`, o mesmo módulo que o lote da Revisão usa: uma régua só
 // para o mesmo robô (`sugBloqueio`, ponto invertido, cartão já mexido, as duas
@@ -959,6 +960,10 @@ function ModalHistoricoBot({ linhas, nomes, aoFechar }) {
    Aqui vira ensaio + valendo, que é a regra desta casa para tudo que dirige o
    Transnet. */
 function EditorPontoSugerido({ pessoa, cartao, caso, aoLancar }) {
+  // A confirmação é a da ferramenta, não a do navegador (ver `Perguntar.jsx`): o
+  // `window.confirm` escrevia "inovequatai.onrender.com diz" em cima da pergunta,
+  // ignorava o tema e espremia tudo num bloco só.
+  const [perguntar, caixaPergunta] = usePergunta();
   const travado = almocoTravado(cartao);
   const semeia = useCallback(
     () => ({
@@ -997,7 +1002,7 @@ function EditorPontoSugerido({ pessoa, cartao, caso, aoLancar }) {
       ? `LANÇAR DE VERDADE no Transnet o cartão de ponto de ${quem} (crachá ${ajuste.csv.cracha}) em ${ajuste.csv.data}:`
       : `ENSAIO (o robô preenche a tela e NÃO clica em Inserir) — cartão de ${quem} (crachá ${ajuste.csv.cracha}) em ${ajuste.csv.data}:`;
     if (
-      !window.confirm(
+      !await perguntar(
         `${cabeca}\n\n` +
           `cartão hoje:  ${hoje}\n` +
           `vai ficar:    ${grava}\n\n` +
@@ -1059,6 +1064,7 @@ function EditorPontoSugerido({ pessoa, cartao, caso, aoLancar }) {
 
   return (
     <div className="fg-sug">
+      {caixaPergunta}
       <div className="fg-sug-t">
         ↳ ponto sugerido (edite se precisar) · cartão hoje:{" "}
         <span className="dp-mono">{ajuste.cartaoHoje.map((h) => h || "—").join(" · ")}</span>
@@ -1139,6 +1145,10 @@ function PainelDetalhe({
   reservaGravando,
   aoDisparar,
 }) {
+  // A confirmação é a da ferramenta, não a do navegador (ver `Perguntar.jsx`): o
+  // `window.confirm` escrevia "inovequatai.onrender.com diz" em cima da pergunta,
+  // ignorava o tema e espremia tudo num bloco só.
+  const [perguntar, caixaPergunta] = usePergunta();
   const folgas = folgasALancar(pessoa, ctx.diasCurso);
   const tipoPorData = new Map(folgas.map((f) => [f.data, f.tipo]));
   const situacaoRuim = pessoa.situacao && !/^OK/i.test(pessoa.situacao);
@@ -1278,7 +1288,7 @@ function PainelDetalhe({
       ? `LANÇAR DE VERDADE no Transnet, na ficha de ${pessoa.nome || pessoa.cracha}:`
       : `ENSAIO (o robô navega e NÃO confirma) para ${pessoa.nome || pessoa.cracha}:`;
     if (
-      !window.confirm(
+      !await perguntar(
         `${cabecalho}\n\n1 pessoa · ${fila.length} dia(s)\n\n${resumo}\n\n` +
           (manuais.length
             ? `${manuais.length} dia(s) marcados como Atestado (04) NÃO entram: esses são lançados à mão.\n\n`
@@ -1312,6 +1322,7 @@ function PainelDetalhe({
 
   return (
     <aside className="dp-detail">
+      {caixaPergunta}
       <div className="dp-det-head">
         <div style={{ minWidth: 0 }}>
           <b>{pessoa.nome}</b>
@@ -1589,6 +1600,10 @@ function PainelDetalhe({
 /* ──────────────────────────────── a aba ────────────────────────────────── */
 
 export default function Folgas() {
+  // A confirmação é a da ferramenta, não a do navegador (ver `Perguntar.jsx`): o
+  // `window.confirm` escrevia "inovequatai.onrender.com diz" em cima da pergunta,
+  // ignorava o tema e espremia tudo num bloco só.
+  const [perguntar, caixaPergunta] = usePergunta();
   const [categoria, setCategoria] = useState("MOTORISTA");
   const [semanas, setSemanas] = useState([]);
   const [semana, setSemana] = useState("");
@@ -2006,7 +2021,7 @@ export default function Folgas() {
       "Quem executa é o robô, no GitHub Actions. O disparo fica registrado com o seu nome.",
       "O resultado por dia NÃO volta sozinho para esta tela: a evidência fica no run do GitHub.",
     ].filter((l) => l !== "");
-    if (!window.confirm(linhas.join("\n"))) return;
+    if (!await perguntar(linhas.join("\n"))) return;
 
     setDisparandoLote(true);
     setRecadoLote(null);
@@ -2057,6 +2072,7 @@ export default function Folgas() {
       erro={erro}
       filtros={
         <>
+          {caixaPergunta}
           <select value={categoria} onChange={(evento) => setCategoria(evento.target.value)}>
             {CATEGORIAS.map((item) => (
               <option key={item} value={item}>

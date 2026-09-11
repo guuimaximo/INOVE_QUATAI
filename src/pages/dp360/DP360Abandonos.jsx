@@ -51,6 +51,7 @@ import { supabase } from "../../supabase";
 import AbaShell from "./abas/AbaShell";
 import "./dp360.css";
 
+import { usePergunta } from "./Perguntar";
 /* ─────────────────────────── constantes do domínio ───────────────────────── */
 
 // main.py:7559 — assinatura `get_abandonos(self, min_dias=4)`. É o gatilho da
@@ -172,11 +173,6 @@ const CONSULTA_MARCAS = {
 };
 
 /* ─────────────────────── autoria e trilha (lado INOVE) ───────────────────── */
-
-function confirmar(texto) {
-  if (typeof window === "undefined" || typeof window.confirm !== "function") return false;
-  return window.confirm(texto);
-}
 
 // Mesma checagem que o resto do INOVE faz antes de gravar autor (molde:
 // EstruturaFisicaSolicitacao.jsx). O `user.id` pode ser o id LEGADO (inteiro da
@@ -334,6 +330,10 @@ function calcularAbandonos(linhas, naoBate, monitorados) {
 /* ────────────────────────────────── a tela ───────────────────────────────── */
 
 export default function DP360Abandonos() {
+  // A confirmação é a da ferramenta, não a do navegador (ver `Perguntar.jsx`): o
+  // `window.confirm` escrevia "inovequatai.onrender.com diz" em cima da pergunta,
+  // ignorava o tema e espremia tudo num bloco só.
+  const [perguntar, caixaPergunta] = usePergunta();
   const { user } = useContext(AuthContext);
   const { profileMap } = useAccessGovernance();
   const podeAcessar = canUserAccessPath(user, "/dp360-abandonos", profileMap);
@@ -431,7 +431,7 @@ export default function DP360Abandonos() {
 
       const rotulo = chave === CHAVE_NAO_BATE ? "não bate ponto" : "acompanhamento";
       const quem = `${linha.nome || "sem nome"} · crachá ${cracha} · ${linha.diasSemPonto} dias sem ponto`;
-      const ok = confirmar(
+      const ok = await perguntar(
         [
           ligar ? `Marcar “${rotulo}”:` : `Tirar a marcação “${rotulo}” de:`,
           quem,
@@ -546,6 +546,7 @@ export default function DP360Abandonos() {
 
   return (
     <div className="dp360 -m-4 sm:-m-6">
+      {caixaPergunta}
       <div className="dp-topbar">
         <div className="dp-brand">
           <div className="dp-brand-mark">DP</div>

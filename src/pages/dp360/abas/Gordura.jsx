@@ -22,6 +22,7 @@ import {
 // `dp360-api`: lê-se com o cliente Supabase normal do INOVE, exatamente como o app
 // antigo faz em ferramenta/supabase_client.py:695-715.
 import CartaoDoDia, { aplicarRealManual, lerReservasInove } from "../CartaoDoDia";
+import { usePergunta } from "../Perguntar";
 // AS QUATRO CAMADAS DA GORDURA (o `_gord()` do app antigo) e as conversões que elas
 // exigem moram em `regrasGordura.js` — módulo puro, sem React e sem rede. Estavam
 // escritas aqui dentro e por isso o Resumo não conseguia mostrar oportunidade sem
@@ -953,6 +954,10 @@ function ListaPessoas({ itens, limite = 12 }) {
 }
 
 function ModalComunicado({ linhas, casoDe, comPontoAntes, aoFechar, aoConcluir }) {
+  // A confirmação é a da ferramenta, não a do navegador (ver `Perguntar.jsx`): o
+  // `window.confirm` escrevia "inovequatai.onrender.com diz" em cima da pergunta,
+  // ignorava o tema e espremia tudo num bloco só.
+  const [perguntar, caixaPergunta] = usePergunta();
   const [template, setTemplate] = useState(null);
   const [erro, setErro] = useState("");
   const [disparando, setDisparando] = useState(false);
@@ -1055,7 +1060,7 @@ function ModalComunicado({ linhas, casoDe, comPontoAntes, aoFechar, aoConcluir }
         "congelado não é reescrito."
       : "Nada é enviado e NENHUM caso é aberto.";
     if (
-      !window.confirm(
+      !await perguntar(
         `${cabeca}\n\n${nomes}${resto}\n\n${efeito}\n\n` +
           "Quem executa é o robô, no GitHub Actions. O disparo fica registrado com o seu nome.",
       )
@@ -1128,6 +1133,7 @@ function ModalComunicado({ linhas, casoDe, comPontoAntes, aoFechar, aoConcluir }
       className="fixed inset-0 flex items-start justify-center overflow-y-auto"
       style={{ background: "rgba(15,20,32,.5)", padding: 16, zIndex: 60 }}
     >
+      {caixaPergunta}
       <div className="dp-card w-full max-w-3xl" style={{ padding: 0 }}>
         <header
           className="flex items-start justify-between gap-3"

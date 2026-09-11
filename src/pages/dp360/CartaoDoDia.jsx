@@ -5,6 +5,7 @@ import { apagarDP360, dispararRoboDP360, lerDP360, upsertDP360 } from "../../ser
 import { supabase } from "../../supabase";
 import { getStoredUser } from "../../utils/auth";
 import { RAIO_LOCAL, RAIO_VEIC, reguaLocal, resumoGps } from "./regrasGps";
+import { usePergunta } from "./Perguntar";
 import {
   MOTIVO_AVISO,
   TIPO,
@@ -1140,6 +1141,10 @@ function FaixaSemana({ semana, resumo, carregando, erro }) {
    recusou.                                                                        */
 
 function ModalPedirExclusao({ linha, caso, aoFechar, aoConcluir }) {
+  // A confirmação é a da ferramenta, não a do navegador (ver `Perguntar.jsx`): o
+  // `window.confirm` escrevia "inovequatai.onrender.com diz" em cima da pergunta,
+  // ignorava o tema e espremia tudo num bloco só.
+  const [perguntar, caixaPergunta] = usePergunta();
   const [template, setTemplate] = useState(null);
   const [erro, setErro] = useState("");
   const [disparando, setDisparando] = useState(false);
@@ -1222,7 +1227,7 @@ function ModalPedirExclusao({ linha, caso, aoFechar, aoConcluir }) {
         `batida é o próprio colaborador, pelo aplicativo.`
       : `Nada é enviado e NENHUM caso é aberto.`;
     if (
-      !window.confirm(
+      !await perguntar(
         `${cabeca}\n\n· ${item.nome || item.cracha} (${item.cracha}) — ${item.data}\n\n${efeito}\n\n` +
           `Quem executa é o robô, no GitHub Actions. O disparo fica registrado com o seu nome.`,
       )
@@ -1275,6 +1280,7 @@ function ModalPedirExclusao({ linha, caso, aoFechar, aoConcluir }) {
       className="fixed inset-0 flex items-start justify-center overflow-y-auto"
       style={{ background: "rgba(15,20,32,.5)", padding: 16, zIndex: 60 }}
     >
+      {caixaPergunta}
       <div className="dp-card w-full max-w-3xl" style={{ padding: 0 }}>
         <header
           className="flex items-start justify-between gap-3"

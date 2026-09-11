@@ -2393,3 +2393,64 @@
   .dp360 .oc-vd-blocos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dp360 .oc-vd-ref-l { align-items: flex-start; flex-direction: column; gap: 3px; }
 }
+
+/* ═══════════ A CONFIRMAÇÃO, NO LAYOUT DA FERRAMENTA (Perguntar.jsx) ═══════════
+   Porte do `.aguardebx.perg` de `app/ui/styles.css:503`. O `confirm()` do navegador
+   escrevia "inovequatai.onrender.com diz" em cima da pergunta, ignorava o tema e
+   espremia tudo num bloco — e o que se confirma aqui é advertência na ficha de alguém
+   e robô reescrevendo cartão de ponto. A pergunta tem de dar para ler.
+   A camada é 400, a mesma da ferramenta: acima de qualquer modal desta tela. */
+.dp360 .dp-perg-ov,
+.dp-perg-ov {
+  position: fixed; inset: 0; z-index: 400;
+  background: rgba(16, 22, 36, 0.5);
+  backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.dp-perg-bx {
+  background: var(--dp-surface, #fff);
+  color: var(--dp-ink, #1a2233);
+  border: 1px solid var(--dp-border, #e4e8f0);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(10, 16, 30, 0.32);
+  padding: 22px 26px;
+  text-align: left;
+  width: min(600px, 94vw);
+  max-height: 88vh;
+  display: flex; flex-direction: column;
+  font-size: 13px;
+}
+/* AÇÃO GRAVE TEM BORDA: advertir e reescrever ponto não podem parecer salvar rascunho. */
+.dp-perg-bx.grave { border-color: var(--dp-danger-line, #e6a9a2); }
+.dp-perg-tit {
+  font-weight: 680; font-size: 16px; line-height: 1.35;
+  margin-bottom: 10px; text-wrap: balance;
+}
+.dp-perg-corpo { line-height: 1.6; overflow-y: auto; }
+.dp-perg-p { margin: 0 0 9px; white-space: pre-wrap; }
+.dp-perg-p:last-child { margin-bottom: 0; }
+.dp-perg-pl { display: flex; gap: 9px; padding: 6px 0; align-items: baseline; }
+.dp-perg-pl .n { color: var(--dp-accent, #3d6ae0); font-weight: 700; flex: none; min-width: 14px; }
+.dp-perg-lista { margin: 4px 0 10px; padding: 0; list-style: none; }
+.dp-perg-lista li {
+  padding: 3px 0 3px 14px; position: relative;
+  font-variant-numeric: tabular-nums;
+}
+.dp-perg-lista li::before {
+  content: "·"; position: absolute; left: 2px;
+  color: var(--dp-faint, #9aa4b4); font-weight: 700;
+}
+.dp-perg-obs {
+  margin-top: 10px; padding: 9px 12px; border-radius: 9px;
+  background: var(--dp-warn-bg, #fdf1da); color: var(--dp-warn-ink, #9a6a11);
+  font-size: 12.5px; line-height: 1.5;
+}
+.dp-perg-nota { margin-top: 10px; font-size: 12px; color: var(--dp-muted, #6b7688); }
+.dp-perg-rod { display: flex; justify-content: flex-end; gap: 9px; margin-top: 18px; flex: none; }
+.dp-perg-sim {
+  background: var(--dp-accent, #3d6ae0); border-color: var(--dp-accent, #3d6ae0); color: #fff;
+}
+.dp-perg-sim:hover:not(:disabled) { filter: brightness(1.06); color: #fff; }
+.dp-perg-sim.grave {
+  background: var(--dp-danger-ink, #c53434); border-color: var(--dp-danger-ink, #c53434);
+}

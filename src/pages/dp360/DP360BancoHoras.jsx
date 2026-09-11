@@ -70,6 +70,7 @@ import { supabase } from "../../supabase";
 import { baixarCsv } from "./TabelaDP";
 import "./dp360.css";
 
+import { usePergunta } from "./Perguntar";
 const TABELA = "banco_horas";
 
 // Trilha, no projeto do INOVE (migration 202609061400_dp360_auditoria). Vai pelo
@@ -416,11 +417,6 @@ function colunasDoCsvMes(abertas) {
   ];
 }
 
-function confirmar(texto) {
-  if (typeof window === "undefined" || typeof window.confirm !== "function") return false;
-  return window.confirm(texto);
-}
-
 // NUNCA `new Date().toISOString()` para uma data LOCAL (CLAUDE.md): ele devolve UTC
 // e, das 21h BRT em diante, o arquivo sairia carimbado com o dia SEGUINTE.
 function isoHojeLocal() {
@@ -433,6 +429,10 @@ function isoHojeLocal() {
 }
 
 export default function DP360BancoHoras() {
+  // A confirmação é a da ferramenta, não a do navegador (ver `Perguntar.jsx`): o
+  // `window.confirm` escrevia "inovequatai.onrender.com diz" em cima da pergunta,
+  // ignorava o tema e espremia tudo num bloco só.
+  const [perguntar, caixaPergunta] = usePergunta();
   const { user } = useContext(AuthContext);
   const { profileMap } = useAccessGovernance();
   const podeAcessar = canUserAccessPath(user, "/dp360-banco-horas", profileMap);
@@ -798,7 +798,7 @@ export default function DP360BancoHoras() {
     const nome = `banco_horas_${recorte}_${situacao}_${isoHojeLocal()}`;
     const termo = porMes ? "" : busca.trim();
 
-    const ok = confirmar(
+    const ok = await perguntar(
       [
         `Exportar ${dados.length} linha(s) do banco de horas em CSV?`,
         "",
@@ -879,6 +879,7 @@ export default function DP360BancoHoras() {
 
   return (
     <div className="dp360 -m-4 sm:-m-6">
+      {caixaPergunta}
       <div className="dp-topbar">
         <div className="dp-brand">
           <div className="dp-brand-mark">DP</div>

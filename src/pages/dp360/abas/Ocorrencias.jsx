@@ -62,6 +62,7 @@ import {
   pedidoMiraOMiolo,
   slotsDoCartao,
 } from "../vereditoCartao";
+import { usePergunta } from "../Perguntar";
 import CartaoDoDia, {
   agoraUtc,
   aplicarRealManual,
@@ -330,11 +331,6 @@ function horasLiquidas(min) {
   if (min == null || Number.isNaN(min)) return "";
   const v = Math.max(0, Math.round(min));
   return `${Math.floor(v / 60)}h${String(v % 60).padStart(2, "0")}`;
-}
-
-function confirmar(texto) {
-  if (typeof window === "undefined" || typeof window.confirm !== "function") return false;
-  return window.confirm(texto);
 }
 
 /* ─────────────────────────── regras portadas do DP ───────────────────────── */
@@ -3947,6 +3943,10 @@ export default function Ocorrencias() {
   // acontece nada": a tela respondia num lugar que o próprio pop-up cobre.
   const [erroCartao, setErroCartao] = useState("");
   const [progresso, setProgresso] = useState(null);
+  /* A CONFIRMAÇÃO É A DA FERRAMENTA, não a do navegador (pedido do dono, 10/09/2026):
+   * "inovequatai.onrender.com diz" em cima da pergunta, fora do tema e tudo espremido num
+   * bloco — para confirmar advertência na ficha de alguém. Ver `Perguntar.jsx`. */
+  const [perguntar, caixaPergunta] = usePergunta();
   // recarga que NÃO tira a lista da tela (ver `buscar`)
   const [atualizando, setAtualizando] = useState(false);
   // Gravou alguma coisa DENTRO do cartão? A releitura da aba custa a varredura do lake por
@@ -4186,14 +4186,14 @@ export default function Ocorrencias() {
   );
 
   const aoAceitar = useCallback(
-    (reg) => {
+    async (reg) => {
       const trava = motivoForaDoLote(reg, "aceitar");
       if (trava) { setRecado(`Não dá para aceitar: ${trava}.`); return; }
       const marcado = selosDaMarcacao(reg);
       const contrato =
         reg.bloqueio || ![2, 4].includes((reg.depois || []).length) ? "" : textoBatidas(reg.depois);
       if (
-        !confirmar(
+        !await perguntar(
           `ACEITAR o dia ${reg.dataBR} de ${reg.nome} (${reg.cracha}).\n\n` +
             (marcado
               ? `⚠ ESTE DIA JÁ ESTÁ MARCADO por ocorrência (${marcado.nA} aceitar / ${marcado.nR} recusar).\n` +
@@ -4212,7 +4212,7 @@ export default function Ocorrencias() {
   );
 
   const aoRejeitar = useCallback(
-    (reg, modo) => {
+    async (reg, modo) => {
       const trava = motivoSemDecisao(reg);
       if (trava) { setRecado(`Não dá para recusar: ${trava}.`); return; }
       // TRAVA DA ADVERTÊNCIA INDEVIDA: sem aviso registrado, a recusa é sempre 'dispensada'.
@@ -4235,19 +4235,19 @@ export default function Ocorrencias() {
             `Grava: aceite=rejeitado, ajuste=errado, correcao_status="dispensada".\n` +
             `"dispensada" tira o caso da fila de advertência E de correção — para sempre.\n\n` +
             `${reg.temAviso ? "Há aviso no dia, mas você está escolhendo NÃO advertir." : "Não há aviso no dia: recusar não é advertir."}`);
-      if (!confirmar(texto)) return;
+      if (!await perguntar(texto)) return;
       executarGravacao(`Recusa gravada (${reg.nome} · ${reg.dataBR})`, () => gravarRecusa(reg, modoReal));
     },
     [executarGravacao],
   );
 
   const aoDesfazer = useCallback(
-    (reg) => {
+    async (reg) => {
       if (reg.decJa?.subiu) {
         setRecado("O bot já executou este caso no Transnet: desfazer aqui não desfaz lá.");
         return;
       }
-      if (!confirmar(
+      if (!await perguntar(
         `DESFAZER a decisão do dia ${reg.dataBR} de ${reg.nome}.\n\n` +
           `Grava: aceite=pendente, ajuste=null, aceito_em=null. O caso volta para a fila.`,
       )) return;
@@ -4257,14 +4257,14 @@ export default function Ocorrencias() {
   );
 
   const aoMarcar = useCallback(
-    (reg, aceitarIds, rejeitarIds, cartaoDoMontador) => {
+    async (reg, aceitarIds, rejeitarIds, cartaoDoMontador) => {
       const trava = motivoSemDecisao(reg);
       if (trava) { setRecado(`Não dá para marcar: ${trava}.`); return; }
       if (!aceitarIds.length && !rejeitarIds.length) { setRecado("Nenhuma marcação."); return; }
       // O CARTÃO VAI NA CONFIRMAÇÃO porque é ELE que fica congelado como contrato — é o que
       // o DP acabou de ver no card do montador, e é contra ele que o robô confere.
       const contrato = txt(cartaoDoMontador);
-      if (!confirmar(
+      if (!await perguntar(
         `MARCAR POR OCORRÊNCIA o dia ${reg.dataBR} de ${reg.nome}.\n\n` +
           `Aceitar: ${aceitarIds.join(", ") || "—"}\nRejeitar: ${rejeitarIds.join(", ") || "—"}\n\n` +
           `Cartão congelado como contrato (o do card do montador): ${reg.antesTexto || "—"} → ` +
@@ -4288,7 +4288,7 @@ export default function Ocorrencias() {
    * diferentes e a diferença é o histórico da pessoa: um diz que o ponto foi corrigido, o
    * outro diz que o dia vai ficar errado. */
   const aoFecharAMao = useCallback(
-    (reg, como, nota) => {
+    async (reg, como, nota) => {
       const trava = motivoSemFechamentoManual(reg);
       if (trava) { setRecado(`Não dá para fechar à mão: ${trava}.`); return; }
       const cfg = desfechoForaDoRobo(como);
@@ -4307,7 +4307,7 @@ export default function Ocorrencias() {
           ? `Grava: correcao_status="corrigido", correcao_final_em=agora, usuario="${notaFinal}".`
           : `Grava: correcao_status="ponto_fechado", usuario="${notaFinal}".\n` +
             `NÃO grava correcao_final_em: o ponto NÃO foi corrigido, e dizer que foi seria mentir no histórico.`;
-      if (!confirmar(
+      if (!await perguntar(
         `${cabeca}\n\n${campos}\n\n` +
           `NÃO muda a decisão gravada (aceite=${txt(reg.ciclo?.aceite) || "—"}), não toca no cartão, ` +
           `não inventa horário e NÃO dispara robô nenhum.`,
@@ -4365,7 +4365,7 @@ export default function Ocorrencias() {
   }, [carregar]);
 
   const aoComoAlteracao = useCallback(
-    (reg, proj) => {
+    async (reg, proj) => {
       const trava = motivoSemComoAlteracao(reg, proj);
       if (trava) { setRecado(`Não dá para recusar e corrigir assim: ${trava}.`); return; }
       const horas = proj.pontos.map(min2hm);
@@ -4373,7 +4373,7 @@ export default function Ocorrencias() {
         horas.length === 4
           ? `entrada=${horas[0]}, alm_saida=${horas[1]}, alm_volta=${horas[2]}, saida=${horas[3]}`
           : `entrada=${horas[0]}, saida=${horas[1]} (sem almoço)`;
-      if (!confirmar(
+      if (!await perguntar(
         `RECUSAR os ${proj.ids.length} pedido(s) do dia ${reg.dataBR} de ${reg.nome} (${reg.cracha}) ` +
           `E CRAVAR O CARTÃO CERTO.\n\n` +
           `Do jeito que vieram eles quebram o cartão: a ponta já tem batida, então inserir ` +
@@ -4410,7 +4410,7 @@ export default function Ocorrencias() {
       const nomes =
         lista.slice(0, 12).map((r) => `· ${r.nome} ${r.dataBR}`).join("\n") +
         (lista.length > 12 ? `\n… e mais ${lista.length - 12}` : "");
-      if (!confirmar(
+      if (!await perguntar(
         `${valendo ? "LANÇAR DE VERDADE no Transnet" : "ENSAIO (o robô navega e NÃO confirma)"}: ` +
           `${lista.length} dia(s) SEM PONTO como ${rotuloTipoDia(tipo)}.\n\n${nomes}\n\n` +
           `Nenhum destes dias tem batida no cartão — não é corrigir ponta, é dizer o que aconteceu. ` +
@@ -4469,7 +4469,7 @@ export default function Ocorrencias() {
       }
       const plano = planoDaExecucao(reg);
       const rotulo = rotuloDaExecucao(reg);
-      if (!confirmar(
+      if (!await perguntar(
         `${valendo ? `EXECUTAR DE VERDADE no Transnet — ${rotulo}.` : `ENSAIO (o robô navega, marca e NÃO clica) — ${rotulo}.`}\n\n` +
           `Pessoa: ${reg.nome} (${reg.cracha}) · dia ${reg.dataBR}.\n` +
           `Decisão já gravada: aceite=${txt(reg.ciclo.aceite)}` +
@@ -4548,7 +4548,7 @@ export default function Ocorrencias() {
       );
       const comAviso = lista.filter((r) => r.temAviso && txt(r.ciclo.aceite) === "rejeitado"
         && txt(r.ciclo.correcao_status) !== "dispensada").length;
-      if (!confirmar(
+      if (!await perguntar(
         `EXECUTAR DE VERDADE no Transnet — ${lista.length} crachá+dia.
 
 ` +
@@ -4611,7 +4611,7 @@ export default function Ocorrencias() {
       const nomes =
         lista.slice(0, 12).map((r) => `· ${r.nome} ${r.dataBR}`).join("\n") +
         (lista.length > 12 ? `\n… e mais ${lista.length - 12}` : "");
-      if (!confirmar(
+      if (!await perguntar(
         `${valendo ? "CONFERIR E FECHAR NO NOSSO BANCO" : "CONFERIR — ENSAIO (só lê e mostra)"}: ` +
           `${lista.length} crachá+dia.\n\n${nomes}\n\n` +
           `O robô abre o CARTÃO ao vivo e compara com o contrato congelado.\n` +
@@ -4696,7 +4696,7 @@ export default function Ocorrencias() {
         lista.slice(0, 12).map((r) => `· ${r.nome} ${r.dataBR}`).join("\n") +
         (lista.length > 12 ? `\n… e mais ${lista.length - 12}` : "");
       if (
-        !confirmar(
+        !await perguntar(
           `${valendo ? "CANCELAR DE VERDADE no Transnet" : "ENSAIO (o robô lê a grade e NÃO clica)"}: ` +
             `${lista.length} crachá+dia.\n\n${nomes}\n\n` +
             "O robô abre a grade AO VIVO, pareia por crachá + data e RECUSA no Transnet só os " +
@@ -4846,7 +4846,7 @@ export default function Ocorrencias() {
         }
 
         const cartaoDe = (r) => cartaoDaCorrecao(r).slots.filter(Boolean).join(" ") || "— sem cartão";
-        if (!confirmar(
+        if (!await perguntar(
           `ADVERTIR E CORRIGIR ${podem.length} vencido(s), em ${dias.length} dia(s):\n\n` +
             `1. ${dias.length} envio(s) de ADVERTÊNCIA — motivo ${MOTIVO_ADVERTENCIA}, um CSV por dia. ` +
             `Isto entra na ficha da pessoa.\n` +
@@ -5004,7 +5004,7 @@ export default function Ocorrencias() {
       // O CARTÃO DE CADA UM NA CONFIRMAÇÃO: é ponto de gente, e o robô ESCREVE — diferente
       // do `ajustes`, que só clica em pedido que já existe.
       const linha = (r) => `· ${r.nome} ${r.dataBR}: ${cartaoDaCorrecao(r).slots.filter(Boolean).join(" ")}`;
-      if (!confirmar(
+      if (!await perguntar(
         `CORRIGIR O PONTO de ${podem.length} dia(s) no Transnet, em ${dias.length} rodada(s):\n\n` +
           podem.slice(0, 12).map(linha).join("\n") +
           (podem.length > 12 ? `\n… e mais ${podem.length - 12}` : "") +
@@ -5606,6 +5606,10 @@ export default function Ocorrencias() {
 
   return (
     <>
+      {/* A CAIXA DE CONFIRMAÇÃO fica FORA do AbaShell e antes de tudo: ela é a camada 400,
+          acima do modal do caso — a pergunta sobre advertir ou reescrever ponto não pode
+          nascer atrás do pop-up que a disparou. */}
+      {caixaPergunta}
       <AbaShell carregando={carregando} progresso={progresso} erro={erro} filtros={filtros} resumo={resumo}>
         {/* DIA SEM PONTO — PAINEL, não botão de lote (app.js:2952). Não é parte do fluxo de
             decisão: estes dias não têm pedido para julgar, e o painel tem um seletor de tipo

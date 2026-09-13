@@ -169,8 +169,16 @@ const chaveConfig = (chave) => `tbl_${chave}`;
 const chaveLocal = (chave) => `dp360:tbl:${chave}`;
 
 // Aceita o que vier (jsonb, string JSON, lixo) e devolve SEMPRE um objeto válido.
-function normalizarPrefs(bruto, pinPadrao) {
-  const base = { ...PREF_PADRAO, pin: pinPadrao };
+/**
+ * `ocultasPadrao` — o que a tela mostra NA PRIMEIRA VEZ.
+ *
+ * Sem isso, grade larga abre com TODAS as colunas e a primeira coisa que a pessoa faz é
+ * esconder uma dúzia. O padrão é a leitura que o dono da tela pediu; o resto continua a um
+ * clique em ⚙ Colunas. Vale só quando NÃO há preferência salva — quem já arrumou a grade
+ * não tem a arrumação desfeita por uma mudança de padrão.
+ */
+function normalizarPrefs(bruto, pinPadrao, ocultasPadrao) {
+  const base = { ...PREF_PADRAO, hidden: [...(ocultasPadrao || [])], pin: pinPadrao };
   let v = bruto;
   if (typeof v === "string") {
     try {
@@ -189,12 +197,13 @@ function normalizarPrefs(bruto, pinPadrao) {
   };
 }
 
-function lerCache(chave, pinPadrao) {
+function lerCache(chave, pinPadrao, ocultasPadrao) {
+  const padrao = () => ({ ...PREF_PADRAO, hidden: [...(ocultasPadrao || [])], pin: pinPadrao });
   try {
     const cru = window.localStorage.getItem(chaveLocal(chave));
-    return cru ? normalizarPrefs(cru, pinPadrao) : { ...PREF_PADRAO, pin: pinPadrao };
+    return cru ? normalizarPrefs(cru, pinPadrao, ocultasPadrao) : padrao();
   } catch {
-    return { ...PREF_PADRAO, pin: pinPadrao };
+    return padrao();
   }
 }
 
@@ -257,8 +266,9 @@ export default function TabelaDP({
   ferramentas = true,
   acoes = null,
   pinPadrao = 2,
+  ocultasPadrao = null,
 }) {
-  const [prefs, setPrefs] = useState(() => lerCache(chave, pinPadrao));
+  const [prefs, setPrefs] = useState(() => lerCache(chave, pinPadrao, ocultasPadrao));
   const [menuAberto, setMenuAberto] = useState(false);
   const [selecionados, setSelecionados] = useState(() => new Set());
 
@@ -276,7 +286,7 @@ export default function TabelaDP({
   if (chaveAnterior.current !== chave) {
     chaveAnterior.current = chave;
     tocado.current = false;
-    setPrefs(lerCache(chave, pinPadrao));
+    setPrefs(lerCache(chave, pinPadrao, ocultasPadrao));
   }
 
   /* ── carrega do app_config (best-effort; falhou, fica o padrão/cache) ── */
@@ -290,7 +300,7 @@ export default function TabelaDP({
           limite: 1,
         });
         if (!vivo || tocado.current || !achadas?.length) return;
-        const remoto = normalizarPrefs(achadas[0].valor, pinPadrao);
+        const remoto = normalizarPrefs(achadas[0].valor, pinPadrao, ocultasPadrao);
         setPrefs(remoto);
         gravarCache(chave, remoto);
       } catch {
@@ -300,7 +310,7 @@ export default function TabelaDP({
     return () => {
       vivo = false;
     };
-  }, [chave, pinPadrao]);
+  }, [chave, pinPadrao, ocultasPadrao]);
 
   /* ── grava: localStorage na hora, app_config com folga (evita 1 POST por px) ── */
   const salvar = useCallback(

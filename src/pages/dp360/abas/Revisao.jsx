@@ -478,12 +478,18 @@ function ModalComunicado({
   const primeira = preparo?.itens?.[0];
 
   return (
+    /* O MODAL É O DO INOVE (`rv-overlay` + `rv-box`), o mesmo do cartão do dia e do caso
+       da Ocorrências. Estes dois estavam montados com utilitários soltos
+       (`fixed inset-0 …`), e o efeito prático era o pop-up rolar a PÁGINA inteira em vez
+       do próprio corpo: com o lote cheio, os botões de Ensaio e de lançar saíam da tela.
+       Aqui o cabeçalho fica parado e só o corpo rola (`rv-corpo`). */
     <div
-      className="fixed inset-0 flex items-start justify-center overflow-y-auto"
-      style={{ background: "rgba(15,20,32,.5)", padding: 16, zIndex: 60 }}
+      className="rv-overlay"
+      role="dialog"
+      aria-modal="true"
     >
       {caixaPergunta}
-      <div className="dp-card w-full max-w-3xl" style={{ padding: 0 }}>
+      <div className="dp-card rv-box" style={{ padding: 0, maxWidth: 860 }}>
         <header
           className="flex items-start justify-between gap-3"
           style={{ padding: "14px 18px", borderBottom: "1px solid var(--dp-border)" }}
@@ -500,7 +506,7 @@ function ModalComunicado({
           </button>
         </header>
 
-        <div style={{ padding: "14px 18px", display: "grid", gap: 12 }}>
+        <div className="rv-corpo" style={{ padding: "14px 18px", display: "grid", gap: 12 }}>
           {erro && <div className="dp-pill warn">{erro}</div>}
           {!templates && <div className="dp-muted">Carregando os modelos…</div>}
 
@@ -751,12 +757,18 @@ function PainelLancarAjuste({ data, lote, aoFechar, aoConcluir }) {
   };
 
   return (
+    /* O MODAL É O DO INOVE (`rv-overlay` + `rv-box`), o mesmo do cartão do dia e do caso
+       da Ocorrências. Estes dois estavam montados com utilitários soltos
+       (`fixed inset-0 …`), e o efeito prático era o pop-up rolar a PÁGINA inteira em vez
+       do próprio corpo: com o lote cheio, os botões de Ensaio e de lançar saíam da tela.
+       Aqui o cabeçalho fica parado e só o corpo rola (`rv-corpo`). */
     <div
-      className="fixed inset-0 flex items-start justify-center overflow-y-auto"
-      style={{ background: "rgba(15,20,32,.5)", padding: 16, zIndex: 60 }}
+      className="rv-overlay"
+      role="dialog"
+      aria-modal="true"
     >
       {caixaPergunta}
-      <div className="dp-card w-full max-w-4xl" style={{ padding: 0 }}>
+      <div className="dp-card rv-box" style={{ padding: 0, maxWidth: 1000 }}>
         <header
           className="flex items-start justify-between gap-3"
           style={{ padding: "14px 18px", borderBottom: "1px solid var(--dp-border)" }}
@@ -774,7 +786,7 @@ function PainelLancarAjuste({ data, lote, aoFechar, aoConcluir }) {
           </button>
         </header>
 
-        <div style={{ padding: "14px 18px", display: "grid", gap: 12 }}>
+        <div className="rv-corpo" style={{ padding: "14px 18px", display: "grid", gap: 12 }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <span className="dp-pill accent">{lote.dentro.length} no lote</span>
             {lote.fora.length ? <span className="dp-pill warn">{lote.fora.length} fora do lote</span> : null}
@@ -1050,6 +1062,36 @@ const COLUNAS = [
   { id: "duracao_total_sug", rotulo: "Dur. total SUG", classe: "dp-num dp-mono", sug: true, largura: 115 },
   { id: "atraso_min", rotulo: "Atraso (min)", classe: "dp-num", alinhar: "right", largura: 95 },
   { id: "he_min", rotulo: "HE (min)", classe: "dp-num", alinhar: "right", largura: 85 },
+];
+
+/**
+ * O QUE A GRADE MOSTRA NA PRIMEIRA VEZ (pedido do dono, 13/09/2026).
+ *
+ * São 29 colunas. Abrir com todas é obrigar cada pessoa a esconder uma dúzia antes de
+ * conseguir ler. O padrão aqui é a leitura da tela: quem é, que dia, o que a view achou,
+ * o que ele bateu e o que a Revisão sugere. O resto continua a um clique em ⚙ Colunas, e
+ * quem já arrumou a própria grade não perde a arrumação — o padrão só vale quando não há
+ * preferência salva.
+ *
+ * Os quatro campos crus do cartão (`entrada`, `saida_almoco`, …) saem porque "Todas as
+ * batidas" e "Batidas limpas" já dizem a mesma coisa, e dizem melhor: na ordem em que
+ * foram batidas.
+ */
+const COLUNAS_OCULTAS_PADRAO = [
+  "nm_funcao",
+  "sugestao_fonte",
+  "entrada",
+  "saida_almoco",
+  "volta_almoco",
+  "saida",
+  "_jornada",
+  "esc_entrada",
+  "programado_entrada",
+  "programado_saida",
+  "esc_saida",
+  "duracao_total_sug",
+  "atraso_min",
+  "he_min",
 ];
 
 // Colunas pedidas da ponto_diario. Lista explícita (em vez de `*`) porque a
@@ -1358,9 +1400,28 @@ export default function Revisao() {
      acontece com o comunicado). Não faz I/O: `casos` e `bloqueios` já estão em
      mãos, então o botão pode mostrar o número real do lote antes de abrir. */
   const [loteAberto, setLoteAberto] = useState(false);
+  /* ── AS CAIXINHAS SÃO A SELEÇÃO (pedido do dono, 13/09/2026) ──────────────────
+   * Antes o lote saía das linhas VISÍVEIS: o filtro e a busca eram a seleção. Funciona
+   * enquanto o filtro coincide com a intenção, e deixa de funcionar no instante em que
+   * ela quer mandar 3 dos 21 que estão na tela — e o número no botão ("Lançar ajuste
+   * (12)") era a única pista de quantas pessoas iam junto.
+   * Agora o alvo é o que está MARCADO. Sem marca os botões nascem desabilitados com o
+   * motivo escrito, reusando o `BotaoSemAlvo` que já existia para "não há ninguém".
+   */
+  const [selIds, setSelIds] = useState([]);
+  // trocar de dia, de categoria ou de filtro zera a marcação: o ✔ de outra lista não
+  // pode virar lote desta.
+  useEffect(() => {
+    setSelIds([]);
+  }, [data, categoria, filtro]);
+  const marcadas = useMemo(() => {
+    const alvo = new Set(selIds);
+    return visiveis.filter((l) => alvo.has(chaveDia(l.cracha, l.date_ref)));
+  }, [visiveis, selIds]);
+
   const loteAjuste = useMemo(
-    () => montarLoteAjuste(visiveis, casos, bloqueios),
-    [visiveis, casos, bloqueios],
+    () => montarLoteAjuste(marcadas, casos, bloqueios),
+    [marcadas, casos, bloqueios],
   );
 
   /* ---- releitura de UMA linha depois de gravar ----
@@ -1611,8 +1672,8 @@ export default function Revisao() {
     [casos],
   );
   const alvoMotoristas = useMemo(
-    () => (ehInterno ? [] : visiveis.filter(podeAvisarMotorista)),
-    [ehInterno, visiveis, podeAvisarMotorista],
+    () => (ehInterno ? [] : marcadas.filter(podeAvisarMotorista)),
+    [ehInterno, marcadas, podeAvisarMotorista],
   );
   // O ALVO CONGELADO do aviso. `sugBloqueio` é o porte de `_sug_bloqueio` e já é a
   // frase que a tela mostra quando o dia não pode ser usado ("não dá para avisar nem
@@ -1645,7 +1706,7 @@ export default function Revisao() {
     if (!ehInterno) return { alvo: [], pulados: 0 };
     const alvo = [];
     let pulados = 0;
-    for (const l of visiveis) {
+    for (const l of marcadas) {
       if (pontoConferido(casos[chaveDia(l.cracha, l.date_ref)])) continue;
       const { modelo, divergencia } = rotaAvisoInterno(l, medianas);
       if (!modelo) {
@@ -1686,8 +1747,8 @@ export default function Revisao() {
      comunicadoTransnet). Abrir poria a pessoa em "Meus avisos" como ajuste e ainda
      sobrescreveria o caso de gordura do mesmo dia. */
   const alvoFora = useMemo(
-    () => visiveis.filter((l) => (gpsPorCracha[cra8(l.cracha)]?.fora || 0) > 0),
-    [visiveis, gpsPorCracha],
+    () => marcadas.filter((l) => (gpsPorCracha[cra8(l.cracha)]?.fora || 0) > 0),
+    [marcadas, gpsPorCracha],
   );
   const mensagemDeFora = useCallback(
     (l, tpls) => mensagemBateuFora(tpls.aviso_fora, l, gpsPorCracha[cra8(l.cracha)]),
@@ -1898,7 +1959,7 @@ export default function Revisao() {
               📣 Enviar ocorrência ({alvoMotoristas.length})
             </button>
           ) : (
-            <BotaoSemAlvo titulo="Nenhum motorista visível com marcação de entrada ou saída faltando identificada.">
+            <BotaoSemAlvo titulo={selIds.length ? "Nenhuma das linhas marcadas tem marcação de entrada ou saída faltando identificada." : "Marque na grade (✔) quem deve receber a ocorrência."}>
               📣 Enviar ocorrência
             </BotaoSemAlvo>
           )}
@@ -1927,7 +1988,7 @@ export default function Revisao() {
               ✅ Lançar ajuste (0 de {loteAjuste.fora.length})
             </button>
           ) : (
-            <BotaoSemAlvo titulo="Nenhuma linha visível tem alvo completo para lançar no Cartão de Ponto (dia OK não entra: não há o que corrigir).">
+            <BotaoSemAlvo titulo={selIds.length ? "Nenhuma das linhas marcadas tem alvo completo para lançar no Cartão de Ponto (dia OK não entra: não há o que corrigir)." : "Marque na grade (✔) os dias que vão para o robô do Cartão de Ponto."}>
               ✅ Lançar ajuste
             </BotaoSemAlvo>
           )}
@@ -1941,7 +2002,7 @@ export default function Revisao() {
               📍 Avisar quem bateu fora ({alvoFora.length})
             </button>
           ) : (
-            <BotaoSemAlvo titulo="Ninguém com batida fora de local conhecido nas linhas visíveis.">
+            <BotaoSemAlvo titulo={selIds.length ? "Nenhuma das linhas marcadas tem batida fora de local conhecido." : "Marque na grade (✔) quem deve ser avisado."}>
               📍 Avisar quem bateu fora
             </BotaoSemAlvo>
           )}
@@ -1959,6 +2020,9 @@ export default function Revisao() {
         linhas={visiveis}
         classeLinha={(l) => classeLinha(l, bloqueios[chaveDia(l.cracha, l.date_ref)])}
         idLinha={(l) => chaveDia(l.cracha, l.date_ref)}
+        selecionavel
+        aoSelecionar={setSelIds}
+        ocultasPadrao={COLUNAS_OCULTAS_PADRAO}
         aoClicarLinha={(l) => setAberta(l)}
         carregando={carregando}
         mensagemCarregando={`Carregando a revisão de ${fmtData(data)}…`}

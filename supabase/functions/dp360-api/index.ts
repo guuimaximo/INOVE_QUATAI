@@ -14,7 +14,14 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // O GitHub exige `crypto_box_seal` (X25519 + XSalsa20-Poly1305) para gravar secret.
 // WebCrypto nao faz sealed box — por isso o libsodium entra aqui.
-import * as sodium from "https://esm.sh/libsodium-wrappers@0.7.13";
+//
+// O DESEMBRULHO DO `default` NAO E ENFEITE. O pacote publica o objeto no `default`; com
+// `import * as sodium` o namespace apenas o EMBRULHA, e `sodium.base64_variants` volta
+// `undefined` — o type-check passa e a funcao estoura em execucao. Pego num teste com a
+// chave publica real do repo, depois de eu ja ter feito o deploy da versao quebrada.
+import * as sodiumNS from "https://esm.sh/libsodium-wrappers@0.7.13";
+// deno-lint-ignore no-explicit-any
+const sodium: any = (sodiumNS as any).default ?? sodiumNS;
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

@@ -1418,6 +1418,10 @@ export default function CartaoDoDia({
   impedimentoAviso,
   previaAviso,
   selos, // pílulas extras no cabeçalho
+  /* Troca a pílula de status do cabeçalho. A Revisão usa para pôr AJUSTADO no lugar do
+     REVISAR quando o robô já corrigiu o dia: ali o status vira diagnóstico do passado, e
+     o que interessa é que este cartão está resolvido. Sem a prop, nada muda. */
+  statusSelo,
   blocoLateral, // bloco extra no topo da coluna 2
   acoesRodape, // botões de decisão da tela
   rodapeInfo, // frase do rodapé
@@ -2074,10 +2078,12 @@ export default function CartaoDoDia({
               titulo="O gestor lançou reserva para este dia no Controle de Reservas — a anotação está no cartão."
             />
           )}
-          <Pilula
-            texto={linha.status_ponto || "—"}
-            tom={String(linha.status_ponto ?? "").toUpperCase() === "OK" ? "ok" : "warn"}
-          />
+          {statusSelo || (
+            <Pilula
+              texto={linha.status_ponto || "—"}
+              tom={String(linha.status_ponto ?? "").toUpperCase() === "OK" ? "ok" : "warn"}
+            />
+          )}
           <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar">
             <X size={14} />
           </button>

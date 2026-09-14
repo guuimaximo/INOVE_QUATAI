@@ -304,7 +304,19 @@ export function avaliarAjustePonto(linha, { caso = null, digitado = null, bloque
  * Não faz I/O: `casos` (ponto_caso do dia) e `bloqueios` (sugBloqueio por linha)
  * já estão carregados pela aba, indexados por `chaveDia`.
  */
-export function montarLoteAjuste(linhas, casos, bloqueios) {
+/**
+ * JÁ LANÇADO NÃO SE LANÇA DE NOVO.
+ *
+ * O robô do Cartão de Ponto REESCREVE o cartão inteiro do dia. Mandar duas vezes não é
+ * "repetir sem efeito": é escrever por cima de um cartão que já foi corrigido, e a
+ * segunda passada não sabe o que a primeira fez. A tela gravava o histórico em
+ * `ponto_importacoes` e nunca o lia de volta — então o mesmo dia voltava para o lote no
+ * dia seguinte, sem uma palavra.
+ *
+ * A forma é a das outras travas: a linha não some, ela vai para FORA do lote com o
+ * motivo. Quem lançou continua vendo a pessoa e por quê.
+ */
+export function montarLoteAjuste(linhas, casos, bloqueios, lancamentos) {
   const dentro = [];
   const fora = [];
 
@@ -326,7 +338,9 @@ export function montarLoteAjuste(linhas, casos, bloqueios) {
       fonte: veredito.fonte,
       cartaoHoje: veredito.cartaoHoje,
     };
-    if (veredito.csv) dentro.push({ ...base, csv: veredito.csv });
+    const lancado = lancamentos?.[chave];
+    if (lancado) fora.push({ ...base, motivo: `já lançado em ${lancado.quando}` });
+    else if (veredito.csv) dentro.push({ ...base, csv: veredito.csv });
     else fora.push({ ...base, motivo: veredito.motivo });
   }
 

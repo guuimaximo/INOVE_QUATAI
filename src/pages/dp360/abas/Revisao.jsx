@@ -1176,6 +1176,144 @@ const COLUNAS_GORDURA_GPS = [
 /* =============================================================================
    Componente
    ========================================================================== */
+/**
+ * UMA LINHA DE `ponto_importacoes` VIRA O QUE A TELA PRECISA SABER.
+ *
+ * O que a tabela guarda e o que ela NÃO guarda:
+ *   · guarda o cartão que foi mandado (os quatro campos), a fonte do alvo, o arquivo do
+ *     robô, o status e QUANDO alguém clicou (`importado_em`);
+ *   · NÃO guarda QUEM clicou. Isso está na `dp360_auditoria`, que é de outra base e só
+ *     de Administrador — por isso o pop-up não diz o nome de quem mandou.
+ *
+ * `status` nasce `disparado` de propósito: o robô foi mandado e ninguém abriu a
+ * evidência. Não é "gerado" nem "lancado" — é o meio do caminho, e a tela diz isso.
+ */
+function lancamentoDaLinha(x) {
+  return {
+    quando: fmtDataHora(x.importado_em),
+    cartao: [x.entrada, x.saida_almoco, x.volta_almoco, x.saida].map((h) =>
+      String(h ?? "").trim(),
+    ),
+    fonte: String(x.fonte ?? "").trim(),
+    arquivo: String(x.arquivo ?? "").trim(),
+    status: String(x.status ?? "").trim(),
+  };
+}
+
+/**
+ * O QUE O ROBÔ LANÇOU NESTE CARTÃO.
+ *
+ * Sai inteiro de `ponto_importacoes`, sem calcular nada: a tela conta o que ficou
+ * registrado, não o que ela acha que aconteceu.
+ *
+ * O SELO `disparado` NÃO É ENFEITE. Ele diz que o robô foi mandado e que ninguém abriu a
+ * evidência para confirmar que o Transnet aceitou. A grade já mostra AJUSTADO em verde —
+ * aqui dentro fica a ressalva, que é onde ela cabe.
+ *
+ * E a foto: ela existe no run do GitHub, que a apaga em 30 dias. Enquanto o arquivamento
+ * automático não entra, o pop-up avisa o prazo em vez de fingir que a prova é eterna.
+ */
+function PopupAjuste({ linha, lancado, aoFechar }) {
+  useEffect(() => {
+    const escapa = (e) => e.key === "Escape" && aoFechar();
+    document.addEventListener("keydown", escapa);
+    return () => document.removeEventListener("keydown", escapa);
+  }, [aoFechar]);
+
+  const antes = [linha.entrada, linha.saida_almoco, linha.volta_almoco, linha.saida].map((h) =>
+    String(h ?? "").trim(),
+  );
+  const Slot = ({ hora, i, novo }) => (
+    <span className={`dp-chip${novo ? " new" : ""}${hora ? "" : " none"}`}>
+      {hora ? (
+        <>
+          <span className="es">{["E", "S", "E", "S"][i]}</span>
+          {hora}
+        </>
+      ) : (
+        "—"
+      )}
+    </span>
+  );
+  const Linha = ({ rotulo, children }) => (
+    <>
+      <div className="dp-muted" style={{ fontSize: 12 }}>{rotulo}</div>
+      <div>{children}</div>
+    </>
+  );
+
+  return (
+    <div
+      className="rv-overlay rv-overlay-alto"
+      role="dialog"
+      aria-modal="true"
+      onMouseDown={(e) => e.target === e.currentTarget && aoFechar()}
+    >
+      <div className="dp-card rv-box" style={{ maxWidth: 720 }}>
+        <header className="dp-det-topo">
+          <div style={{ flex: 1 }}>
+            <div className="dp-faint" style={{ fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase" }}>
+              Ajustado pela Revisão
+            </div>
+            <b style={{ fontSize: 15 }}>{linha.nm_funcionario || linha.cracha}</b>
+            <div className="dp-faint" style={{ fontSize: 12 }}>
+              cartão de {fmtData(linha.date_ref)} · crachá {linha.cracha}
+            </div>
+          </div>
+          <Pilula
+            texto={lancado.status || "—"}
+            tom={lancado.status === "lancado" ? "ok" : "warn"}
+            titulo="“disparado” quer dizer que o robô foi mandado e a evidência ainda não foi conferida."
+          />
+          <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar">
+            <X size={14} />
+          </button>
+        </header>
+
+        <div className="rv-corpo">
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "148px 1fr",
+              gap: "10px 12px",
+              padding: "14px 18px",
+              alignItems: "baseline",
+            }}
+          >
+            <Linha rotulo="Quando">
+              <b className="dp-num">{lancado.quando}</b>
+            </Linha>
+            <Linha rotulo="O cartão antes">
+              <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
+                {antes.map((h, i) => <Slot key={i} hora={h} i={i} />)}
+              </span>
+            </Linha>
+            <Linha rotulo="O que foi lançado">
+              <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
+                {lancado.cartao.map((h, i) => (
+                  <Slot key={i} hora={h} i={i} novo={h && h !== antes[i]} />
+                ))}
+              </span>
+              <div className="dp-faint" style={{ fontSize: 11.5, marginTop: 4 }}>
+                destacado = o que o robô escreveu · o resto ficou como estava
+              </div>
+            </Linha>
+            <Linha rotulo="De onde veio o alvo">
+              {lancado.fonte || "—"}
+            </Linha>
+            <Linha rotulo="Robô">
+              <span className="dp-mono" style={{ fontSize: 12 }}>{lancado.arquivo || "—"}</span>
+              <div className="dp-faint" style={{ fontSize: 11.5, marginTop: 2 }}>
+                a foto da tela do Transnet fica no run do GitHub, que a apaga em 30 dias
+              </div>
+            </Linha>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Revisao() {
   const [categoria, setCategoria] = useState("MOTORISTA");
   const [categorias, setCategorias] = useState(CATEGORIAS_PADRAO);
@@ -1186,6 +1324,10 @@ export default function Revisao() {
 
   const [linhas, setLinhas] = useState([]);
   const [casos, setCasos] = useState({});
+  // o que o robô já lançou neste dia, por crachá+dia (ver `lancamentoDaLinha`)
+  const [lancados, setLancados] = useState({});
+  // o pop-up do "clique para saber o ajuste"
+  const [verAjuste, setVerAjuste] = useState(false);
   const [gpsPorCracha, setGpsPorCracha] = useState({});
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
@@ -1254,14 +1396,31 @@ export default function Revisao() {
       }),
       lerTudoDP360("ponto_real_manual", { filtros: { date_ref: `eq.${data}` }, ordem: "cracha.asc" }),
       lerTudoDP360("ponto_caso", { filtros: { date_ref: `eq.${data}` }, ordem: "cracha.asc" }),
+      /* O QUE JÁ FOI LANÇADO NESTE DIA. `ponto_importacoes` passo 2 = correção do ponto
+         (passo 1 é a Refeição). A tela escrevia isto e nunca lia de volta: o dia
+         corrigido voltava para o lote no dia seguinte como se nada tivesse acontecido.
+         ATENÇÃO às duas datas: `date_ref` é o dia do CARTÃO (o que está na tela) e
+         `importado_em` é quando alguém CLICOU. São diferentes — este caso foi corrigido
+         seis dias depois do cartão. */
+      lerTudoDP360("ponto_importacoes", {
+        filtros: { date_ref: `eq.${data}`, passo: "eq.2" },
+        ordem: "importado_em.desc",
+      }).catch(() => []),
     ])
-      .then(([diario, reaisManuais, listaCasos]) => {
+      .then(([diario, reaisManuais, listaCasos, listaLancados]) => {
         if (!ativo) return;
         const mapaRm = {};
         for (const rm of reaisManuais) mapaRm[chaveDia(rm.cracha, rm.date_ref)] = rm;
         const mapaCasos = {};
         for (const c of listaCasos) mapaCasos[chaveDia(c.cracha, c.date_ref)] = c;
         setCasos(mapaCasos);
+        // o mais recente manda: `ordem: importado_em.desc` + só o primeiro de cada chave
+        const mapaLancados = {};
+        for (const x of listaLancados || []) {
+          const k = chaveDia(x.cracha, x.date_ref);
+          if (!mapaLancados[k]) mapaLancados[k] = lancamentoDaLinha(x);
+        }
+        setLancados(mapaLancados);
         setLinhas(diario.map((l) => aplicarRealManual(l, mapaRm[chaveDia(l.cracha, l.date_ref)])));
       })
       .catch((falha) => {
@@ -1420,8 +1579,8 @@ export default function Revisao() {
   }, [visiveis, selIds]);
 
   const loteAjuste = useMemo(
-    () => montarLoteAjuste(marcadas, casos, bloqueios),
-    [marcadas, casos, bloqueios],
+    () => montarLoteAjuste(marcadas, casos, bloqueios, lancados),
+    [marcadas, casos, bloqueios, lancados],
   );
 
   /* ---- releitura de UMA linha depois de gravar ----
@@ -1505,9 +1664,25 @@ export default function Revisao() {
             ...col,
             valor: (l) => {
               const s = String(l.status_ponto ?? "").trim();
+              if (lancados[chaveDia(l.cracha, l.date_ref)]) return `AJUSTADO (${s})`;
               return pontoConferido(casos[chaveDia(l.cracha, l.date_ref)]) ? `${s} · conferido` : s;
             },
-            render: (l) => (
+            render: (l) => {
+              /* AJUSTADO TOMA O LUGAR DO STATUS, não fica ao lado. O status original
+                 (REVISAR, FALTA_SAIDA…) é o diagnóstico de ANTES da correção; depois de
+                 lançado ele já não é o que interessa na varredura — interessa que este
+                 dia está resolvido. Ele não se perde: continua no title e no CSV. */
+              const lancado = lancados[chaveDia(l.cracha, l.date_ref)];
+              if (lancado) {
+                return (
+                  <Pilula
+                    texto="AJUSTADO"
+                    tom="ok"
+                    titulo={`O robô lançou a correção deste cartão em ${lancado.quando}. Era ${l.status_ponto || "—"}. Abra a linha para ver o que foi lançado.`}
+                  />
+                );
+              }
+              return (
               <>
                 <Pilula
                   texto={l.status_ponto || "—"}
@@ -1524,7 +1699,8 @@ export default function Revisao() {
                   </>
                 )}
               </>
-            ),
+              );
+            },
           };
 
         if (col.id === "_avisado")
@@ -2047,7 +2223,36 @@ export default function Revisao() {
           linha={aberta}
           caso={casos[chaveDia(aberta.cracha, aberta.date_ref)]}
           gps={gpsPorCracha[cra8(aberta.cracha)]}
-          aoFechar={() => setAberta(null)}
+          /* AJUSTADO no lugar do REVISAR, e o caminho para saber O QUÊ. Sem o botão o
+             selo diria "está resolvido" e pararia aí — e a primeira pergunta de quem lê
+             isso é o que foi lançado. */
+          statusSelo={
+            lancados[chaveDia(aberta.cracha, aberta.date_ref)] ? (
+              <Pilula texto="AJUSTADO" tom="ok" />
+            ) : undefined
+          }
+          selos={
+            lancados[chaveDia(aberta.cracha, aberta.date_ref)] ? (
+              <button
+                type="button"
+                onClick={() => setVerAjuste(true)}
+                style={{
+                  border: "1px solid var(--dp-danger-line)",
+                  background: "var(--dp-danger-bg)",
+                  color: "var(--dp-danger-ink)",
+                  font: "inherit",
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  padding: "4px 10px",
+                  borderRadius: 7,
+                  cursor: "pointer",
+                }}
+              >
+                CLIQUE PARA SABER O AJUSTE
+              </button>
+            ) : undefined
+          }
+          aoFechar={() => { setVerAjuste(false); setAberta(null); }}
           aoRecarregar={recarregarLinha}
           aoAvisar={avisarUmaLinha}
           impedimentoAviso={impedimentoAviso}
@@ -2092,6 +2297,14 @@ export default function Revisao() {
 
       {/* O lote da correção. Mesma altura do comunicado: ele também abre POR CIMA
           do cartão, para quem clicou continuar vendo o dia. */}
+      {verAjuste && aberta && lancados[chaveDia(aberta.cracha, aberta.date_ref)] && (
+        <PopupAjuste
+          linha={aberta}
+          lancado={lancados[chaveDia(aberta.cracha, aberta.date_ref)]}
+          aoFechar={() => setVerAjuste(false)}
+        />
+      )}
+
       {loteAberto && (
         <PainelLancarAjuste
           data={data}

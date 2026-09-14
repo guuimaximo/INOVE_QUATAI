@@ -203,7 +203,7 @@ export function avaliarAjustePonto(linha, { caso = null, digitado = null, bloque
     // própria view — e é isso que o dia de ALMOÇO TRAVADO manda. O overlay do
     // Real manual respeita a mesma trava (`aplicarRealManual`), então um horário
     // digitado pelo DP nunca chega aqui num dia travado.
-    entrada = fmtHora(linha?.entrada_sug);
+    entrada = entradaDoLancamento(linha);
     saida = saidaDoLancamento(linha);
     almIni = fmtHora(linha?.almoco_saida_sug);
     almFim = fmtHora(linha?.almoco_volta_sug);
@@ -341,14 +341,51 @@ export function avaliarAjustePonto(linha, { caso = null, digitado = null, bloque
  * ISTO DIVERGE DA FERRAMENTA DO PC (`main.py:2823`), que continua mandando a `saida_sug`.
  * A divergência é deliberada e é a favor do colaborador.
  */
+/**
+ * AS MARCAS DO CARTÃO, tipadas. `E13:49 | S20:57 | …` vira [{tipo:"E",hora:"13:49"}, …].
+ * É a marca que diz quem é ponta: a primeira `E` é a entrada, a última `S` é a saída.
+ */
+function marcasDoCartao(linha) {
+  return [...String(linha?.todas_batidas ?? "").matchAll(/([ES])\s*(\d{1,2}:\d{2})/gi)].map(
+    (m) => ({ tipo: m[1].toUpperCase(), hora: m[2] }),
+  );
+}
+
+/**
+ * A ENTRADA QUE VAI PARA O TRANSNET É A QUE A PESSOA BATEU.
+ *
+ * Mesma regra da saída e pelo mesmo motivo — a régua da view aplica −10 min na entrada
+ * (`s_ent_buf`), e isso é alvo de GORDURA, não correção de cartão. O EVERALDO bateu
+ * 13:49 e a sugestão dizia 13:38.
+ *
+ * E a simetria importa: a batida só prevalece quando a sugestão MOVERIA a ponta para
+ * ANTES dela. Sugestão mais TARDE que a batida não está dando nada — está corrigindo um
+ * cartão em que a primeira marca não é a entrada (o `p1` que é saída de almoço, ou a
+ * virada do dia anterior), e aí ela é a única fonte. Foi o que o PAULO mostrou: ele bateu
+ * `00:15` e a sugestão diz `14:40`, porque o `00:15` é do dia anterior.
+ */
+export function entradaDoLancamento(linha) {
+  const marcas = marcasDoCartao(linha);
+  const primeira = marcas[0];
+  const batida = marcas.length >= 2 && primeira?.tipo === "E" ? fmtHora(primeira.hora) : null;
+  const sugerida = fmtHora(linha?.entrada_sug);
+  if (!batida) return sugerida;
+  if (!sugerida) return batida;
+
+  const bMin = hm2min(batida);
+  const sMin = hm2min(sugerida);
+  if (bMin == null || sMin == null) return batida;
+  // a sugestão só vence quando ela é MAIS TARDE — ou seja, quando a primeira marca não
+  // era a entrada de verdade. Quando ela é mais cedo, é a régua, e a régua não manda aqui.
+  return sMin > bMin ? sugerida : batida;
+}
+
 export function saidaDoLancamento(linha) {
   // A MARCA E/S DECIDE. Sem ela eu pegava "a última hora do cartão", e num dia de
   // FALTA_SAIDA essa última hora é a VOLTA DO ALMOÇO — o lançamento encerraria a jornada
   // no meio da tarde. Saída é a última marca `S`; se o cartão termina em `E`, não há
   // saída batida e a sugestão é a única fonte.
-  const marcas = [
-    ...String(linha?.todas_batidas ?? "").matchAll(/([ES])\s*(\d{1,2}:\d{2})/gi),
-  ].map((m) => ({ tipo: m[1].toUpperCase(), hora: m[2] }));
+  const marcas = marcasDoCartao(linha);
 
   // NÃO HÁ TRAVA DE TAPA-BURACO AQUI, e isso é escolha.
   //
@@ -394,15 +431,28 @@ export function saidaDoLancamento(linha) {
  * `duracao_total_sug` é recalculada junto: ela é (saída − entrada) − almoço, e deixá-la
  * com o número velho faria a jornada exibida discordar das pontas exibidas na mesma linha.
  */
-export function aplicarSaidaBatida(linha) {
-  const protegida = saidaDoLancamento(linha);
-  const atual = fmtHora(linha?.saida_sug);
-  if (!protegida || protegida === atual) return linha;
+export function aplicarPontasBatidas(linha) {
+  const entNova = entradaDoLancamento(linha);
+  const saiNova = saidaDoLancamento(linha);
+  const entVelha = fmtHora(linha?.entrada_sug);
+  const saiVelha = fmtHora(linha?.saida_sug);
+  const mudouEnt = entNova && entNova !== entVelha;
+  const mudouSai = saiNova && saiNova !== saiVelha;
+  if (!mudouEnt && !mudouSai) return linha;
 
-  const out = { ...linha, saida_sug: protegida, saida_protegida_de: atual || "" };
+  const out = { ...linha };
+  if (mudouEnt) {
+    out.entrada_sug = entNova;
+    out.entrada_protegida_de = entVelha || "";
+  }
+  if (mudouSai) {
+    out.saida_sug = saiNova;
+    out.saida_protegida_de = saiVelha || "";
+  }
 
+  // a jornada exibida tem de sair das MESMAS pontas exibidas na linha
   const ent = hm2min(out.entrada_sug);
-  const sai = hm2min(protegida);
+  const sai = hm2min(out.saida_sug);
   const ai = hm2min(out.almoco_saida_sug);
   const af = hm2min(out.almoco_volta_sug);
   if (ent != null && sai != null && sai > ent) {

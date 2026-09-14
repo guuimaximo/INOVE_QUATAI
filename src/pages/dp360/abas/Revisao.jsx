@@ -60,7 +60,7 @@ import { CONSTANTES, hm2min, min2hm } from "../regrasPonto";
 // AS TRAVAS DO LANÇAMENTO NÃO SÃO DESTA TELA. Elas e o CSV de seis colunas são
 // do módulo compartilhado com as Folgas — a mesma régua para o mesmo robô.
 import {
-  aplicarSaidaBatida,
+  aplicarPontasBatidas,
   csvDoAjustePonto,
   ddmmaaaa,
   montarLoteAjuste,
@@ -1572,7 +1572,7 @@ export default function Revisao() {
         // porque aí a saída já é decisão de gente, não sugestão da view.
         setLinhas(
           diario.map((l) =>
-            aplicarSaidaBatida(aplicarRealManual(l, mapaRm[chaveDia(l.cracha, l.date_ref)])),
+            aplicarPontasBatidas(aplicarRealManual(l, mapaRm[chaveDia(l.cracha, l.date_ref)])),
           ),
         );
       })
@@ -1776,7 +1776,7 @@ export default function Revisao() {
     const caso = listaCasos?.[0] || null;
     // a MESMA dupla de camadas da carga do dia — senão a linha relida volta com a
     // saída crua da view e a grade passa a mostrar dois números diferentes na mesma tela
-    const nova = diario?.[0] ? aplicarSaidaBatida(aplicarRealManual(diario[0], rm)) : null;
+    const nova = diario?.[0] ? aplicarPontasBatidas(aplicarRealManual(diario[0], rm)) : null;
 
     setCasos((mapa) => {
       const novo = { ...mapa };

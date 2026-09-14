@@ -59,7 +59,12 @@ import {
 import { CONSTANTES, hm2min, min2hm } from "../regrasPonto";
 // AS TRAVAS DO LANÇAMENTO NÃO SÃO DESTA TELA. Elas e o CSV de seis colunas são
 // do módulo compartilhado com as Folgas — a mesma régua para o mesmo robô.
-import { csvDoAjustePonto, ddmmaaaa, montarLoteAjuste } from "../regrasAjustePonto";
+import {
+  aplicarSaidaBatida,
+  csvDoAjustePonto,
+  ddmmaaaa,
+  montarLoteAjuste,
+} from "../regrasAjustePonto";
 
 import { supabase } from "../../../supabase";
 import { usePergunta } from "../Perguntar";
@@ -1562,7 +1567,14 @@ export default function Revisao() {
           if (!mapaLancados[k]) mapaLancados[k] = lancamentoDaLinha(x);
         }
         setLancados(mapaLancados);
-        setLinhas(diario.map((l) => aplicarRealManual(l, mapaRm[chaveDia(l.cracha, l.date_ref)])));
+        // As duas camadas, nesta ordem: o Real manual do DP manda sobre a view, e a
+        // proteção da saída batida entra DEPOIS — sobre o que o DP cravou ela não mexe,
+        // porque aí a saída já é decisão de gente, não sugestão da view.
+        setLinhas(
+          diario.map((l) =>
+            aplicarSaidaBatida(aplicarRealManual(l, mapaRm[chaveDia(l.cracha, l.date_ref)])),
+          ),
+        );
       })
       .catch((falha) => {
         if (ativo) setErro(falha.message || "Falha ao carregar a revisão deste dia.");
@@ -1762,7 +1774,9 @@ export default function Revisao() {
     const chave = chaveDia(cr, dia);
     const rm = reaisManuais?.[0] || null;
     const caso = listaCasos?.[0] || null;
-    const nova = diario?.[0] ? aplicarRealManual(diario[0], rm) : null;
+    // a MESMA dupla de camadas da carga do dia — senão a linha relida volta com a
+    // saída crua da view e a grade passa a mostrar dois números diferentes na mesma tela
+    const nova = diario?.[0] ? aplicarSaidaBatida(aplicarRealManual(diario[0], rm)) : null;
 
     setCasos((mapa) => {
       const novo = { ...mapa };

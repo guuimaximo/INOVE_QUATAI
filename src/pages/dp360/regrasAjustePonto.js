@@ -341,7 +341,7 @@ export function avaliarAjustePonto(linha, { caso = null, digitado = null, bloque
  * ISTO DIVERGE DA FERRAMENTA DO PC (`main.py:2823`), que continua mandando a `saida_sug`.
  * A divergência é deliberada e é a favor do colaborador.
  */
-function saidaDoLancamento(linha) {
+export function saidaDoLancamento(linha) {
   // A MARCA E/S DECIDE. Sem ela eu pegava "a última hora do cartão", e num dia de
   // FALTA_SAIDA essa última hora é a VOLTA DO ALMOÇO — o lançamento encerraria a jornada
   // no meio da tarde. Saída é a última marca `S`; se o cartão termina em `E`, não há
@@ -350,19 +350,19 @@ function saidaDoLancamento(linha) {
     ...String(linha?.todas_batidas ?? "").matchAll(/([ES])\s*(\d{1,2}:\d{2})/gi),
   ].map((m) => ({ tipo: m[1].toUpperCase(), hora: m[2] }));
 
-  // O TAPA-BURACO NÃO É SAÍDA (montador.py, LIÇÃO 4): o Transnet soma 1 min na última
-  // batida para fechar o cartão de quem esqueceu de bater. `E10:25 | S10:26` termina em
-  // `S`, mas essa saída é do sistema, não da pessoa — e tomá-la por boa encerraria o dia
-  // quatro horas antes (medido: 25 casos, todos assim).
-  const reais = marcas.filter((m, i) => {
-    if (i === 0) return true;
-    const antes = hm2min(marcas[i - 1].hora);
-    const agora = hm2min(m.hora);
-    return antes == null || agora == null || agora - antes > 1;
-  });
-
-  const ultima = reais[reais.length - 1];
-  const batida = reais.length >= 2 && ultima?.tipo === "S" ? fmtHora(ultima.hora) : null;
+  // NÃO HÁ TRAVA DE TAPA-BURACO AQUI, e isso é escolha.
+  //
+  // Eu tinha posto uma (descartar a marca ≤1 min depois da anterior, LIÇÃO 4 do
+  // montador) e ela ERRAVA o caso do dono: em `E23:33 | S23:34` a VIEW considera o 23:33
+  // o fantasma e o 23:34 a saída boa — o contrário da lição, porque ali o par é um
+  // duplo-toque no fim do dia, não o sistema fechando cartão de quem esqueceu de bater.
+  //
+  // E ela era desnecessária: a comparação lá embaixo já resolve os dois casos. No
+  // `E10:25 | S10:26` de FALTA_SAIDA a sugestão (14:34) é MAIS TARDE e vence sozinha; no
+  // do EVERALDO a sugestão (23:22) é mais cedo e a batida vence. Uma regra a menos, o
+  // mesmo resultado — e sem eu ter que adivinhar qual das duas marcas é a de gente.
+  const ultima = marcas[marcas.length - 1];
+  const batida = marcas.length >= 2 && ultima?.tipo === "S" ? fmtHora(ultima.hora) : null;
   const sugerida = fmtHora(linha?.saida_sug);
   if (!batida) return sugerida;
   if (!sugerida) return batida;
@@ -376,6 +376,40 @@ function saidaDoLancamento(linha) {
   const sMin = hm2min(sugerida);
   if (bMin == null || sMin == null) return batida;
   return bMin > sMin ? batida : sugerida;
+}
+
+/**
+ * A PROTEÇÃO DA SAÍDA APLICADA NA LINHA — a mesma forma do `aplicarRealManual`.
+ *
+ * Ela nasceu só dentro do lote, e isso deixou a tela mentindo: a coluna "Saída SUG"
+ * mostrava a sugestão crua da view (23:22) e o robô gravaria a batida (23:34). Dois
+ * números para a mesma coisa é pior do que o problema original — o DP decide olhando um
+ * e o Transnet recebe o outro.
+ *
+ * Aplicada aqui, uma vez, na carga do dia, vale para TUDO que vem depois: a grade, o
+ * CSV, o pop-up do ajuste e a fila do robô. `saidaDoLancamento` continua sendo chamada
+ * no lote — sobre a linha já protegida ela devolve o mesmo valor, e segue valendo como
+ * rede para quem montar lote a partir de linha crua.
+ *
+ * `duracao_total_sug` é recalculada junto: ela é (saída − entrada) − almoço, e deixá-la
+ * com o número velho faria a jornada exibida discordar das pontas exibidas na mesma linha.
+ */
+export function aplicarSaidaBatida(linha) {
+  const protegida = saidaDoLancamento(linha);
+  const atual = fmtHora(linha?.saida_sug);
+  if (!protegida || protegida === atual) return linha;
+
+  const out = { ...linha, saida_sug: protegida, saida_protegida_de: atual || "" };
+
+  const ent = hm2min(out.entrada_sug);
+  const sai = hm2min(protegida);
+  const ai = hm2min(out.almoco_saida_sug);
+  const af = hm2min(out.almoco_volta_sug);
+  if (ent != null && sai != null && sai > ent) {
+    const almoco = ai != null && af != null && af > ai ? af - ai : 0;
+    out.duracao_total_sug = min2hm(sai - ent - almoco);
+  }
+  return out;
 }
 
 export function montarLoteAjuste(linhas, casos, bloqueios, lancamentos) {

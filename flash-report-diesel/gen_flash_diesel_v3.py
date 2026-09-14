@@ -164,6 +164,7 @@ CLUSTER_TRANSNET = [
 LINHA_VEL_HIST = []
 VEL_BETA = None        # (beta km/L por km/h, r2, n_pares) medido dentro das linhas
 VEL_HIST_LABEL = ""    # ex.: "Jun-Ago"
+VEL_DRIFT = 0.0        # mare da frota: o ganho/perda comum a todas as linhas no mes
 
 # Linha x Meta x Velocidade Media (Telemetria, junho/2026 completo)
 # (linha, km_l, vel_media, meta, km_total_mil)
@@ -1370,7 +1371,7 @@ if _bcnt_url and _bcnt_key:
 
         _ref_ym = (MES_REF_ANO, MES_REF_MM)
         _hist_ym = [ym for ym in _m4 if ym != _ref_ym]
-        _lv = []
+        _lv0 = []
         for _ln, _ms in _lvh.items():
             _aR = _ms.get(_ref_ym)
             _hs = [_ms[m] for m in _hist_ym if m in _ms and _vale(_ms[m])]
@@ -1382,13 +1383,26 @@ if _bcnt_url and _bcnt_key:
             _kH, _vH = _kmH / _ltH, _kmH * 60 / _mnH
             _dv, _dk = _vR - _vH, _kR - _kH
             _dk_exp = (_beta * _dv) if _beta else 0.0
-            _dk_res = _dk - _dk_exp
-            _esp = _kH + _dk_exp
-            # litros a mais (+) do que a linha gastaria se so o efeito da velocidade valesse
-            _lit = (_aR[0] / _kR - _aR[0] / _esp) if _esp > 0 else 0.0
-            _lv.append((_ln, round(_vH, 1), round(_vR, 1), round(_dv, 2), round(_kH, 3),
-                        round(_kR, 3), round(_dk, 3), round(_dk_exp, 3), round(_dk_res, 3),
-                        round(_lit, 1), int(_aR[0])))
+            #      ln   vel_h vel_r d_vel kml_h kml_r d_kml d_expl  residuo_bruto  km
+            _lv0.append([_ln, _vH, _vR, _dv, _kH, _kR, _dk, _dk_exp, _dk - _dk_exp, _aR[0]])
+
+        # A frota anda junto. Se o mes rendeu mais que o historico em quase todas as linhas,
+        # esse ganho comum nao e merito de linha nenhuma - e sem desconta-lo 14 das 18
+        # apareciam verdes e a pagina nao apontava ninguem, que era exatamente a critica
+        # feita a pagina anterior. VEL_DRIFT e essa mare (ponderada por km); o que sobra
+        # depois dela e o que e de cada linha, acima ou abaixo dos pares.
+        _kmT = sum(x[9] for x in _lv0)
+        VEL_DRIFT = (sum(x[9] * x[8] for x in _lv0) / _kmT) if _kmT else 0.0
+        _lv = []
+        for _x in _lv0:
+            _res = _x[8] - VEL_DRIFT
+            # esperado da linha = o KM/L dela + o que o ritmo mudou + a mare da frota
+            _esp = _x[4] + _x[7] + VEL_DRIFT
+            # litros a mais (+) do que a linha gastaria se so o ritmo e a mare valessem
+            _lit = (_x[9] / _x[5] - _x[9] / _esp) if _esp > 0 and _x[5] > 0 else 0.0
+            _lv.append((_x[0], round(_x[1], 1), round(_x[2], 1), round(_x[3], 2),
+                        round(_x[4], 3), round(_x[5], 3), round(_x[6], 3), round(_x[7], 3),
+                        round(_res, 3), round(_lit, 1), int(_x[9])))
         if len(_lv) >= 5:
             LINHA_VEL_HIST = sorted(_lv, key=lambda x: x[8])
             VEL_BETA = ((round(_beta, 4), round(_r2b, 3), len(_pares),
@@ -1397,7 +1411,7 @@ if _bcnt_url and _bcnt_key:
             VEL_HIST_LABEL = (f"{_MES3[_ms_hist[0][1]-1]}-{_MES3[_ms_hist[-1][1]-1]}"
                               if _ms_hist else "")
             _ok(f"[bcnt] Pagina 7 (velocidade x propria historia) ao vivo: {len(_lv)} linhas, "
-                f"beta={'-' if not _beta else round(_beta, 4)}.")
+                f"beta={'-' if not _beta else round(_beta, 4)}, mare={round(VEL_DRIFT, 4)}.")
 
         # ----- Pagina 8: Sinal de Alerta / Destaque Positivo (motorista mai vs jun) + causa -----
         _mMJ = _dd(lambda: {MES_ANT_MM: [0.0, 0.0], MES_REF_MM: [0.0, 0.0]})
@@ -2729,7 +2743,8 @@ def chart_linha_vel_hist():
                 fontsize=7.6, fontweight="bold" if abs(L) >= 100 else "normal",
                 color=RED if L > 0 else "#475569")
     ax.set_yticks(list(y)); ax.set_yticklabels(labels, fontsize=8.6)
-    ax.set_xlabel("KM/L que a velocidade NÃO explica  (negativo = pior do que o ritmo justifica)")
+    ax.set_xlabel("KM/L acima ou abaixo do esperado, descontados o ritmo e a variação geral "
+                  "da frota  (negativo = pior)")
     _topo = len(labels) - 0.25
     ax.text(_x1, _topo, "Velocidade", fontsize=7.6, fontweight="bold", color="#475569",
             ha="left", va="bottom")
@@ -2738,9 +2753,9 @@ def chart_linha_vel_hist():
     from matplotlib.patches import Patch
     # Legenda acima do eixo, e nao em "lower right": no canto de baixo a direita ela cobria
     # as colunas de texto - foi exatamente o que aconteceu na pagina 6.
-    ax.legend(handles=[Patch(color=GREEN, label="Melhor do que o ritmo justifica"),
+    ax.legend(handles=[Patch(color=GREEN, label="Acima do esperado para a linha"),
                        Patch(color=GOLD, label="Dentro do esperado (±0,02)"),
-                       Patch(color=RED, label="Pior do que o ritmo justifica — condução")],
+                       Patch(color=RED, label="Abaixo do esperado — condução")],
               loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=3,
               fontsize=7.2, frameon=False)
     for sp in ["top", "right", "left"]:

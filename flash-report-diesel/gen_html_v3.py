@@ -752,7 +752,7 @@ else:
         f'<div class="val">{len(_lentas)} de {len(_vh)}</div></div>'
         f'<div class="metric"><div class="lbl">{"Litros que o ritmo explica" if _tot_exp >= 0 else "Litros que o ritmo poupou"}</div>'
         f'<div class="val" style="font-size:15px;color:{"#6B7C79" if _tot_exp >= 0 else "#16a34a"};">{fmt(abs(_tot_exp), 0)} L</div></div>'
-        f'<div class="metric"><div class="lbl">Litros SEM explicação de velocidade</div>'
+        f'<div class="metric"><div class="lbl">Litros que sobram para a condução</div>'
         f'<div class="val" style="font-size:15px;color:#dc2626;">{fmt(_res_neg, 0)} L</div></div>')
 
     if _beta_t:
@@ -806,13 +806,24 @@ else:
     else:
         _t4 = ""
 
+    # Sem dizer a maré em voz alta, uma linha que MELHOROU contra a própria história
+    # aparece vermelha e o leitor acha que a página errou a conta.
+    _drift = getattr(gfd, "VEL_DRIFT", 0.0)
+    if abs(_drift) >= 0.005:
+        _t0 = (f"Antes de olhar linha por linha: descontado o ritmo, a frota <b>inteira</b> "
+               f"está {'+' if _drift > 0 else ''}{fmt(_drift, 3)} km/L "
+               f"{'acima' if _drift > 0 else 'abaixo'} do que fazia em {_hist_lbl}. É uma maré "
+               f"que levanta (ou baixa) todas as linhas junto e não é mérito de nenhuma — a "
+               f"página desconta essa maré, então o que sobra é o que é de cada linha. ")
+    else:
+        _t0 = ""
     _p6_corpo = (
         f'<div class="card"><div class="card-title">O que sobra da variação de KM/L depois de '
-        f'descontar a velocidade — {MESREF} contra a própria linha em {_hist_lbl}</div>'
+        f'descontar o ritmo e a maré da frota — {MESREF} contra a própria linha em {_hist_lbl}</div>'
         f'<div class="card-body">'
         f'<div class="chart-wrap"><img src="v3_linha_vel_hist.png"/></div></div></div>'
         f'<div class="cons-box"><div class="cons-title">De quem é a conta</div>'
-        f'<div class="cons-text">{_t1}{_t2}{_t3}{_t4} Os dois lados usam a <b>mesma janela de '
+        f'<div class="cons-text">{_t0}{_t1}{_t2}{_t3}{_t4} Os dois lados usam a <b>mesma janela de '
         f'dias</b> (01 a {gfd._ONTEM.day:02d} de cada mês): comparar o mês corrente parcial com '
         f'meses cheios trocaria a proporção de dia útil e fim de semana, e fim de semana é mais '
         f'rápido.</div></div>')

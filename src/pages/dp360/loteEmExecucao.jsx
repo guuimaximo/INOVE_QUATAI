@@ -241,6 +241,14 @@ const RE_LOG_CASO =
 
 const TOM_DO_PASSO = { OK: "ok", CORRIGIR: "warn", PENDENTE: "warn", VERIFICAR: "mute" };
 
+/* O RECADO DO TRANSNET, quando existe, VALE MAIS QUE O NOME DA EXCEÇÃO.
+   Quando o Transnet recusa um lançamento ele abre um alerta, e o Selenium devolve isso
+   como `UnexpectedAlertPresentException: Alert Text: Intervalo entre jornada Maior que
+   19:00 horas`. Mostrar o nome da classe faz o DP achar que é defeito da ferramenta; o
+   que aconteceu foi o Transnet RECUSAR o alvo que ele mesmo fechou, e a frase do alerta é
+   a única coisa na tela que explica isso. Visto no run 34898154006. */
+const RE_ALERTA = /Alert Text:\s*(.+)/i;
+
 export function lerLogDoBot(texto) {
   const mapa = new Map();
   for (const bruto of String(texto || "").split(/\r?\n/)) {
@@ -250,14 +258,25 @@ export function lerLogDoBot(texto) {
     const dia = data.includes("/")
       ? `${data.slice(6, 10)}-${data.slice(3, 5)}-${data.slice(0, 2)}`
       : data;
-    // A ÚLTIMA palavra do robô sobre aquele caso vence: ele fala mais de uma vez sobre o
-    // mesmo dia (verifica, corrige, reconfere) e o que vale é onde ele parou.
-    mapa.set(`${cra8(cracha)}|${dia}`, {
+    const chave = `${cra8(cracha)}|${dia}`;
+    const alerta = RE_ALERTA.exec(frase);
+    const novo = {
       passo,
       tom: TOM_DO_PASSO[passo.toUpperCase()] || "mute",
       // a frase do robô inteira não cabe na coluna; o começo dela é o que diz o estado
-      frase: frase.split(" | ")[0].trim(),
-    });
+      frase: alerta ? `o Transnet recusou: ${alerta[1].trim()}` : frase.split(" | ")[0].trim(),
+      motivo: Boolean(alerta),
+    };
+    /* A ÚLTIMA palavra do robô vence — ELE FALA VÁRIAS VEZES do mesmo dia (verifica,
+       corrige, reconfere) e o que vale é onde parou. Com UMA exceção: o `PENDENTE` que
+       fecha o caso repete só o nome da exceção ("falha tecnica
+       (UnexpectedAlertPresentException)"), e deixá-lo passar por cima apagaria a frase do
+       Transnet que a linha anterior trouxe — que é a única que diz POR QUE falhou. */
+    if (mapa.get(chave)?.motivo && !novo.motivo) {
+      mapa.set(chave, { ...mapa.get(chave), tom: novo.tom, passo: novo.passo });
+      continue;
+    }
+    mapa.set(chave, novo);
   }
   return mapa;
 }
@@ -356,8 +375,15 @@ export default function PainelExecucao() {
                falar deste caso, a espera. */
             const fechado = porCaso?.get(c.chave);
             const vivo = aoVivo.get(c.chave);
+            /* PENDENTE É O ÚNICO DESFECHO SEM MOTIVO NO BANCO: a falha técnica não deixa
+               marca nenhuma, de propósito ("o caso continua pendente, que é exatamente o
+               que ele é"). Então, só nele, a última palavra do robô no log é o que
+               responde POR QUÊ — e sem ela a linha diria "não conseguiu mexer" e pararia,
+               escondendo que o Transnet recusou por uma regra dele. */
             const d = fechado
-              ? DESFECHO_CASO[fechado.estado]
+              ? fechado.estado === "pendente" && vivo
+                ? { ...DESFECHO_CASO.pendente, texto: `continua pendente — ${vivo.frase}` }
+                : DESFECHO_CASO[fechado.estado]
               : vivo
                 ? { icone: vivo.tom === "ok" ? "✅" : vivo.tom === "warn" ? "⚙" : "👁", tom: vivo.tom, texto: vivo.frase }
                 : DESFECHO_CASO.esperando;

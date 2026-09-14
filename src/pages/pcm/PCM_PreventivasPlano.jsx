@@ -536,9 +536,9 @@ function Garantia({ itens }) {
           {pend} a chamar
         </span>
         <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-semibold dark:bg-emerald-900/40 dark:text-emerald-300">
-          {itens.length - pend} feitos
+          {itens.length - pend} em dia
         </span>
-        <span>Revisão 60.000 na concessionária · &quot;Chamar em&quot; já desconta o save de 500 km.</span>
+        <span>Revisão 60.000 na concessionária · &quot;Chamar em&quot; já desconta o save de 500 km · <b>EM DIA</b> = próxima revisão longe.</span>
       </div>
 
       <div className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm bg-white dark:bg-gray-800">
@@ -586,9 +586,13 @@ function Garantia({ itens }) {
                       {g.done ? "—" : g.alvo}
                     </td>
                     <td className={`px-3 py-2.5 text-center ${zbg}`}>
-                      {g.done ? (
+                      {g.oleoVenc != null ? (
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300" title={`óleo vencido +${g.oleoVenc} km`}>
+                          CHAMAR JÁ
+                        </span>
+                      ) : g.done ? (
                         <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
-                          OK ✓
+                          EM DIA ✓
                         </span>
                       ) : (
                         <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">

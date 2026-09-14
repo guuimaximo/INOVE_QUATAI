@@ -787,16 +787,16 @@ else:
     if _piores:
         _lit_piores = sum(l[9] for l in _piores if l[9] > 0)
         _resto = _res_neg - _lit_piores
-        _t3 = (f" Descontado esse efeito, sobram <b>{fmt(_res_neg, 0)} L</b> que a velocidade "
-               f"não explica. O grosso está em "
+        _t3 = (f" Descontados o ritmo e a maré, sobram <b>{fmt(_res_neg, 0)} L</b> que são da "
+               f"própria linha. O grosso está em "
                + ", ".join(f"<b>{l[0]}</b> ({fmt(l[8], 3)} km/L, {fmt(l[9], 0)} L)" for l in _piores)
                + (f", e os {fmt(_resto, 0)} L restantes se espalham em perdas pequenas por "
                   f"várias linhas" if _resto >= 10 else "")
                + ". São estas as linhas em que a cobrança de condução se sustenta — elas "
                  "pioraram além do que o próprio ritmo justifica.")
     else:
-        _t3 = (" Descontado esse efeito, nenhuma linha ficou mais do que 0,02 km/L abaixo do "
-               "que o próprio ritmo justificaria — não há caso de condução destacado nesta janela.")
+        _t3 = (" Descontados o ritmo e a maré, nenhuma linha ficou mais do que 0,02 km/L abaixo "
+               "do esperado para ela — não há caso de condução destacado nesta janela.")
 
     if _melhores:
         _t4 = (" No sentido contrário, "

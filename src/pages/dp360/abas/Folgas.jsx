@@ -30,6 +30,12 @@
 // `folgasALancar` (duas seguidas → 1ª Compensação e 2ª DSR; isolada → DSR; dia de
 // curso → 29) e o motivo definido à mão VENCE o automático no mesmo dia.
 //
+// O CICLO FECHA SOZINHO (porte de `_ingest_ocorr`, main.py:4521). O bot de folgas
+// escreve um relatório por pessoa — `fila_ocorr_resultado.csv`, com `status` linha a
+// linha — e desde 14/09/2026 ele SOBE esse relatório junto com as fotos. Então a tela
+// faz o que o desktop sempre fez: quando o run termina, lê o relatório e grava o status
+// de verdade. O ⏳ vira ✓ ou ✗ sem ninguém mexer. Ver `ingestaOcorrencias.js`.
+//
 // O DISPARO FICA REGISTRADO AQUI MESMO. O workflow guarda a evidência como artefato
 // e não escreve no Supabase, e quem preenchia `ponto_ocorrencias` era só o
 // pós-processo da ferramenta desktop (`_ingest_ocorr`) — então uma DSR lançada por
@@ -67,6 +73,12 @@ import {
 // O `aplicarRealManual` é o overlay do Real cravado pelo DP, e é ele que faz o
 // dia já decidido na Revisão aparecer aqui com o horário que o DP mandou.
 import { aplicarRealManual, fmtHora, quemEstaUsando } from "../CartaoDoDia";
+import {
+  STATUS_DISPARADO,
+  ingerirResultados,
+  ocorrenciaTrancaODia,
+} from "../ingestaOcorrencias";
+import { useVigiaDoRobo } from "../roboVigia";
 import { usePergunta } from "../Perguntar";
 // AS TRAVAS DO LANÇAMENTO NÃO SÃO DESTA TELA — nem da Revisão. Elas moram em
 // `../regrasAjustePonto`, o mesmo módulo que o lote da Revisão usa: uma régua só
@@ -434,11 +446,15 @@ const temSugestao = (cartao) =>
 
 // Folgas ainda NÃO lançadas, com o tipo automático (folgasP, app.js ~3582):
 // duas seguidas → 1ª Compensação (40) e 2ª DSR (05); isolada → DSR (05); curso → 29.
-function folgasALancar(pessoa, diasCurso) {
+function folgasALancar(pessoa, diasCurso, ocorrencias) {
   const dias = [];
   for (let d = 1; d <= 7; d += 1) {
     const linha = pessoa.linha[d];
     if (!linha || folgaJaLancada(linha)) continue;
+    // O `te_descricao_dia` é a palavra final, mas ele só chega na importação do dia
+    // seguinte. Até lá, quem responde "já mandei este dia" é a ocorrência registrada —
+    // sem isso o mesmo domingo ficava a um clique de ser lançado duas vezes.
+    if (ocorrenciaTrancaODia(ocorrencias?.get(chaveDia(pessoa.cracha, linha.date_ref)))) continue;
     const folga =
       texto(linha.acao_passo3).toUpperCase() === "LANCAR_DSR" ||
       texto(linha.classificacao).toUpperCase() === "FOLGA_DSR" ||
@@ -458,10 +474,10 @@ function folgasALancar(pessoa, diasCurso) {
 // VENCE o tipo automático, para o mesmo dia nunca sair duas vezes no CSV.
 // O atestado (04) sai da fila do robô e volta em `manuais`, para a tela dizer
 // quantos dias ainda precisam de lançamento à mão.
-function montarFila(pessoas, motivos, diasCurso) {
+function montarFila(pessoas, motivos, diasCurso, ocorrencias) {
   const porDia = new Map();
   pessoas.forEach((pessoa) => {
-    folgasALancar(pessoa, diasCurso).forEach((f) => {
+    folgasALancar(pessoa, diasCurso, ocorrencias).forEach((f) => {
       porDia.set(chaveDia(pessoa.cracha, f.data), {
         chave: chaveDia(pessoa.cracha, f.data),
         cracha: pessoa.cracha,
@@ -851,9 +867,6 @@ function instanteCurto(valor) {
 }
 
 const RE_BOT_OK = /^OK/i;
-// O status que ESTA tela escreve ao disparar valendo. Some quando o `_ingest_ocorr`
-// do desktop upsertar o resultado de verdade em cima da mesma chave.
-const STATUS_DISPARADO = "DISPARADO PELO INOVE";
 const RE_AVISO = /^aviso_/i;
 
 // Três baldes, os mesmos que a marca 🤖 da grade usa: deu certo, falhou, ou o bot
@@ -1227,7 +1240,7 @@ function PainelDetalhe({
   // `window.confirm` escrevia "inovequatai.onrender.com diz" em cima da pergunta,
   // ignorava o tema e espremia tudo num bloco só.
   const [perguntar, caixaPergunta] = usePergunta();
-  const folgas = folgasALancar(pessoa, ctx.diasCurso);
+  const folgas = folgasALancar(pessoa, ctx.diasCurso, ctx.ocorrencias);
   const tipoPorData = new Map(folgas.map((f) => [f.data, f.tipo]));
   const [disparando, setDisparando] = useState(false);
   const [recado, setRecado] = useState(null);
@@ -1244,8 +1257,8 @@ function PainelDetalhe({
   }, [ctx.motivos, prefixo]);
 
   const { fila, manuais } = useMemo(
-    () => montarFila([pessoa], motivosDaPessoa, ctx.diasCurso),
-    [pessoa, motivosDaPessoa, ctx.diasCurso],
+    () => montarFila([pessoa], motivosDaPessoa, ctx.diasCurso, ctx.ocorrencias),
+    [pessoa, motivosDaPessoa, ctx.diasCurso, ctx.ocorrencias],
   );
 
   /* ── o cartão da semana, para lançar o ponto sugerido (PORTE.md §11, item 5) ──
@@ -1375,8 +1388,8 @@ function PainelDetalhe({
             : "") +
           `Quem executa é o robô, no GitHub Actions. O disparo fica registrado ` +
           `com o seu nome.\n\n` +
-          `O resultado por dia NÃO volta sozinho para esta tela: a evidência ` +
-          `fica no run do GitHub.`,
+          `Quando o robô terminar, a tela lê o relatório dele e marca cada dia ` +
+          `com 🤖 ✓ ou ✗ sozinha. O ✅ "já lançado no Transnet" vem na próxima importação.`,
       )
     )
       return;
@@ -1720,6 +1733,41 @@ export default function Folgas() {
 
   const recarregar = useCallback(() => setRecarga((n) => n + 1), []);
 
+  /* ── o ciclo fechando (porte de `_ingest_ocorr`) ─────────────────────────
+     Só acorda quando há linha pendente: sem ⏳ na tela não há nada para ler, e a
+     varredura de runs custa uma chamada por run. O `runs` vem do vigia, que já está de
+     pé para o aviso do topo — esta leitura não acrescenta consulta ao GitHub.
+
+     A trava por run lido evita o laço: aplicar o resultado recarrega a base, a base
+     traz o mapa novo, e sem ela o efeito voltaria a rodar sobre os mesmos runs. */
+  const runs = useVigiaDoRobo();
+  const jaLidos = useRef(new Set());
+
+  useEffect(() => {
+    const pendentes = listaOcorrencias.filter(
+      (o) => texto(o.status).toUpperCase() === STATUS_DISPARADO,
+    );
+    if (!pendentes.length) return;
+    const novos = (runs || []).filter(
+      (r) => String(r.status || "") === "completed" && !jaLidos.current.has(String(r.id)),
+    );
+    if (!novos.length) return;
+    novos.forEach((r) => jaLidos.current.add(String(r.id)));
+
+    let vivo = true;
+    ingerirResultados(pendentes, runs)
+      .then(({ aplicados }) => {
+        if (vivo && aplicados) recarregar();
+      })
+      .catch(() => {
+        // Conveniência de segundo plano: falhar aqui deixa a linha em ⏳ até a próxima
+        // volta, que é exatamente o estado de antes deste porte existir.
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [listaOcorrencias, runs, recarregar]);
+
   // Base fixa: semanas disponíveis, reservas, ocorrências do bot, dias de curso
   // e os motivos que o DP já definiu (a fila compartilhada com a ferramenta).
   useEffect(() => {
@@ -1875,7 +1923,7 @@ export default function Folgas() {
   const linhasGrade = useMemo(
     () =>
       visiveis.map((pessoa) => {
-        const folgas = folgasALancar(pessoa, diasCurso);
+        const folgas = folgasALancar(pessoa, diasCurso, ocorrencias);
         const tipoPorData = new Map(folgas.map((f) => [f.data, f.tipo]));
         const celulas = [1, 2, 3, 4, 5, 6, 7].map((d) => {
           const linha = pessoa.linha[d];
@@ -1934,7 +1982,7 @@ export default function Folgas() {
 
         return { pessoa, celulas, bot, folgas };
       }),
-    [visiveis, ctx, diasCurso, diasNaoProntos],
+    [visiveis, ctx, diasCurso, diasNaoProntos, ocorrencias],
   );
 
   const totalFolgas = useMemo(
@@ -1970,8 +2018,8 @@ export default function Folgas() {
   }, [linhasGrade]);
 
   const { fila, manuais } = useMemo(
-    () => montarFila(marcados.map((item) => item.pessoa), motivos, diasCurso),
-    [marcados, motivos, diasCurso],
+    () => montarFila(marcados.map((item) => item.pessoa), motivos, diasCurso, ocorrencias),
+    [marcados, motivos, diasCurso, ocorrencias],
   );
 
   const pessoasNaFila = useMemo(
@@ -2131,7 +2179,8 @@ export default function Folgas() {
       "",
       confirmar ? "Ao disparar valendo, os motivos que você definiu saem da fila." : "",
       "Quem executa é o robô, no GitHub Actions. O disparo fica registrado com o seu nome.",
-      "O resultado por dia NÃO volta sozinho para esta tela: a evidência fica no run do GitHub.",
+      "Quando o robô terminar, a tela lê o relatório dele e marca cada dia com 🤖 ✓ ou ✗ sozinha.",
+      'O ✅ "já lançado no Transnet" vem na próxima importação.',
     ].filter((l) => l !== "");
     if (!await perguntar(linhas.join("\n"))) return;
 

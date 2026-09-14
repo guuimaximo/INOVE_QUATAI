@@ -1657,16 +1657,34 @@ export default function Revisao() {
   useEffect(() => carregarDia(), [carregarDia]);
 
   /* ---- contagens e filtro ---- */
+  /**
+   * RESOLVIDO = OK **OU** JÁ AJUSTADO.
+   *
+   * O `status_ponto` é o diagnóstico de ANTES da correção: o dia que o robô corrigiu
+   * continua vindo do lake como REVISAR, porque a view não sabe que o ajuste saiu daqui.
+   * Deixar esse dia na aba REVISAR é pedir para ele ser trabalhado de novo — e é
+   * exatamente o dia que já está resolvido.
+   *
+   * Uma função só para a CONTAGEM e para o FILTRO: quando eram dois critérios, o chip
+   * dizia um número e a lista mostrava outro.
+   */
+  const jaResolvido = useCallback(
+    (l) =>
+      String(l.status_ponto ?? "").toUpperCase() === "OK" ||
+      !!lancados[chaveDia(l.cracha, l.date_ref)],
+    [lancados],
+  );
+
   const contagens = useMemo(() => {
     const c = { TODOS: linhas.length, REVISAR: 0, OK: 0, FORA: 0 };
     for (const l of linhas) {
-      if (String(l.status_ponto ?? "").toUpperCase() === "OK") c.OK += 1;
+      if (jaResolvido(l)) c.OK += 1;
       else c.REVISAR += 1;
       const g = gpsPorCracha[cra8(l.cracha)];
       if (g && g.fora > 0) c.FORA += 1;
     }
     return c;
-  }, [linhas, gpsPorCracha]);
+  }, [linhas, gpsPorCracha, jaResolvido]);
 
   // `sugBloqueio` roda uma vez por linha (e não uma vez por célula): a grade tem
   // ~30 colunas e o dia inteiro de motoristas, então repetir custava 12k chamadas.
@@ -1684,7 +1702,7 @@ export default function Revisao() {
         const cra = String(l.cracha ?? "");
         if (!nome.includes(q) && !cra.includes(q)) return false;
       }
-      const ok = String(l.status_ponto ?? "").toUpperCase() === "OK";
+      const ok = jaResolvido(l);
       if (filtro === "REVISAR") return !ok;
       if (filtro === "OK") return ok;
       if (filtro === "FORA") {
@@ -1693,7 +1711,7 @@ export default function Revisao() {
       }
       return true;
     });
-  }, [linhas, busca, filtro, gpsPorCracha]);
+  }, [linhas, busca, filtro, gpsPorCracha, jaResolvido]);
 
   /* ---- o lote do "✅ Lançar ajuste" ----
      Sai das linhas VISÍVEIS (o filtro e a busca da barra são a seleção, como já

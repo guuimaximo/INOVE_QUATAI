@@ -1623,6 +1623,54 @@ function chaveDoCaso(reg) {
 const idsDoDia = (reg) => (reg.ajustes || []).map((o) => txt(o.id_ocorrencia)).filter(Boolean);
 
 /**
+ * O QUE O ROBÔ CONSEGUIU, LIDO DO NOSSO BANCO.
+ *
+ * O desfecho do run diz que o robô terminou, não que ele resolveu: ele sai `success` tendo
+ * conferido cinco de oito, porque três estavam com o ponto fechado ou não subiram. Quem
+ * sabe caso a caso é o `conferido_em` que ELE MESMO carimba em `ponto_caso`
+ * (`bot_ajustes_app.executar_decisoes`: "só depois de confirmado no Transnet carimba
+ * conferido_em") — e é esse carimbo que tira o caso da Fila de lançamento.
+ *
+ * Então o relatório do fim não repete o status do GitHub: ele conta quantos dos casos QUE
+ * FORAM MANDADOS voltaram carimbados, e nomeia os que não voltaram. Sem isso a tela dizia
+ * "disparado" e parava — que era a queixa: "ele precisa entender o resultado".
+ */
+async function conferidosDepoisDoRobo(lista) {
+  const alvo = new Map();
+  for (const reg of lista || []) {
+    const { cracha, date_ref } = chaveDoCaso(reg);
+    const d = normData(date_ref) || txt(date_ref).slice(0, 10);
+    if (txt(cracha) && d) alvo.set(`${cra8(cracha)}|${d}`, reg);
+  }
+  if (!alvo.size) return { feitos: [], faltaram: [] };
+
+  const crachas = [...new Set([...alvo.values()].map((r) => txt(chaveDoCaso(r).cracha)))];
+  const dias = [...new Set([...alvo.keys()].map((k) => k.split("|")[1]))];
+  let casos = [];
+  try {
+    // Dois `in.` e o cruzamento aqui: PostgREST não filtra por PARES, e pedir caso a caso
+    // seria uma consulta por linha do lote.
+    casos = await lerDP360("ponto_caso", {
+      colunas: "cracha,date_ref,conferido_em,usuario",
+      filtros: { cracha: `in.(${crachas.join(",")})`, date_ref: `in.(${dias.join(",")})` },
+      limite: 2000,
+    });
+  } catch {
+    return null; // sem leitura não invento desfecho: quem chama diz "não consegui conferir"
+  }
+
+  const carimbado = new Map();
+  for (const c of casos || []) {
+    const k = `${cra8(c.cracha)}|${normData(c.date_ref) || txt(c.date_ref).slice(0, 10)}`;
+    if (alvo.has(k) && txt(c.conferido_em)) carimbado.set(k, txt(c.usuario));
+  }
+  const feitos = [];
+  const faltaram = [];
+  for (const [k, reg] of alvo) (carimbado.has(k) ? feitos : faltaram).push(reg);
+  return { feitos, faltaram };
+}
+
+/**
  * main.py:9467 (_grava_contrato) — o CONTRATO da decisão: como o cartão estava e como tem
  * que ficar. CONGELAMENTO: nunca reescreve um contrato que já existe — o primeiro é o que
  * o DP aprovou, o resto é ruído. Falhar aqui não pode derrubar a decisão.
@@ -4516,6 +4564,66 @@ export default function Ocorrencias() {
     [atualizarSilencioso],
   );
 
+  /* ══ A CADEIA DO VENCIDO, NUM CLIQUE — E ELA ESPERA O ROBÔ ════════════════
+   *
+   * "Disparamos os dois: primeiro as advertências, depois as correções" (dono, 10/09/2026).
+   * É o fluxo da ferramenta (app.js:2044-2075), e ele tem duas exigências que o INOVE não
+   * tinha como cumprir até agora:
+   *
+   *   1. SÓ CORRIGE QUEM FOI ADVERTIDO. Punir sem consertar é ruim; consertar sem punir
+   *      apaga a prova de que a pessoa não cumpriu o prazo.
+   *   2. UM ROBÔ DE CADA VEZ. O Transnet aceita uma sessão só — dois runs juntos e o
+   *      segundo morre com `travado_por` (foi o que matou o run das 12:41 de 09/09).
+   *
+   * Por isso a tela AGORA ESPERA: dispara o comunicado do dia, acompanha o run pelo id que
+   * o gateway casou e só segue quando ele termina. Advertência que não terminou em
+   * `success` NÃO vira correção — e o dia fica dito no relatório do fim, para o DP mandar a
+   * correção à mão na aba "Advertências e correções".
+   *
+   * É LENTO POR NATUREZA, e a confirmação diz isso: são N envios + N rodadas, um de cada
+   * vez. Na ferramenta eram 14 dias em ~9 min com o bot na própria máquina; aqui cada run
+   * ainda paga o tempo de subir a máquina do GitHub. */
+  const ESPERA_PASSO_MS = 15000;
+  const ESPERA_MAX_MIN = 14;
+
+  /* O ID DO RUN NEM SEMPRE VEM. O gateway casa o disparo com a execução logo depois do
+   * dispatch, e o run pode não ter nascido ainda ("nao_encontrado") ou dois caírem na mesma
+   * janela ("ambiguo"). Sem plano B, todo disparo assim viraria "não sei se saiu" e a
+   * correção nunca sairia — então o plano B é o mesmo que uma pessoa faria: olhar o run
+   * DAQUELE robô que começou depois do meu clique. */
+  const esperarRun = useCallback(async ({ runId, robo, desde }, dizendo) => {
+    const limite = Date.now() + ESPERA_MAX_MIN * 60000;
+    let visto = "";
+    while (Date.now() < limite) {
+      await new Promise((r) => setTimeout(r, ESPERA_PASSO_MS));
+      let runs = [];
+      try {
+        runs = await statusRoboDP360(2);
+      } catch {
+        continue; // falha de leitura não é falha do run: tenta de novo
+      }
+      const meu = runId
+        ? (runs || []).find((x) => String(x.id) === String(runId))
+        : (runs || [])
+            .filter(
+              (x) =>
+                txt(x.nome).toLowerCase().includes(txt(robo).toLowerCase()) &&
+                Date.parse(txt(x.comecou_em)) >= desde - 60000,
+            )
+            .sort((a, b) => Date.parse(txt(b.comecou_em)) - Date.parse(txt(a.comecou_em)))[0];
+      if (!meu) continue;
+      if (txt(meu.status) !== "completed") {
+        if (txt(meu.status) !== visto) {
+          visto = txt(meu.status);
+          dizendo?.(visto === "queued" ? "na fila do GitHub" : "rodando no Transnet");
+        }
+        continue;
+      }
+      return txt(meu.conclusao) || "sem_conclusao";
+    }
+    return "tempo_esgotado";
+  }, []);
+
   /* ── EXECUTAR EM LOTE — o passo que faltava (09/09/2026) ─────────────────────
    * O dono, olhando 63 casos parados: "mas não podia ficar em pronto para executar, tinha
    * que ter executado lá — alguma coisa aconteceu". Aconteceu isto: na FERRAMENTA o
@@ -4573,23 +4681,54 @@ export default function Ocorrencias() {
 
       setDisparando(true);
       setRecado("");
+      const t0 = Date.now();
       try {
         const r = await dispararRoboDP360("ajustes", { modo: MODO_EXECUTAR, casos, confirmar: "true" });
-        setRecado(
-          `Execução disparada — ${lista.length} crachá+dia (${soma.a} aceitar / ${soma.r} rejeitar).` +
-            " O resultado não volta sozinho: a prova fica no run." + (r?.painel ? ` ${r.painel}` : ""),
-        );
+        const painel = r?.painel ? ` ${r.painel}` : "";
+        const escopo = `${lista.length} crachá+dia (${soma.a} aceitar / ${soma.r} rejeitar)`;
+        setRecado(`⚙ Execução disparada — ${escopo}. Esperando o robô…${painel}`);
         setSelIds([]);
-        // O aviso do robô ficava aqui e precisava ser relido à mão; agora ele é o do topo,
-        // que acorda sozinho no disparo (evento do `dp360Api`).
+
+        /* A TELA ESPERA, como já espera na cadeia do vencido. Sem isso o DP ficava com
+           "disparado" na mão e nenhum jeito de saber o que saiu dali — e o caminho natural
+           de quem não sabe é disparar de novo, que no Transnet é mexer duas vezes na ficha
+           de alguém. */
+        const fim = await esperarRun(
+          { runId: r?.execucao?.run_id || null, robo: "ajustes", desde: t0 },
+          (onde) => setRecado(`⚙ Executando ${escopo} — ${onde}…${painel}`),
+        );
         await atualizarSilencioso();
+
+        /* O DESFECHO DO RUN NÃO É O DESFECHO DOS CASOS. O robô sai `success` tendo
+           conferido cinco de oito: os outros três podem ter o ponto fechado, ou o cartão
+           não subiu. Então o relatório conta o que voltou CARIMBADO. */
+        const conta = await conferidosDepoisDoRobo(lista);
+        if (!conta) {
+          setRecado(
+            `Robô terminou (${fim}) — mas não consegui reler os casos para dizer o que passou.` +
+              ` Recarregue a tela.${painel}`,
+          );
+          return;
+        }
+        const { feitos, faltaram } = conta;
+        const nomes = faltaram.slice(0, 6).map((x) => `${x.nome} ${x.dataBR}`).join(" · ");
+        setRecado(
+          (faltaram.length ? "⚠ " : "✅ ") +
+            `Robô ${fim === "success" ? "terminou" : `terminou ${fim}`} — ` +
+            `${feitos.length} de ${lista.length} caso(s) conferido(s) e fora da fila.` +
+            (faltaram.length
+              ? ` ${faltaram.length} ficaram: ${nomes}${faltaram.length > 6 ? " …" : ""}.` +
+                " Abra o caso para ver por quê (ponto fechado, cartão que não subiu) — o log do run tem a linha."
+              : "") +
+            painel,
+        );
       } catch (e) {
         setRecado(`Falhou: ${e?.message || "não foi possível disparar o robô."}`);
       } finally {
         setDisparando(false);
       }
     },
-    [atualizarSilencioso],
+    [atualizarSilencioso, esperarRun],
   );
 
   /* ── CONFERÊNCIA: lê o cartão ao vivo, NÃO mexe no Transnet ────────────────
@@ -4746,65 +4885,6 @@ export default function Ocorrencias() {
     [atualizarSilencioso],
   );
 
-  /* ══ A CADEIA DO VENCIDO, NUM CLIQUE — E ELA ESPERA O ROBÔ ════════════════
-   *
-   * "Disparamos os dois: primeiro as advertências, depois as correções" (dono, 10/09/2026).
-   * É o fluxo da ferramenta (app.js:2044-2075), e ele tem duas exigências que o INOVE não
-   * tinha como cumprir até agora:
-   *
-   *   1. SÓ CORRIGE QUEM FOI ADVERTIDO. Punir sem consertar é ruim; consertar sem punir
-   *      apaga a prova de que a pessoa não cumpriu o prazo.
-   *   2. UM ROBÔ DE CADA VEZ. O Transnet aceita uma sessão só — dois runs juntos e o
-   *      segundo morre com `travado_por` (foi o que matou o run das 12:41 de 09/09).
-   *
-   * Por isso a tela AGORA ESPERA: dispara o comunicado do dia, acompanha o run pelo id que
-   * o gateway casou e só segue quando ele termina. Advertência que não terminou em
-   * `success` NÃO vira correção — e o dia fica dito no relatório do fim, para o DP mandar a
-   * correção à mão na aba "Advertências e correções".
-   *
-   * É LENTO POR NATUREZA, e a confirmação diz isso: são N envios + N rodadas, um de cada
-   * vez. Na ferramenta eram 14 dias em ~9 min com o bot na própria máquina; aqui cada run
-   * ainda paga o tempo de subir a máquina do GitHub. */
-  const ESPERA_PASSO_MS = 15000;
-  const ESPERA_MAX_MIN = 14;
-
-  /* O ID DO RUN NEM SEMPRE VEM. O gateway casa o disparo com a execução logo depois do
-   * dispatch, e o run pode não ter nascido ainda ("nao_encontrado") ou dois caírem na mesma
-   * janela ("ambiguo"). Sem plano B, todo disparo assim viraria "não sei se saiu" e a
-   * correção nunca sairia — então o plano B é o mesmo que uma pessoa faria: olhar o run
-   * DAQUELE robô que começou depois do meu clique. */
-  const esperarRun = useCallback(async ({ runId, robo, desde }, dizendo) => {
-    const limite = Date.now() + ESPERA_MAX_MIN * 60000;
-    let visto = "";
-    while (Date.now() < limite) {
-      await new Promise((r) => setTimeout(r, ESPERA_PASSO_MS));
-      let runs = [];
-      try {
-        runs = await statusRoboDP360(2);
-      } catch {
-        continue; // falha de leitura não é falha do run: tenta de novo
-      }
-      const meu = runId
-        ? (runs || []).find((x) => String(x.id) === String(runId))
-        : (runs || [])
-            .filter(
-              (x) =>
-                txt(x.nome).toLowerCase().includes(txt(robo).toLowerCase()) &&
-                Date.parse(txt(x.comecou_em)) >= desde - 60000,
-            )
-            .sort((a, b) => Date.parse(txt(b.comecou_em)) - Date.parse(txt(a.comecou_em)))[0];
-      if (!meu) continue;
-      if (txt(meu.status) !== "completed") {
-        if (txt(meu.status) !== visto) {
-          visto = txt(meu.status);
-          dizendo?.(visto === "queued" ? "na fila do GitHub" : "rodando no Transnet");
-        }
-        continue;
-      }
-      return txt(meu.conclusao) || "sem_conclusao";
-    }
-    return "tempo_esgotado";
-  }, []);
 
   const aoAdvertirECorrigir = useCallback(
     async (regs) => {

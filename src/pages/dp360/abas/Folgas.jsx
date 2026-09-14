@@ -634,11 +634,13 @@ function Celula({ estado, aoClicar, definido, gravando }) {
 const SITUACAO_SELO = {
   "MENOS_FOLGAS (verificar)": { txt: "folga a menos", tom: "warn" },
   "EXCESSO (verificar)": { txt: "folga a mais", tom: "warn" },
-  "EM ANDAMENTO": { txt: "semana aberta", tom: "mute" },
 };
 const seloDaSituacao = (situacao) => {
   const cru = String(situacao || "").trim();
-  if (!cru || /^OK/i.test(cru)) return null;
+  // `OK` e `EM ANDAMENTO` NÃO ganham selo. Um é o esperado; o outro é a semana que ainda
+  // não terminou — nenhum dos dois pede nada de ninguém, e marcar os dois enchia a coluna
+  // de selo em 90% das linhas, que é o mesmo que não marcar nada.
+  if (!cru || /^OK/i.test(cru) || cru === "EM ANDAMENTO") return null;
   return SITUACAO_SELO[cru] || { txt: cru, tom: "warn" };
 };
 
@@ -2298,24 +2300,30 @@ export default function Folgas() {
                         >
                           {pessoa.nome || pessoa.cracha}
                         </b>
-                        {pessoa.regime && (
-                          <span className="reg" title={rotuloRegime(pessoa.regime, pessoa.categoria)}>
-                            {pessoa.regime}
-                          </span>
-                        )}
+                        {/* AS QUATRO CAIXAS EXISTEM SEMPRE, mesmo vazias. É isso que mantém o
+                            regime, o crachá e o sinal na MESMA coluna em toda linha — uma
+                            caixa que some faz a seguinte escorregar para o lugar dela, e era
+                            exatamente esse escorregão que deixava a coluna torta. */}
+                        <span className="reg" title={pessoa.regime ? rotuloRegime(pessoa.regime, pessoa.categoria) : undefined}>
+                          {pessoa.regime || ""}
+                        </span>
                         <span className="cra">{pessoa.cracha}</span>
-                        {/* ENCOSTADO À DIREITA de propósito: o selo começava depois do nome,
-                            então cada linha o punha num x diferente e não dava para varrer a
-                            coluna. Alinhado, ele vira uma coluna de leitura. */}
-                        {selo && (
-                          <span className={`sit ${selo.tom}`} title={pessoa.situacao}>
-                            {selo.tom === "warn" ? "⚠ " : ""}
-                            {selo.txt}
-                          </span>
-                        )}
-                        {pessoa.desligadoEm && (
-                          <span className="desl">⛔ DESLIGADO {ddmm(pessoa.desligadoEm)}</span>
-                        )}
+                        {/* SÓ O SINAL. O texto ("folga a menos") tinha largura variável e
+                            desalinhava a coluna inteira; a frase fica no title e por extenso
+                            no painel ao lado, que é onde se lê o caso. Desligado vence a
+                            situação da semana: é o fato mais forte sobre a pessoa. */}
+                        <span
+                          className={`sit${pessoa.desligadoEm ? " desl" : ""}`}
+                          title={
+                            pessoa.desligadoEm
+                              ? `Desligado em ${ddmm(pessoa.desligadoEm)}`
+                              : selo
+                                ? pessoa.situacao
+                                : undefined
+                          }
+                        >
+                          {pessoa.desligadoEm ? "⛔" : selo ? "⚠" : ""}
+                        </span>
                       </div>
                       {celulas.map((celula) => (
                         <Celula

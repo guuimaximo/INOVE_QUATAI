@@ -361,7 +361,12 @@
 
 .dp360 .dp-cal-nome {
   padding: 6px 10px 6px 8px;
-  display: flex;
+  /* GRADE, NÃO FLEX. Em flex cada pedaço começava onde o anterior terminava, então o
+     regime, o crachá e o sinal ficavam num x diferente em cada linha — a coluna do
+     colaborador parecia quatro colunas tortas. Com trilhas fixas, só o NOME é elástico:
+     tudo o mais fica sempre no mesmo lugar, linha após linha. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px 72px 18px;
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -372,6 +377,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
   /* O NOME É O ÚLTIMO A CEDER. Ele era o único item encolhível da célula (todo o resto é
      `flex: none`), então quando o selo de situação era comprido — "⚠ EM ANDAMENTO" — o
      nome ia a ZERO e a linha ficava identificada só pelo crachá. Quem dá lugar agora é o
@@ -383,50 +389,28 @@
   font-size: 11px;
   color: var(--dp-faint);
   border: 1px solid var(--dp-border);
-  padding: 1px 6px;
+  padding: 1px 0;
   border-radius: 6px;
-  flex: none;
+  text-align: center;
 }
+/* sem regime, a caixa continua ocupando a trilha, mas sem desenhar contorno de nada */
+.dp360 .dp-cal-nome .reg:empty { border-color: transparent; }
 .dp360 .dp-cal-nome .cra {
   font-family: var(--dp-mono);
   font-size: 11px;
   color: var(--dp-faint);
-  flex: none;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
+/* A TRILHA DO SINAL existe SEMPRE, com ou sem alerta — é ela que mantém o crachá
+   terminando no mesmo ponto em toda linha. Vazia, ela só reserva o lugar. */
 .dp360 .dp-cal-nome .sit {
-  font-size: 11px;
-  font-weight: 600;
-  /* encostado à direita: alinhado, o selo vira uma coluna que dá para varrer; solto
-     depois do nome, ele começava num x diferente em cada linha. */
-  margin-left: auto;
-  background: var(--dp-warn-bg);
+  font-size: 12px;
+  line-height: 1;
+  text-align: center;
   color: var(--dp-warn-ink);
-  padding: 1px 8px;
-  border-radius: 6px;
-  flex: 0 1 auto;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-/* `mute` = estado, não problema. "Semana aberta" é a semana que ainda não terminou:
-   pintá-la de âmbar ensinava a ignorar o âmbar de quem realmente precisa de conferência. */
-.dp360 .dp-cal-nome .sit.mute {
-  background: var(--dp-surface-2);
-  color: var(--dp-muted);
-  border: 1px solid var(--dp-border);
-  font-weight: 500;
-}
-.dp360 .dp-cal-nome .desl {
-  font-size: 11px;
-  font-weight: 600;
-  background: var(--dp-danger-bg);
-  color: var(--dp-danger-ink);
-  padding: 1px 8px;
-  border-radius: 6px;
-  flex: none;
-  white-space: nowrap;
-}
+.dp360 .dp-cal-nome .sit.desl { color: var(--dp-danger-ink); }
 
 /* a celula do dia */
 .dp360 .dp-cell {

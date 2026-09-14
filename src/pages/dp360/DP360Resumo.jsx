@@ -1380,59 +1380,82 @@ export default function DP360Resumo() {
 
       {!ocupado && !erro && temConteudo && (
         <>
-          {/* ---------------- cartões de indicador (topo) ------------------ */}
-          <div style={{ padding: "14px 20px 4px", display: "grid", gap: 12,
-            gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
-            {/* Os quatro do Gerencial saem da `ponto_diario` — não existem em "Todas". */}
-            {!modoTodas && (
-              <>
-                <Cartao rotulo="Dias com cartão" valor={gerencial.kpis.diasPeriodo}
-                  nota="linhas de ponto na competência" />
-                <Cartao rotulo="Dias errados (P1)" valor={gerencial.kpis.diasErrados}
-                  nota="sem almoço curto/longo" tom="warn" />
-                <Cartao rotulo="Pessoas com erro" valor={gerencial.kpis.pessoasErro}
-                  nota="com pelo menos um dia errado" />
-                <Cartao rotulo="Pessoas muito graves" valor={gerencial.kpis.pessoasGrave}
-                  nota="sinal grave ou 3+ dias errados" tom="danger" />
-              </>
-            )}
-            <Cartao rotulo="Ação agora" valor={urgenteDias}
-              nota={`${hhmm(urgente)} vencidas ou advertidas`} tom="warn" />
-            <Cartao rotulo="Gordura corrigida" valor={hhmm(economizado.liquidoMin)}
-              nota={`${economizado.casos} cartão(ões) com correção confirmada`} tom="ok" />
-            <Cartao rotulo="Resposta aos avisos" valor={`${taxaResposta}%`}
-              nota={`${ciclo.respondidos} de ${ciclo.avisados} avisados deram retorno`} />
-            <Cartao rotulo="Correções no Transnet" valor={ciclo.corrigidos}
-              nota={`${taxaCorrecao}% dos avisos de gordura`} tom="ok" />
-            {valorHora > 0 && (
-              <Cartao
-                rotulo="Valor gerencial"
-                valor={brl((economizado.liquidoMin / 60) * valorHora)}
-                nota={`hora a ${brl(valorHora)} · só o saldo líquido confirmado`}
-                tom="ok"
-              />
-            )}
-            {/* Os quatro do Radar de captura (app.js `viewDash`). Só aparecem com a
-                gordura em mãos: o total de horas abertas conta a caixa `faltam`, e
-                mostrar a soma sem ela seria um número menor sem avisar. */}
-            {oportunidade && (
-              <>
-                <Cartao rotulo="Horas abertas" valor={hhmm(abertoMin)}
-                  nota="potencial ainda não encerrado (sem aviso + em fluxo)" tom="warn" />
-                <Cartao rotulo="P1 oficial" valor={hmDeHoras(horas1(oportunidade.oficialMin))}
-                  nota={`${oportunidade.pessoasP1} pessoa(s) com P1 · o único número cobrável`} />
-                <Cartao rotulo="Ainda sem aviso" valor={faltam.qtd}
-                  nota={`${hhmm(faltam.min)} · oportunidade que não entrou no fluxo`} />
-                {valorHora > 0 && (
-                  <Cartao
-                    rotulo="Potencial aberto"
-                    valor={brl((abertoMin / 60) * valorHora)}
-                    nota={`horas abertas × ${brl(valorHora)} · a captura usa só o líquido confirmado`}
-                    tom="warn"
-                  />
+          {/* ------- os indicadores, em três perguntas ---------------------
+              A ordem é a da conversa: quanto é o mês, quanto já voltou, quanto falta.
+              O dinheiro abre os dois últimos blocos porque é o número que se leva para
+              fora da tela. */}
+          <div style={{ display: "grid", gap: 6, paddingBottom: 4 }}>
+            {(!modoTodas || oportunidade) && (
+              <Grupo
+                titulo="O tamanho da competência"
+                ajuda="quanto ponto entrou e quanta gente errou — o diagnóstico, antes de qualquer ação"
+              >
+                {/* Os quatro do Gerencial saem da `ponto_diario` — não existem em "Todas". */}
+                {!modoTodas && (
+                  <>
+                    <Cartao rotulo="Dias com cartão" valor={gerencial.kpis.diasPeriodo}
+                      nota="linhas de ponto na competência" />
+                    <Cartao rotulo="Dias errados (P1)" valor={gerencial.kpis.diasErrados}
+                      nota="sem almoço curto/longo" tom="warn" />
+                    <Cartao rotulo="Pessoas com erro" valor={gerencial.kpis.pessoasErro}
+                      nota="com pelo menos um dia errado" />
+                    <Cartao rotulo="Pessoas muito graves" valor={gerencial.kpis.pessoasGrave}
+                      nota="sinal grave ou 3+ dias errados" tom="danger" />
+                  </>
                 )}
-              </>
+                {oportunidade && (
+                  <Cartao rotulo="P1 oficial" valor={hmDeHoras(horas1(oportunidade.oficialMin))}
+                    nota={`${oportunidade.pessoasP1} pessoa(s) com P1 · o único número cobrável`} />
+                )}
+              </Grupo>
             )}
+
+            <Grupo
+              titulo="O que já voltou"
+              ajuda="fechado e confirmado no Transnet — é o resultado do mês, não promessa"
+            >
+              {valorHora > 0 && (
+                <Cartao
+                  rotulo="Valor gerencial"
+                  valor={brl((economizado.liquidoMin / 60) * valorHora)}
+                  nota={`hora a ${brl(valorHora)} · só o saldo líquido confirmado`}
+                  tom="ok"
+                />
+              )}
+              <Cartao rotulo="Gordura corrigida" valor={hhmm(economizado.liquidoMin)}
+                nota={`${economizado.casos} cartão(ões) com correção confirmada`} tom="ok" />
+              <Cartao rotulo="Correções no Transnet" valor={ciclo.corrigidos}
+                nota={`${taxaCorrecao}% dos avisos de gordura`} tom="ok" />
+              <Cartao rotulo="Resposta aos avisos" valor={`${taxaResposta}%`}
+                nota={`${ciclo.respondidos} de ${ciclo.avisados} avisados deram retorno`} />
+            </Grupo>
+
+            {/* Os do Radar de captura (app.js `viewDash`). Só aparecem com a gordura em
+                mãos: o total de horas abertas conta a caixa `faltam`, e mostrar a soma
+                sem ela seria um número menor sem avisar. */}
+            <Grupo
+              titulo="O que está aberto"
+              ajuda="o que ainda dá para recuperar — e o que vence se ninguém tocar"
+            >
+              {oportunidade && valorHora > 0 && (
+                <Cartao
+                  rotulo="Potencial aberto"
+                  valor={brl((abertoMin / 60) * valorHora)}
+                  nota={`horas abertas × ${brl(valorHora)} · a captura usa só o líquido confirmado`}
+                  tom="warn"
+                />
+              )}
+              <Cartao rotulo="Ação agora" valor={urgenteDias}
+                nota={`${hhmm(urgente)} vencidas ou advertidas`} tom="warn" />
+              {oportunidade && (
+                <>
+                  <Cartao rotulo="Horas abertas" valor={hhmm(abertoMin)}
+                    nota="potencial ainda não encerrado (sem aviso + em fluxo)" tom="warn" />
+                  <Cartao rotulo="Ainda sem aviso" valor={faltam.qtd}
+                    nota={`${hhmm(faltam.min)} · oportunidade que não entrou no fluxo`} />
+                </>
+              )}
+            </Grupo>
           </div>
 
           {/* ------- o valor da hora: o único campo que esta tela grava ---- */}
@@ -1926,6 +1949,33 @@ export default function DP360Resumo() {
 }
 
 /* ------------------------------- peças da tela ---------------------------- */
+
+/**
+ * UM GRUPO DE CARTÕES, COM NOME.
+ *
+ * Eram treze cartões idênticos numa fita só, embrulhando em duas linhas — e treze números
+ * com o mesmo peso não têm leitura: não dá para saber por onde começar nem o que cada um
+ * responde. Eles não são o mesmo tipo de coisa. Uns dizem o TAMANHO do mês, outros o que
+ * JÁ VOLTOU, outros o que ESTÁ ABERTO — e é essa a pergunta que o gestor faz.
+ *
+ * O cabeçalho é o `Secao` que o resto da página já usa (Esteira, Oportunidade…), de
+ * propósito: um ritmo só do topo ao fim, em vez de um estilo de título novo no meio.
+ */
+function Grupo({ titulo, ajuda, children }) {
+  return (
+    <Secao titulo={titulo} tag={ajuda}>
+      <div
+        style={{
+          display: "grid",
+          gap: 12,
+          gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+        }}
+      >
+        {children}
+      </div>
+    </Secao>
+  );
+}
 
 function Cartao({ rotulo, valor, nota, tom }) {
   const cor = {

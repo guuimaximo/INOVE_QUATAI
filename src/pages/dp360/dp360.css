@@ -396,6 +396,9 @@
 .dp360 .dp-cal-nome .sit {
   font-size: 11px;
   font-weight: 600;
+  /* encostado à direita: alinhado, o selo vira uma coluna que dá para varrer; solto
+     depois do nome, ele começava num x diferente em cada linha. */
+  margin-left: auto;
   background: var(--dp-warn-bg);
   color: var(--dp-warn-ink);
   padding: 1px 8px;
@@ -405,6 +408,14 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* `mute` = estado, não problema. "Semana aberta" é a semana que ainda não terminou:
+   pintá-la de âmbar ensinava a ignorar o âmbar de quem realmente precisa de conferência. */
+.dp360 .dp-cal-nome .sit.mute {
+  background: var(--dp-surface-2);
+  color: var(--dp-muted);
+  border: 1px solid var(--dp-border);
+  font-weight: 500;
 }
 .dp360 .dp-cal-nome .desl {
   font-size: 11px;

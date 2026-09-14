@@ -617,6 +617,31 @@ function Celula({ estado, aoClicar, definido, gravando }) {
   );
 }
 
+/**
+ * A SITUAÇÃO DA SEMANA É UM ENUM DE QUATRO ESTADOS, não uma frase.
+ *
+ * Medido no `ponto_diario` (40 dias, 12.000 linhas): `MENOS_FOLGAS (verificar)` 46,3%,
+ * `OK` 35,5%, `EM ANDAMENTO` 8,5%, `EXCESSO (verificar)` 6,5%. Mostrar isso como texto
+ * corrido dentro da célula do nome dava "⚠ EM ANDA…" — comprido o bastante para comer o
+ * nome, curto o bastante para não dizer o que é.
+ *
+ * E o tom estava errado: `EM ANDAMENTO` saía de ALERTA. Não é problema nenhum — é a
+ * semana que ainda não terminou. Pintar 8,5% das linhas de âmbar por isso ensina a
+ * ignorar o âmbar, que é justamente onde moram as 46% que pedem verificação.
+ *
+ * O texto cru continua no `title`: o selo é a leitura, não a fonte.
+ */
+const SITUACAO_SELO = {
+  "MENOS_FOLGAS (verificar)": { txt: "folga a menos", tom: "warn" },
+  "EXCESSO (verificar)": { txt: "folga a mais", tom: "warn" },
+  "EM ANDAMENTO": { txt: "semana aberta", tom: "mute" },
+};
+const seloDaSituacao = (situacao) => {
+  const cru = String(situacao || "").trim();
+  if (!cru || /^OK/i.test(cru)) return null;
+  return SITUACAO_SELO[cru] || { txt: cru, tom: "warn" };
+};
+
 function MarcaBot({ situacao }) {
   if (!situacao) return <span className="dp-faint">—</span>;
   if (situacao === "erro") {
@@ -1151,7 +1176,6 @@ function PainelDetalhe({
   const [perguntar, caixaPergunta] = usePergunta();
   const folgas = folgasALancar(pessoa, ctx.diasCurso);
   const tipoPorData = new Map(folgas.map((f) => [f.data, f.tipo]));
-  const situacaoRuim = pessoa.situacao && !/^OK/i.test(pessoa.situacao);
   const [disparando, setDisparando] = useState(false);
   const [recado, setRecado] = useState(null);
 
@@ -1333,8 +1357,14 @@ function PainelDetalhe({
           </div>
           {pessoa.situacao && (
             <div className="sub">
-              {situacaoRuim ? (
-                <span className="dp-pill warn">⚠ {pessoa.situacao}</span>
+              {seloDaSituacao(pessoa.situacao) ? (
+                <span
+                  className={`dp-pill ${seloDaSituacao(pessoa.situacao).tom}`}
+                  title={pessoa.situacao}
+                >
+                  {seloDaSituacao(pessoa.situacao).tom === "warn" ? "⚠ " : ""}
+                  {seloDaSituacao(pessoa.situacao).txt}
+                </span>
               ) : (
                 pessoa.situacao
               )}
@@ -2241,7 +2271,7 @@ export default function Folgas() {
 
               <div className="dp-cal-body">
                 {linhasGrade.map(({ pessoa, celulas, bot }) => {
-                  const situacaoRuim = pessoa.situacao && !/^OK/i.test(pessoa.situacao);
+                  const selo = seloDaSituacao(pessoa.situacao);
                   const ativo = pessoa.cracha === selecionado;
                   return (
                     <div
@@ -2274,9 +2304,13 @@ export default function Folgas() {
                           </span>
                         )}
                         <span className="cra">{pessoa.cracha}</span>
-                        {pessoa.situacao && situacaoRuim && (
-                          <span className="sit" title={pessoa.situacao}>
-                            ⚠ {pessoa.situacao}
+                        {/* ENCOSTADO À DIREITA de propósito: o selo começava depois do nome,
+                            então cada linha o punha num x diferente e não dava para varrer a
+                            coluna. Alinhado, ele vira uma coluna de leitura. */}
+                        {selo && (
+                          <span className={`sit ${selo.tom}`} title={pessoa.situacao}>
+                            {selo.tom === "warn" ? "⚠ " : ""}
+                            {selo.txt}
                           </span>
                         )}
                         {pessoa.desligadoEm && (

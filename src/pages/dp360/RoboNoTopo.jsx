@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { rodando, useVigiaDoRobo } from "./roboVigia";
+import { rodando, useRoboDP360 } from "./roboVigia";
 
 /**
  * O ROBÔ, NO TOPO — pedido do dono: "preciso saber em algum lugar na ferramenta o bot
@@ -37,7 +37,7 @@ function desfecho(run) {
 }
 
 export default function RoboNoTopo() {
-  const runs = useVigiaDoRobo();
+  const { runs, esperando } = useRoboDP360();
   const [aberto, setAberto] = useState(false);
   const caixa = useRef(null);
 
@@ -57,26 +57,34 @@ export default function RoboNoTopo() {
 
   const ativos = rodando(runs);
   const naFila = ativos.filter((r) => String(r.status || "") === "queued").length;
-  const legenda = !ativos.length
-    ? "robô parado"
-    : ativos.length === 1
+  /* TRÊS ESTADOS, não dois. Entre clicar em "lançar" e o run existir no GitHub passam
+     alguns segundos, e nesse intervalo "parado" é mentira e "rodando" também — quem
+     acabou de disparar leria "robô parado" e concluiria que o clique não pegou. */
+  const aceso = ativos.length > 0 || esperando;
+  const legenda = ativos.length
+    ? ativos.length === 1
       ? `robô rodando · ${ativos[0].nome || "?"}`
-      : `${ativos.length} robôs${naFila ? ` (${naFila} na fila)` : ""}`;
+      : `${ativos.length} robôs${naFila ? ` (${naFila} na fila)` : ""}`
+    : esperando
+      ? "mandando o robô…"
+      : "robô parado";
 
   return (
     <div className="dp-robo" ref={caixa}>
       <button
         type="button"
-        className={`dp-robo-btn${ativos.length ? " is-ativo" : ""}`}
+        className={`dp-robo-btn${aceso ? " is-ativo" : ""}`}
         onClick={() => setAberto((v) => !v)}
         title={
           ativos.length
             ? "Há robô mexendo no Transnet agora. Clique para ver quais."
-            : "Nenhum robô rodando. Clique para ver os últimos."
+            : esperando
+              ? "O disparo saiu daqui agora; o GitHub leva alguns segundos para registrar o run."
+              : "Nenhum robô rodando. Clique para ver os últimos."
         }
         aria-expanded={aberto}
       >
-        <span className={`dp-robo-luz${ativos.length ? " is-ativo" : ""}`} />
+        <span className={`dp-robo-luz${aceso ? " is-ativo" : ""}`} />
         {legenda}
       </button>
 

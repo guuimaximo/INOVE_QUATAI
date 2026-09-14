@@ -236,10 +236,29 @@ export async function evidenciasDoRun(runId, ano, mes) {
   return dados.arquivos || [];
 }
 
+/**
+ * "ACABOU DE SAIR UM ROBÔ" — avisado por evento, e não por chamada.
+ *
+ * O vigia (`roboVigia`) precisa saber disso para ler o GitHub na hora, senão o topo
+ * continua dizendo "robô parado" por até dois minutos depois do disparo. Fazer cada tela
+ * avisá-lo daria no mesmo até alguém criar a quinta tela de disparo e esquecer; e o
+ * caminho inverso (este serviço importar o vigia) fecharia um ciclo, porque o vigia já
+ * importa daqui. Um evento do `window` não tem dono nem direção.
+ */
+export const EVENTO_ROBO_DISPARADO = "dp360:robo-disparado";
+
 export function dispararRoboDP360(robo, inputs) {
   // A credencial viaja no corpo da chamada, para o gateway — NUNCA como input do
   // workflow: o GitHub imprime os inputs no log da execução (medido neste projeto).
-  return chamar({ action: "robo", robo, inputs, credencial: lerCredencialTransnet() });
+  const pedido = chamar({ action: "robo", robo, inputs, credencial: lerCredencialTransnet() });
+  const avisar = () => {
+    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(EVENTO_ROBO_DISPARADO));
+  };
+  // Nos dois desfechos: o gateway pode responder erro DEPOIS de o run ter nascido, e aí o
+  // robô está rodando de verdade. Este `then` também é quem trata a recusa deste ramo —
+  // sem ele, a promessa derivada viraria "unhandled rejection" no console.
+  pedido.then(avisar, avisar);
+  return pedido;
 }
 
 /**

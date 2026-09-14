@@ -1538,6 +1538,13 @@ function PainelDetalhe({
           const motivo = texto(linha?.motivo);
           const chave = chaveDia(pessoa.cracha, dataRef);
           const bot = ctx.ocorrencias.get(chave);
+          /* O DIA QUE JÁ FOI MANDADO AO ROBÔ. Sem esta leitura o dia lançado caía na
+             frase genérica ("clique na célula para trocar o tipo do dia") e continuava
+             parecendo pendente — o dono viu isso: "já lancei, tem que aparecer que já
+             foi lançado". A confirmação do Transnet ainda é o `te_descricao_dia` da
+             importação seguinte; até ela chegar, quem responde é a ocorrência. */
+          const mandado = ocorrenciaTrancaODia(bot) ? bot : null;
+          const aguardando = texto(mandado?.status).toUpperCase() === STATUS_DISPARADO;
           const definido = ctx.motivos.get(chave) || "";
           const ehReserva = ctx.reservas.has(chave);
           const gravandoReserva = reservaGravando === chave;
@@ -1642,14 +1649,25 @@ function PainelDetalhe({
                 />
               )}
 
-              {podeMotivo && definido && (
+              {mandado && !lancado && (
+                <div className={`dp-dnote ${aguardando ? "warn" : "ok"}`}>
+                  {aguardando ? "⏳" : "✅"} {nomeDoMotivo(texto(mandado.tipo))} —{" "}
+                  {aguardando
+                    ? "mandado ao robô, esperando o resultado"
+                    : "já lançado pelo robô"}
+                  {mandado.lancado_em ? ` · ${ddmm(mandado.lancado_em)}` : ""}
+                  {aguardando ? "" : ' · o ✅ do Transnet vem na próxima importação'}
+                </div>
+              )}
+
+              {podeMotivo && !mandado && definido && (
                 <div className="dp-dnote sug">
                   ✎ {nomeDoMotivo(definido)} — definido por você
                   {MOTIVO_MANUAL.has(definido) ? " · lançar MANUAL no Transnet" : " (a lançar pelo robô)"}
                 </div>
               )}
 
-              {podeMotivo && !definido && tipo && (
+              {podeMotivo && !mandado && !definido && tipo && (
                 <div className="dp-dnote sug">
                   Sugestão: {tipo}-{ROTULO_TIPO[tipo] || tipo} — a lançar pelo robô · clique na
                   célula para trocar
@@ -1658,13 +1676,13 @@ function PainelDetalhe({
 
               {/* S/PONTO é o único dia que não fecha sozinho: sem ponto e sem
                   nada lançado, só o DP sabe o que foi (app.js:6221). */}
-              {podeMotivo && !definido && !tipo && estado.cls === "verif" && (
+              {podeMotivo && !mandado && !definido && !tipo && estado.cls === "verif" && (
                 <div className="dp-dnote warn">
                   ⚠ sem ponto e sem nada lançado — <b>clique na célula para definir o motivo</b>
                 </div>
               )}
 
-              {podeMotivo && !definido && !tipo && estado.cls !== "verif" && (
+              {podeMotivo && !mandado && !definido && !tipo && estado.cls !== "verif" && (
                 <div className="dp-dnote mute">clique na célula para trocar o tipo do dia</div>
               )}
 
@@ -1672,7 +1690,10 @@ function PainelDetalhe({
                 <div className="dp-dnote warn">⚠ {motivo}</div>
               )}
 
-              {bot && (
+              {/* O status CRU do robô só quando ele não couber na linha de cima: o
+                  que falhou, e o ensaio. Repetir "05-DSR · OK" embaixo de "já lançado
+                  pelo robô" era dizer a mesma coisa duas vezes. */}
+              {bot && !mandado && (
                 <div className="dp-dnote mute">
                   🤖 {texto(bot.tipo)} · {texto(bot.status) || "sem status"}
                   {bot.lancado_em ? ` · ${ddmm(bot.lancado_em)}` : ""}

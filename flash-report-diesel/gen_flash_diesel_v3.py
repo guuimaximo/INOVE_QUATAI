@@ -1343,7 +1343,7 @@ if _bcnt_url and _bcnt_key:
             for _m0, _m1 in zip(_ord, _ord[1:]):
                 _k0, _v0 = _kv(_ms[_m0]); _k1, _v1 = _kv(_ms[_m1])
                 _pares.append((_v1 - _v0, _k1 - _k0, _ms[_m1][0]))
-        _beta = _r2b = None
+        _beta = _r2b = _tb = None
         if len(_pares) >= 10:
             _sw = sum(p[2] for p in _pares)
             _mx = sum(p[2] * p[0] for p in _pares) / _sw
@@ -1358,6 +1358,15 @@ if _bcnt_url and _bcnt_key:
                 # que a pagina descreve, entao a decomposicao nao sai e a pagina diz isso.
                 if _b > 0 and _sst > 0:
                     _beta, _r2b = _b, 1 - _ssr / _sst
+                    # t de Student do proprio beta. O R2 desta regressao e baixo por
+                    # natureza (mes a mes a linha muda de motorista, de carro e de escala
+                    # junto com a velocidade), e sem o t alguem leria "R2 0,13" como
+                    # "numero inventado". Sao coisas diferentes: o t diz se a inclinacao
+                    # existe; o R2, quanto do que varia ela cobre.
+                    if len(_pares) > 2:
+                        _var = _ssr / (len(_pares) - 2)
+                        _seb = (_var / _sxx) ** 0.5 if _sxx > 0 else 0.0
+                        _tb = (_b / _seb) if _seb > 0 else None
 
         _ref_ym = (MES_REF_ANO, MES_REF_MM)
         _hist_ym = [ym for ym in _m4 if ym != _ref_ym]
@@ -1382,7 +1391,8 @@ if _bcnt_url and _bcnt_key:
                         round(_lit, 1), int(_aR[0])))
         if len(_lv) >= 5:
             LINHA_VEL_HIST = sorted(_lv, key=lambda x: x[8])
-            VEL_BETA = (round(_beta, 4), round(_r2b, 3), len(_pares)) if _beta else None
+            VEL_BETA = ((round(_beta, 4), round(_r2b, 3), len(_pares),
+                         round(_tb, 2) if _tb else None) if _beta else None)
             _ms_hist = sorted(_hist_ym)
             VEL_HIST_LABEL = (f"{_MES3[_ms_hist[0][1]-1]}-{_MES3[_ms_hist[-1][1]-1]}"
                               if _ms_hist else "")

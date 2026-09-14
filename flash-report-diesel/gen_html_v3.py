@@ -750,17 +750,22 @@ else:
         f'<div class="val">{_beta_val}</div></div>'
         f'<div class="metric"><div class="lbl">Linhas mais lentas que a própria média</div>'
         f'<div class="val">{len(_lentas)} de {len(_vh)}</div></div>'
-        f'<div class="metric"><div class="lbl">Litros explicados pela velocidade</div>'
-        f'<div class="val" style="font-size:15px;color:#6B7C79;">{fmt(_tot_exp, 0)} L</div></div>'
+        f'<div class="metric"><div class="lbl">{"Litros que o ritmo explica" if _tot_exp >= 0 else "Litros que o ritmo poupou"}</div>'
+        f'<div class="val" style="font-size:15px;color:{"#6B7C79" if _tot_exp >= 0 else "#16a34a"};">{fmt(abs(_tot_exp), 0)} L</div></div>'
         f'<div class="metric"><div class="lbl">Litros SEM explicação de velocidade</div>'
         f'<div class="val" style="font-size:15px;color:#dc2626;">{fmt(_res_neg, 0)} L</div></div>')
 
     if _beta_t:
+        _sig = (" O efeito é estatisticamente sólido (t = " + fmt(_beta_t[3], 1) + "), mas o "
+                "ritmo cobre só " + fmt(100 * _beta_t[1], 0) + "% do que muda de um mês para o "
+                "outro: o resto é frota, escala, quem dirigiu e ruído de uma janela curta. "
+                "Serve para dizer <b>de quem é a conta</b>, não para prever o KM/L de uma linha."
+                ) if _beta_t[3] else ""
         _t1 = (f"O parâmetro que faltava: cada <b>1 km/h</b> que uma linha perde de velocidade "
-               f"custa <b>{fmt(_beta_t[0], 3)} km/L</b> a ela. Não é uma regra de bolso — sai de "
+               f"custa <b>{fmt(_beta_t[0], 3)} km/L</b> a ela. Não é regra de bolso — sai de "
                f"{_beta_t[2]} comparações de cada linha <b>consigo mesma</b> de um mês para o "
-               f"outro (R² {fmt(_beta_t[1], 2)}), que é o único jeito de medir o efeito do ritmo "
-               f"sem confundi-lo com o perfil da linha.")
+               f"outro, que é o único jeito de medir o efeito do ritmo sem confundi-lo com o "
+               f"perfil da linha.{_sig}")
     else:
         _t1 = ("Nesta janela não foi possível medir de forma confiável quanto 1 km/h vale em "
                "KM/L — as variações mês a mês ficaram sem padrão. A página mostra a variação "
@@ -780,9 +785,13 @@ else:
                f"do que variou no KM/L tem álibi de trânsito.")
 
     if _piores:
+        _lit_piores = sum(l[9] for l in _piores if l[9] > 0)
+        _resto = _res_neg - _lit_piores
         _t3 = (f" Descontado esse efeito, sobram <b>{fmt(_res_neg, 0)} L</b> que a velocidade "
-               f"não explica, concentrados em "
+               f"não explica. O grosso está em "
                + ", ".join(f"<b>{l[0]}</b> ({fmt(l[8], 3)} km/L, {fmt(l[9], 0)} L)" for l in _piores)
+               + (f", e os {fmt(_resto, 0)} L restantes se espalham em perdas pequenas por "
+                  f"várias linhas" if _resto >= 10 else "")
                + ". São estas as linhas em que a cobrança de condução se sustenta — elas "
                  "pioraram além do que o próprio ritmo justifica.")
     else:
@@ -809,7 +818,7 @@ else:
         f'rápido.</div></div>')
 
 pages.append(f"""<div class="page-break"></div><div class="page">
-  {page_header("Página 6 · A Linha Ficou Mais Lenta?", f"Velocidade e KM/L de cada linha contra a própria média de {_hist_lbl} — mesma janela de dias", "Cada 1 km/h vale", (fmt(_beta_t[0], 3) + " km/L") if _beta_t else "—")}
+  {page_header("Página 6 · A Linha Ficou Mais Lenta?", f"Velocidade e KM/L de cada linha contra a própria média de {_hist_lbl} — mesma janela de dias", "Linhas comparadas", str(len(_vh)) if _vh else "—")}
   <div class="grid-4">{_p6_kpis}</div>
   {_p6_corpo}
   {footer(6)}

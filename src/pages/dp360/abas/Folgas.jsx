@@ -30,11 +30,20 @@
 // `folgasALancar` (duas seguidas → 1ª Compensação e 2ª DSR; isolada → DSR; dia de
 // curso → 29) e o motivo definido à mão VENCE o automático no mesmo dia.
 //
-// O QUE ESTA TELA NÃO FAZ: ler o resultado do robô de volta. O workflow guarda a
-// evidência como artefato e não escreve no Supabase — quem preenche
-// `ponto_ocorrencias` hoje é o pós-processo da ferramenta desktop
-// (`_ingest_ocorr`). Então, depois de disparar daqui, a coluna 🤖 só muda quando
-// alguém ingerir o resultado. Está dito na tela, para ninguém achar que sumiu.
+// O DISPARO FICA REGISTRADO AQUI MESMO. O workflow guarda a evidência como artefato
+// e não escreve no Supabase, e quem preenchia `ponto_ocorrencias` era só o
+// pós-processo da ferramenta desktop (`_ingest_ocorr`) — então uma DSR lançada por
+// esta tela sumia até alguém ingerir o resultado lá. O dono topou com isso: lançou,
+// o robô rodou e a tela continuou dizendo que não tinha nada.
+//
+// Agora a própria tela grava a linha no instante do disparo VALENDO, com status
+// `DISPARADO PELO INOVE` e o nome de quem clicou. É upsert na MESMA chave que o
+// desktop usa (`cracha,date_ref`): quando o `_ingest_ocorr` rodar, ele passa por
+// cima com o resultado de verdade — e o `te_descricao_dia` da próxima importação
+// continua sendo a palavra final (é ele que acende o ✅ "já lançado no Transnet").
+//
+// O selo do meio-termo é 🤖 ⏳, e ele é o ponto: dizer "lançado" no disparo seria o
+// mesmo erro que a Revisão cometia, de chamar de pronto o que ainda nem rodou.
 //
 // DUAS COISAS A MAIS, PORTADAS DEPOIS (PORTE.md §11, itens 5 e 9):
 //   · LANÇAR O PONTO SUGERIDO do dia, do próprio detalhe da pessoa (app.js:6168
@@ -57,7 +66,7 @@ import {
 } from "../../../services/dp360Api";
 // O `aplicarRealManual` é o overlay do Real cravado pelo DP, e é ele que faz o
 // dia já decidido na Revisão aparecer aqui com o horário que o DP mandou.
-import { aplicarRealManual, fmtHora } from "../CartaoDoDia";
+import { aplicarRealManual, fmtHora, quemEstaUsando } from "../CartaoDoDia";
 import { usePergunta } from "../Perguntar";
 // AS TRAVAS DO LANÇAMENTO NÃO SÃO DESTA TELA — nem da Revisão. Elas moram em
 // `../regrasAjustePonto`, o mesmo módulo que o lote da Revisão usa: uma régua só
@@ -230,6 +239,29 @@ function carimboLocal() {
   }).formatToParts(new Date());
   const p = Object.fromEntries(partes.map((x) => [x.type, x.value]));
   return `${p.day}/${p.month} ${p.hour}:${p.minute}`;
+}
+
+/* Carimbo do `lancado_em`, no MESMO formato naive que o desktop grava
+   (`2026-08-24T13:19:01`): a coluna já está cheia desse formato e os dois leitores
+   desta tela (`ddmm` e `instanteCurto`) fatiam a string supondo hora local. Gravar
+   um `toISOString()` com Z aqui mostraria a hora três horas adiantada.
+   Fuso fixado em São Paulo — o relógio do navegador pode estar em qualquer lugar. */
+function instanteLocalISO() {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    })
+      .formatToParts(new Date())
+      .map((x) => [x.type, x.value]),
+  );
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;
 }
 
 // Código curto do evento lançado no Transnet: "07-FERIAS", "04-ATESTADO", DSR → "05-DSR".
@@ -653,6 +685,16 @@ function MarcaBot({ situacao }) {
       </span>
     );
   }
+  if (situacao === "outro") {
+    return (
+      <span
+        className="dp-botmark p"
+        title="Disparado, sem confirmação ainda — o ✅ vem com a próxima importação do Transnet"
+      >
+        🤖 ⏳
+      </span>
+    );
+  }
   return (
     <span className="dp-botmark o" title="Ocorrência lançada pelo bot com sucesso">
       🤖 ✓
@@ -809,6 +851,9 @@ function instanteCurto(valor) {
 }
 
 const RE_BOT_OK = /^OK/i;
+// O status que ESTA tela escreve ao disparar valendo. Some quando o `_ingest_ocorr`
+// do desktop upsertar o resultado de verdade em cima da mesma chave.
+const STATUS_DISPARADO = "DISPARADO PELO INOVE";
 const RE_AVISO = /^aviso_/i;
 
 // Três baldes, os mesmos que a marca 🤖 da grade usa: deu certo, falhou, ou o bot
@@ -819,6 +864,12 @@ function baldeStatus(status) {
   if (RE_BOT_OK.test(s)) return "ok";
   return "outro";
 }
+
+/* A marca da GRADE usa os MESMOS três baldes do histórico. Ela não usava: tudo que
+   não fosse erro virava ✓ verde, então o disparo pendente aparecia como sucesso na
+   grade e como pendente no pop-up, para a mesma linha. Erro manda sobre pendente, e
+   pendente manda sobre OK: o que a pessoa precisa ver é o pior estado da semana. */
+const PESO_BOT = { erro: 3, outro: 2, ok: 1 };
 
 function ModalHistoricoBot({ linhas, nomes, aoFechar }) {
   const [busca, setBusca] = useState("");
@@ -1877,8 +1928,8 @@ export default function Folgas() {
           if (!linha) continue;
           const registro = ctx.ocorrencias.get(chaveDia(pessoa.cracha, linha.date_ref));
           if (!registro) continue;
-          if (RE_BOT_ERRO.test(registro.status)) bot = "erro";
-          else if (bot !== "erro") bot = "ok";
+          const balde = baldeStatus(registro.status);
+          if ((PESO_BOT[balde] || 0) > (PESO_BOT[bot] || 0)) bot = balde;
         }
 
         return { pessoa, celulas, bot, folgas };
@@ -2016,6 +2067,11 @@ export default function Folgas() {
   // Disparo compartilhado (lote e pessoa a pessoa). Depois de um lançamento DE
   // VERDADE, os motivos definidos saem da fila — é o `limpar_folga_motivos` do
   // original (app.js:3755). Ensaio não limpa nada.
+  /* ÚNICO funil de disparo desta aba — pessoa a pessoa e lote passam por aqui, e é
+     por isso que o registro mora neste ponto e não nos dois botões.
+
+     O ENSAIO NÃO GRAVA NADA, de propósito: ele existe justamente para não deixar
+     rastro na ficha de ninguém, e escrever a ocorrência arruinaria isso. */
   const disparar = useCallback(async (filaDoLote, confirmar) => {
     const resposta = await dispararLote(filaDoLote, confirmar);
     if (confirmar) {
@@ -2026,9 +2082,33 @@ export default function Folgas() {
         });
         setMotivos(atualizados);
       }
+
+      let aviso = "";
+      try {
+        const carimbo = instanteLocalISO();
+        const quem = quemEstaUsando();
+        await upsertDP360(
+          "ponto_ocorrencias",
+          filaDoLote.map((item) => ({
+            cracha: cra8(item.cracha),
+            date_ref: texto(item.data).slice(0, 10),
+            tipo: item.tipo,
+            status: STATUS_DISPARADO,
+            lancado_em: carimbo,
+            usuario: quem,
+          })),
+        );
+      } catch {
+        // O robô JÁ FOI disparado — falhar aqui não desfaz nada, e travar o retorno
+        // faria a tela dizer que não lançou quando lançou. O aviso é para o DP não
+        // estranhar a marca 🤖 que não apareceu.
+        aviso = " (o robô foi disparado, mas não deu para registrar a marca 🤖 nesta tela)";
+      }
+      recarregar();
+      return { ...resposta, aviso: `${resposta?.aviso || ""}${aviso}` };
     }
     return resposta;
-  }, []);
+  }, [recarregar]);
 
   const lancarLote = async (confirmar) => {
     if (!fila.length) return;

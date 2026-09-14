@@ -1215,9 +1215,14 @@ const COLUNAS_GORDURA_GPS = [
  * o run daquele lançamento é o que começou por perto. A janela de 15 min é folgada de
  * propósito — o GitHub leva segundos para registrar o começo.
  *
- * SEM RUN VALE COMO AJUSTADO, e isso é deliberado: a leitura só alcança as últimas horas,
- * e todo lançamento de ontem ficaria sem par. Sem o run não dá para afirmar que falhou —
- * pintar de vermelho um dia antigo que deu certo é pior do que não dizer nada.
+ * SEM RUN, A IDADE DO LANÇAMENTO DECIDE. Lançamento VELHO vale como ajustado: a leitura
+ * só alcança as últimas horas, e todo lançamento de ontem ficaria sem par — sem o run não
+ * dá para afirmar que falhou, e pintar de vermelho um dia antigo que deu certo é pior do
+ * que não dizer nada. Lançamento dos últimos 15 min vale como RODANDO: ou o GitHub ainda
+ * não registrou o run, ou a primeira leitura da tela ainda não voltou, e nos dois casos a
+ * resposta honesta é "ainda não sei" — que é o que "rodando" diz. Sem isso o selo piscava
+ * AJUSTADO no clique e só depois virava âmbar, reproduzindo em miniatura o defeito que
+ * este bloco existe para corrigir.
  */
 const ESTADO_LANCAMENTO = {
   rodando: { texto: "robô rodando", tom: "warn" },
@@ -1233,7 +1238,7 @@ function estadoDoLancamento(lancado, runs) {
     .map((r) => ({ r, dt: Math.abs(Date.parse(String(r.comecou_em || "")) - quando) }))
     .filter((x) => Number.isFinite(x.dt) && x.dt <= 15 * 60000)
     .sort((a, b) => a.dt - b.dt)[0];
-  if (!perto) return "ajustado";
+  if (!perto) return Date.now() - quando <= 15 * 60000 ? "rodando" : "ajustado";
   if (String(perto.r.status || "") !== "completed") return "rodando";
   return String(perto.r.conclusao || "") === "success" ? "ajustado" : "falhou";
 }

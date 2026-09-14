@@ -555,6 +555,8 @@
 }
 .dp360 .dp-botmark.o { background: var(--dp-ok-bg); color: var(--dp-ok-ink); }
 .dp360 .dp-botmark.e { background: var(--dp-danger-bg); color: var(--dp-danger-ink); }
+/* disparado e ainda sem confirmação: nem verde nem vermelho */
+.dp360 .dp-botmark.p { background: var(--dp-warn-bg); color: var(--dp-warn-ink); }
 
 /* navegador de semana da barra de filtros */
 .dp360 .dp-weeknav {

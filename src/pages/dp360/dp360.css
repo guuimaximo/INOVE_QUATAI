@@ -887,6 +887,32 @@
 }
 /* Cabeçalho e rodapé não rolam: o botão de fechar e o de gravar ficam sempre à mão. */
 .dp360 .rv-fixo { flex: none; }
+
+/* ── o painel do lote de execução ────────────────────────────────────────── */
+.dp360 .oc-exec-linha {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--dp-border);
+  font-size: 12.5px;
+}
+.dp360 .oc-exec-linha:last-child { border-bottom: 0; }
+.dp360 .oc-exec-ic { flex: 0 0 auto; width: 18px; text-align: center; }
+.dp360 .oc-exec-nome {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.dp360 .oc-exec-est { flex: 0 0 auto; font-size: 11.5px; text-align: right; }
+.dp360 .oc-exec-est.ok { color: var(--dp-ok-ink); font-weight: 600; }
+.dp360 .oc-exec-est.warn { color: var(--dp-warn-ink); }
+.dp360 .oc-exec-est.mute { color: var(--dp-muted); }
+/* A lista respira: oito linhas cabem sem rolar, e o resto rola dentro do corpo. */
+.dp360 .oc-exec .rv-corpo { padding-right: 4px; }
 .dp360 .rv-corpo {
   flex: 1 1 auto;
   min-height: 0;

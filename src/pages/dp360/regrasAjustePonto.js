@@ -204,7 +204,7 @@ export function avaliarAjustePonto(linha, { caso = null, digitado = null, bloque
     // Real manual respeita a mesma trava (`aplicarRealManual`), então um horário
     // digitado pelo DP nunca chega aqui num dia travado.
     entrada = fmtHora(linha?.entrada_sug);
-    saida = fmtHora(linha?.saida_sug);
+    saida = saidaDoLancamento(linha);
     almIni = fmtHora(linha?.almoco_saida_sug);
     almFim = fmtHora(linha?.almoco_volta_sug);
   }
@@ -316,6 +316,68 @@ export function avaliarAjustePonto(linha, { caso = null, digitado = null, bloque
  * A forma é a das outras travas: a linha não some, ela vai para FORA do lote com o
  * motivo. Quem lançou continua vendo a pessoa e por quê.
  */
+/**
+ * A SAÍDA QUE VAI PARA O TRANSNET É A QUE A PESSOA BATEU.
+ *
+ * DECISÃO DO DONO (14/09/2026), e a razão é de competência entre telas:
+ *
+ *   A Revisão conserta o que FALTA ou está DUPLICADO no cartão.
+ *   Quem decide se sobra tempo nas pontas é a GORDURA.
+ *
+ * A `saida_sug` da view não é "a saída corrigida": é o ALVO da régua — a operação real
+ * mais a tolerância de 8 min. Como o robô do Cartão de Ponto REESCREVE o cartão inteiro,
+ * mandar essa sugestão junto fazia a correção de um almoço (ou de uma batida duplicada)
+ * gravar de lado uma saída mais cedo — cobrando gordura sem passar pela tela que tem a
+ * régua, o aviso ao colaborador, o prazo de 48 h e a cadeia de advertência.
+ *
+ * Medido no `ponto_diario` (01/08 a 14/09): 49 dias em que a sugestão puxava a saída para
+ * trás, somando 37,7 HORAS — 41 deles em ALMOCO_AUTOMATICO, um em BATIDAS_DUPLICADAS
+ * (EVERALDO 08/09, 12 min), e os demais em falta de ponta.
+ *
+ * A EXCEÇÃO É NÃO HAVER BATIDA. Em FALTA_SAIDA não existe o que preservar, e aí a
+ * sugestão é a única fonte — são 4 dos 49. Por isso a regra olha o CARTÃO, não o motivo:
+ * havendo última batida, ela manda; não havendo, vale a sugestão.
+ *
+ * ISTO DIVERGE DA FERRAMENTA DO PC (`main.py:2823`), que continua mandando a `saida_sug`.
+ * A divergência é deliberada e é a favor do colaborador.
+ */
+function saidaDoLancamento(linha) {
+  // A MARCA E/S DECIDE. Sem ela eu pegava "a última hora do cartão", e num dia de
+  // FALTA_SAIDA essa última hora é a VOLTA DO ALMOÇO — o lançamento encerraria a jornada
+  // no meio da tarde. Saída é a última marca `S`; se o cartão termina em `E`, não há
+  // saída batida e a sugestão é a única fonte.
+  const marcas = [
+    ...String(linha?.todas_batidas ?? "").matchAll(/([ES])\s*(\d{1,2}:\d{2})/gi),
+  ].map((m) => ({ tipo: m[1].toUpperCase(), hora: m[2] }));
+
+  // O TAPA-BURACO NÃO É SAÍDA (montador.py, LIÇÃO 4): o Transnet soma 1 min na última
+  // batida para fechar o cartão de quem esqueceu de bater. `E10:25 | S10:26` termina em
+  // `S`, mas essa saída é do sistema, não da pessoa — e tomá-la por boa encerraria o dia
+  // quatro horas antes (medido: 25 casos, todos assim).
+  const reais = marcas.filter((m, i) => {
+    if (i === 0) return true;
+    const antes = hm2min(marcas[i - 1].hora);
+    const agora = hm2min(m.hora);
+    return antes == null || agora == null || agora - antes > 1;
+  });
+
+  const ultima = reais[reais.length - 1];
+  const batida = reais.length >= 2 && ultima?.tipo === "S" ? fmtHora(ultima.hora) : null;
+  const sugerida = fmtHora(linha?.saida_sug);
+  if (!batida) return sugerida;
+  if (!sugerida) return batida;
+
+  // A BATIDA SÓ PREVALECE QUANDO A SUGESTÃO CORTARIA. Se a sugestão é MAIS TARDE que a
+  // batida, ela não está cobrando gordura — está COMPENSANDO o almoço que vai inserir,
+  // para a jornada trabalhada não encolher (`E13:35 | S22:25` com sugestão `22:43`).
+  // Trocar por "sempre a batida" encurtava o dia pago em 60 dos 452 do lote — o oposto
+  // do que esta trava existe para fazer. Então: nunca cortar, e deixar o que a view soma.
+  const bMin = hm2min(batida);
+  const sMin = hm2min(sugerida);
+  if (bMin == null || sMin == null) return batida;
+  return bMin > sMin ? batida : sugerida;
+}
+
 export function montarLoteAjuste(linhas, casos, bloqueios, lancamentos) {
   const dentro = [];
   const fora = [];

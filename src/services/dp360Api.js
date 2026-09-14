@@ -209,6 +209,20 @@ export function apagarCredencialTransnet() {
   }
 }
 
+/**
+ * A URL da foto que o robô tirou no Transnet.
+ *
+ * O bucket é PRIVADO: navegador nenhum lê direto. Quem assina é a Edge Function, que já
+ * exige sessão do INOVE e nível Administrador, e a assinatura vale pouco tempo — foto com
+ * nome, crachá e horário de gente não fica em link aberto por aí.
+ */
+export async function dispararEvidenciaUrl(id) {
+  const dados = await chamar({ action: "evidencia_url", ids: [id] });
+  const item = (dados.urls || []).find((u) => Number(u.id) === Number(id));
+  if (!item?.url) throw new Error(item?.erro || "não foi possível abrir esta evidência");
+  return item.url;
+}
+
 export function dispararRoboDP360(robo, inputs) {
   // A credencial viaja no corpo da chamada, para o gateway — NUNCA como input do
   // workflow: o GitHub imprime os inputs no log da execução (medido neste projeto).

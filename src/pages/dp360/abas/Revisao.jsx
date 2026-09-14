@@ -32,6 +32,7 @@ import CartaoDoDia, {
   temSugestaoUtil,
 } from "../CartaoDoDia";
 import {
+  dispararEvidenciaUrl,
   dispararRoboDP360,
   inserirDP360,
   lerDP360,
@@ -60,6 +61,7 @@ import { CONSTANTES, hm2min, min2hm } from "../regrasPonto";
 // do módulo compartilhado com as Folgas — a mesma régua para o mesmo robô.
 import { csvDoAjustePonto, ddmmaaaa, montarLoteAjuste } from "../regrasAjustePonto";
 
+import { supabase } from "../../../supabase";
 import { usePergunta } from "../Perguntar";
 /* =============================================================================
    Revisão (Passo 2) — porte da tela do DP360 (Sistemas/PONTO: app/ui/app.js
@@ -1191,6 +1193,7 @@ const COLUNAS_GORDURA_GPS = [
 function lancamentoDaLinha(x) {
   return {
     quando: fmtDataHora(x.importado_em),
+    quandoISO: String(x.importado_em ?? ""),
     cartao: [x.entrada, x.saida_almoco, x.volta_almoco, x.saida].map((h) =>
       String(h ?? "").trim(),
     ),
@@ -1213,7 +1216,132 @@ function lancamentoDaLinha(x) {
  * E a foto: ela existe no run do GitHub, que a apaga em 30 dias. Enquanto o arquivamento
  * automático não entra, o pop-up avisa o prazo em vez de fingir que a prova é eterna.
  */
+/**
+ * O QUEM E A FOTO MORAM NA OUTRA BASE — e já estão lá.
+ *
+ * `ponto_importacoes` (lake) guarda o QUE foi lançado. Quem clicou, com que login do
+ * Transnet e qual run do GitHub saiu, tudo isso o gateway já grava em
+ * `dp360_robo_execucao` + `dp360_auditoria`, no banco do INOVE. Faltava só ligar as duas
+ * pontas — e é o que esta consulta faz.
+ *
+ * O ELO É POR TEMPO, e é por isso: o disparo devolve o id da execução, mas a
+ * `ponto_importacoes` não tem coluna para guardá-lo (o DDL dela é da ferramenta do PC e
+ * não é meu para mexer agora). Então casa-se pelo workflow (`ponto.yml`), pelo dia do
+ * lote que está na trilha, e pela execução mais próxima do `importado_em`. A janela é
+ * curta porque as duas escritas acontecem com segundos de diferença — no caso medido,
+ * quatro. E as execuções são serializadas pelo `concurrency: bots-transnet`, então não há
+ * duas do mesmo workflow disputando o mesmo segundo.
+ *
+ * Se não casar, a tela DIZ que não casou em vez de mostrar o nome de outra pessoa.
+ */
+function useExecucaoDoLancamento(lancado, diaBR) {
+  const [exec, setExec] = useState(null);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    let vivo = true;
+    setExec(null);
+    setErro("");
+    const alvo = Date.parse(lancado?.quandoISO || "");
+    if (!Number.isFinite(alvo)) return undefined;
+
+    supabase
+      .from("dp360_robo_execucao")
+      .select("id, run_url, run_id, autor_nome, disparado_em, confirmar, workflow, dp360_auditoria!inner(detalhe)")
+      .eq("workflow", "ponto.yml")
+      .eq("confirmar", true)
+      .gte("disparado_em", new Date(alvo - 15 * 60000).toISOString())
+      .lte("disparado_em", new Date(alvo + 15 * 60000).toISOString())
+      .order("disparado_em", { ascending: false })
+      .limit(20)
+      .then(({ data, error }) => {
+        if (!vivo) return;
+        if (error) {
+          setErro(error.message);
+          return;
+        }
+        const doDia = (data || []).filter(
+          (e) => String(e.dp360_auditoria?.detalhe?.data ?? "") === diaBR,
+        );
+        const perto = (doDia.length ? doDia : data || [])
+          .map((e) => ({ e, d: Math.abs(Date.parse(e.disparado_em) - alvo) }))
+          .sort((a, b) => a.d - b.d)[0];
+        setExec(perto?.e || null);
+        if (!perto) setErro("não achei a execução deste lançamento");
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [lancado?.quandoISO, diaBR]);
+
+  return { exec, erro };
+}
+
+/** As fotos que o robô tirou, já copiadas para o nosso banco. */
+function useFotos(execucaoId) {
+  const [fotos, setFotos] = useState([]);
+  useEffect(() => {
+    let vivo = true;
+    setFotos([]);
+    if (!execucaoId) return undefined;
+    supabase
+      .from("dp360_robo_evidencia")
+      .select("id, arquivo, rotulo, cracha")
+      .eq("execucao_id", execucaoId)
+      .limit(12)
+      .then(({ data }) => {
+        if (vivo) setFotos(data || []);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [execucaoId]);
+  return fotos;
+}
+
+/**
+ * A MINIATURA DA PROVA. O bucket é privado — nenhum navegador lê direto. A URL vem
+ * assinada pela Edge Function, que já exige sessão do INOVE e nível Administrador, e vale
+ * pouco tempo de propósito: prova de gente não fica em link aberto por aí.
+ */
+function FotoEvidencia({ evidencia }) {
+  const [url, setUrl] = useState("");
+  const [erro, setErro] = useState("");
+  useEffect(() => {
+    let vivo = true;
+    dispararEvidenciaUrl(evidencia.id)
+      .then((u) => vivo && setUrl(u))
+      .catch((e) => vivo && setErro(e?.message || "não deu para abrir"));
+    return () => {
+      vivo = false;
+    };
+  }, [evidencia.id]);
+
+  if (erro) return <span className="dp-faint" style={{ fontSize: 11.5 }}>{erro}</span>;
+  if (!url) return <span className="dp-faint" style={{ fontSize: 11.5 }}>abrindo…</span>;
+  return (
+    <a href={url} target="_blank" rel="noreferrer" title={evidencia.rotulo || evidencia.arquivo}>
+      <img
+        src={url}
+        alt={evidencia.rotulo || evidencia.arquivo}
+        style={{
+          width: 132,
+          height: 84,
+          objectFit: "cover",
+          objectPosition: "top left",
+          borderRadius: 6,
+          border: "1px solid var(--dp-border)",
+        }}
+      />
+    </a>
+  );
+}
+
 function PopupAjuste({ linha, lancado, aoFechar }) {
+  const { exec, erro: erroExec } = useExecucaoDoLancamento(lancado, fmtData(linha.date_ref));
+  const fotos = useFotos(exec?.id);
+  const transnet = String(exec?.dp360_auditoria?.detalhe?.transnet_usuario ?? "").trim();
+
   useEffect(() => {
     const escapa = (e) => e.key === "Escape" && aoFechar();
     document.addEventListener("keydown", escapa);
@@ -1250,7 +1378,10 @@ function PopupAjuste({ linha, lancado, aoFechar }) {
       onMouseDown={(e) => e.target === e.currentTarget && aoFechar()}
     >
       <div className="dp-card rv-box" style={{ maxWidth: 720 }}>
-        <header className="dp-det-topo">
+        {/* `rv-head` — a mesma classe do cabeçalho do cartão do dia. Eu tinha escrito
+            `dp-det-topo`, que NÃO EXISTE no CSS: sem flex, a pílula e o ✕ caíam para
+            baixo do título e o botão de fechar ficava solto no meio da caixa. */}
+        <header className="rv-head" style={{ alignItems: "flex-start", gap: 10 }}>
           <div style={{ flex: 1 }}>
             <div className="dp-faint" style={{ fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase" }}>
               Ajustado pela Revisão
@@ -1283,6 +1414,20 @@ function PopupAjuste({ linha, lancado, aoFechar }) {
             <Linha rotulo="Quando">
               <b className="dp-num">{lancado.quando}</b>
             </Linha>
+            <Linha rotulo="Quem mandou">
+              {exec?.autor_nome ? (
+                <>
+                  {exec.autor_nome}
+                  {transnet ? (
+                    <span className="dp-faint" style={{ fontSize: 11.5 }}>
+                      {" "}· entrou no Transnet como <b className="dp-mono">{transnet}</b>
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                <span className="dp-faint">{erroExec || "procurando a execução…"}</span>
+              )}
+            </Linha>
             <Linha rotulo="O cartão antes">
               <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
                 {antes.map((h, i) => <Slot key={i} hora={h} i={i} />)}
@@ -1303,9 +1448,34 @@ function PopupAjuste({ linha, lancado, aoFechar }) {
             </Linha>
             <Linha rotulo="Robô">
               <span className="dp-mono" style={{ fontSize: 12 }}>{lancado.arquivo || "—"}</span>
-              <div className="dp-faint" style={{ fontSize: 11.5, marginTop: 2 }}>
-                a foto da tela do Transnet fica no run do GitHub, que a apaga em 30 dias
-              </div>
+              {exec?.run_url ? (
+                <>
+                  {" · "}
+                  <a href={exec.run_url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
+                    run {exec.run_id} ↗
+                  </a>
+                </>
+              ) : null}
+            </Linha>
+            {/* A FOTO É A PEÇA TRABALHISTA. Ela nasce no run do GitHub, que a apaga em 30
+                dias; o que aparece aqui é a CÓPIA já guardada no nosso bucket privado.
+                Enquanto ninguém arquivou, o pop-up diz isso — e oferece arquivar, que é a
+                mesma ação da tela de Evidências. */}
+            <Linha rotulo="A foto do Transnet">
+              {fotos.length ? (
+                <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}>
+                  {fotos.map((f) => (
+                    <FotoEvidencia key={f.id} evidencia={f} />
+                  ))}
+                </span>
+              ) : exec?.id ? (
+                <span className="dp-faint" style={{ fontSize: 12 }}>
+                  ainda não foi copiada para o nosso banco — ela vive no run do GitHub e
+                  some em 30 dias. Arquive na tela de <b>Evidências</b>.
+                </span>
+              ) : (
+                <span className="dp-faint" style={{ fontSize: 12 }}>—</span>
+              )}
             </Linha>
           </div>
         </div>

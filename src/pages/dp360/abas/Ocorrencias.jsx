@@ -66,6 +66,7 @@ import {
   slotsDoCartao,
 } from "../vereditoCartao";
 import { usePergunta } from "../Perguntar";
+import { acompanharLote, lotePifou } from "../loteEmExecucao";
 import CartaoDoDia, {
   agoraUtc,
   aplicarRealManual,
@@ -1636,254 +1637,6 @@ const idsDoDia = (reg) => (reg.ajustes || []).map((o) => txt(o.id_ocorrencia)).f
  * FORAM MANDADOS voltaram carimbados, e nomeia os que não voltaram. Sem isso a tela dizia
  * "disparado" e parava — que era a queixa: "ele precisa entender o resultado".
  */
-/* O QUE O BOT ESCREVE, POR CASO — e como isso vira uma frase. Tudo sai de
-   `executar_decisoes`, no fim dele:
-
-     conferido_em         confirmou no Transnet e tirou o caso da fila
-     correcao_status      "ponto_fechado" = o Transnet recusa gravar aquele dia
-     conf_veredito        "divergente" = aceitou e o cartão não ficou como o DP fechou
-                          "sem_base"   = a leitura ao vivo veio vazia, não reescreve no escuro
-     (nada)               falha técnica: o caso continua pendente, SEM marca — de propósito
-                          ("quem falhou assim continua pendente, que é exatamente o que ele é") */
-const DESFECHO_CASO = {
-  conferido: { icone: "✅", tom: "ok", texto: "conferido — fora da fila" },
-  ponto_fechado: { icone: "🔒", tom: "warn", texto: "ponto fechado — o Transnet não grava mais esse dia" },
-  divergente: { icone: "⚠", tom: "warn", texto: "o cartão não ficou como o DP fechou" },
-  sem_base: { icone: "⚠", tom: "warn", texto: "leitura ao vivo veio vazia — não reescreveu no escuro" },
-  pendente: { icone: "⏳", tom: "mute", texto: "continua pendente — o robô não conseguiu mexer" },
-  esperando: { icone: "⏳", tom: "mute", texto: "esperando o robô" },
-};
-
-function desfechoDoCaso(caso) {
-  if (!caso) return "pendente";
-  if (txt(caso.conferido_em)) return "conferido";
-  if (txt(caso.correcao_status) === "ponto_fechado") return "ponto_fechado";
-  const v = txt(caso.conf_veredito);
-  if (v === "divergente" || v === "sem_base") return v;
-  return "pendente";
-}
-
-async function conferidosDepoisDoRobo(lista) {
-  const alvo = new Map();
-  for (const reg of lista || []) {
-    const { cracha, date_ref } = chaveDoCaso(reg);
-    const d = normData(date_ref) || txt(date_ref).slice(0, 10);
-    if (txt(cracha) && d) alvo.set(`${cra8(cracha)}|${d}`, reg);
-  }
-  if (!alvo.size) return { feitos: [], faltaram: [] };
-
-  const crachas = [...new Set([...alvo.values()].map((r) => txt(chaveDoCaso(r).cracha)))];
-  const dias = [...new Set([...alvo.keys()].map((k) => k.split("|")[1]))];
-  let casos = [];
-  try {
-    // Dois `in.` e o cruzamento aqui: PostgREST não filtra por PARES, e pedir caso a caso
-    // seria uma consulta por linha do lote.
-    casos = await lerDP360("ponto_caso", {
-      colunas: "cracha,date_ref,conferido_em,usuario,correcao_status,conf_veredito",
-      filtros: { cracha: `in.(${crachas.join(",")})`, date_ref: `in.(${dias.join(",")})` },
-      limite: 2000,
-    });
-  } catch {
-    return null; // sem leitura não invento desfecho: quem chama diz "não consegui conferir"
-  }
-
-  const porChave = new Map();
-  for (const c of casos || []) {
-    const k = `${cra8(c.cracha)}|${normData(c.date_ref) || txt(c.date_ref).slice(0, 10)}`;
-    if (alvo.has(k)) porChave.set(k, c);
-  }
-  const porCaso = new Map();
-  const feitos = [];
-  const faltaram = [];
-  for (const [k, reg] of alvo) {
-    const estado = desfechoDoCaso(porChave.get(k));
-    porCaso.set(k, { estado, usuario: txt(porChave.get(k)?.usuario) });
-    (estado === "conferido" ? feitos : faltaram).push(reg);
-  }
-  return { porCaso, feitos, faltaram };
-}
-
-/* ── O QUE O ROBÔ ESTÁ DIZENDO, CASO A CASO, AGORA ────────────────────────────
-   O bot imprime uma linha por caso enquanto trabalha:
-
-     [bot_ponto]     VERIFICAR  30060250 2026-09-05: subiu | esperado [...] ao vivo [...]
-     [bot_ponto]      CORRIGIR  30060284 2026-08-19: dia ja marcado como PONTO FECHADO
-     [bot_ponto]            OK  30060951 2026-09-06: resultado confirmado -> dia encerrado.
-
-   É daí que sai o tempo real. A tela NÃO reescreve essas frases: ela mostra a do robô,
-   que é a única que sabe o que está acontecendo naquele segundo. O rótulo à esquerda dá
-   o tom (OK verde, CORRIGIR e PENDENTE âmbar, VERIFICAR neutro) e nada mais.
-
-   Ler o log em vez de mexer no bot foi deliberado: o bot roda na máquina do DP também, e
-   o que está de pé lá não pode quebrar por causa de uma tela. */
-const RE_LOG_CASO =
-  /\[bot_[a-z_]+\]\s+([A-Za-zÇÃÕ-]+)\s{2,}(\d{6,8})\s+(\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4})\s*:\s*(.+)/;
-
-const TOM_DO_PASSO = { OK: "ok", CORRIGIR: "warn", PENDENTE: "warn", VERIFICAR: "mute" };
-
-export function lerLogDoBot(texto) {
-  const mapa = new Map();
-  for (const bruto of String(texto || "").split(/\r?\n/)) {
-    const m = RE_LOG_CASO.exec(bruto);
-    if (!m) continue;
-    const [, passo, cracha, data, frase] = m;
-    const dia = data.includes("/")
-      ? `${data.slice(6, 10)}-${data.slice(3, 5)}-${data.slice(0, 2)}`
-      : data;
-    // A ÚLTIMA palavra do robô sobre aquele caso vence: ele fala mais de uma vez sobre o
-    // mesmo dia (verifica, corrige, reconfere) e o que vale é onde ele parou.
-    mapa.set(`${cra8(cracha)}|${dia}`, {
-      passo,
-      tom: TOM_DO_PASSO[passo.toUpperCase()] || "mute",
-      // a frase do robô inteira não cabe na coluna; o começo dela é o que diz o estado
-      frase: frase.split(" | ")[0].trim(),
-    });
-  }
-  return mapa;
-}
-
-/**
- * O PAINEL DO LOTE — "enquanto ele tiver rodando eu quero um pop-up na tela mostrando
- * cada um" (dono, 14/09/2026).
- *
- * Ele existe porque o lote é a única ação da tela que mexe em N fichas de uma vez e demora
- * minutos. Um recado de uma linha no topo não dá conta: quem mandou oito casos quer ver os
- * oito, e quer saber qual dos oito não passou.
- *
- * AS LINHAS ACENDEM UMA A UMA, e a fonte disso não é o banco — é o LOG. O
- * `executar_decisoes` junta tudo e grava uma vez só no fim (`sc.gravar_caso(rows)`), então
- * pelo banco não dá mesmo para saber que o terceiro caso já passou. Mas o bot IMPRIME cada
- * passo enquanto anda, e o GitHub serve o log de um job em andamento: a tela lê de lá.
- *
- * SÃO DUAS FONTES, NESTA ORDEM. Enquanto o robô roda vale o log, que é o que está
- * acontecendo agora e pode mudar no minuto seguinte. Quando ele termina vale o BANCO, que
- * é o que ficou — e o banco sobrescreve o log, porque "estou corrigindo" não é desfecho.
- *
- * Log indisponível não quebra nada: as linhas ficam em "esperando o robô" e o resultado
- * chega inteiro no fim, que era o comportamento antes desta leitura existir.
- *
- * FECHAR NÃO CANCELA NADA. O robô está no GitHub e não ouve esta tela; o painel é janela,
- * não controle. Por isso ele não trava a tela atrás dele enquanto roda — o DP pode fechar,
- * olhar outro caso e voltar pelo aviso do topo.
- */
-function PainelExecucao({ execucao, aoFechar }) {
-  const [agora, setAgora] = useState(() => Date.now());
-  const [aoVivo, setAoVivo] = useState(() => new Map());
-  useEffect(() => {
-    if (execucao?.fim) return undefined;
-    const t = setInterval(() => setAgora(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [execucao?.fim]);
-
-  useEffect(() => {
-    const esc = (e) => e.key === "Escape" && aoFechar();
-    document.addEventListener("keydown", esc);
-    return () => document.removeEventListener("keydown", esc);
-  }, [aoFechar]);
-
-  /* A LEITURA AO VIVO. De 8 em 8 segundos enquanto o robô está de pé — o bot leva alguns
-     segundos por caso, então mais rápido que isso só gastaria chamada para reler a mesma
-     linha. Para sozinha quando ele termina: daí em diante quem manda é o banco. */
-  const runId = execucao?.runId;
-  const acabou = Boolean(execucao?.fim);
-  useEffect(() => {
-    if (!runId || acabou) return undefined;
-    let vivo = true;
-    let timer = null;
-    const ler = async () => {
-      try {
-        const texto = await logRoboDP360(runId);
-        if (vivo && texto) setAoVivo(lerLogDoBot(texto));
-      } catch {
-        // log indisponível não é falha da execução: o robô segue, a tela só não narra
-      }
-      if (vivo) timer = window.setTimeout(ler, 8000);
-    };
-    ler();
-    return () => {
-      vivo = false;
-      if (timer) window.clearTimeout(timer);
-    };
-  }, [runId, acabou]);
-
-  if (!execucao) return null;
-  const { casos, onde, fim, painel, desde, porCaso, erro } = execucao;
-  const seg = Math.max(0, Math.round(((fim ? execucao.terminouEm : agora) - desde) / 1000));
-  const relogio = `${String(Math.floor(seg / 60)).padStart(2, "0")}:${String(seg % 60).padStart(2, "0")}`;
-  const feitos = casos.filter((c) => porCaso?.get(c.chave)?.estado === "conferido").length;
-
-  return (
-    <div
-      className="rv-overlay rv-overlay-alto"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Execução no Transnet"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) aoFechar(); }}
-    >
-      <div className="dp-card rv-box oc-exec" style={{ maxWidth: 720 }}>
-        <header className="rv-head rv-fixo">
-          <div>
-            <div style={{ ...ROTULO_CARD, color: "var(--dp-accent)" }}>Robô · executar decisões</div>
-            <h3 style={{ margin: "4px 0 2px", fontSize: 16, fontWeight: 700 }}>
-              {fim ? (
-                <>
-                  {feitos} de {casos.length} conferido(s)
-                </>
-              ) : (
-                <>
-                  {casos.length} crachá+dia no Transnet <span className="dp-num">· {relogio}</span>
-                </>
-              )}
-            </h3>
-            <div className="dp-muted" style={{ fontSize: 12 }}>
-              {erro
-                ? erro
-                : fim
-                  ? `o robô terminou${fim === "success" ? "" : ` (${fim})`} em ${relogio}`
-                  : `${onde || "mandando o robô"}${
-                      aoVivo.size ? ` · já passou por ${aoVivo.size} de ${casos.length}` : "…"
-                    }`}
-            </div>
-          </div>
-          <button type="button" className="dp-btn" onClick={aoFechar} aria-label="Fechar">
-            <X size={14} />
-          </button>
-        </header>
-
-        <div className="rv-corpo" style={{ padding: "4px 0" }}>
-          {casos.map((c) => {
-            /* O BANCO MANDA quando existe; até lá, a palavra do robô; e antes de ele
-               falar deste caso, a espera. */
-            const fechado = porCaso?.get(c.chave);
-            const vivo = aoVivo.get(c.chave);
-            const d = fechado
-              ? DESFECHO_CASO[fechado.estado]
-              : vivo
-                ? { icone: vivo.tom === "ok" ? "✅" : vivo.tom === "warn" ? "⚙" : "👁", tom: vivo.tom, texto: vivo.frase }
-                : DESFECHO_CASO.esperando;
-            return (
-              <div key={c.chave} className="oc-exec-linha">
-                <span className={`oc-exec-ic ${d.tom}`}>{d.icone}</span>
-                <span className="oc-exec-nome" title={c.nome}>
-                  {c.nome} <span className="dp-muted dp-num">· {c.dataBR}</span>
-                </span>
-                <span className={`oc-exec-est ${d.tom}`} title={d.texto}>{d.texto}</span>
-              </div>
-            );
-          })}
-        </div>
-
-        {painel ? (
-          <footer className="rv-fixo" style={{ padding: "8px 2px 0", fontSize: 12 }}>
-            <a href={painel} target="_blank" rel="noreferrer">ver o log do run ↗</a>
-            <span className="dp-faint"> · fechar esta janela não para o robô</span>
-          </footer>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 /**
  * main.py:9467 (_grava_contrato) — o CONTRATO da decisão: como o cartão estava e como tem
  * que ficar. CONGELAMENTO: nunca reescreve um contrato que já existe — o primeiro é o que
@@ -4827,12 +4580,12 @@ export default function Ocorrencias() {
             .sort((a, b) => Date.parse(txt(b.comecou_em)) - Date.parse(txt(a.comecou_em)))[0];
       if (!meu) continue;
       if (txt(meu.status) !== "completed") {
-        /* O ID VAI JUNTO, e não só quando o estado muda: é por ele que o painel lê o log
-           ao vivo, e o `run_id` do casamento do gateway às vezes não vem (o run pode não
-           ter nascido no instante do dispatch). Aqui ele já foi encontrado. */
-        const mudou = txt(meu.status) !== visto;
-        if (mudou) visto = txt(meu.status);
-        dizendo?.(mudou ? (visto === "queued" ? "na fila do GitHub" : "rodando no Transnet") : "", meu.id);
+        // só fala quando MUDA: os dois usuários desta espera escrevem no recado, e repetir
+        // a mesma frase a cada 15 s só faz a tela piscar.
+        if (txt(meu.status) !== visto) {
+          visto = txt(meu.status);
+          dizendo?.(visto === "queued" ? "na fila do GitHub" : "rodando no Transnet");
+        }
         continue;
       }
       return txt(meu.conclusao) || "sem_conclusao";
@@ -4855,8 +4608,6 @@ export default function Ocorrencias() {
    * e uma linha travada recusa o lote inteiro em vez de sair calada. */
   /* O painel do lote. Ele é do DISPARO, não da grade: some quando o DP fecha, e o
      que sobra é o recado de uma linha no topo e o aviso do robô na barra. */
-  const [execucao, setExecucao] = useState(null);
-
   const aoExecutarLote = useCallback(
     async (regs) => {
       const lista = (regs || []).filter(Boolean);
@@ -4901,73 +4652,63 @@ export default function Ocorrencias() {
 
       setDisparando(true);
       setRecado("");
-      const t0 = Date.now();
       try {
         const r = await dispararRoboDP360("ajustes", { modo: MODO_EXECUTAR, casos, confirmar: "true" });
         const painel = r?.painel ? ` ${r.painel}` : "";
         const escopo = `${lista.length} crachá+dia (${soma.a} aceitar / ${soma.r} rejeitar)`;
-        setRecado(`⚙ Execução disparada — ${escopo}. Esperando o robô…${painel}`);
+        setRecado(`⚙ Execução disparada — ${escopo}. Acompanhe no painel.${painel}`);
         setSelIds([]);
-        setExecucao({
-          desde: t0,
+
+        /* A PARTIR DAQUI A TELA LARGA. Quem espera o robô, lê o log e confere o desfecho é
+           o `loteEmExecucao`, que vive acima das abas — era ele que faltava para o
+           acompanhamento não morrer quando o DP sai das Ocorrências ("tem que ficar nessa
+           tela rodando até acabar"). A tradução da linha para `{chave, cracha, date_ref}`
+           é daqui, porque quem conhece a forma do registro é esta tela. */
+        acompanharLote({
           runId: r?.execucao?.run_id || null,
           painel: r?.painel || "",
-          onde: "mandando o robô",
+          robo: "ajustes",
           casos: lista.map((reg) => {
             const { cracha, date_ref } = chaveDoCaso(reg);
             const dia = normData(date_ref) || txt(date_ref).slice(0, 10);
-            return { chave: `${cra8(cracha)}|${dia}`, nome: reg.nome, dataBR: reg.dataBR };
+            return {
+              chave: `${cra8(cracha)}|${dia}`,
+              cracha: txt(cracha),
+              date_ref: dia,
+              nome: reg.nome,
+              dataBR: reg.dataBR,
+            };
           }),
-        });
-
-        /* A TELA ESPERA, como já espera na cadeia do vencido. Sem isso o DP ficava com
-           "disparado" na mão e nenhum jeito de saber o que saiu dali — e o caminho natural
-           de quem não sabe é disparar de novo, que no Transnet é mexer duas vezes na ficha
-           de alguém. */
-        const fim = await esperarRun(
-          { runId: r?.execucao?.run_id || null, robo: "ajustes", desde: t0 },
-          (onde, idDoRun) => {
-            if (onde) setRecado(`⚙ Executando ${escopo} — ${onde}…${painel}`);
-            setExecucao((x) =>
-              x ? { ...x, ...(onde ? { onde } : {}), runId: x.runId || idDoRun || null } : x,
+          // a releitura da grade só interessa se esta tela ainda estiver montada
+          aoTerminar: (fim, conta) => {
+            atualizarSilencioso();
+            if (!conta) {
+              setRecado(`Robô terminou (${fim}) — não consegui reler os casos. Recarregue a tela.${painel}`);
+              return;
+            }
+            const { feitos, faltaram } = conta;
+            const nomes = faltaram.slice(0, 6).map((x) => `${x.nome} ${x.dataBR}`).join(" · ");
+            setRecado(
+              (faltaram.length ? "⚠ " : "✅ ") +
+                `Robô ${fim === "success" ? "terminou" : `terminou ${fim}`} — ` +
+                `${feitos.length} de ${lista.length} caso(s) conferido(s) e fora da fila.` +
+                (faltaram.length
+                  ? ` ${faltaram.length} ficaram: ${nomes}${faltaram.length > 6 ? " …" : ""}.` +
+                    " Abra o caso para ver por quê (ponto fechado, cartão que não subiu)."
+                  : "") +
+                painel,
             );
           },
-        );
-        setExecucao((x) => (x ? { ...x, fim, terminouEm: Date.now(), onde: "" } : x));
-        await atualizarSilencioso();
-
-        /* O DESFECHO DO RUN NÃO É O DESFECHO DOS CASOS. O robô sai `success` tendo
-           conferido cinco de oito: os outros três podem ter o ponto fechado, ou o cartão
-           não subiu. Então o relatório conta o que voltou CARIMBADO. */
-        const conta = await conferidosDepoisDoRobo(lista);
-        if (!conta) {
-          const aviso = "o robô terminou, mas não consegui reler os casos — recarregue a tela";
-          setExecucao((x) => (x ? { ...x, erro: aviso } : x));
-          setRecado(`Robô terminou (${fim}) — mas não consegui reler os casos para dizer o que passou. Recarregue a tela.${painel}`);
-          return;
-        }
-        const { porCaso, feitos, faltaram } = conta;
-        setExecucao((x) => (x ? { ...x, porCaso } : x));
-        const nomes = faltaram.slice(0, 6).map((x) => `${x.nome} ${x.dataBR}`).join(" · ");
-        setRecado(
-          (faltaram.length ? "⚠ " : "✅ ") +
-            `Robô ${fim === "success" ? "terminou" : `terminou ${fim}`} — ` +
-            `${feitos.length} de ${lista.length} caso(s) conferido(s) e fora da fila.` +
-            (faltaram.length
-              ? ` ${faltaram.length} ficaram: ${nomes}${faltaram.length > 6 ? " …" : ""}.` +
-                " Abra o caso para ver por quê (ponto fechado, cartão que não subiu) — o log do run tem a linha."
-              : "") +
-            painel,
-        );
+        });
       } catch (e) {
         const motivo = e?.message || "não foi possível disparar o robô.";
-        setExecucao((x) => (x ? { ...x, fim: "erro", terminouEm: Date.now(), erro: motivo } : x));
+        lotePifou(motivo);
         setRecado(`Falhou: ${motivo}`);
       } finally {
         setDisparando(false);
       }
     },
-    [atualizarSilencioso, esperarRun],
+    [atualizarSilencioso],
   );
 
   /* ── CONFERÊNCIA: lê o cartão ao vivo, NÃO mexe no Transnet ────────────────
@@ -5909,9 +5650,6 @@ export default function Ocorrencias() {
           acima do modal do caso — a pergunta sobre advertir ou reescrever ponto não pode
           nascer atrás do pop-up que a disparou. */}
       {caixaPergunta}
-      {/* O PAINEL DO LOTE fica no mesmo nível da confirmação: ele nasce DEPOIS dela, sobre
-          a tela toda, e continua visível se o DP abrir um caso enquanto o robô trabalha. */}
-      <PainelExecucao execucao={execucao} aoFechar={() => setExecucao(null)} />
       <AbaShell carregando={carregando} progresso={progresso} erro={erro} filtros={filtros} resumo={resumo}>
         {/* DIA SEM PONTO — PAINEL, não botão de lote (app.js:2952). Não é parte do fluxo de
             decisão: estes dias não têm pedido para julgar, e o painel tem um seletor de tipo

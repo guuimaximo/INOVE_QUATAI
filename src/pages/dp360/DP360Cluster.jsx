@@ -16,6 +16,7 @@ import Motorista from "./abas/Motorista";
 import Importacoes from "./abas/Importacoes";
 import Config from "./abas/Config";
 import RoboNoTopo from "./RoboNoTopo";
+import PainelExecucao from "./loteEmExecucao";
 
 // A aparencia segue a FERRAMENTA (Sistemas/PONTO/app/ui), nao o visual do INOVE:
 // topbar enxuta com abas de texto, fundo cinza, tabela densa. Quem usa o DP passa o
@@ -83,6 +84,11 @@ export default function DP360Cluster() {
       </div>
 
       <Conteudo />
+
+      {/* O PAINEL DO LOTE mora AQUI, e não dentro da aba que disparou: o robô leva minutos
+          e o DP não fica parado olhando — ele vai ver a Revisão enquanto espera, e o
+          acompanhamento tem de ir junto. Montado no cluster, sobrevive à troca de aba. */}
+      <PainelExecucao />
     </div>
   );
 }

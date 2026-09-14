@@ -12,6 +12,9 @@
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// O GitHub exige `crypto_box_seal` (X25519 + XSalsa20-Poly1305) para gravar secret.
+// WebCrypto nao faz sealed box — por isso o libsodium entra aqui.
+import * as sodium from "https://esm.sh/libsodium-wrappers@0.7.13";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -206,6 +209,79 @@ const ROBOS: Record<string, { arquivo: string; inputs: Record<string, string[] |
     },
   },
 };
+
+/**
+ * A CREDENCIAL DO TRANSNET, DE CADA PESSOA, SEM PASSAR POR LOG NENHUM.
+ *
+ * O robo entra no Transnet com um login de gente, e o Transnet registra as acoes no nome
+ * de quem entrou. Entao a credencial tem de ser a de QUEM MANDOU — nao uma conta de
+ * servico comum, que faria toda correcao do mes aparecer como sendo da mesma pessoa.
+ *
+ * POR QUE ELA NAO VAI COMO INPUT DO WORKFLOW: o GitHub imprime o bloco `run:` com os
+ * inputs ja substituidos no log da execucao. Foi medido neste projeto — o `casos` inteiro
+ * apareceu no log do run 34073577523 —, e nao existe "input secreto" no
+ * `workflow_dispatch`. Senha por ali fica escrita no log, visivel para qualquer um com
+ * acesso ao repositorio.
+ *
+ * O que se faz: cifrar aqui (sealed box com a chave publica do repo) e gravar como SECRET.
+ * O workflow continua lendo `secrets.TRANSNET_USER` / `secrets.TRANSNET_PASSWORD` como
+ * sempre leu — nenhum .yml muda, e a ferramenta do PC nao sente nada.
+ *
+ * O QUE ISTO NAO RESOLVE: o secret e do REPOSITORIO, nao da pessoa. Dois disparos ao
+ * mesmo tempo escrevem por cima um do outro. O `concurrency: bots-transnet` ja serializa
+ * as EXECUCOES, mas nao esta escrita; na pratica o risco e a janela entre gravar e o run
+ * pegar o secret. Se isso virar problema, o caminho e um runner proprio, nao mais um
+ * remendo aqui.
+ */
+async function gravarCredencialTransnet(
+  dono: string,
+  repo: string,
+  token: string,
+  usuario: string,
+  senha: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const cab = cabecalhoGitHub(token);
+  const rChave = await fetch(
+    `https://api.github.com/repos/${dono}/${repo}/actions/secrets/public-key`,
+    { headers: cab },
+  );
+  if (!rChave.ok) {
+    const detalhe = rChave.status === 403 || rChave.status === 404
+      ? "o token do gateway (DP360_GITHUB_TOKEN) nao tem permissao de escrita em secrets deste repositorio"
+      : `o GitHub respondeu ${rChave.status} ao pedir a chave publica`;
+    return { ok: false, error: detalhe };
+  }
+  const { key, key_id } = await rChave.json() as { key: string; key_id: string };
+
+  await sodium.ready;
+  const publica = sodium.from_base64(key, sodium.base64_variants.ORIGINAL);
+  const selar = (valor: string) =>
+    sodium.to_base64(
+      sodium.crypto_box_seal(sodium.from_string(valor), publica),
+      sodium.base64_variants.ORIGINAL,
+    );
+
+  for (const [nome, valor] of [["TRANSNET_USER", usuario], ["TRANSNET_PASSWORD", senha]]) {
+    const r = await fetch(
+      `https://api.github.com/repos/${dono}/${repo}/actions/secrets/${nome}`,
+      {
+        method: "PUT",
+        headers: { ...cab, "Content-Type": "application/json" },
+        // encrypted_value e o UNICO lugar onde o valor aparece, e ja cifrado
+        body: JSON.stringify({ encrypted_value: selar(valor), key_id }),
+      },
+    );
+    if (!r.ok) {
+      return {
+        ok: false,
+        error: r.status === 403
+          ? "o token do gateway nao pode gravar secrets neste repositorio"
+          : `o GitHub recusou gravar ${nome} (${r.status})`,
+      };
+    }
+  }
+  return { ok: true };
+}
 
 function tokenGitHub() {
   return Deno.env.get("DP360_GITHUB_TOKEN") || Deno.env.get("GITHUB_TOKEN") || "";
@@ -904,6 +980,23 @@ serve(async (req: Request) => {
     const repo = Deno.env.get("DP360_GITHUB_REPO") ?? "DP360";
     const ref = Deno.env.get("DP360_GITHUB_REF") ?? "main";
 
+    // A CREDENCIAL E OBRIGATORIA. Sem ela o run morre em 16 segundos na tela de login do
+    // Transnet, e a pessoa so descobre isso abrindo o log — um erro caro para um erro
+    // barato de explicar aqui.
+    const cred = (corpo.credencial ?? {}) as Record<string, unknown>;
+    const transnetUser = String(cred.usuario ?? "").trim();
+    const transnetSenha = String(cred.senha ?? "");
+    if (!transnetUser || !transnetSenha) {
+      return json(
+        {
+          ok: false,
+          error:
+            "conecte a sua conta do Transnet na aba Início do DP360 — o robô entra no Transnet com o SEU login, e é no seu nome que ele aparece lá",
+        },
+        400,
+      );
+    }
+
     const recebidos = corpo.inputs;
     if (typeof recebidos !== "object" || recebidos === null || Array.isArray(recebidos)) {
       return json({ ok: false, error: "inputs ausentes" }, 400);
@@ -945,6 +1038,9 @@ serve(async (req: Request) => {
         modo: inputs.modo ?? null,
         motivo: inputs.motivo ?? null,
         data: inputs.data ?? null,
+        // COM QUE LOGIN o robo entrou no Transnet. O usuario, nunca a senha: e por este
+        // campo que se liga uma acao la com a pessoa que mandou daqui.
+        transnet_usuario: transnetUser,
       },
       autor_id: authData.user.id,
       autor_nome: perfil?.nome ?? null,
@@ -959,6 +1055,17 @@ serve(async (req: Request) => {
       .single();
     if (erroTrilha || !linhaTrilha?.id) {
       return json({ ok: false, error: "não foi possível registrar o disparo — nada foi executado" }, 500);
+    }
+
+    // A CREDENCIAL VAI ANTES DO DISPATCH, e depois da trilha: se gravar o secret falhar,
+    // nada foi disparado e a trilha ja diz que alguem tentou. Ordem inversa deixaria um
+    // run entrando no Transnet com a credencial da pessoa ANTERIOR.
+    const gravou = await gravarCredencialTransnet(dono, repo, token, transnetUser, transnetSenha);
+    if (!gravou.ok) {
+      return json(
+        { ok: false, error: `não foi possível preparar o login do Transnet: ${gravou.error}` },
+        502,
+      );
     }
 
     try {

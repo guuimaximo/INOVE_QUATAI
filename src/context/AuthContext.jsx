@@ -9,6 +9,7 @@ import {
 } from "../utils/auth";
 import { hydrateAuthenticatedUser } from "../utils/authBridge";
 import { PRESENCE_SYNC_INTERVAL_MS } from "../utils/presence";
+import { apagarCredencialTransnet } from "../services/dp360Api";
 
 export const AuthContext = createContext(null);
 
@@ -130,6 +131,11 @@ export function AuthProvider({ children }) {
       await supabase.auth.signOut();
     } finally {
       clearStoredUser();
+      // "Saiu do INOVE, apaga": a credencial do Transnet é de UMA pessoa numa sessão, e
+      // sair da conta é onde essa sessão termina. Sem isto, a próxima pessoa a usar a
+      // máquina herdaria o login da anterior — e o Transnet registraria as ações dela no
+      // nome de quem já foi embora.
+      apagarCredencialTransnet();
       setUser(null);
     }
   }, []);

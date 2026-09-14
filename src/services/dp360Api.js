@@ -164,8 +164,55 @@ export function atualizarDP360(tabela, filtros, campos) {
  *   comunicado   csv (Empresa;Crachá;Comunicado)    · data · motivo · confirmar
  *   ajustes      modo · casos (JSON)                       · confirmar
  */
+/* ── A CREDENCIAL DO TRANSNET ────────────────────────────────────────────────
+ * O robô entra no Transnet com um login de GENTE, e é no nome de quem entrou que o
+ * Transnet registra a ação. Então a credencial é a de quem manda — não uma conta de
+ * serviço comum, que faria toda correção do mês aparecer como sendo da mesma pessoa.
+ *
+ * ELA MORA NO `sessionStorage`, E SÓ. Não vai para o banco do INOVE, não vai para o
+ * `localStorage`, não é sincronizada com nada. Consequências, que são o desenho e não
+ * efeito colateral:
+ *   · a Gabi digita a dela; o Josué, na máquina dele, vê o campo VAZIO — não é permissão,
+ *     é que o dado não existe em lugar nenhum comum;
+ *   · fechou a aba ou saiu do INOVE, some (ver o `logout` do AuthContext);
+ *   · e nenhuma tela do INOVE tem de onde ler a senha de outra pessoa, porque não há onde.
+ */
+const CHAVE_CREDENCIAL = "dp360:transnet";
+
+export function lerCredencialTransnet() {
+  try {
+    const cru = window.sessionStorage.getItem(CHAVE_CREDENCIAL);
+    if (!cru) return null;
+    const { usuario, senha } = JSON.parse(cru);
+    return usuario && senha ? { usuario, senha } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function salvarCredencialTransnet(usuario, senha) {
+  try {
+    window.sessionStorage.setItem(
+      CHAVE_CREDENCIAL,
+      JSON.stringify({ usuario: String(usuario || "").trim(), senha: String(senha || "") }),
+    );
+  } catch {
+    /* navegador sem sessionStorage: a pessoa digita de novo, e é só isso */
+  }
+}
+
+export function apagarCredencialTransnet() {
+  try {
+    window.sessionStorage.removeItem(CHAVE_CREDENCIAL);
+  } catch {
+    /* nada a fazer */
+  }
+}
+
 export function dispararRoboDP360(robo, inputs) {
-  return chamar({ action: "robo", robo, inputs });
+  // A credencial viaja no corpo da chamada, para o gateway — NUNCA como input do
+  // workflow: o GitHub imprime os inputs no log da execução (medido neste projeto).
+  return chamar({ action: "robo", robo, inputs, credencial: lerCredencialTransnet() });
 }
 
 /**

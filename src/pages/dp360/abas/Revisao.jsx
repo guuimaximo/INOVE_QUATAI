@@ -1313,6 +1313,46 @@ function useProvaDoRun(runId, quandoISO) {
   return { arquivos, erro };
 }
 
+/**
+ * UM ARQUIVO DE PROVA do run: miniatura se for imagem, link nomeado se não for.
+ *
+ * O que os bots sobem não é sempre foto — o `comunicado` guarda o HTML da tela e o
+ * `ocorrencias`, o CSV do lote. Desenhar miniatura de um CSV seria um retângulo cinza que
+ * não diz nada; o nome e o tamanho dizem.
+ *
+ * A URL já vem assinada pela Edge Function e vale pouco tempo: o bucket é privado porque
+ * cada print tem nome, crachá e horário de gente.
+ */
+function ProvaArquivo({ arquivo }) {
+  if (!arquivo?.url) {
+    return <span className="dp-faint" style={{ fontSize: 11.5 }}>{arquivo?.arquivo}</span>;
+  }
+  if (!String(arquivo.tipo || "").startsWith("image/")) {
+    return (
+      <a href={arquivo.url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
+        {arquivo.arquivo}{" "}
+        <span className="dp-faint">({Math.max(1, Math.round((arquivo.bytes || 0) / 1024))} KB)</span>
+      </a>
+    );
+  }
+  return (
+    <a href={arquivo.url} target="_blank" rel="noreferrer" title={arquivo.arquivo}>
+      <img
+        src={arquivo.url}
+        alt={arquivo.arquivo}
+        style={{
+          width: 132,
+          height: 84,
+          objectFit: "cover",
+          objectPosition: "top left",
+          borderRadius: 6,
+          border: "1px solid var(--dp-border)",
+        }}
+      />
+    </a>
+  );
+}
+
 function PopupAjuste({ linha, lancado, aoFechar }) {
   const { exec, erro: erroExec } = useExecucaoDoLancamento(lancado, fmtData(linha.date_ref));
   const { arquivos: provas, erro: erroProva } = useProvaDoRun(exec?.run_id, lancado?.quandoISO);

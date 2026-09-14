@@ -15,6 +15,7 @@ import Ocorrencias from "./abas/Ocorrencias";
 import Motorista from "./abas/Motorista";
 import Importacoes from "./abas/Importacoes";
 import Config from "./abas/Config";
+import RoboNoTopo from "./RoboNoTopo";
 
 // A aparencia segue a FERRAMENTA (Sistemas/PONTO/app/ui), nao o visual do INOVE:
 // topbar enxuta com abas de texto, fundo cinza, tabela densa. Quem usa o DP passa o
@@ -75,6 +76,10 @@ export default function DP360Cluster() {
             </NavLink>
           ))}
         </nav>
+
+        {/* O ROBÔ FICA NA BARRA, não dentro de uma aba: quem dispara na Revisão sai
+            para as Ocorrências enquanto espera, e a pergunta "já acabou?" viaja junto. */}
+        <RoboNoTopo />
       </div>
 
       <Conteudo />

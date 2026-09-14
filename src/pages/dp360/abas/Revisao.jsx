@@ -39,6 +39,7 @@ import {
   lerTudoDP360,
   upsertDP360,
 } from "../../../services/dp360Api";
+import { useVigiaDoRobo } from "../roboVigia";
 import { RAIO_LOCAL, RAIO_VEIC } from "../regrasGps";
 import { COLUNAS_INDICE_DATAS, datasComPonto } from "../regrasDia";
 import {
@@ -1195,6 +1196,48 @@ const COLUNAS_GORDURA_GPS = [
  * `status` nasce `disparado` de propósito: o robô foi mandado e ninguém abriu a
  * evidência. Não é "gerado" nem "lancado" — é o meio do caminho, e a tela diz isso.
  */
+/**
+ * O ESTADO DE UM LANÇAMENTO NÃO É O DISPARO — É O DESFECHO.
+ *
+ * `ponto_importacoes.status` nasce `disparado` e nunca muda: ele registra que alguém
+ * mandou, não que deu certo. Pintar AJUSTADO verde a partir dele é dizer "resolvido"
+ * enquanto o robô ainda está abrindo o Transnet — ou depois de ele ter falhado no meio.
+ * Foi o que o dono viu: "ele tá ajustando quando dispara o bot e não no final".
+ *
+ * Quem sabe o desfecho é o run do GitHub, e o gateway já lê isso (`robo_status`). Então o
+ * estado de cada linha sai da conjunção dos dois:
+ *
+ *   rodando   o run existe e ainda não terminou  -> âmbar, e o dia NÃO sai da fila
+ *   ajustado  terminou com `success`             -> verde, e sai da fila
+ *   falhou    terminou de outro jeito            -> vermelho, e VOLTA para a fila
+ *
+ * O casamento é por HORA: o disparo grava `importado_em` logo antes de pedir o run, então
+ * o run daquele lançamento é o que começou por perto. A janela de 15 min é folgada de
+ * propósito — o GitHub leva segundos para registrar o começo.
+ *
+ * SEM RUN VALE COMO AJUSTADO, e isso é deliberado: a leitura só alcança as últimas horas,
+ * e todo lançamento de ontem ficaria sem par. Sem o run não dá para afirmar que falhou —
+ * pintar de vermelho um dia antigo que deu certo é pior do que não dizer nada.
+ */
+const ESTADO_LANCAMENTO = {
+  rodando: { texto: "robô rodando", tom: "warn" },
+  ajustado: { texto: "AJUSTADO", tom: "ok" },
+  falhou: { texto: "robô falhou", tom: "danger" },
+};
+
+function estadoDoLancamento(lancado, runs) {
+  if (!lancado) return null;
+  const quando = Date.parse(lancado.quandoISO || "");
+  if (!Number.isFinite(quando)) return "ajustado";
+  const perto = (runs || [])
+    .map((r) => ({ r, dt: Math.abs(Date.parse(String(r.comecou_em || "")) - quando) }))
+    .filter((x) => Number.isFinite(x.dt) && x.dt <= 15 * 60000)
+    .sort((a, b) => a.dt - b.dt)[0];
+  if (!perto) return "ajustado";
+  if (String(perto.r.status || "") !== "completed") return "rodando";
+  return String(perto.r.conclusao || "") === "success" ? "ajustado" : "falhou";
+}
+
 function lancamentoDaLinha(x) {
   return {
     quando: fmtDataHora(x.importado_em),
@@ -1323,7 +1366,64 @@ function useProvaDoRun(runId, quandoISO) {
  * A URL já vem assinada pela Edge Function e vale pouco tempo: o bucket é privado porque
  * cada print tem nome, crachá e horário de gente.
  */
-function ProvaArquivo({ arquivo }) {
+/**
+ * A LUPA: a prova abre NA TELA, não numa aba nova.
+ *
+ * Aba nova tira o DP do caso que ele estava lendo e, na volta, ele perde o lugar. E a URL
+ * é assinada e de vida curta — na aba solta ela vira um link que expira sozinho e parece
+ * defeito. Aqui a foto fecha no Esc e no clique fora, como todo pop-up desta tela.
+ */
+function Lupa({ arquivo, aoFechar }) {
+  useEffect(() => {
+    const escapa = (e) => e.key === "Escape" && aoFechar();
+    document.addEventListener("keydown", escapa);
+    return () => document.removeEventListener("keydown", escapa);
+  }, [aoFechar]);
+
+  return (
+    <div
+      className="rv-overlay rv-overlay-alto"
+      role="dialog"
+      aria-modal="true"
+      aria-label={arquivo.arquivo}
+      onMouseDown={(e) => e.target === e.currentTarget && aoFechar()}
+      style={{ alignItems: "center" }}
+    >
+      <div className="dp-card rv-box" style={{ maxWidth: "min(96vw, 1400px)" }}>
+        <header className="rv-head" style={{ alignItems: "center", gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <b style={{ fontSize: 13 }}>{arquivo.arquivo}</b>
+            <div className="dp-faint" style={{ fontSize: 11.5 }}>
+              {arquivo.robo} · {Math.max(1, Math.round((arquivo.bytes || 0) / 1024))} KB
+            </div>
+          </div>
+          <a href={arquivo.url} target="_blank" rel="noreferrer" className="dp-btn" style={{ fontSize: 12 }}>
+            abrir em tamanho real ↗
+          </a>
+          <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar">
+            <X size={14} />
+          </button>
+        </header>
+        <div className="rv-corpo" style={{ padding: 12, textAlign: "center" }}>
+          <img
+            src={arquivo.url}
+            alt={arquivo.arquivo}
+            style={{ maxWidth: "100%", borderRadius: 6, border: "1px solid var(--dp-border)" }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * UM ARQUIVO DE PROVA: miniatura se for imagem, link nomeado se não for.
+ *
+ * O que os bots sobem não é sempre foto — o `comunicado` guarda o HTML da tela e o
+ * `ocorrencias`, o CSV do lote. Miniatura de um CSV seria um retângulo cinza; o nome e o
+ * tamanho dizem mais.
+ */
+function ProvaArquivo({ arquivo, aoAmpliar }) {
   if (!arquivo?.url) {
     return <span className="dp-faint" style={{ fontSize: 11.5 }}>{arquivo?.arquivo}</span>;
   }
@@ -1336,7 +1436,12 @@ function ProvaArquivo({ arquivo }) {
     );
   }
   return (
-    <a href={arquivo.url} target="_blank" rel="noreferrer" title={arquivo.arquivo}>
+    <button
+      type="button"
+      onClick={() => aoAmpliar(arquivo)}
+      title={`${arquivo.arquivo} — clique para ampliar`}
+      style={{ border: 0, background: "none", padding: 0, cursor: "zoom-in", lineHeight: 0 }}
+    >
       <img
         src={arquivo.url}
         alt={arquivo.arquivo}
@@ -1349,11 +1454,12 @@ function ProvaArquivo({ arquivo }) {
           border: "1px solid var(--dp-border)",
         }}
       />
-    </a>
+    </button>
   );
 }
 
 function PopupAjuste({ linha, lancado, aoFechar }) {
+  const [ampliada, setAmpliada] = useState(null);
   const { exec, erro: erroExec } = useExecucaoDoLancamento(lancado, fmtData(linha.date_ref));
   const { arquivos: provas, erro: erroProva } = useProvaDoRun(exec?.run_id, lancado?.quandoISO);
   const transnet = String(exec?.dp360_auditoria?.detalhe?.transnet_usuario ?? "").trim();
@@ -1481,7 +1587,7 @@ function PopupAjuste({ linha, lancado, aoFechar }) {
               {provas.length ? (
                 <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   {provas.map((a) => (
-                    <ProvaArquivo key={a.caminho} arquivo={a} />
+                    <ProvaArquivo key={a.caminho} arquivo={a} aoAmpliar={setAmpliada} />
                   ))}
                 </span>
               ) : (
@@ -1496,6 +1602,7 @@ function PopupAjuste({ linha, lancado, aoFechar }) {
           </div>
         </div>
       </div>
+      {ampliada && <Lupa arquivo={ampliada} aoFechar={() => setAmpliada(null)} />}
     </div>
   );
 }
@@ -1514,6 +1621,10 @@ export default function Revisao() {
   const [lancados, setLancados] = useState({});
   // o pop-up do "clique para saber o ajuste"
   const [verAjuste, setVerAjuste] = useState(false);
+  // Os runs recentes do robô — é deles que sai o DESFECHO de cada lançamento. A
+  // leitura é a MESMA que o aviso do topo usa (`roboVigia`): uma consulta ao GitHub
+  // serve as duas, e as duas dizem a mesma coisa ao mesmo tempo.
+  const runs = useVigiaDoRobo();
   const [gpsPorCracha, setGpsPorCracha] = useState({});
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
@@ -1708,6 +1819,11 @@ export default function Revisao() {
 
   useEffect(() => carregarDia(), [carregarDia]);
 
+  const estadoDe = useCallback(
+    (l) => estadoDoLancamento(lancados[chaveDia(l.cracha, l.date_ref)], runs),
+    [lancados, runs],
+  );
+
   /* ---- contagens e filtro ---- */
   /**
    * RESOLVIDO = OK **OU** JÁ AJUSTADO.
@@ -1723,8 +1839,10 @@ export default function Revisao() {
   const jaResolvido = useCallback(
     (l) =>
       String(l.status_ponto ?? "").toUpperCase() === "OK" ||
-      !!lancados[chaveDia(l.cracha, l.date_ref)],
-    [lancados],
+      // Só conta como resolvido o que o robô TERMINOU BEM: o que falhou tem de voltar
+      // para a fila, e o que ainda está rodando não é resultado de coisa nenhuma.
+      estadoDe(l) === "ajustado",
+    [estadoDe],
   );
 
   const contagens = useMemo(() => {
@@ -1789,9 +1907,22 @@ export default function Revisao() {
     return visiveis.filter((l) => alvo.has(chaveDia(l.cracha, l.date_ref)));
   }, [visiveis, selIds]);
 
+  /* O LOTE só barra quem já foi ajustado DE VERDADE — ou quem está no meio do caminho.
+     O dia cujo robô falhou precisa poder ser lançado de novo; barrá-lo pelo registro do
+     disparo deixaria a correção presa sem ninguém entender por quê. */
+  const travados = useMemo(() => {
+    const m = {};
+    for (const l of linhas) {
+      const k = chaveDia(l.cracha, l.date_ref);
+      const e = estadoDoLancamento(lancados[k], runs);
+      if (e === "ajustado" || e === "rodando") m[k] = lancados[k];
+    }
+    return m;
+  }, [linhas, lancados, runs]);
+
   const loteAjuste = useMemo(
-    () => montarLoteAjuste(marcadas, casos, bloqueios, lancados),
-    [marcadas, casos, bloqueios, lancados],
+    () => montarLoteAjuste(marcadas, casos, bloqueios, travados),
+    [marcadas, casos, bloqueios, travados],
   );
 
   /* ---- releitura de UMA linha depois de gravar ----
@@ -1877,7 +2008,8 @@ export default function Revisao() {
             ...col,
             valor: (l) => {
               const s = String(l.status_ponto ?? "").trim();
-              if (lancados[chaveDia(l.cracha, l.date_ref)]) return `AJUSTADO (${s})`;
+              const e = ESTADO_LANCAMENTO[estadoDe(l)];
+              if (e) return `${e.texto} (${s})`;
               return pontoConferido(casos[chaveDia(l.cracha, l.date_ref)]) ? `${s} · conferido` : s;
             },
             render: (l) => {
@@ -1886,12 +2018,13 @@ export default function Revisao() {
                  lançado ele já não é o que interessa na varredura — interessa que este
                  dia está resolvido. Ele não se perde: continua no title e no CSV. */
               const lancado = lancados[chaveDia(l.cracha, l.date_ref)];
-              if (lancado) {
+              const estado = ESTADO_LANCAMENTO[estadoDe(l)];
+              if (lancado && estado) {
                 return (
                   <Pilula
-                    texto="AJUSTADO"
-                    tom="ok"
-                    titulo={`O robô lançou a correção deste cartão em ${lancado.quando}. Era ${l.status_ponto || "—"}. Abra a linha para ver o que foi lançado.`}
+                    texto={estado.texto}
+                    tom={estado.tom}
+                    titulo={`Disparado em ${lancado.quando}. Era ${l.status_ponto || "—"}. Abra a linha para ver o que foi lançado.`}
                   />
                 );
               }
@@ -1992,7 +2125,7 @@ export default function Revisao() {
           },
         };
       }),
-    [bloqueios, casos, gpsPorCracha, gravarCampoSug],
+    [bloqueios, casos, gpsPorCracha, gravarCampoSug, lancados, estadoDe],
   );
 
   /* ═══════════════════ AVISO AO TRABALHADOR (o robô do Transnet) ═══════════════════
@@ -2440,8 +2573,11 @@ export default function Revisao() {
              selo diria "está resolvido" e pararia aí — e a primeira pergunta de quem lê
              isso é o que foi lançado. */
           statusSelo={
-            lancados[chaveDia(aberta.cracha, aberta.date_ref)] ? (
-              <Pilula texto="AJUSTADO" tom="ok" />
+            ESTADO_LANCAMENTO[estadoDe(aberta)] ? (
+              <Pilula
+                texto={ESTADO_LANCAMENTO[estadoDe(aberta)].texto}
+                tom={ESTADO_LANCAMENTO[estadoDe(aberta)].tom}
+              />
             ) : undefined
           }
           selos={

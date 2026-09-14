@@ -317,7 +317,13 @@
 }
 .dp360 .dp-cal-row {
   display: grid;
-  grid-template-columns: 34px minmax(200px, 1.3fr) repeat(7, 1fr) 74px;
+  /* O NOME É A COLUNA, NÃO O DIA. Eram 1,3fr para o colaborador contra 7fr para a
+     semana: o nome batia no piso de 200px e os sete dias ficavam com ~155px cada, largos
+     demais para o que carregam (um rótulo curto, que já corta com reticências e tem o
+     texto inteiro no title). Agora a semana cede espaço para quem se está lendo.
+     `minmax(0, 1fr)` nos dias: sem isso um rótulo comprido ("32-AGUARDANDO SENTENCA")
+     empurra a coluna pelo min-content e desfaz o aperto. */
+  grid-template-columns: 34px minmax(300px, 2.6fr) repeat(7, minmax(0, 1fr)) 74px;
   align-items: center;
   grid-auto-rows: 34px;
 }
@@ -366,6 +372,12 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* O NOME É O ÚLTIMO A CEDER. Ele era o único item encolhível da célula (todo o resto é
+     `flex: none`), então quando o selo de situação era comprido — "⚠ EM ANDAMENTO" — o
+     nome ia a ZERO e a linha ficava identificada só pelo crachá. Quem dá lugar agora é o
+     selo; o nome tem piso. */
+  flex: 1 1 auto;
+  min-width: 7ch;
 }
 .dp360 .dp-cal-nome .reg {
   font-size: 11px;
@@ -388,8 +400,11 @@
   color: var(--dp-warn-ink);
   padding: 1px 8px;
   border-radius: 6px;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .dp360 .dp-cal-nome .desl {
   font-size: 11px;

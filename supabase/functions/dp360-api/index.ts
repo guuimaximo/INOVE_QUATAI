@@ -1181,6 +1181,69 @@ serve(async (req: Request) => {
 
      Devolve o que a tela precisa dizer numa linha: nome do workflow, status,
      conclusao, quando comecou, quem disparou e o link do run.                  */
+  /* ── robo_log: O QUE O ROBO ESTA DIZENDO AGORA (14/09/2026) ───────────────
+     O dono, vendo o painel do lote parado em "esperando": "mas nao fica atualizando
+     cada um em tempo real?".
+
+     Fica — e sem tocar no bot. Ele JA imprime uma linha por caso enquanto trabalha
+     ("[bot_ponto]  VERIFICAR  30060250 2026-09-05: subiu | esperado [...]"), e o
+     GitHub serve o log de um job EM ANDAMENTO. Entao a tela le o que ele esta
+     escrevendo, em vez de esperar o `sc.gravar_caso` do fim.
+
+     SOMENTE LEITURA, e do MESMO repo do robo. Devolve so o FIM do log: o arquivo passa
+     de megabyte e a tela so precisa do que aconteceu desde a ultima olhada.
+
+     O DOWNLOAD E EM DOIS PASSOS de proposito. O GitHub responde 302 para uma URL
+     assinada do storage dele; seguir o redirecionamento com o `Authorization` junto
+     manda o nosso token para outro dominio — e alguns storages recusam a requisicao
+     por causa disso. Entao: `redirect: "manual"`, e o segundo pedido vai limpo.      */
+  if (acao === "robo_log") {
+    const token = tokenGitHub();
+    if (!token) return json({ ok: true, texto: "", nota: "robô não configurado nesta função" });
+    const run = String(corpo.run_id ?? "").replace(/[^0-9]/g, "");
+    if (!run) return json({ ok: false, error: "run inválido" }, 400);
+    const dono = Deno.env.get("DP360_GITHUB_OWNER") ?? "guuimaximo";
+    const repo = Deno.env.get("DP360_GITHUB_REPO") ?? "DP360";
+    const MAX = 120_000;
+    try {
+      const jobs = await githubJson(
+        `https://api.github.com/repos/${dono}/${repo}/actions/runs/${run}/jobs?per_page=10`,
+        token,
+      );
+      const lista = Array.isArray(jobs?.jobs) ? jobs.jobs : [];
+      // O que interessa e o job que esta trabalhando; sem nenhum em curso, o ultimo.
+      const job = lista.find((j: Record<string, unknown>) => String(j?.status ?? "") === "in_progress")
+        ?? lista[lista.length - 1];
+      if (!job?.id) return json({ ok: true, texto: "", nota: "o run ainda não tem job" });
+
+      const r = await fetch(
+        `https://api.github.com/repos/${dono}/${repo}/actions/jobs/${job.id}/logs`,
+        { headers: cabecalhoGitHub(token), redirect: "manual" },
+      );
+      let texto = "";
+      if (r.status >= 300 && r.status < 400) {
+        const destino = r.headers.get("location");
+        if (!destino) return json({ ok: true, texto: "", nota: "log sem destino" });
+        const arq = await fetch(destino); // SEM o nosso token: a URL ja vem assinada
+        if (!arq.ok) return json({ ok: true, texto: "", nota: `log indisponível (${arq.status})` });
+        texto = await arq.text();
+      } else if (r.ok) {
+        texto = await r.text();
+      } else {
+        // 404 enquanto o job nao comecou a escrever e o normal, nao e erro da tela.
+        return json({ ok: true, texto: "", nota: `log ainda não disponível (${r.status})` });
+      }
+      return json({
+        ok: true,
+        job: job.id,
+        status: String(job?.status ?? ""),
+        texto: texto.length > MAX ? texto.slice(-MAX) : texto,
+      });
+    } catch (error) {
+      return json({ ok: false, error: mensagemSegura(error) }, 502);
+    }
+  }
+
   if (acao === "robo_status") {
     const token = tokenGitHub();
     if (!token) return json({ ok: true, runs: [], nota: "robô não configurado nesta função" });

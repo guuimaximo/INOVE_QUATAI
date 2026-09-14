@@ -266,6 +266,22 @@ export function dispararRoboDP360(robo, inputs) {
  * do PC dispara sem passar por aqui. Somente leitura: é a resposta para "tem bot
  * mexendo no Transnet agora?", que a trilha do INOVE sozinha não sabe dar.
  */
+/**
+ * O LOG DO RUN, COMO ELE ESTÁ AGORA — inclusive com o robô no meio do trabalho.
+ *
+ * O bot imprime uma linha por caso enquanto anda; o GitHub serve o log de um job em
+ * andamento; então a tela não precisa esperar o robô terminar para dizer em quem ele está.
+ * Vem só o FIM do arquivo: o log passa de megabyte e o que interessa é o que ele escreveu
+ * desde a última olhada.
+ *
+ * Log indisponível devolve texto VAZIO em vez de erro. Nos primeiros segundos do run ele
+ * não existe mesmo, e isso não é defeito: é cedo.
+ */
+export async function logRoboDP360(runId) {
+  const dados = await chamar({ action: "robo_log", run_id: runId });
+  return String(dados.texto || "");
+}
+
 export async function statusRoboDP360(horas = 6) {
   const dados = await chamar({ action: "robo_status", horas });
   return dados.runs || [];

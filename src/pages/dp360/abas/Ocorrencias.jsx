@@ -33,6 +33,7 @@ import TabelaDP from "../TabelaDP";
 import {
   dispararRoboDP360,
   lerDP360,
+  logRoboDP360,
   lerTudoDP360,
   statusRoboDP360,
   upsertDP360,
@@ -1702,6 +1703,45 @@ async function conferidosDepoisDoRobo(lista) {
   return { porCaso, feitos, faltaram };
 }
 
+/* ── O QUE O ROBÔ ESTÁ DIZENDO, CASO A CASO, AGORA ────────────────────────────
+   O bot imprime uma linha por caso enquanto trabalha:
+
+     [bot_ponto]     VERIFICAR  30060250 2026-09-05: subiu | esperado [...] ao vivo [...]
+     [bot_ponto]      CORRIGIR  30060284 2026-08-19: dia ja marcado como PONTO FECHADO
+     [bot_ponto]            OK  30060951 2026-09-06: resultado confirmado -> dia encerrado.
+
+   É daí que sai o tempo real. A tela NÃO reescreve essas frases: ela mostra a do robô,
+   que é a única que sabe o que está acontecendo naquele segundo. O rótulo à esquerda dá
+   o tom (OK verde, CORRIGIR e PENDENTE âmbar, VERIFICAR neutro) e nada mais.
+
+   Ler o log em vez de mexer no bot foi deliberado: o bot roda na máquina do DP também, e
+   o que está de pé lá não pode quebrar por causa de uma tela. */
+const RE_LOG_CASO =
+  /\[bot_[a-z_]+\]\s+([A-Za-zÇÃÕ-]+)\s{2,}(\d{6,8})\s+(\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4})\s*:\s*(.+)/;
+
+const TOM_DO_PASSO = { OK: "ok", CORRIGIR: "warn", PENDENTE: "warn", VERIFICAR: "mute" };
+
+export function lerLogDoBot(texto) {
+  const mapa = new Map();
+  for (const bruto of String(texto || "").split(/\r?\n/)) {
+    const m = RE_LOG_CASO.exec(bruto);
+    if (!m) continue;
+    const [, passo, cracha, data, frase] = m;
+    const dia = data.includes("/")
+      ? `${data.slice(6, 10)}-${data.slice(3, 5)}-${data.slice(0, 2)}`
+      : data;
+    // A ÚLTIMA palavra do robô sobre aquele caso vence: ele fala mais de uma vez sobre o
+    // mesmo dia (verifica, corrige, reconfere) e o que vale é onde ele parou.
+    mapa.set(`${cra8(cracha)}|${dia}`, {
+      passo,
+      tom: TOM_DO_PASSO[passo.toUpperCase()] || "mute",
+      // a frase do robô inteira não cabe na coluna; o começo dela é o que diz o estado
+      frase: frase.split(" | ")[0].trim(),
+    });
+  }
+  return mapa;
+}
+
 /**
  * O PAINEL DO LOTE — "enquanto ele tiver rodando eu quero um pop-up na tela mostrando
  * cada um" (dono, 14/09/2026).
@@ -1710,12 +1750,17 @@ async function conferidosDepoisDoRobo(lista) {
  * minutos. Um recado de uma linha no topo não dá conta: quem mandou oito casos quer ver os
  * oito, e quer saber qual dos oito não passou.
  *
- * O QUE ELE NÃO FAZ, E POR QUÊ. As linhas não acendem uma a uma enquanto o robô trabalha.
- * Não é escolha de tela: o `executar_decisoes` junta tudo e grava UMA vez no fim
- * (`sc.gravar_caso(rows)`), então antes disso não existe, em lugar nenhum, o dado de que o
- * terceiro caso já passou. Fingir progresso com uma barra que anda sozinha seria inventar.
- * Então durante o run as linhas ficam honestamente em "esperando o robô", o cabeçalho
- * mostra onde ele está de verdade (fila do GitHub · rodando no Transnet) e o relógio anda.
+ * AS LINHAS ACENDEM UMA A UMA, e a fonte disso não é o banco — é o LOG. O
+ * `executar_decisoes` junta tudo e grava uma vez só no fim (`sc.gravar_caso(rows)`), então
+ * pelo banco não dá mesmo para saber que o terceiro caso já passou. Mas o bot IMPRIME cada
+ * passo enquanto anda, e o GitHub serve o log de um job em andamento: a tela lê de lá.
+ *
+ * SÃO DUAS FONTES, NESTA ORDEM. Enquanto o robô roda vale o log, que é o que está
+ * acontecendo agora e pode mudar no minuto seguinte. Quando ele termina vale o BANCO, que
+ * é o que ficou — e o banco sobrescreve o log, porque "estou corrigindo" não é desfecho.
+ *
+ * Log indisponível não quebra nada: as linhas ficam em "esperando o robô" e o resultado
+ * chega inteiro no fim, que era o comportamento antes desta leitura existir.
  *
  * FECHAR NÃO CANCELA NADA. O robô está no GitHub e não ouve esta tela; o painel é janela,
  * não controle. Por isso ele não trava a tela atrás dele enquanto roda — o DP pode fechar,
@@ -1723,6 +1768,7 @@ async function conferidosDepoisDoRobo(lista) {
  */
 function PainelExecucao({ execucao, aoFechar }) {
   const [agora, setAgora] = useState(() => Date.now());
+  const [aoVivo, setAoVivo] = useState(() => new Map());
   useEffect(() => {
     if (execucao?.fim) return undefined;
     const t = setInterval(() => setAgora(Date.now()), 1000);
@@ -1734,6 +1780,31 @@ function PainelExecucao({ execucao, aoFechar }) {
     document.addEventListener("keydown", esc);
     return () => document.removeEventListener("keydown", esc);
   }, [aoFechar]);
+
+  /* A LEITURA AO VIVO. De 8 em 8 segundos enquanto o robô está de pé — o bot leva alguns
+     segundos por caso, então mais rápido que isso só gastaria chamada para reler a mesma
+     linha. Para sozinha quando ele termina: daí em diante quem manda é o banco. */
+  const runId = execucao?.runId;
+  const acabou = Boolean(execucao?.fim);
+  useEffect(() => {
+    if (!runId || acabou) return undefined;
+    let vivo = true;
+    let timer = null;
+    const ler = async () => {
+      try {
+        const texto = await logRoboDP360(runId);
+        if (vivo && texto) setAoVivo(lerLogDoBot(texto));
+      } catch {
+        // log indisponível não é falha da execução: o robô segue, a tela só não narra
+      }
+      if (vivo) timer = window.setTimeout(ler, 8000);
+    };
+    ler();
+    return () => {
+      vivo = false;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [runId, acabou]);
 
   if (!execucao) return null;
   const { casos, onde, fim, painel, desde, porCaso, erro } = execucao;
@@ -1769,7 +1840,9 @@ function PainelExecucao({ execucao, aoFechar }) {
                 ? erro
                 : fim
                   ? `o robô terminou${fim === "success" ? "" : ` (${fim})`} em ${relogio}`
-                  : `${onde || "mandando o robô"}… o resultado de cada um só existe quando ele termina`}
+                  : `${onde || "mandando o robô"}${
+                      aoVivo.size ? ` · já passou por ${aoVivo.size} de ${casos.length}` : "…"
+                    }`}
             </div>
           </div>
           <button type="button" className="dp-btn" onClick={aoFechar} aria-label="Fechar">
@@ -1779,14 +1852,22 @@ function PainelExecucao({ execucao, aoFechar }) {
 
         <div className="rv-corpo" style={{ padding: "4px 0" }}>
           {casos.map((c) => {
-            const d = DESFECHO_CASO[porCaso?.get(c.chave)?.estado || "esperando"];
+            /* O BANCO MANDA quando existe; até lá, a palavra do robô; e antes de ele
+               falar deste caso, a espera. */
+            const fechado = porCaso?.get(c.chave);
+            const vivo = aoVivo.get(c.chave);
+            const d = fechado
+              ? DESFECHO_CASO[fechado.estado]
+              : vivo
+                ? { icone: vivo.tom === "ok" ? "✅" : vivo.tom === "warn" ? "⚙" : "👁", tom: vivo.tom, texto: vivo.frase }
+                : DESFECHO_CASO.esperando;
             return (
               <div key={c.chave} className="oc-exec-linha">
                 <span className={`oc-exec-ic ${d.tom}`}>{d.icone}</span>
                 <span className="oc-exec-nome" title={c.nome}>
                   {c.nome} <span className="dp-muted dp-num">· {c.dataBR}</span>
                 </span>
-                <span className={`oc-exec-est ${d.tom}`}>{d.texto}</span>
+                <span className={`oc-exec-est ${d.tom}`} title={d.texto}>{d.texto}</span>
               </div>
             );
           })}
@@ -4746,10 +4827,12 @@ export default function Ocorrencias() {
             .sort((a, b) => Date.parse(txt(b.comecou_em)) - Date.parse(txt(a.comecou_em)))[0];
       if (!meu) continue;
       if (txt(meu.status) !== "completed") {
-        if (txt(meu.status) !== visto) {
-          visto = txt(meu.status);
-          dizendo?.(visto === "queued" ? "na fila do GitHub" : "rodando no Transnet");
-        }
+        /* O ID VAI JUNTO, e não só quando o estado muda: é por ele que o painel lê o log
+           ao vivo, e o `run_id` do casamento do gateway às vezes não vem (o run pode não
+           ter nascido no instante do dispatch). Aqui ele já foi encontrado. */
+        const mudou = txt(meu.status) !== visto;
+        if (mudou) visto = txt(meu.status);
+        dizendo?.(mudou ? (visto === "queued" ? "na fila do GitHub" : "rodando no Transnet") : "", meu.id);
         continue;
       }
       return txt(meu.conclusao) || "sem_conclusao";
@@ -4827,6 +4910,7 @@ export default function Ocorrencias() {
         setSelIds([]);
         setExecucao({
           desde: t0,
+          runId: r?.execucao?.run_id || null,
           painel: r?.painel || "",
           onde: "mandando o robô",
           casos: lista.map((reg) => {
@@ -4842,9 +4926,11 @@ export default function Ocorrencias() {
            de alguém. */
         const fim = await esperarRun(
           { runId: r?.execucao?.run_id || null, robo: "ajustes", desde: t0 },
-          (onde) => {
-            setRecado(`⚙ Executando ${escopo} — ${onde}…${painel}`);
-            setExecucao((x) => (x ? { ...x, onde } : x));
+          (onde, idDoRun) => {
+            if (onde) setRecado(`⚙ Executando ${escopo} — ${onde}…${painel}`);
+            setExecucao((x) =>
+              x ? { ...x, ...(onde ? { onde } : {}), runId: x.runId || idDoRun || null } : x,
+            );
           },
         );
         setExecucao((x) => (x ? { ...x, fim, terminouEm: Date.now(), onde: "" } : x));

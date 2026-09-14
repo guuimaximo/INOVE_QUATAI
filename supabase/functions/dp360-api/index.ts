@@ -1222,7 +1222,13 @@ serve(async (req: Request) => {
     }
   }
 
-  const acoesDaProva = new Set(["robo_casar", "robo_artefatos", "robo_arquivar", "evidencia_url"]);
+  const acoesDaProva = new Set([
+    "robo_casar",
+    "robo_artefatos",
+    "robo_arquivar",
+    "evidencia_url",
+    "evidencia_run",
+  ]);
   if (acoesDaProva.has(acao)) {
     const token = tokenGitHub();
     const dono = Deno.env.get("DP360_GITHUB_OWNER") ?? "guuimaximo";
@@ -1265,6 +1271,83 @@ serve(async (req: Request) => {
             erro: a?.error ? String(a.error) : (a?.signedUrl ? null : "URL não emitida"),
           };
         }),
+      });
+    }
+
+    /* ── evidencia_run: A PROVA DE UM RUN, SEM TABELA NO MEIO ──────────────────
+       Desde 14/09/2026 o proprio bot sobe a foto para o bucket privado do BANCO DO
+       PONTO, assim que tira. Ele nao escreve linha nenhuma em `dp360_robo_evidencia` —
+       e nem precisa: o caminho no bucket ja carrega o `run_id`, e o run e o elo com o
+       disparo. Entao, para mostrar a prova de um lancamento, basta listar a pasta.
+
+       O CAMINHO E `ANO/MES/ROBO/RUN/arquivo`. A tela sabe o ano e o mes (do proprio
+       lancamento) e o run; o robo nao — por isso varre os quatro. Sao quatro listagens
+       de uma pasta pequena, e nenhuma consulta a banco.
+
+       POR QUE UM CLIENTE NOVO: o `dp360Admin` desta funcao aponta para o LAKE, que e
+       outro projeto. O bucket nasceu no banco do ponto justamente para a service key que
+       o bot carrega nao alcancar folha e RH. Sem `PONTO_SUPABASE_URL`/`_KEY` a acao
+       responde que nao esta configurada, em vez de devolver lista vazia — lista vazia
+       seria lida como "nao ha prova", que e o oposto.                                  */
+    if (acao === "evidencia_run") {
+      const run = String(corpo.run_id ?? "").replace(/[^0-9]/g, "");
+      const ano = String(corpo.ano ?? "").replace(/[^0-9]/g, "");
+      const mes = String(corpo.mes ?? "").replace(/[^0-9]/g, "").padStart(2, "0");
+      if (!run || ano.length !== 4 || mes.length !== 2) {
+        return json({ ok: false, error: "run, ano e mês são obrigatórios" }, 400);
+      }
+
+      const pontoUrl = Deno.env.get("PONTO_SUPABASE_URL") ?? "";
+      const pontoKey = Deno.env.get("PONTO_SUPABASE_KEY") ?? "";
+      if (!pontoUrl || !pontoKey) {
+        return json(
+          {
+            ok: false,
+            error:
+              "a prova não está configurada nesta função: faltam os secrets PONTO_SUPABASE_URL e PONTO_SUPABASE_KEY",
+          },
+          503,
+        );
+      }
+      const pontoAdmin = createClient(pontoUrl, pontoKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+
+      const achados: Record<string, unknown>[] = [];
+      for (const robo of ["ponto", "ajustes", "comunicado", "ocorrencias"]) {
+        const pasta = `${ano}/${mes}/${robo}/${run}`;
+        const { data: arquivos } = await pontoAdmin.storage
+          .from(BUCKET_EVIDENCIAS)
+          .list(pasta, { limit: 40 });
+        for (const a of arquivos ?? []) {
+          if (!a?.name) continue;
+          achados.push({
+            robo,
+            arquivo: a.name,
+            caminho: `${pasta}/${a.name}`,
+            bytes: Number((a as Record<string, any>)?.metadata?.size ?? 0),
+            tipo: String((a as Record<string, any>)?.metadata?.mimetype ?? ""),
+          });
+        }
+      }
+      if (!achados.length) return json({ ok: true, run, arquivos: [] });
+
+      const { data: assinadas, error: erroUrl } = await pontoAdmin.storage
+        .from(BUCKET_EVIDENCIAS)
+        .createSignedUrls(achados.map((a) => String(a.caminho)), SEGUNDOS_URL_ASSINADA);
+      if (erroUrl) return json({ ok: false, error: erroUrl.message }, 502);
+      const porCaminho = new Map<string, Record<string, unknown>>();
+      for (const a of (assinadas ?? []) as Record<string, unknown>[]) {
+        porCaminho.set(String(a.path), a);
+      }
+      return json({
+        ok: true,
+        run,
+        expira_em_s: SEGUNDOS_URL_ASSINADA,
+        arquivos: achados.map((a) => ({
+          ...a,
+          url: (porCaminho.get(String(a.caminho))?.signedUrl as string) ?? null,
+        })),
       });
     }
 

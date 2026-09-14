@@ -32,7 +32,7 @@ import CartaoDoDia, {
   temSugestaoUtil,
 } from "../CartaoDoDia";
 import {
-  dispararEvidenciaUrl,
+  evidenciasDoRun,
   dispararRoboDP360,
   inserirDP360,
   lerDP360,
@@ -1277,69 +1277,40 @@ function useExecucaoDoLancamento(lancado, diaBR) {
   return { exec, erro };
 }
 
-/** As fotos que o robô tirou, já copiadas para o nosso banco. */
-function useFotos(execucaoId) {
-  const [fotos, setFotos] = useState([]);
-  useEffect(() => {
-    let vivo = true;
-    setFotos([]);
-    if (!execucaoId) return undefined;
-    supabase
-      .from("dp360_robo_evidencia")
-      .select("id, arquivo, rotulo, cracha")
-      .eq("execucao_id", execucaoId)
-      .limit(12)
-      .then(({ data }) => {
-        if (vivo) setFotos(data || []);
-      });
-    return () => {
-      vivo = false;
-    };
-  }, [execucaoId]);
-  return fotos;
-}
-
 /**
- * A MINIATURA DA PROVA. O bucket é privado — nenhum navegador lê direto. A URL vem
- * assinada pela Edge Function, que já exige sessão do INOVE e nível Administrador, e vale
- * pouco tempo de propósito: prova de gente não fica em link aberto por aí.
+ * A PROVA DO RUN, DIRETO DO BUCKET.
+ *
+ * Não passa por `dp360_robo_evidencia`: desde 14/09/2026 o próprio bot sobe o arquivo
+ * assim que o produz, e não escreve linha nenhuma — o `run_id` no caminho já é o elo com
+ * o disparo. Tabela no meio seria um terceiro lugar para a mesma verdade ficar
+ * desatualizada.
+ *
+ * O que sobe não é sempre foto: o `comunicado` guarda o HTML da tela e o `ocorrencias`, o
+ * CSV do lote. Por isso a lista mostra miniatura para imagem e um link nomeado para o
+ * resto — em vez de tentar desenhar um CSV.
  */
-function FotoEvidencia({ evidencia }) {
-  const [url, setUrl] = useState("");
+function useProvaDoRun(runId, quandoISO) {
+  const [arquivos, setArquivos] = useState([]);
   const [erro, setErro] = useState("");
   useEffect(() => {
     let vivo = true;
-    dispararEvidenciaUrl(evidencia.id)
-      .then((u) => vivo && setUrl(u))
-      .catch((e) => vivo && setErro(e?.message || "não deu para abrir"));
+    setArquivos([]);
+    setErro("");
+    const d = new Date(quandoISO || "");
+    if (!runId || Number.isNaN(d.getTime())) return undefined;
+    evidenciasDoRun(runId, d.getFullYear(), d.getMonth() + 1)
+      .then((lista) => vivo && setArquivos(lista))
+      .catch((e) => vivo && setErro(e?.message || "não deu para listar a prova"));
     return () => {
       vivo = false;
     };
-  }, [evidencia.id]);
-
-  if (erro) return <span className="dp-faint" style={{ fontSize: 11.5 }}>{erro}</span>;
-  if (!url) return <span className="dp-faint" style={{ fontSize: 11.5 }}>abrindo…</span>;
-  return (
-    <a href={url} target="_blank" rel="noreferrer" title={evidencia.rotulo || evidencia.arquivo}>
-      <img
-        src={url}
-        alt={evidencia.rotulo || evidencia.arquivo}
-        style={{
-          width: 132,
-          height: 84,
-          objectFit: "cover",
-          objectPosition: "top left",
-          borderRadius: 6,
-          border: "1px solid var(--dp-border)",
-        }}
-      />
-    </a>
-  );
+  }, [runId, quandoISO]);
+  return { arquivos, erro };
 }
 
 function PopupAjuste({ linha, lancado, aoFechar }) {
   const { exec, erro: erroExec } = useExecucaoDoLancamento(lancado, fmtData(linha.date_ref));
-  const fotos = useFotos(exec?.id);
+  const { arquivos: provas, erro: erroProva } = useProvaDoRun(exec?.run_id, lancado?.quandoISO);
   const transnet = String(exec?.dp360_auditoria?.detalhe?.transnet_usuario ?? "").trim();
 
   useEffect(() => {
@@ -1461,20 +1432,20 @@ function PopupAjuste({ linha, lancado, aoFechar }) {
                 dias; o que aparece aqui é a CÓPIA já guardada no nosso bucket privado.
                 Enquanto ninguém arquivou, o pop-up diz isso — e oferece arquivar, que é a
                 mesma ação da tela de Evidências. */}
-            <Linha rotulo="A foto do Transnet">
-              {fotos.length ? (
-                <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}>
-                  {fotos.map((f) => (
-                    <FotoEvidencia key={f.id} evidencia={f} />
+            <Linha rotulo="A prova do Transnet">
+              {provas.length ? (
+                <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  {provas.map((a) => (
+                    <ProvaArquivo key={a.caminho} arquivo={a} />
                   ))}
                 </span>
-              ) : exec?.id ? (
-                <span className="dp-faint" style={{ fontSize: 12 }}>
-                  ainda não foi copiada para o nosso banco — ela vive no run do GitHub e
-                  some em 30 dias. Arquive na tela de <b>Evidências</b>.
-                </span>
               ) : (
-                <span className="dp-faint" style={{ fontSize: 12 }}>—</span>
+                <span className="dp-faint" style={{ fontSize: 12 }}>
+                  {erroProva ||
+                    (exec?.run_id
+                      ? "este run é anterior ao upload automático — a prova está só no artefato do GitHub, que expira em 30 dias"
+                      : "—")}
+                </span>
               )}
             </Linha>
           </div>

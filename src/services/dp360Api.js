@@ -223,6 +223,19 @@ export async function dispararEvidenciaUrl(id) {
   return item.url;
 }
 
+/**
+ * A prova de UM RUN, listada direto do bucket do banco do ponto.
+ *
+ * Desde 14/09/2026 o próprio bot sobe a foto assim que tira, e não escreve linha em
+ * tabela nenhuma — o `run_id` no caminho já é o elo com o disparo. Então para mostrar a
+ * prova basta listar a pasta daquele run, e é isso que o gateway faz (varrendo os quatro
+ * robôs, porque a tela sabe o run e o mês, mas não quem fez).
+ */
+export async function evidenciasDoRun(runId, ano, mes) {
+  const dados = await chamar({ action: "evidencia_run", run_id: runId, ano, mes });
+  return dados.arquivos || [];
+}
+
 export function dispararRoboDP360(robo, inputs) {
   // A credencial viaja no corpo da chamada, para o gateway — NUNCA como input do
   // workflow: o GitHub imprime os inputs no log da execução (medido neste projeto).

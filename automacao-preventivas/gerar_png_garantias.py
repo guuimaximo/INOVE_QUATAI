@@ -43,9 +43,9 @@ def S(n, **k):
 def build(D, png_path, hoje):
     hoje_d = hoje.date() if isinstance(hoje, datetime.datetime) else hoje
     gar = D.get('garantia', [])
-    pend = [g for g in gar if not g.get('done')]
-    feitos = [g for g in gar if g.get('done')]
-    prox = pend[0] if pend else None
+    pend = [g for g in gar if not g.get('done')]          # a chamar (revisao 60k se aproximando) + oleo vencido
+    feitos = [g for g in gar if g.get('done')]             # em dia (proxima revisao longe)
+    prox = next((g for g in pend if g.get('oleo_venc') is None), None)  # proxima chamada real (fora oleo)
 
     H1   = S('h1', fontName='Helvetica-Bold', fontSize=19, leading=22, textColor=INK)
     SUB  = S('sub', fontSize=8.8, leading=11, textColor=MUT)
@@ -90,8 +90,8 @@ def build(D, png_path, hoje):
         return t
     prox_txt = ('%s · %s' % (prox['veic'], prox['alvo'])) if prox else '—'
     kr = Table([[kpi(len(gar),'FROTA EM GARANTIA','veículos Euro6', INK),
-                 kpi(len(pend),'A PROGRAMAR','revisões pendentes', TEAL),
-                 kpi(len(feitos),'JÁ REALIZADAS','concluídas', OKG),
+                 kpi(len(pend),'A CHAMAR','próximas revisões', TEAL),
+                 kpi(len(feitos),'EM DIA','revisão 60k longe', OKG),
                  kpi(prox['alvo'] if prox else '—','PRÓXIMA CHAMADA', prox['veic'] if prox else '', WARN)]],
                colWidths=[PW/4]*4)
     kr.setStyle(TableStyle([('LEFTPADDING',(0,0),(-1,-1),3),('RIGHTPADDING',(0,0),(-1,-1),3),('VALIGN',(0,0),(-1,-1),'TOP')]))
@@ -136,7 +136,7 @@ def build(D, png_path, hoje):
     story += [bar]
 
     # ---- tabela ----
-    hdr = [Paragraph('VEÍCULO', THL), Paragraph('ODÔMETRO', TH), Paragraph('KM ATUALIZ.', TH),
+    hdr = [Paragraph('VEÍCULO', THL), Paragraph('ODÔMETRO', TH), Paragraph('ÓLEO FEITO (KM)', TH), Paragraph('KM ATUALIZ.', TH),
            Paragraph('REV.', TH), Paragraph('FALTA (KM)', TH), Paragraph('KM/DIA', TH),
            Paragraph('VENCE', TH), Paragraph('CHAMAR EM', TH), Paragraph('STATUS', TH)]
     data = [hdr]; styles = []
@@ -149,16 +149,19 @@ def build(D, png_path, hoje):
         except Exception:
             dias = 999
         oleo_v = g.get('oleo_venc') is not None
-        if done: stat_txt, stat_c, stat_bg = ('OK<br/><font size=5.3>OS %s</font>' % ('ABERTA' if g.get('os_aberta') else 'FECHADA')), OKG, OKBG
-        elif oleo_v: stat_txt, stat_c, stat_bg = 'CHAMAR JÁ<br/><font size=5.3>óleo vencido</font>', RED, REDBG
+        if oleo_v: stat_txt, stat_c, stat_bg = 'CHAMAR JÁ<br/><font size=5.3>óleo vencido</font>', RED, REDBG
+        elif done: stat_txt, stat_c, stat_bg = ('EM DIA<br/><font size=5.3>OS %s</font>' % ('ABERTA' if g.get('os_aberta') else 'FECHADA')), OKG, OKBG
         elif dias <= 3: stat_txt, stat_c, stat_bg = 'URGENTE', RED, REDBG
         elif dias <= 10: stat_txt, stat_c, stat_bg = 'PRÓXIMA', WARN, WARNBG
         else: stat_txt, stat_c, stat_bg = 'PROGRAMAR', MUT, SOFT
-        chamar = '—' if done else ('JÁ' if oleo_v else g['alvo'])
+        chamar = 'JÁ' if oleo_v else ('—' if done else g['alvo'])
         atr = g.get('km_atraso')
         kmupd_c = MUT if (atr is None or atr <= 1) else (WARN if atr <= 3 else RED)
+        oleo_km_txt = '{:,}'.format(g['oleo_km']).replace(',', '.') if g.get('oleo_km') else '—'
         data.append([Paragraph(g['veic'], TDB),
                      Paragraph('{:,}'.format(g['odom']).replace(',', '.'), TD),
+                     Paragraph(oleo_km_txt, S('ok', parent=TD, textColor=(RED if oleo_v else MUT),
+                               fontName=('Helvetica-Bold' if oleo_v else 'Helvetica'))),
                      Paragraph(g.get('km_upd','—'), S('ku', parent=TD, textColor=kmupd_c,
                                fontName=('Helvetica-Bold' if (atr or 0) > 3 else 'Helvetica'))),
                      Paragraph('%dk' % (g['milestone']//1000), TD),
@@ -168,10 +171,10 @@ def build(D, png_path, hoje):
                      Paragraph(chamar, S('c', parent=TD, fontName='Helvetica-Bold',
                                          textColor=(MUT if done else (RED if dias <= 3 else INK)))),
                      Paragraph(stat_txt, S('s', parent=TD, fontName='Helvetica-Bold', fontSize=6.0, leading=7.2, textColor=stat_c))])
-        styles.append(('BACKGROUND', (8,i), (8,i), stat_bg))
-        if done: styles.append(('BACKGROUND', (0,i), (7,i), colors.HexColor('#f7fbf8')))
-        elif i % 2 == 0: styles.append(('BACKGROUND', (0,i), (7,i), SOFT))
-    cw = [2.0*cm, 1.95*cm, 1.75*cm, 1.1*cm, 1.8*cm, 1.45*cm, 1.95*cm, 2.05*cm, 1.95*cm]
+        styles.append(('BACKGROUND', (9,i), (9,i), stat_bg))
+        if done: styles.append(('BACKGROUND', (0,i), (8,i), colors.HexColor('#f7fbf8')))
+        elif i % 2 == 0: styles.append(('BACKGROUND', (0,i), (8,i), SOFT))
+    cw = [1.9*cm, 1.85*cm, 1.85*cm, 1.6*cm, 1.0*cm, 1.7*cm, 1.35*cm, 1.85*cm, 1.9*cm, 1.9*cm]
     cw = [w * (PW/sum(cw)) for w in cw]
     tb = Table(data, colWidths=cw, repeatRows=1)
     tb.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#eef2f5')),
@@ -183,7 +186,7 @@ def build(D, png_path, hoje):
 
     leg = Paragraph('<font color="#c0392b"><b>URGENTE</b></font> = chamar em ≤3 dias &nbsp;·&nbsp; '
         '<font color="#b7791f"><b>PRÓXIMA</b></font> = ≤10 dias &nbsp;·&nbsp; '
-        '<font color="#1e9e63"><b>OK</b></font> = já realizada (<b>OS aberta</b> = feita, ainda não fechada no sistema · <b>OS fechada</b> = baixada). &nbsp; '
+        '<font color="#1e9e63"><b>EM DIA</b></font> = próxima revisão de 60k ainda longe — fez a última e não vence tão cedo. &nbsp; '
         '"Chamar em" já desconta o save de 500 km. Projeção pelo km/dia real de cada veículo. &nbsp; '
         '<b>KM Atualiz.</b> = último abastecimento que atualizou o odômetro daquele veículo '
         '(âmbar = 2-3 dias, vermelho = +3 dias sem leitura).', FOOT)
@@ -247,7 +250,7 @@ def montar_caption(D, hoje):
     else: sinal, txt = '🔴', '%d dias de defasagem' % atr
     linhas = ['<b>🛡️ GARANTIA EURO6 — %s</b>' % hoje.strftime('%d/%m/%Y'),
               '%s <b>KM atualizado até %s</b> (%s)' % (sinal, D.get('km_ref','—'), txt),
-              '🚌 %d na frota · <b>%d a programar</b> · %d já feitas' % (len(gar), len(pend), len(gar)-len(pend))]
+              '🚌 %d na frota · <b>%d a chamar</b> · %d em dia' % (len(gar), len(pend), len(gar)-len(pend))]
     if pend:
         linhas.append('')
         linhas.append('<b>Próximas chamadas:</b>')

@@ -237,11 +237,12 @@ export function montarProgramacao(cars, hoje = new Date()) {
   };
 }
 
-// ---------- GARANTIA (Euro6): revisão 60k na concessionária, save 500km ----------
-export const GAR_FEITOS = new Set([
-  "242522", "242520", "242517", "242514", "242505", "242513",
-]);
+// ---------- GARANTIA (Euro6): revisão de 60k na concessionária (60k/120k/180k), save 500km ----------
+// "EM DIA" (done) = a próxima revisão de 60k ainda está LONGE (chamar > HORIZON dias) e sem óleo
+// vencido. Só entra em "a chamar" quando se aproxima. NÃO depende de "fez há X dias" — o próprio
+// contador (via faltam) reflete quem fez. Óleo de motor vencido = chamar já (a revisão troca junto).
 const GAR_BUFFER = 500;
+const HORIZON_GAR_DIAS = 60;
 const addDias = (base, n) => {
   const d = new Date(base);
   d.setDate(d.getDate() + n);
@@ -254,20 +255,24 @@ export function montarGarantia(cars, hoje = new Date()) {
   const out = [];
   for (const c of cars.values()) {
     if (!c.gar || !c.kmdia || c.kmdia <= 0 || !c.odom) continue;
-    let faltam = null;
-    for (const id of CONCESS) {
-      const k = kmp(c, id);
-      if (k == null) continue;
-      const rk = -k; // faltam km
-      if (faltam == null || rk < faltam) faltam = rk;
-    }
-    if (faltam == null) continue;
-    const milestone = Math.round((c.odom + faltam) / 30000) * 30000;
+    const milestone = (Math.floor(c.odom / 60000) + 1) * 60000; // próxima revisão de 60k acima do odômetro
+    const faltam = milestone - c.odom;
+    if (faltam <= 0) continue;
     const venceD = faltam / c.kmdia;
     const alvoD = (faltam - GAR_BUFFER) / c.kmdia;
     const vence = addDias(base, Math.round(venceD));
     const alvo = addDias(base, Math.max(0, Math.round(alvoD)));
-    const done = GAR_FEITOS.has(c.veic);
+    // óleo de motor (726): a revisão da concessionária troca junto -> óleo vencido = chamar já
+    const k726 = kmp(c, "726");
+    const oleoVenc = k726 != null && k726 >= 0 ? Math.round(k726) : null;
+    const r726 = c.byplan["726"];
+    const oleoKm = r726 && num(r726.nr_hodometro) ? Math.round(num(r726.nr_hodometro)) : null;
+    // OS da revisão mais recente da concessionária: aberta (sem fechamento) ou fechada?
+    const a30 = fdate((c.byplan["2645"] || {}).dt_abertura_os);
+    const a60 = fdate((c.byplan["2646"] || {}).dt_abertura_os);
+    const codDone = a60 && (!a30 || a60 >= a30) ? "2646" : (a30 ? "2645" : null);
+    const osAberta = !!(codDone && !fdate((c.byplan[codDone] || {}).dt_fechamento_os));
+    const done = alvoD > HORIZON_GAR_DIAS && oleoVenc == null;
     out.push({
       veic: "046-" + c.veic,
       odom: Math.round(c.odom),
@@ -278,10 +283,18 @@ export function montarGarantia(cars, hoje = new Date()) {
       alvo: fmtBR(alvo),
       alvoSort: alvo.getTime(),
       done,
+      oleoVenc,
+      oleoKm,
+      osAberta,
     });
   }
-  // pendentes por data de chamada; feitos (OK) no fim
-  out.sort((a, b) => (a.done === b.done ? a.alvoSort - b.alvoSort : a.done ? 1 : -1));
+  // óleo vencido primeiro (chamar já); depois a chamar por data; em dia (done) no fim
+  out.sort((a, b) => {
+    const ao = a.oleoVenc == null, bo = b.oleoVenc == null;
+    if (ao !== bo) return ao ? 1 : -1;
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    return a.alvoSort - b.alvoSort;
+  });
   return out;
 }
 

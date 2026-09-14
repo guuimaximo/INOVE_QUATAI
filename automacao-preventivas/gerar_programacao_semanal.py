@@ -43,6 +43,7 @@ CONCESS     = {'2645', '2646'}                 # planos de garantia Euro6: 2645=
 # "OK/feito" da garantia agora eh AUTOMATICO: revisao da concessionaria aberta nos ultimos 60 dias
 # (ver montar()). Antes era a lista manual GAR_FEITOS, que ficava desatualizada.
 WINDOW_KM   = 3000                             # conciliacao de satelites na preventiva 10k
+HORIZON_GAR_DIAS = 60                           # garantia: so entra em "a chamar" se a revisao de 60k vem em <= N dias
 MECS        = ['ANDERSON', 'LUIZ H', 'MAURILIO']
 
 # id_plano -> rotulo curto
@@ -221,9 +222,6 @@ def montar(rows, hoje):
         milestone = (int(odom // 60000) + 1) * 60000     # proxima revisao de 60k acima do odometro
         faltam = milestone - odom                        # falta = milestone - odometro (ex.: 60000 - 59678 = 322)
         if faltam <= 0: continue
-        # "abriu o plano conta como feito": revisao da concessionaria ABERTA recente (ultimos 60 dias) = OK
-        ult_conc = max([d for d in (a30, a60) if d], default=None)
-        done = bool(ult_conc and (hoje - ult_conc).days <= 60)
         # a OS da revisao mais recente esta aberta (sem fechamento) ou ja foi fechada?
         cod_done = '2646' if (a60 and (a30 is None or a60 >= a30)) else ('2645' if a30 else None)
         os_aberta = bool(cod_done and not fdate((c['byplan'].get(cod_done) or {}).get('dt_fechamento_os')))
@@ -241,9 +239,14 @@ def montar(rows, hoje):
         # a garantia ja era pra ter sido chamada -> vira alerta no report de Garantia.
         ro = c['byplan'].get('726'); ko = num(ro['km_para_proxima']) if ro else None
         oleo_venc = int(ko) if (ko is not None and ko >= 0) else None
+        oleo_km = int(num(ro['nr_hodometro'])) if (ro and num(ro.get('nr_hodometro'))) else None  # odometro na ultima troca
+        # EM DIA (OK) = a proxima revisao de 60k ainda esta LONGE (data de chamar > HORIZON dias)
+        # E sem oleo vencido. So entra em "a chamar" quando a data se aproxima. NAO depende de
+        # "fez ha X dias" -> o proprio contador de 60k (via faltam) ja reflete quem fez a revisao.
+        done = alvo_d > HORIZON_GAR_DIAS and oleo_venc is None
         gar.append(dict(veic='046-'+c['veic'], odom=int(odom), milestone=milestone, falta=int(round(faltam)),
             kmdia=kd, vence=vence.strftime('%d/%m/%Y'), alvo=alvo.strftime('%d/%m/%Y'),
-            alvo_sort=alvo.isoformat(), done=done, os_aberta=os_aberta, oleo_venc=oleo_venc,
+            alvo_sort=alvo.isoformat(), done=done, os_aberta=os_aberta, oleo_venc=oleo_venc, oleo_km=oleo_km,
             km_upd=kmupd.strftime('%d/%m') if kmupd else '—', km_atraso=km_atraso))
     # feitos (OK) no fim; oleo vencido primeiro (chamar ja); depois por data de chamada
     gar.sort(key=lambda x: (x['done'], x.get('oleo_venc') is None, x['alvo_sort']))

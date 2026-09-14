@@ -4151,55 +4151,17 @@ export default function Ocorrencias() {
 
   // O recado do robô é DAQUELE caso: trocar de caso sem limpar faria o resultado de um
   // disparo aparecer no rodapé de outra pessoa.
-  /* ── O ROBÔ ESTÁ RODANDO? ENTÃO A TELA AVISA (09/09/2026, pedido do dono) ─────
-   * "Execução pendente" dizia que 63 casos esperavam o bot e a tela não dizia se o bot
-   * estava a caminho — e a saída natural de quem não sabe é clicar de novo, que no Transnet
-   * significa lançar duas vezes na ficha de alguém.
+  /* O AVISO DO ROBÔ SAIU DAQUI (14/09/2026, o dono: "não é para isso estar ali").
    *
-   * A fonte é a trilha do disparo (`dp360_robo_execucao`), gravada pelo gateway ANTES do
-   * POST no GitHub: `run_status` vem do run casado (queued · in_progress · completed) e
-   * `run_conclusao` do desfecho. Ela é do INOVE, não do lake.
+   * Ele nasceu nesta tela em 09/09 porque era o único lugar onde cabia: "execução
+   * pendente" dizia que 63 casos esperavam o bot e nada dizia se o bot estava a caminho.
+   * Só que a pergunta "tem robô rodando?" nunca foi das Ocorrências — ela é da DP360
+   * inteira, e um run cancelado do Comunicado ocupando duas linhas vermelhas no topo de
+   * quem está decidindo pedido de colaborador é ruído sobre assunto alheio.
    *
-   * HONESTIDADE DO STATUS: ele é o do momento do casamento e não se atualiza sozinho — por
-   * isso a faixa mostra a HORA do disparo e o link do run, em vez de afirmar "está rodando
-   * agora" com um dado que pode ter envelhecido. Sem trilha (ou sem permissão), some. */
-  const [execRobo, setExecRobo] = useState([]);
-  const lerExecucoes = useCallback(async () => {
-    /* DUAS FONTES, E A SEGUNDA É A QUE FALTAVA (09/09/2026, o dono: "não do INOVE, mas da
-     * ferramenta"). A trilha só conhece o que sai daqui; o robô também é disparado pelo app
-     * do PC, direto no GitHub. Para quem olha a fila tanto faz quem mandou — o que importa é
-     * se tem bot no Transnet agora. Então o GITHUB manda, e a trilha entra só para dizer
-     * QUEM disparou quando o run saiu daqui. */
-    const [trilha, runs] = await Promise.all([
-      supabase
-        .from("dp360_robo_execucao")
-        .select("id,robo,confirmar,disparado_em,autor_nome,run_id,run_url")
-        .gte("disparado_em", new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString())
-        .order("disparado_em", { ascending: false })
-        .limit(20)
-        .then((r) => r.data || [])
-        .catch(() => []),
-      statusRoboDP360(6).catch(() => []),
-    ]);
-    const porRun = new Map((trilha || []).map((x) => [String(x.run_id ?? ""), x]));
-    setExecRobo(
-      (runs || []).map((x) => {
-        const daqui = porRun.get(String(x.id ?? ""));
-        return {
-          id: x.id,
-          robo: x.nome || "robô",
-          confirmar: daqui ? daqui.confirmar : true,
-          disparado_em: x.comecou_em,
-          autor_nome: daqui?.autor_nome || (x.ator ? `${x.ator} (GitHub)` : ""),
-          daqui: Boolean(daqui),
-          run_url: x.url,
-          run_status: x.status,
-          run_conclusao: x.conclusao,
-        };
-      }),
-    );
-  }, []);
-  useEffect(() => { lerExecucoes(); }, [lerExecucoes, versao]);
+   * Agora ele mora na barra (`RoboNoTopo`), visível em todas as abas e alimentado pelo
+   * mesmo GitHub. Nada se perdeu: a gaveta de lá lista os runs recentes com desfecho,
+   * origem e link, que era tudo o que esta faixa dizia. */
 
   const abrir = (reg) => {
     setResultadoRobo(null);
@@ -4618,7 +4580,8 @@ export default function Ocorrencias() {
             " O resultado não volta sozinho: a prova fica no run." + (r?.painel ? ` ${r.painel}` : ""),
         );
         setSelIds([]);
-        await lerExecucoes();
+        // O aviso do robô ficava aqui e precisava ser relido à mão; agora ele é o do topo,
+        // que acorda sozinho no disparo (evento do `dp360Api`).
         await atualizarSilencioso();
       } catch (e) {
         setRecado(`Falhou: ${e?.message || "não foi possível disparar o robô."}`);
@@ -4626,7 +4589,7 @@ export default function Ocorrencias() {
         setDisparando(false);
       }
     },
-    [atualizarSilencioso, lerExecucoes],
+    [atualizarSilencioso],
   );
 
   /* ── CONFERÊNCIA: lê o cartão ao vivo, NÃO mexe no Transnet ────────────────
@@ -5606,35 +5569,6 @@ export default function Ocorrencias() {
           ) : null}
         </span>
       )}
-      {/* O ROBÔ A CAMINHO — antes do recado, porque muda o que a pessoa deve fazer agora. */}
-      {execRobo.map((x) => {
-        const rodando = ["queued", "in_progress"].includes(txt(x.run_status));
-        const falhou = txt(x.run_status) === "completed" && txt(x.run_conclusao) !== "success";
-        if (!rodando && !falhou) return null;
-        return (
-          <Selo
-            key={x.id}
-            cor={rodando ? "alerta" : "erro"}
-            quebra
-            titulo={
-              `Run #${x.id} do repo do robô, lido AGORA no GitHub — vale para qualquer origem, inclusive o que a ` +
-              "ferramenta do PC dispara sem passar pelo INOVE. Enquanto houver robô rodando, não dispare de novo o mesmo escopo."
-            }
-          >
-            {rodando ? "⚙ robô rodando agora" : "⚠ o robô terminou mal"} · {txt(x.robo)}
-            {x.confirmar ? "" : " (ensaio)"} · começou {fmtDataHora(x.disparado_em)}
-            {txt(x.autor_nome) ? ` por ${txt(x.autor_nome)}` : ""}
-            {x.daqui ? "" : " · disparado fora do INOVE (ferramenta)"}
-            {falhou ? ` · ${txt(x.run_conclusao) || "sem conclusão"}` : ""}
-            {txt(x.run_url) ? (
-              <>
-                {" "}
-                <a href={x.run_url} target="_blank" rel="noreferrer">ver o run</a>
-              </>
-            ) : null}
-          </Selo>
-        );
-      })}
       {/* O RECADO é a resposta ao último clique — fica sempre visível, nunca atrás de botão. */}
       {recado ? <Selo cor={recado.startsWith("Falhou") ? "erro" : "ok"} quebra>{recado}</Selo> : null}
       {/* O QUE ESTÁ ACONTECENDO, COM PALAVRA. Gravar, disparar e reler são três esperas

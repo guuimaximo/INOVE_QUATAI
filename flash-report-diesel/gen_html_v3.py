@@ -156,7 +156,7 @@ import calendar as _cal
 _cal_c = _cal.Calendar(firstweekday=6)
 _weeks_jul = _cal_c.monthdayscalendar(gfd.MES_REF_ANO, gfd.MES_REF_MM)
 _dias_cols = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"]
-_visita_label = {14: "1ª visita", 28: "2ª visita"}
+_visita_label = {18: "1ª visita", 30: "2ª visita"}
 _cal_header = "".join(f'<div style="text-align:center;font-size:8px;font-weight:800;color:#6B7C79;text-transform:uppercase;padding:4px 0;">{d}</div>' for d in _dias_cols)
 # Celula alta: a pagina 17 tem so o calendario e o card da visita, e com celula baixa
 # sobrava mais de um terco da folha em branco (fica gritante quando a visita nao teve
@@ -1871,7 +1871,7 @@ FOTOS_NOTURNO_BLOCO = (
 # entao os dois cards esticam ate o rodape e o calendario cresce junto (linhas 1fr) em vez
 # de ficar espremido no topo. margin-bottom deixa a faixa do rodape livre - ele e absoluto.
 pages.append(f"""<div class="page-break"></div><div class="page" style="display:flex;flex-direction:column;">
-  {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "28/08")}
+  {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "18/09")}
   <div class="grid-2" style="flex:1;min-height:0;margin-bottom:0;">
     <div class="card" style="display:flex;flex-direction:column;"><div class="card-title">Calendário de visitas — {MESREF}</div><div class="card-body" style="flex:1;display:flex;flex-direction:column;">
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:2px;">{CAL_JULHO_HEADER}</div>
@@ -1885,8 +1885,8 @@ pages.append(f"""<div class="page-break"></div><div class="page" style="display:
       <div class="cons-text" style="text-align:justify;">Foi realizado treinamento prático com os manobristas em campo, com acompanhamento do instrutor, trabalhando a dinâmica “o instrutor leva e o manobrista traz”, proporcionando mais segurança e confiança durante as manobras.</div>
       <div class="cons-text" style="text-align:justify;margin-top:5px;">Também foi realizado teste prático de manobrista para motorista, sendo o colaborador Maurício <b>APROVADO</b> na avaliação e apto a exercer a função de motorista.</div>
       <div class="cons-text" style="text-align:justify;margin-top:5px;">Treinamento, avaliação e desenvolvimento profissional em busca de mais segurança e qualidade na operação.</div>
-      <div class="metric" style="margin-top:auto;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">28/08/2026</div>
-        <div style="font-size:7.6px;color:#48605C;margin-top:2px;">2ª e última visita noturna de agosto</div></div>
+      <div class="metric" style="margin-top:auto;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">18/09/2026</div>
+        <div style="font-size:7.6px;color:#48605C;margin-top:2px;">1ª das 2 visitas noturnas de setembro (18/09 e 30/09)</div></div>
     </div></div>
   </div>
   {FOTOS_NOTURNO_BLOCO}
@@ -1900,36 +1900,23 @@ pages.append(f"""<div class="page-break"></div><div class="page" style="display:
 # executado=False -> item nao executado (bolinha vazia), igual ao board. A data so fica
 # vermelha se ja venceu; o que ainda vai acontecer no mes e programacao, nao atraso.
 CRONOGRAMA = [
-    ("1ª Semana", "03 a 07/08", [
-        ("Imagem Motivacional", "", "03/08", True),
-        ("Vídeo - Min. do Conhecimento", "Parado Ligado: Consumo ou Desperdício?", "04/08", True),
-        ("Imagem Informativa", "Parado Ligado: Consumo ou Desperdício?", "05/08", True),
-        ("Podcast - Fala, Motô!", "Benefícios sem Mistério: Entenda Como Tudo Funciona", "06/08", True),
-        ("Enquete de Fixação", "Parado Ligado: Consumo ou Desperdício?", "07/08", True),
+    ("1ª Semana", "01 a 04/09", [
+        ("Abertura das Comunicações KM/L Telemetria", "Por trás dos processos", "02/09", True),
+        ("Comunicação Telemetria (1)", "Como o Sistema sabe meu KM/L?", "03/09", True),
     ]),
-    ("2ª Semana", "10 a 14/08", [
-        ("Imagem Motivacional", "", "10/08", True),
-        ("Vídeo - Min. do Conhecimento", "i9mtra", "11/08", True),
-        ("Imagem Informativa", "Carros com Vazamento de Ar", "12/08", True),
-        ("Podcast - Fala, Motô!", "", "13/08", True),
-        ("Enquete de Fixação", "Carros com Vazamento de Ar", "14/08", True),
+    ("2ª Semana", "07 a 11/09", [
+        ("Comunicação Telemetria (2)", "Como o Sistema sabe minhas viagens?", "09/09", True),
+        ("Premiação Telemetria", "Fechamento e divulgação da data — agosto/2026", "10/09", True),
+        ("Comunicação Telemetria (3)", "Como meu KM/L é calculado no dia e no mês?", "11/09", True),
     ]),
-    ("3ª Semana", "17 a 21/08", [
-        ("Imagem Motivacional", "", "17/08", True),
-        ("Vídeo - Min. do Conhecimento", "Extra Econômica", "18/08", True),
-        ("Imagem Informativa", "Extra Econômica", "19/08", True),
-        ("Podcast - Fala, Motô!", "Segredos de um Bom KM/L: Hábitos que fazem a diferença", "20/08", True),
-        ("Enquete de Fixação", "Extra Econômica", "21/08", True),
+    ("3ª Semana", "14 a 18/09", [
+        ("Comunicações da semana", "", "18/09", False),
     ]),
-    ("4ª Semana", "24 a 28/08", [
-        ("Imagem Motivacional", "", "24/08", False),
-        ("Vídeo - Min. do Conhecimento", "", "25/08", False),
-        ("Imagem Informativa", "", "26/08", False),
-        ("Podcast - Fala, Motô!", "", "27/08", False),
-        ("Enquete de Fixação", "", "28/08", False),
+    ("4ª Semana", "21 a 25/09", [
+        ("Comunicações da semana", "", "25/09", False),
     ]),
-    ("5ª Semana", "31/08", [
-        ("Imagem Motivacional", "", "31/08", False),
+    ("5ª Semana", "28 a 30/09", [
+        ("Comunicações da semana", "", "30/09", False),
     ]),
 ]
 
@@ -1985,7 +1972,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div>{_crono_left}</div>
     <div>{_crono_right}
       <div class="cons-box"><div class="cons-title">Sobre o cronograma</div>
-      <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas, combinando imagem motivacional, vídeo de conhecimento, imagem informativa, podcast e enquete de fixação. Das {len(CRONOGRAMA)} semanas de {MESREF_NOME.lower()}, {_n_feitos} dos {_n_itens} conteúdos já foram executados. A série da 1ª semana foi "Parado Ligado: Consumo ou Desperdício?", trabalhada em vídeo, imagem informativa e enquete de fixação para reforçar o custo do motor em marcha lenta, somada ao podcast "Benefícios sem Mistério: Entenda Como Tudo Funciona". A 2ª semana tratou de "Carros com Vazamento de Ar" em imagem informativa e enquete de fixação, tema de manutenção que impacta diretamente o consumo. Na 3ª semana a série foi "Extra Econômica", fechando com o podcast "Segredos de um Bom KM/L: Hábitos que fazem a diferença" — o tema mais direto ao indicador que este relatório acompanha. {_crono_pend}</div></div>
+      <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas. Em setembro a série é sobre KM/L e Telemetria — como o sistema apura, no dia e no mês, o indicador que este relatório acompanha. A 1ª semana abriu as comunicações com "Por trás dos processos" e "Como o Sistema sabe meu KM/L?". A 2ª semana seguiu com "Como o Sistema sabe minhas viagens?" e "Como meu KM/L é calculado no dia e no mês?", além do fechamento e da divulgação da data da Premiação Telemetria de agosto/2026. Das {len(CRONOGRAMA)} semanas de {MESREF_NOME.lower()}, {_n_feitos} dos {_n_itens} conteúdos já foram executados. {_crono_pend}</div></div>
     </div>
   </div>
   {footer(18)}

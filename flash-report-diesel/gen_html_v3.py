@@ -707,6 +707,114 @@ pages.append(f"""<div class="page-break"></div><div class="page">
   {footer(5)}
 </div>""")
 
+# ================= PAGINA 5c: A LINHA FICOU MAIS LENTA? =================
+# Pedido do usuario (14/09/2026): "velocidade media da linha sem um parametro de quanto tem
+# que ser nao serve para nada". A pagina anterior mostra 17,4 km/h e para por ai. O
+# parametro que faltava e a PROPRIA linha nos meses anteriores, e o cambio entre as duas
+# grandezas (quanto de KM/L vale 1 km/h) sai medido dentro das linhas, mes a mes, em
+# gfd.VEL_BETA. Assim a pagina responde de quem e o problema: se a linha ficou mais lenta,
+# a conta e de transito/ciclo (trafego); se a velocidade nao mudou e o KM/L caiu, e conducao.
+_vh = list(gfd.LINHA_VEL_HIST)
+_beta_t = gfd.VEL_BETA
+_hist_lbl = gfd.VEL_HIST_LABEL or "meses anteriores"
+
+if not _vh:
+    _p6_kpis = ('<div class="metric"><div class="lbl">Histórico por linha</div>'
+                '<div class="val" style="font-size:15px;">indisponível</div></div>')
+    _p6_corpo = ('<div class="cons-box"><div class="cons-title">Sem base de comparação</div>'
+                 '<div class="cons-text">Não houve meses anteriores suficientes com linha, '
+                 'quilometragem e tempo de viagem para comparar cada linha consigo mesma '
+                 'nesta janela. A página volta assim que a série tiver ao menos dois meses '
+                 'completos por linha.</div></div>')
+else:
+    # Litros: a diferenca total contra a propria historia, aberta em "o que a velocidade
+    # explica" e "o que sobra". km/kml e o consumo do periodo; a conta e feita por linha e
+    # somada depois, e nao no agregado, porque cada linha tem KM/L e velocidade proprios.
+    _tot_exp = 0.0
+    _tot_res = 0.0
+    for _l in _vh:
+        _km, _kH, _dexp = _l[10], _l[4], _l[7]
+        _esp = _kH + _dexp
+        if _kH > 0 and _esp > 0:
+            _tot_exp += _km / _esp - _km / _kH
+        _tot_res += _l[9]
+    _lentas = [l for l in _vh if l[3] < -0.3]
+    _rapidas = [l for l in _vh if l[3] > 0.3]
+    _piores = [l for l in _vh if l[8] < -0.02][:4]
+    _melhores = [l for l in sorted(_vh, key=lambda x: -x[8]) if l[8] > 0.02][:3]
+    _res_neg = sum(l[9] for l in _vh if l[9] > 0)
+    _beta_val = f"{fmt(_beta_t[0], 3)} km/L" if _beta_t else "—"
+
+    _p6_kpis = (
+        f'<div class="metric"><div class="lbl">Cada 1 km/h a menos custa</div>'
+        f'<div class="val">{_beta_val}</div></div>'
+        f'<div class="metric"><div class="lbl">Linhas mais lentas que a própria média</div>'
+        f'<div class="val">{len(_lentas)} de {len(_vh)}</div></div>'
+        f'<div class="metric"><div class="lbl">Litros explicados pela velocidade</div>'
+        f'<div class="val" style="font-size:15px;color:#6B7C79;">{fmt(_tot_exp, 0)} L</div></div>'
+        f'<div class="metric"><div class="lbl">Litros SEM explicação de velocidade</div>'
+        f'<div class="val" style="font-size:15px;color:#dc2626;">{fmt(_res_neg, 0)} L</div></div>')
+
+    if _beta_t:
+        _t1 = (f"O parâmetro que faltava: cada <b>1 km/h</b> que uma linha perde de velocidade "
+               f"custa <b>{fmt(_beta_t[0], 3)} km/L</b> a ela. Não é uma regra de bolso — sai de "
+               f"{_beta_t[2]} comparações de cada linha <b>consigo mesma</b> de um mês para o "
+               f"outro (R² {fmt(_beta_t[1], 2)}), que é o único jeito de medir o efeito do ritmo "
+               f"sem confundi-lo com o perfil da linha.")
+    else:
+        _t1 = ("Nesta janela não foi possível medir de forma confiável quanto 1 km/h vale em "
+               "KM/L — as variações mês a mês ficaram sem padrão. A página mostra a variação "
+               "de velocidade e a de KM/L lado a lado, sem separar uma da outra.")
+
+    if _lentas:
+        _pior_v = min(_lentas, key=lambda l: l[3])
+        _t2 = (f" <b>{len(_lentas)} das {len(_vh)} linhas</b> rodaram mais devagar que a própria "
+               f"média de {_hist_lbl} — a maior queda é <b>{_pior_v[0]}</b> "
+               f"({fmt(_pior_v[3], 1)} km/h, de {fmt(_pior_v[1], 1)} para {fmt(_pior_v[2], 1)}). "
+               f"Somando a frota, o ritmo mais lento responde por <b>{fmt(abs(_tot_exp), 0)} L</b> "
+               f"do consumo do período: essa parte é trânsito e ciclo, e o interlocutor é o "
+               f"tráfego, não o motorista.")
+    else:
+        _t2 = (f" Nenhuma linha perdeu velocidade relevante contra a própria média de "
+               f"{_hist_lbl} — o ritmo desta janela está igual ao de costume, então quase nada "
+               f"do que variou no KM/L tem álibi de trânsito.")
+
+    if _piores:
+        _t3 = (f" Descontado esse efeito, sobram <b>{fmt(_res_neg, 0)} L</b> que a velocidade "
+               f"não explica, concentrados em "
+               + ", ".join(f"<b>{l[0]}</b> ({fmt(l[8], 3)} km/L, {fmt(l[9], 0)} L)" for l in _piores)
+               + ". São estas as linhas em que a cobrança de condução se sustenta — elas "
+                 "pioraram além do que o próprio ritmo justifica.")
+    else:
+        _t3 = (" Descontado esse efeito, nenhuma linha ficou mais do que 0,02 km/L abaixo do "
+               "que o próprio ritmo justificaria — não há caso de condução destacado nesta janela.")
+
+    if _melhores:
+        _t4 = (" No sentido contrário, "
+               + ", ".join(f"<b>{l[0]}</b> (+{fmt(l[8], 3)} km/L)" for l in _melhores)
+               + " entregaram mais do que a velocidade delas prometia, e é onde vale olhar o "
+                 "que está sendo feito de diferente.")
+    else:
+        _t4 = ""
+
+    _p6_corpo = (
+        f'<div class="card"><div class="card-title">O que sobra da variação de KM/L depois de '
+        f'descontar a velocidade — {MESREF} contra a própria linha em {_hist_lbl}</div>'
+        f'<div class="card-body">'
+        f'<div class="chart-wrap"><img src="v3_linha_vel_hist.png"/></div></div></div>'
+        f'<div class="cons-box"><div class="cons-title">De quem é a conta</div>'
+        f'<div class="cons-text">{_t1}{_t2}{_t3}{_t4} Os dois lados usam a <b>mesma janela de '
+        f'dias</b> (01 a {gfd._ONTEM.day:02d} de cada mês): comparar o mês corrente parcial com '
+        f'meses cheios trocaria a proporção de dia útil e fim de semana, e fim de semana é mais '
+        f'rápido.</div></div>')
+
+pages.append(f"""<div class="page-break"></div><div class="page">
+  {page_header("Página 6 · A Linha Ficou Mais Lenta?", f"Velocidade e KM/L de cada linha contra a própria média de {_hist_lbl} — mesma janela de dias", "Cada 1 km/h vale", (fmt(_beta_t[0], 3) + " km/L") if _beta_t else "—")}
+  <div class="grid-4">{_p6_kpis}</div>
+  {_p6_corpo}
+  {footer(6)}
+</div>""")
+
 # ================= PAGINA 5b: VELOCIDADE MEDIA DIARIA x KM/L (correlacao) =================
 # Correlacao dinamica (Pearson) velocidade x KM/L diario — evita texto fixo desatualizado.
 _vk = list(gfd.KML_VELOCIDADE_DIARIO)

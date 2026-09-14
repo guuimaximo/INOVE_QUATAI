@@ -155,6 +155,16 @@ CLUSTER_TRANSNET = [
     ("C11", 2.7821, 2.7846),
 ]
 
+# Velocidade da linha contra a PROPRIA historia (preenchido ao vivo; sem fallback fixo).
+# A pagina 6 mostra "17,4 km/h" sem referencia nenhuma - o numero nao diz se e bom ou
+# ruim. A unica referencia honesta e a propria linha nos meses anteriores. Vazio = a
+# pagina avisa que nao houve historico suficiente, em vez de inventar um comparativo.
+# (linha, vel_hist, vel_ref, d_vel, kml_hist, kml_ref, d_kml, d_kml_expl, d_kml_resid,
+#  litros_resid, km_ref)
+LINHA_VEL_HIST = []
+VEL_BETA = None        # (beta km/L por km/h, r2, n_pares) medido dentro das linhas
+VEL_HIST_LABEL = ""    # ex.: "Jun-Ago"
+
 # Linha x Meta x Velocidade Media (Telemetria, junho/2026 completo)
 # (linha, km_l, vel_media, meta, km_total_mil)
 LINHAS = [
@@ -1290,6 +1300,94 @@ if _bcnt_url and _bcnt_key:
         if len(_kv) >= min(5, max(2, _dias_possiveis)):
             KML_VELOCIDADE_DIARIO = _kv
             _ok("[bcnt] Pagina 6 (kml x velocidade diario) ao vivo.")
+
+        # ----- Pagina 7: a linha ficou mais lenta? (velocidade contra a propria historia) -----
+        # Janela IGUAL dos dois lados (dias 01.._DIA_MAX de cada mes). O mes de referencia
+        # vai so ate ontem; comparar 13 dias contra 31 troca a proporcao de dia util e fim
+        # de semana, e fim de semana e mais rapido - o mes cheio pareceria "mais veloz" so
+        # pela janela. E o mesmo cuidado que _analise_cluster ja toma.
+        _DIA_MAX = _ONTEM.day
+        _lvh = _dd(lambda: _dd(lambda: [0.0, 0.0, 0.0]))   # linha -> (ano,mes) -> km, litros, min
+        for r in _pd:
+            _d = str(r.get("dia") or "")
+            if len(_d) < 10:
+                continue
+            try:
+                _ym = (int(r["ano"]), int(r["mes"]))
+                _dia_n = int(_d[8:10])
+            except (TypeError, ValueError, KeyError):
+                continue
+            if _ym not in _m4 or _dia_n > _DIA_MAX:
+                continue
+            _ln = str(r.get("linha") or "").strip()
+            _km, _lt = _num(r.get("km_rodado")), _num(r.get("litros_consumidos"))
+            _mn = _num(r.get("minutos_em_viagem"))
+            if not (_ln and _km and _lt and _mn):
+                continue
+            _a = _lvh[_ln][_ym]
+            _a[0] += _km; _a[1] += _lt; _a[2] += _mn
+
+        def _kv(a):
+            return a[0] / a[1], a[0] * 60 / a[2]
+
+        def _vale(a):
+            return a[0] >= 1000 and a[1] > 0 and a[2] > 0
+
+        # BETA: quanto de KM/L a linha perde por km/h que ela perde. Medido DENTRO da linha,
+        # mes a mes - comparar linhas diferentes confunde o efeito da velocidade com o
+        # perfil da linha (uma linha de corredor e rapida E economica por outros motivos).
+        # Aqui cada ponto e a mesma linha se comparando consigo mesma em dois meses.
+        _pares = []
+        for _ln, _ms in _lvh.items():
+            _ord = sorted(m for m in _ms if _vale(_ms[m]))
+            for _m0, _m1 in zip(_ord, _ord[1:]):
+                _k0, _v0 = _kv(_ms[_m0]); _k1, _v1 = _kv(_ms[_m1])
+                _pares.append((_v1 - _v0, _k1 - _k0, _ms[_m1][0]))
+        _beta = _r2b = None
+        if len(_pares) >= 10:
+            _sw = sum(p[2] for p in _pares)
+            _mx = sum(p[2] * p[0] for p in _pares) / _sw
+            _my = sum(p[2] * p[1] for p in _pares) / _sw
+            _sxx = sum(p[2] * (p[0] - _mx) ** 2 for p in _pares)
+            if _sxx > 0:
+                _b = sum(p[2] * (p[0] - _mx) * (p[1] - _my) for p in _pares) / _sxx
+                _a0 = _my - _b * _mx
+                _sst = sum(p[2] * (p[1] - _my) ** 2 for p in _pares)
+                _ssr = sum(p[2] * (p[1] - (_a0 + _b * p[0])) ** 2 for p in _pares)
+                # beta negativo seria "ficar mais lento melhora o consumo": nao e o efeito
+                # que a pagina descreve, entao a decomposicao nao sai e a pagina diz isso.
+                if _b > 0 and _sst > 0:
+                    _beta, _r2b = _b, 1 - _ssr / _sst
+
+        _ref_ym = (MES_REF_ANO, MES_REF_MM)
+        _hist_ym = [ym for ym in _m4 if ym != _ref_ym]
+        _lv = []
+        for _ln, _ms in _lvh.items():
+            _aR = _ms.get(_ref_ym)
+            _hs = [_ms[m] for m in _hist_ym if m in _ms and _vale(_ms[m])]
+            if not _aR or not _vale(_aR) or len(_hs) < 2:
+                continue
+            _kmH = sum(h[0] for h in _hs); _ltH = sum(h[1] for h in _hs)
+            _mnH = sum(h[2] for h in _hs)
+            _kR, _vR = _kv(_aR)
+            _kH, _vH = _kmH / _ltH, _kmH * 60 / _mnH
+            _dv, _dk = _vR - _vH, _kR - _kH
+            _dk_exp = (_beta * _dv) if _beta else 0.0
+            _dk_res = _dk - _dk_exp
+            _esp = _kH + _dk_exp
+            # litros a mais (+) do que a linha gastaria se so o efeito da velocidade valesse
+            _lit = (_aR[0] / _kR - _aR[0] / _esp) if _esp > 0 else 0.0
+            _lv.append((_ln, round(_vH, 1), round(_vR, 1), round(_dv, 2), round(_kH, 3),
+                        round(_kR, 3), round(_dk, 3), round(_dk_exp, 3), round(_dk_res, 3),
+                        round(_lit, 1), int(_aR[0])))
+        if len(_lv) >= 5:
+            LINHA_VEL_HIST = sorted(_lv, key=lambda x: x[8])
+            VEL_BETA = (round(_beta, 4), round(_r2b, 3), len(_pares)) if _beta else None
+            _ms_hist = sorted(_hist_ym)
+            VEL_HIST_LABEL = (f"{_MES3[_ms_hist[0][1]-1]}-{_MES3[_ms_hist[-1][1]-1]}"
+                              if _ms_hist else "")
+            _ok(f"[bcnt] Pagina 7 (velocidade x propria historia) ao vivo: {len(_lv)} linhas, "
+                f"beta={'-' if not _beta else round(_beta, 4)}.")
 
         # ----- Pagina 8: Sinal de Alerta / Destaque Positivo (motorista mai vs jun) + causa -----
         _mMJ = _dd(lambda: {MES_ANT_MM: [0.0, 0.0], MES_REF_MM: [0.0, 0.0]})
@@ -2566,10 +2664,14 @@ def chart_linha_meta_velocidade():
     ax.text(0.20, len(labels) - 0.25, "Velocidade média", fontsize=7.6, fontweight="bold",
             color="#475569", ha="left", va="bottom")
     from matplotlib.patches import Patch
+    # "lower right" escrevia a legenda POR CIMA do rotulo de velocidade das duas ultimas
+    # linhas (a coluna de km/h fica em x=0,20, no mesmo canto). Sobe para fora do eixo,
+    # como ja foi feito em chart_motoristas_lollipop pelo mesmo motivo.
     ax.legend(handles=[Patch(color=GREEN, label="Na meta ou acima"),
                        Patch(color=GOLD, label="Quase na meta (até 0,05 abaixo)"),
                        Patch(color=RED, label="Abaixo da meta")],
-              loc="lower right", fontsize=7.2, frameon=False)
+              loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=3,
+              fontsize=7.2, frameon=False)
     # titulo removido: duplicava o card-title da pagina
     # ax.set_title(f"Distância da Meta por Linha, com Velocidade Média ({MES_REF_LABEL})", fontsize=12, fontweight="bold", color=DARK)
     for s in ["top", "right", "left"]:
@@ -2577,6 +2679,65 @@ def chart_linha_meta_velocidade():
     ax.grid(axis="x", linestyle=":", alpha=0.4)
     fig.tight_layout()
     fig.savefig(OUT / "v3_linha_meta.png", dpi=150, transparent=True)
+    plt.close(fig)
+
+
+def chart_linha_vel_hist():
+    """Pagina 7: o que sobra da variacao de KM/L depois de descontar a velocidade.
+
+    A barra e o RESIDUO (nao explicado). As duas colunas a direita dao o contexto que a
+    barra sozinha nao da: quanto a linha mudou de velocidade e quantos litros o residuo
+    vale no periodo. Sem elas o leitor ve "-0,04" e nao sabe se e muito ou pouco.
+    """
+    dados = LINHA_VEL_HIST
+    if not dados:
+        return
+    fig, ax = plt.subplots(figsize=(11.2, 4.9))
+    linhas = sorted(dados, key=lambda l: l[8])
+    labels = [l[0] for l in linhas]
+    res = [l[8] for l in linhas]
+    dvel = [l[3] for l in linhas]
+    lit = [l[9] for l in linhas]
+    y = np.arange(len(labels))
+    # O corte de 0,02 km/L e o mesmo criterio de "empate" usado no texto da pagina: abaixo
+    # disso a diferenca cabe dentro do ruido de uma janela de poucos dias.
+    colors = [RED if r < -0.02 else (GOLD if r < 0.02 else GREEN) for r in res]
+    ax.barh(y, res, color=colors, height=0.6, zorder=2)
+    ax.axvline(0, color=DARK, linewidth=1.2)
+    _lim = max((abs(r) for r in res), default=0.1) * 1.15 or 0.1
+    _x1, _x2 = _lim * 1.35, _lim * 2.15
+    # A folga a esquerda e maior do que a maior barra: o rotulo da barra mais longa e
+    # escrito PARA FORA dela e, com o limite colado no valor, ele subia por cima do nome
+    # da linha no eixo ("10TR-0,083").
+    ax.set_xlim(-_lim * 1.45, _lim * 2.95)
+    for i, (r, dv, L) in enumerate(zip(res, dvel, lit)):
+        ax.text(r + (_lim * 0.035 if r >= 0 else -_lim * 0.035), i, fmt(r, 3), va="center",
+                ha="left" if r >= 0 else "right", fontsize=8, fontweight="bold", color=DARK)
+        ax.text(_x1, i, f"{'+' if dv > 0 else ''}{fmt(dv, 1)} km/h", va="center", ha="left",
+                fontsize=7.6, color=RED if dv < -0.3 else ("#475569" if dv <= 0.3 else GREEN))
+        ax.text(_x2, i, f"{'+' if L > 0 else ''}{fmt(L, 0)} L", va="center", ha="left",
+                fontsize=7.6, fontweight="bold" if abs(L) >= 100 else "normal",
+                color=RED if L > 0 else "#475569")
+    ax.set_yticks(list(y)); ax.set_yticklabels(labels, fontsize=8.6)
+    ax.set_xlabel("KM/L que a velocidade NÃO explica  (negativo = pior do que o ritmo justifica)")
+    _topo = len(labels) - 0.25
+    ax.text(_x1, _topo, "Velocidade", fontsize=7.6, fontweight="bold", color="#475569",
+            ha="left", va="bottom")
+    ax.text(_x2, _topo, "Litros", fontsize=7.6, fontweight="bold", color="#475569",
+            ha="left", va="bottom")
+    from matplotlib.patches import Patch
+    # Legenda acima do eixo, e nao em "lower right": no canto de baixo a direita ela cobria
+    # as colunas de texto - foi exatamente o que aconteceu na pagina 6.
+    ax.legend(handles=[Patch(color=GREEN, label="Melhor do que o ritmo justifica"),
+                       Patch(color=GOLD, label="Dentro do esperado (±0,02)"),
+                       Patch(color=RED, label="Pior do que o ritmo justifica — condução")],
+              loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=3,
+              fontsize=7.2, frameon=False)
+    for sp in ["top", "right", "left"]:
+        ax.spines[sp].set_visible(False)
+    ax.grid(axis="x", linestyle=":", alpha=0.4)
+    fig.tight_layout()
+    fig.savefig(OUT / "v3_linha_vel_hist.png", dpi=150, transparent=True)
     plt.close(fig)
 
 
@@ -2800,7 +2961,7 @@ def chart_divergencia_carros():
 
 
 for f in [chart_kml_historico, chart_semanal_evolucao, chart_semanal_variacao_pct_com_kml, chart_velocidade_kml_diario, chart_velocidade_kml_dispersao,
-          chart_cluster_divergente, chart_linha_meta_velocidade,
+          chart_cluster_divergente, chart_linha_meta_velocidade, chart_linha_vel_hist,
           # chart_instrutores_eficacia/_status sairam com a reforma da Pagina 11: eram
           # duas barras cada, e a pagina agora responde producao e resultado em tabela.
           chart_donut_tratativas, chart_instrutores_diario,

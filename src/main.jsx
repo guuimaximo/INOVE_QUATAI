@@ -7,11 +7,15 @@ import App from "./App.jsx";
 import RootErrorBoundary from "./components/RootErrorBoundary.jsx";
 import "./index.css";
 import { registerServiceWorker } from "./pwa/registerServiceWorker";
+import { registrarRecuperacaoDaCamera } from "./utils/cameraRestore";
 
 const isNativeShell = Capacitor.isNativePlatform();
 const Router = isNativeShell ? HashRouter : BrowserRouter;
 
 registerServiceWorker({ disable: isNativeShell });
+
+// antes de tudo: a foto da câmera pode chegar na reabertura, se o Android matou o app
+registrarRecuperacaoDaCamera();
 
 if (isNativeShell) {
   document.documentElement.classList.add("native-mobile-app");

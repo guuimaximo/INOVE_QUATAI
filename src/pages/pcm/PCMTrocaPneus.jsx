@@ -1,10 +1,18 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { Capacitor } from "@capacitor/core";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { App as CapacitorApp } from "@capacitor/app";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { compressImageFile } from "../../utils/imageCompress";
+import {
+  apagarRascunhoAuditoria,
+  contarFotos,
+  lerRascunhoAuditoria,
+  rascunhoTemConteudo,
+  salvarRascunhoAuditoria,
+} from "../../utils/pcmRascunhoAuditoria";
+import { EVENTO_FOTO_RESTAURADA } from "../../utils/cameraRestore";
 import { useSearchParams } from "react-router-dom";
 import {
   FaBarcode,
@@ -1019,6 +1027,33 @@ function SelectField({ label, value, onChange, options }) {
   );
 }
 
+/* A MINIATURA DA FOTO, e não a foto. O quadro da prévia tem 160px de altura, mas um
+   `<img>` apontando para o arquivo da câmera faz o navegador decodificar a imagem INTEIRA
+   (1600px ≈ 7-8 MB de pixels) e segurar isso enquanto a tela estiver aberta. Na auditoria
+   são seis quadros: quando a sexta câmera abria, o app carregava cinco fotos cheias em
+   memória, e era aí que o Android o matava. Uma miniatura de 360px ocupa ~0,3 MB.
+
+   O arquivo original continua intacto no formulário — é ele que sobe como evidência. Se o
+   aparelho não souber gerar a miniatura, cai no jeito antigo em vez de ficar sem prévia. */
+async function miniaturaDaFoto(file, lado = 360) {
+  try {
+    if (typeof createImageBitmap !== "function") throw new Error("sem createImageBitmap");
+    const bmp = await createImageBitmap(file, { resizeWidth: lado, resizeQuality: "medium" });
+    const canvas = document.createElement("canvas");
+    canvas.width = bmp.width;
+    canvas.height = bmp.height;
+    canvas.getContext("2d").drawImage(bmp, 0, 0);
+    bmp.close();
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.7));
+    canvas.width = 0;
+    canvas.height = 0;
+    if (!blob) throw new Error("miniatura vazia");
+    return URL.createObjectURL(blob);
+  } catch {
+    return URL.createObjectURL(file);
+  }
+}
+
 function PhotoField({ title, file, imageUrl = "", inputId, onChange, onNativeCapture, isNativeShell, readOnly = false, helperText }) {
   const [previewUrl, setPreviewUrl] = useState(imageUrl || "");
 
@@ -1028,9 +1063,20 @@ function PhotoField({ title, file, imageUrl = "", inputId, onChange, onNativeCap
       return undefined;
     }
 
-    const nextPreview = URL.createObjectURL(file);
-    setPreviewUrl(nextPreview);
-    return () => URL.revokeObjectURL(nextPreview);
+    let vivo = true;
+    let url = "";
+    miniaturaDaFoto(file).then((gerada) => {
+      if (!vivo) {
+        URL.revokeObjectURL(gerada);
+        return;
+      }
+      url = gerada;
+      setPreviewUrl(gerada);
+    });
+    return () => {
+      vivo = false;
+      if (url) URL.revokeObjectURL(url);
+    };
   }, [file, imageUrl]);
 
   return (
@@ -2683,6 +2729,8 @@ export default function PCMTrocaPneus() {
   const isNativeShell = Capacitor.isNativePlatform();
   const [searchParams, setSearchParams] = useSearchParams();
   const userName = safeText(user?.nome || user?.login || user?.email) || "Equipe PCM";
+  // quem é o dono do rascunho: o celular do PCM passa de mão em mão
+  const donoDoRascunho = safeText(user?.login || user?.email || user?.id);
   const initialTab = isTabValue(searchParams.get("aba")) ? searchParams.get("aba") : TAB_TROCA;
 
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -2707,6 +2755,7 @@ export default function PCMTrocaPneus() {
 
   const [trocaForm, setTrocaForm] = useState(() => createTrocaForm("", userName));
   const [auditoriaForm, setAuditoriaForm] = useState(() => createAuditoriaForm("", userName));
+  const rascunhoTimer = useRef(null);
   const [estoqueForm, setEstoqueForm] = useState(() => createEstoqueForm("", userName));
   const [consertoForm, setConsertoForm] = useState(() => createConsertoForm("", userName));
   const [riscadoForm, setRiscadoForm] = useState(() => createRiscadoForm("", userName));
@@ -2928,6 +2977,92 @@ export default function PCMTrocaPneus() {
       backListener.then((listener) => listener.remove());
     };
   }, [activeTab, auditoriaOpen, consertoOpen, consulta.open, estoqueOpen, isNativeShell, riscadoOpen, trocaOpen]);
+
+  /* A AUDITORIA EM ANDAMENTO VAI SENDO GUARDADA NO CELULAR. Se o Android matar o app
+     com a câmera aberta (o "fecha e abre" da última foto), ao reabrir a auditoria o PCM
+     continua de onde parou, com as fotos. Só auditoria NOVA: a edição de uma existente já
+     tem as fotos no servidor e exige internet. Meio segundo de folga para não gravar a
+     cada tecla. */
+  useEffect(() => {
+    if (!auditoriaOpen || auditoriaEditId) return undefined;
+    if (rascunhoTimer.current) clearTimeout(rascunhoTimer.current);
+    rascunhoTimer.current = setTimeout(() => {
+      rascunhoTimer.current = null;
+      salvarRascunhoAuditoria(auditoriaForm, donoDoRascunho).catch(() => {});
+    }, 500);
+    return () => {
+      if (rascunhoTimer.current) {
+        clearTimeout(rascunhoTimer.current);
+        rascunhoTimer.current = null;
+      }
+    };
+  }, [auditoriaForm, auditoriaOpen, auditoriaEditId, donoDoRascunho]);
+
+  /* A foto que o app recuperou depois de ser morto pode chegar com a auditoria já aberta
+     (o ouvinte busca o arquivo de forma assíncrona). Sem isto, a próxima gravação
+     automática sobrescreveria o rascunho SEM ela. Só preenche posição que está vazia. */
+  useEffect(() => {
+    if (!auditoriaOpen || auditoriaEditId) return undefined;
+    const aoRestaurar = async () => {
+      const r = await lerRascunhoAuditoria();
+      if (!r) return;
+      const porPosicao = new Map(r.posicoes.map((p) => [norm(p.posicao), p]));
+      setAuditoriaForm((atual) => ({
+        ...atual,
+        posicoes: atual.posicoes.map((p) => {
+          const salvo = porPosicao.get(norm(p.posicao));
+          return !p.foto && salvo?.foto ? { ...p, foto: salvo.foto } : p;
+        }),
+      }));
+    };
+    window.addEventListener(EVENTO_FOTO_RESTAURADA, aoRestaurar);
+    return () => window.removeEventListener(EVENTO_FOTO_RESTAURADA, aoRestaurar);
+  }, [auditoriaOpen, auditoriaEditId]);
+
+  async function descartarRascunhoAuditoria() {
+    if (rascunhoTimer.current) {
+      clearTimeout(rascunhoTimer.current);
+      rascunhoTimer.current = null;
+    }
+    await apagarRascunhoAuditoria();
+  }
+
+  /* OFERECE CONTINUAR a auditoria interrompida. A pergunta diz o PREFIXO e quantas fotos
+     há: é isso que impede que as fotos de um ônibus entrem na ficha de outro. A ficha é
+     sempre a nova — a do rascunho nunca foi gravada, e reusá-la poderia colidir com uma
+     que outra pessoa lançou nesse meio tempo. */
+  async function comRascunhoSeHouver(formNovo, { prefixoExigido = "" } = {}) {
+    const r = await lerRascunhoAuditoria();
+    if (!r || !rascunhoTemConteudo(r)) return formNovo;
+    if (r.usuario && r.usuario !== donoDoRascunho) return formNovo;
+    if (prefixoExigido && norm(r.prefixo) && norm(r.prefixo) !== norm(prefixoExigido)) return formNovo;
+
+    const quando = new Date(r.salvoEm);
+    const hora = Number.isFinite(quando.getTime())
+      ? quando.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+      : "";
+    const continuar = window.confirm(
+      `Existe uma auditoria em andamento${r.prefixo ? ` do prefixo ${r.prefixo}` : ""}, ` +
+        `com ${contarFotos(r)} de ${r.posicoes.length} foto(s)${hora ? ` (${hora})` : ""}.\n\n` +
+        "OK = continuar de onde parou\nCancelar = descartar e começar do zero",
+    );
+    if (!continuar) {
+      await descartarRascunhoAuditoria();
+      return formNovo;
+    }
+    const porPosicao = new Map(r.posicoes.map((p) => [norm(p.posicao), p]));
+    return {
+      ...formNovo,
+      prefixo: r.prefixo || formNovo.prefixo,
+      observacoes: r.observacoes || formNovo.observacoes,
+      posicoes: formNovo.posicoes.map((p) => {
+        const salvo = porPosicao.get(norm(p.posicao));
+        return salvo
+          ? { ...p, numeroFogo: salvo.numeroFogo, calibragem: salvo.calibragem, sulco: salvo.sulco, foto: salvo.foto }
+          : p;
+      }),
+    };
+  }
 
   useEffect(() => {
     setTrocaForm((current) => ({ ...current, dataLancamento: nowDisplay(), quemLancou: userName }));
@@ -3356,7 +3491,9 @@ export default function PCMTrocaPneus() {
     if (activeTab === TAB_AUDITORIA) {
       const rowsRef = auditorias.length ? auditorias : await carregarAuditorias();
       setAuditoriaEditId(null);
-      setAuditoriaForm(createAuditoriaForm(buildNextFicha(rowsRef, "ficha_auditoria", "AP"), userName));
+      setAuditoriaForm(
+        await comRascunhoSeHouver(createAuditoriaForm(buildNextFicha(rowsRef, "ficha_auditoria", "AP"), userName)),
+      );
       setAuditoriaOpen(true);
       return;
     }
@@ -3461,6 +3598,16 @@ export default function PCMTrocaPneus() {
 
   async function captureAuditoriaPhoto(index) {
     try {
+      /* Grava o formulário e ANOTA A POSIÇÃO antes de abrir a câmera. Se o Android matar o
+         app agora, é por essa anotação que a foto recuperada na reabertura cai no pneu
+         certo — depois da morte do app ninguém mais sabe para qual posição ela era. */
+      if (!auditoriaEditId) {
+        if (rascunhoTimer.current) {
+          clearTimeout(rascunhoTimer.current);
+          rascunhoTimer.current = null;
+        }
+        await salvarRascunhoAuditoria(auditoriaForm, donoDoRascunho, { fotoPendente: index }).catch(() => {});
+      }
       const file = await captureNativePhoto(`auditoria_${index + 1}`);
       if (file) updateAuditoriaPosicao(index, "foto", file);
     } catch (error) {
@@ -3589,10 +3736,17 @@ export default function PCMTrocaPneus() {
     if (!prefixoNormalizado) return;
 
     const rowsRef = auditorias.length ? auditorias : await carregarAuditorias();
-    setAuditoriaForm({
-      ...createAuditoriaForm(buildNextFicha(rowsRef, "ficha_auditoria", "AP"), userName),
-      prefixo: prefixoNormalizado,
-    });
+    // só oferece o rascunho do MESMO prefixo: vindo das pendências o ônibus já está escolhido
+    setAuditoriaEditId(null);
+    setAuditoriaForm(
+      await comRascunhoSeHouver(
+        {
+          ...createAuditoriaForm(buildNextFicha(rowsRef, "ficha_auditoria", "AP"), userName),
+          prefixo: prefixoNormalizado,
+        },
+        { prefixoExigido: prefixoNormalizado },
+      ),
+    );
     setActiveTab(TAB_AUDITORIA);
     setSearchParams({ aba: TAB_AUDITORIA });
     setAuditoriaPendenciasOpen(false);
@@ -4241,6 +4395,8 @@ export default function PCMTrocaPneus() {
 
       setAuditoriaOpen(false);
       setAuditoriaEditId(null);
+      // gravada no servidor ou na fila offline: não há mais nada "em andamento"
+      if (!isEditing) await descartarRascunhoAuditoria();
       if (!isEditing && (mode === "offline" || !window.navigator.onLine)) {
         setAuditoriaForm(createAuditoriaForm(auditoriaForm.ficha, userName));
         alert("Auditoria salva offline. Ela sera enviada quando a internet voltar.");
@@ -4263,6 +4419,7 @@ export default function PCMTrocaPneus() {
         await queueAuditoriaSubmission(payload);
         setAuditoriaOpen(false);
         setAuditoriaEditId(null);
+        await descartarRascunhoAuditoria();
         setAuditoriaForm(createAuditoriaForm(auditoriaForm.ficha, userName));
         alert("Sem internet no envio. A auditoria foi guardada offline e sera enviada depois.");
         return;

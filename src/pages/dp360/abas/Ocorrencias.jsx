@@ -203,6 +203,10 @@ const ABAS = {
     ["exec", "Fila de lançamento"],
     ["ok", "Ponto OK"],
     ["recusados", "Recusados"],
+    // CANCELADOS NA PORTA DO PEDIDO (dono, 15/09/2026: "vamos criar um cancelados nessa tela
+    // também"). É para onde vai o "✗ Recusar marcados e fechar" — a porta do aviso já tinha
+    // a sua ("Cancelamento"), e o filtro das duas é o mesmo: `aceite = cancelado`.
+    ["cancel", "Cancelados"],
     ["fechado", "Ponto fechado"],
   ],
   aviso: [
@@ -230,7 +234,7 @@ const SIT = {
   recusa_exec_pendente: { rotulo: "⏳ recusado · aguardando bot", cor: "neutro" },
   ponto_fechado: { rotulo: "🔒 ponto fechado no Transnet", cor: "erro" },
   recusado: { rotulo: "✗ recusado", cor: "erro" },
-  recusado_lote: { rotulo: "✗ recusado em lote · sem veredito", cor: "erro" },
+  recusado_lote: { rotulo: "🗑 cancelado · recusado no Transnet", cor: "neutro" },
   aguardando: { rotulo: "📤 enviada · sem resposta", cor: "neutro" },
   // estados que só existem no monitor de avisos (main.py:4286-4361)
   comunicado: { rotulo: "📣 comunicado", cor: "neutro" },
@@ -403,7 +407,8 @@ function situacaoDoCaso(veredito, caso, temAviso) {
    * Transnet. Esta função não conhecia esse valor: nenhuma linha abaixo o pegava, o caso
    * caía em `conf` e voltava para "A decidir". O dono recusou 15 pela manhã, o robô fechou
    * os 15 às 10:34, e eles continuaram lá — um deles foi recusado DE NOVO às 12:05, porque
-   * seguia na tela ("se já decidimos e recusamos, ela tem que ir para Recusados").
+   * seguia na tela. Primeiro foram para Recusados; no mesmo dia o dono preferiu uma aba
+   * própria, "Cancelados", como a porta do aviso já tem — e é ela que os mostra agora.
    *
    * SÓ NA PORTA DO PEDIDO. Na porta do aviso o cancelamento já tem aba própria
    * ("Cancelamento", que filtra pelo próprio `aceite`) e ali não se mexe. */
@@ -1591,7 +1596,7 @@ function linhasDaAba(registros, porta, aba) {
     fechado: ["ponto_fechado"],
     // app.js:3315 — advertência e correção são vistas do MESMO caso: uma aba só.
     disc: ["advertido", "corrigido"],
-    recusados: ["recusado", "recusado_lote", "corrigido"],
+    recusados: ["recusado", "corrigido"],
   }[aba];
   return cfg ? base.filter((r) => cfg.includes(r.situacao)) : base;
 }
@@ -2365,7 +2370,7 @@ const LINHA_SIT = {
   conf_certo: "row-ok", conf_errado: "row-sem", conf: "row-sug",
   ok: "row-ok", advertido: "row-sem", corrigido: "row-ok",
   exec_pendente: "row-sug", recusa_exec_pendente: "row-sug",
-  ponto_fechado: "row-sem", recusado: "row-sem", recusado_lote: "row-sem", aguardando: "row-sug",
+  ponto_fechado: "row-sem", recusado: "row-sem", recusado_lote: "", aguardando: "row-sug",
   comunicado: "", posterior: "row-sug", ajustou: "row-ok",
   ajustou_certo: "row-ok", ajustou_errado: "row-sem", ajustou_julgar: "row-sug",
   vencido: "row-sem", cancelado: "",
@@ -4889,7 +4894,7 @@ export default function Ocorrencias() {
         const texto =
           `${valendo ? "Recusa" : "Ensaio da recusa"} disparada — ${lista.length} crachá+dia.` +
           (valendo
-            ? " Acompanhe no quadro abaixo; quando o robô terminar, a lista recarrega sozinha e os dias fechados saem."
+            ? " Acompanhe no pop-up; quando o robô terminar, a lista recarrega sozinha e os dias fechados vão para Cancelados."
             : " O ensaio só lê a grade: nada é recusado nem fechado.");
         if (noCasoAberto) setResultadoRobo({ tipo: "ok", texto, painel: r?.painel || "" });
         else setRecado(texto);
@@ -4914,7 +4919,7 @@ export default function Ocorrencias() {
               valendo
                 ? (sobrou ? "⚠ " : "✅ ") +
                     `Recusa encerrou — ${conta.feitos.length} de ${lista.length} fechado(s)` +
-                    (sobrou ? `, ${sobrou} continua(m) em A decidir` : "") + "."
+                    (sobrou ? `, ${sobrou} continua(m) em A decidir` : "") + " — veja em Cancelados."
                 : "✅ Ensaio da recusa encerrou — nada foi gravado.",
             );
           },
@@ -5361,8 +5366,11 @@ export default function Ocorrencias() {
 
   const COLS_CANCEL = [colColaborador, colDia, colOque, {
     id: "quando", titulo: "Cancelado em", largura: 150, classe: "dp-num",
-    valor: (r) => txt(r.caso.aviso_cancelado_em),
-    render: (r) => <span className="dp-muted dp-num">{fmtDataHora(r.caso.aviso_cancelado_em)}</span>,
+    // aviso cancelado grava `aviso_cancelado_em`; pedido recusado em lote grava `cancelado_em`
+    valor: (r) => txt(r.caso.aviso_cancelado_em || r.caso.cancelado_em),
+    render: (r) => (
+      <span className="dp-muted dp-num">{fmtDataHora(r.caso.aviso_cancelado_em || r.caso.cancelado_em)}</span>
+    ),
   }];
 
   /* Uma CHAVE por grade: as colunas mudam por porta/aba, e a preferência de coluna é por
@@ -5395,7 +5403,7 @@ export default function Ocorrencias() {
     recusados: "Nenhuma recusa nesta porta.",
     disc: "Nenhuma advertência ou correção — e isso pode estar certo: só adverte quem recebeu aviso.",
     fechado: "Nenhum dia travado por competência fechada.",
-    cancel: "Nenhum aviso cancelado.",
+    cancel: "Nada cancelado nesta porta.",
     coment: "Nenhum comunicado no período.",
   };
 

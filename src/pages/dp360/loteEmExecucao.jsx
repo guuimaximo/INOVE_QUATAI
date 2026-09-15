@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { lerDP360, logRoboDP360, statusRoboDP360 } from "../../services/dp360Api";
+import { evidenciasDoRun, lerDP360, logRoboDP360, statusRoboDP360 } from "../../services/dp360Api";
 
 /**
  * O LOTE EM EXECUÇÃO — acima das abas, porque o robô não é de uma tela só.
@@ -20,8 +20,18 @@ import { lerDP360, logRoboDP360, statusRoboDP360 } from "../../services/dp360Api
  * terceira memória do mesmo fato, que envelhece sozinha e passa a mentir. Depois de
  * recarregar, quem responde "o robô está rodando?" é o aviso do topo, que lê o GitHub.
  */
-const RITMO_LOG_MS = 8000;
-const RITMO_RUN_MS = 15000;
+/* O QUE DÁ PARA SABER DURANTE O RUN — e o que não dá (medido em 15/09/2026).
+   O LOG NÃO: o GitHub só entrega o log de um run DEPOIS que ele termina. O próprio `gh`
+   responde "is still in progress; logs will be available when it is complete". Eu tinha
+   montado o "tempo real" em cima do log, e por isso o pop-up só mexia no fim.
+   AS FOTOS SIM: no Executar, o robô fotografa o cartão de cada caso e sobe a foto NA HORA
+   (`conferido_<crachá>_<dia>.png`, bot_ajustes_app.executar_decisoes). Cada foto que chega
+   no bucket é um caso por onde ele já passou — é daí que sai o "1 por 1".
+   O Recusar não tira foto por caso e recusa tudo num clique só no Transnet: ali não existe
+   "um por um" para mostrar, e o quadro não finge. */
+const RITMO_FOTOS_MS = 6000;
+const RITMO_RUN_MS = 5000;
+const RE_FOTO_CASO = /^conferido_(\d{8})_(\d{4}-\d{2}-\d{2})\.png$/i;
 const LIMITE_MIN = 14;
 const RE_ERRO = /ERRO|FALH/i;
 const RE_RESULTADO = /_resultado\.csv$/i;
@@ -61,8 +71,11 @@ export function fecharPainelDoLote() {
    que uma pessoa faria — olhar o run daquele robô que começou depois do meu clique. */
 async function esperarORun({ runId, robo, desde }) {
   const limite = Date.now() + LIMITE_MIN * 60000;
+  let primeira = true;
   while (Date.now() < limite) {
-    await new Promise((r) => setTimeout(r, RITMO_RUN_MS));
+    // a primeira leitura é IMEDIATA: esperar 15 s para dizer "na fila" era o pop-up parado
+    if (!primeira) await new Promise((r) => setTimeout(r, RITMO_RUN_MS));
+    primeira = false;
     if (!estado) return "abandonado"; // ninguém mais acompanhando
     let runs = [];
     try {
@@ -126,24 +139,46 @@ export async function acompanharLote({
   const meuInicio = desde;
   const aindaEMeu = () => estado && estado.desde === meuInicio;
 
-  // a leitura do log corre em paralelo com a espera: uma diz ONDE ele está, a outra O QUE
-  // ele está fazendo, e nenhuma das duas sabe responder pela outra.
-  (async () => {
-    while (aindaEMeu() && !estado.fim) {
-      await new Promise((r) => setTimeout(r, RITMO_LOG_MS));
-      if (!aindaEMeu() || estado.fim || !estado.runId) continue;
-      try {
-        const texto = await logRoboDP360(estado.runId);
-        if (aindaEMeu() && texto) mexer({ aoVivo: lerLogDoBot(texto) });
-      } catch {
-        // log indisponível não é falha da execução: o robô segue, a tela só não narra
+  /* AS FOTOS, EM PARALELO COM A ESPERA: uma diz ONDE o run está (fila, rodando), a outra
+     POR QUAL CASO o robô já passou. Só no Executar e fora do ensaio — é o único modo que
+     sobe foto por caso. */
+  const querChaves = new Set(casos.map((c) => c.chave));
+  if (estado.tipo === "executar" && !ensaio) {
+    (async () => {
+      while (aindaEMeu() && !estado.fim) {
+        await new Promise((r) => setTimeout(r, RITMO_FOTOS_MS));
+        if (!aindaEMeu() || estado.fim || !estado.runId) continue;
+        try {
+          const d = new Date(estado.desde);
+          const arquivos = await evidenciasDoRun(estado.runId, d.getUTCFullYear(), d.getUTCMonth() + 1);
+          const vistos = new Set();
+          for (const a of arquivos || []) {
+            const m = RE_FOTO_CASO.exec(String(a?.arquivo || ""));
+            const k = m ? `${m[1]}|${m[2]}` : "";
+            if (k && querChaves.has(k)) vistos.add(k);
+          }
+          if (aindaEMeu() && vistos.size !== (estado.vistos?.size || 0)) mexer({ vistos });
+        } catch {
+          // sem a prova (bucket fora, gateway sem os secrets): o robô segue, a tela só não narra
+        }
       }
-    }
-  })();
+    })();
+  }
 
   const fim = await esperarORun({ runId, robo, desde });
   if (!aindaEMeu()) return fim;
   mexer({ fim, terminouEm: Date.now(), onde: "" });
+
+  // COM O RUN FECHADO o log passa a existir: uma leitura só, para o motivo de quem ficou
+  // pendente ("o Transnet recusou: ..."). Sem ele, o quadro fica com o que o banco sabe.
+  if (estado.runId && !ensaio) {
+    try {
+      const texto = await logRoboDP360(estado.runId);
+      if (aindaEMeu() && texto) mexer({ aoVivo: lerLogDoBot(texto) });
+    } catch {
+      // log ainda não publicado ou função sem a ação: segue sem o motivo
+    }
+  }
 
   /* ENSAIO e robô sem marca por caso no nosso banco não têm o que conferir: o único dado
      verdadeiro é o desfecho do run. Dizer "conferido" ali seria inventar. */
@@ -203,7 +238,7 @@ const DESFECHO_CASO = {
   esperando: { icone: "⏳", tom: "mute", texto: "esperando o robô" },
   // recusar pedido (modo `cancelar pedidos`): o bot marca aceite=cancelado só no dia cuja
   // recusa inteira confirmou — o resto fica em A decidir, de propósito
-  cancelado: { icone: "✅", tom: "ok", texto: "recusado no Transnet e fechado" },
+  cancelado: { icone: "✅", tom: "ok", texto: "recusado no Transnet · foi para Cancelados" },
   mantido: { icone: "⏳", tom: "warn", texto: "continua em A decidir — nem tudo foi recusado" },
   // robôs que não deixam marca por caso no nosso banco: só o desfecho do run é verdade
   enviado: { icone: "✅", tom: "ok", texto: "o robô terminou" },
@@ -390,6 +425,7 @@ export default function PainelExecucao({ aba = "" }) {
   // O QUADRO MORA NA ABA QUE DISPAROU: recusar pedido aparece em A decidir, lançar na Fila.
   if (aba && execucao.aba && execucao.aba !== aba) return null;
   const { casos, onde, fim, painel, desde, porCaso, erro, ensaio } = execucao;
+  const vistos = execucao.vistos || VAZIO;
   const tipo = TIPOS[execucao.tipo] || TIPOS.generico;
   const seg = Math.max(0, Math.round(((fim ? execucao.terminouEm : agora) - desde) / 1000));
   const relogio = `${String(Math.floor(seg / 60)).padStart(2, "0")}:${String(seg % 60).padStart(2, "0")}`;
@@ -441,7 +477,7 @@ export default function PainelExecucao({ aba = "" }) {
                 : fim
                   ? "o robô terminou — conferindo cada caso no banco…"
                   : `${onde || "mandando o robô"}${
-                      aoVivo.size ? ` · já passou por ${aoVivo.size} de ${casos.length}` : "…"
+                      vistos.size ? ` · já passou por ${vistos.size} de ${casos.length}` : "…"
                     }`}
           </div>
         </div>
@@ -464,8 +500,8 @@ export default function PainelExecucao({ aba = "" }) {
             ? fechado.estado === "pendente" && vivo
               ? { ...DESFECHO_CASO.pendente, texto: `continua pendente — ${vivo.frase}` }
               : DESFECHO_CASO[fechado.estado]
-            : vivo
-              ? { icone: vivo.tom === "ok" ? "✅" : vivo.tom === "warn" ? "⚙" : "👁", tom: vivo.tom, texto: vivo.frase }
+            : vistos.has(c.chave)
+              ? { icone: "👁", tom: "ok", texto: "cartão lido ao vivo — resultado no fim" }
               : DESFECHO_CASO.esperando;
           return (
             <div key={c.chave} className="oc-exec-linha">

@@ -124,6 +124,9 @@ export function canAccessEstruturaFisica(user, accessProfileMap = {}) {
   return user.nivel === "RH" && user.estrutura_fisica_liberada === true;
 }
 
+// as telas que mudam QUEM vê O QUÊ: nunca abrem só pelo nível
+const PAGINAS_DE_ACESSO = new Set(["config_usuarios", "config_niveis", "config_controle_dados"]);
+
 export function canUserAccessPageKey(user, pageKey, accessProfileMap = {}) {
   const key = normalizeText(pageKey);
   if (!key) return false;
@@ -143,7 +146,13 @@ export function canUserAccessPageKey(user, pageKey, accessProfileMap = {}) {
   // total, `FULL_ACCESS_PROFILES`), então honrar o perfil daria folha a todo Gestor sem
   // ninguém ter decidido isso. A mesma regra está no gateway `dp360-api`, que é quem
   // realmente guarda os dados.
-  if (key === "dp360" || key.startsWith("dp360_")) {
+  //
+  // AS CONFIGURAÇÕES DE ACESSO SEGUEM A MESMA REGRA (15/09/2026). O dono entrou no
+  // usuário da Larissa e viu o grupo Configurações. O perfil padrão do Gestor inclui
+  // "Configurações Usuários" (a lista dele é "tudo menos Níveis"), e a tela Usuários
+  // deixa editar as PÁGINAS e o NÍVEL de qualquer pessoa — inclusive o próprio. Quem
+  // administra acesso é Administrador, ou alguém que ele liberou nominalmente.
+  if (key === "dp360" || key.startsWith("dp360_") || PAGINAS_DE_ACESSO.has(key)) {
     if (nivelNorm === "administrador" || nivelNorm === "admin") return true;
     if (new Set(normalizePageKeyArray(user?.paginas_bloqueadas)).has(key)) return false;
     return new Set(normalizePageKeyArray(user?.paginas_liberadas)).has(key);

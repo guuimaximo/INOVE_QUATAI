@@ -926,7 +926,10 @@ export default function Sidebar() {
 
             {configOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
-                {links.configuracoes.map((link) => (
+                {/* SÓ O QUE A PESSOA PODE ABRIR. O grupo aparecia para quem via QUALQUER item
+                    (Cadastros, por exemplo) e desenhava os quatro — Usuários e Níveis de acesso
+                    inclusive —, e foi assim que o dono viu o grupo inteiro no usuário da Larissa. */}
+                {links.configuracoes.filter((link) => canSee(link.path)).map((link) => (
                   <NavLink key={link.path} to={link.path} className={subNavLinkClass}>
                     {link.icon} <span>{link.label}</span>
                   </NavLink>

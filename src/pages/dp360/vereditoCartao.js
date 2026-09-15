@@ -651,10 +651,19 @@ export function montaCompartimentos({
    * grade usa. Duas implementações da mesma leitura é como esta tela já teve três cartões
    * para o mesmo dia. */
   const aceitosDoDia = acoes.filter((_, i) => marcaDaOcorrencia(reg, marcas, i) === "A");
+  /* E NO MOTORISTA ELA RESPONDE AS PONTAS (15/09/2026 — NAELSON 30061225 · 23/08). Ele não
+   * bateu nada e pediu duas inserções, 13:30 e 18:00. O motor não soube dizer a que ponta
+   * cada uma pertence ("não dá para julgar"), e como a leitura em ordem estava trancada
+   * para o motorista o pop-up desenhava um cartão VAZIO — "falta entrada e saída" — do dia
+   * cujo contrato congelado, na lista ao lado, já era `13:30 · 18:00`. A tela dizia duas
+   * coisas sobre o mesmo dia.
+   * O miolo dele continua intocado: a leitura só entra quando devolve DUAS batidas, que é o
+   * cartão de pontas do motorista; a refeição segue vindo da apuração do dia. */
   const cronologico = (() => {
-    if (travaMiolo || encaixe || !aceitosDoDia.length) return null;
+    if (encaixe || !aceitosDoDia.length) return null;
     const lido = cartaoCronologico(hoje, aceitosDoDia, cat) || [];
-    return lido.length === 4 ? lido : null;
+    if (!travaMiolo) return lido.length === 4 ? lido : null;
+    return lido.length === 2 ? [lido[0], null, null, lido[1]] : null;
   })();
   const quatro = encaixe || cronologico;
 
@@ -736,8 +745,9 @@ export function montaCompartimentos({
     const base = { chave: c.chave, rotulo: c.rotulo, ponta: c.ponta, travado: false, porClique: false };
     const tocada = mao[c.chave] != null || maoVazia[c.chave];
     // O INTERNO QUE FECHA EM QUATRO: o cartão já está ordenado — pelo montador, ou pela
-    // leitura cronológica quando ele desiste.
-    if (quatro && !alvoManda && !tocada)
+    // leitura cronológica quando ele desiste. No motorista ela só responde as PONTAS: o
+    // miolo é a refeição travada e cai no bloco de baixo.
+    if (quatro && !alvoManda && !tocada && !(travaMiolo && MIOLO.includes(c.chave)))
       return { ...base, min: quatro[i], origem: origemDoEncaixe(quatro[i], i) };
     if (MIOLO.includes(c.chave)) {
       if (travaMiolo) {

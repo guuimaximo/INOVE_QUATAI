@@ -32,6 +32,12 @@ import { evidenciasDoRun, lerDP360, logRoboDP360, statusRoboDP360 } from "../../
 const RITMO_FOTOS_MS = 6000;
 const RITMO_RUN_MS = 5000;
 const RE_FOTO_CASO = /^conferido_(\d{8})_(\d{4}-\d{2}-\d{2})\.png$/i;
+/* AS FOTOS DO ROBÔ `ponto` (bot_ponto.py `lancar_registro`), uma por etapa de cada cartão:
+   `AAAAMMDD_HHMMSS_preenchido_<crachá>_<dd-mm-aaaa>.png`, depois `apos_inserir_…` e, se o
+   Transnet aceitou, `relido_…`. A que falha deixa `erro_<crachá>.png`, sem dia. */
+const RE_FOTO_PONTO = /_(preenchido|apos_inserir|relido)_(\d{7,8})_(\d{2})-(\d{2})-(\d{4})\.png$/i;
+const RE_FOTO_ERRO = /_erro_(\d{7,8})\.png$/i;
+const ORDEM_ETAPA = { preenchido: 1, apos_inserir: 2, relido: 3, erro: 4 };
 const LIMITE_MIN = 14;
 const RE_ERRO = /ERRO|FALH/i;
 const RE_RESULTADO = /_resultado\.csv$/i;
@@ -143,24 +149,57 @@ export async function acompanharLote({
   const aindaEMeu = () => estado && estado.desde === meuInicio;
 
   /* AS FOTOS, EM PARALELO COM A ESPERA: uma diz ONDE o run está (fila, rodando), a outra
-     POR QUAL CASO o robô já passou. Só no Executar e fora do ensaio — é o único modo que
-     sobe foto por caso. */
+     POR QUAL CASO o robô já passou. No Executar (robô `ajustes`) e no Corrigir (robô
+     `ponto`), fora do ensaio — são os modos que sobem foto por caso. No `ponto` a foto diz
+     também a ETAPA: preenchendo, inseriu, relido, erro.
+     O que já foi visto FICA visto: a lista do bucket vem das fotos mais novas, e um lote
+     grande empurra as primeiras para fora dela. */
   const querChaves = new Set(casos.map((c) => c.chave));
-  if (estado.tipo === "executar" && !ensaio) {
+  if ((tipoDoLote === "executar" || tipoDoLote === "corrigir") && !ensaio) {
     (async () => {
       while (aindaEMeu() && !estado.fim) {
         await new Promise((r) => setTimeout(r, RITMO_FOTOS_MS));
         if (!aindaEMeu() || estado.fim || !estado.runId) continue;
         try {
           const d = new Date(estado.desde);
-          const arquivos = await evidenciasDoRun(estado.runId, d.getUTCFullYear(), d.getUTCMonth() + 1);
-          const vistos = new Set();
+          const arquivos = await evidenciasDoRun(estado.runId, d.getUTCFullYear(), d.getUTCMonth() + 1, {
+            semUrl: true,
+          });
+          const vistos = new Set(estado.vistos || []);
+          const etapas = new Map(estado.etapas || []);
           for (const a of arquivos || []) {
-            const m = RE_FOTO_CASO.exec(String(a?.arquivo || ""));
-            const k = m ? `${m[1]}|${m[2]}` : "";
-            if (k && querChaves.has(k)) vistos.add(k);
+            const nome = String(a?.arquivo || "");
+            if (tipoDoLote === "executar") {
+              const m = RE_FOTO_CASO.exec(nome);
+              const k = m ? `${m[1]}|${m[2]}` : "";
+              if (k && querChaves.has(k)) vistos.add(k);
+              continue;
+            }
+            let k = "";
+            let etapa = "";
+            const p = RE_FOTO_PONTO.exec(nome);
+            if (p) {
+              k = `${cra8(p[2])}|${p[5]}-${p[4]}-${p[3]}`;
+              etapa = p[1].toLowerCase();
+            } else {
+              const e = RE_FOTO_ERRO.exec(nome);
+              const doCracha = e ? casos.filter((c) => c.chave.startsWith(`${cra8(e[1])}|`)) : [];
+              // a foto de erro não tem dia: só vale quando o crachá tem UM caso no lote
+              if (doCracha.length === 1) {
+                k = doCracha[0].chave;
+                etapa = "erro";
+              }
+            }
+            if (!k || !querChaves.has(k)) continue;
+            vistos.add(k);
+            if ((ORDEM_ETAPA[etapa] || 0) > (ORDEM_ETAPA[etapas.get(k)] || 0)) etapas.set(k, etapa);
           }
-          if (aindaEMeu() && vistos.size !== (estado.vistos?.size || 0)) mexer({ vistos });
+          const assinatura = (m) => [...m].sort().join(";");
+          if (
+            aindaEMeu() &&
+            (vistos.size !== (estado.vistos?.size || 0) || assinatura(etapas) !== assinatura(estado.etapas || []))
+          )
+            mexer({ vistos, etapas });
         } catch {
           // sem a prova (bucket fora, gateway sem os secrets): o robô segue, a tela só não narra
         }
@@ -376,6 +415,14 @@ const DESFECHO_CASO = {
   // correção pelo robô `ponto` (o desfecho sai do log, ver `desfechosDaCorrecao`)
   corrigido: { icone: "✅", tom: "ok", texto: "corrigido — o robô releu o cartão e bate" },
   semLog: { icone: "⚠", tom: "warn", texto: "o robô terminou, mas não li o resultado deste dia — confira antes de dar por corrigido" },
+};
+
+/* A ETAPA DO CARTÃO NO ROBÔ `ponto`, enquanto ele roda — a palavra final é do log. */
+const ETAPA_PONTO = {
+  preenchido: { icone: "✍", tom: "ok", texto: "preenchendo o cartão no Transnet…" },
+  apos_inserir: { icone: "⏳", tom: "ok", texto: "inseriu — relendo o cartão…" },
+  relido: { icone: "👁", tom: "ok", texto: "cartão relido — o resultado sai no fim" },
+  erro: { icone: "⚠", tom: "warn", texto: "deu erro neste — o motivo sai no fim" },
 };
 
 /* O QUE CADA TIPO DE DISPARO DIZ. É o mesmo quadro para todos (dono, 15/09/2026: "tudo que
@@ -594,6 +641,7 @@ export default function PainelExecucao({ aba = "" }) {
   const { casos, onde, fim, painel, desde, porCaso, erro, ensaio } = execucao;
   const vistos = execucao.vistos || VAZIO;
   const parcial = execucao.parcial || VAZIO;
+  const etapas = execucao.etapas || VAZIO;
   const tipo = TIPOS[execucao.tipo] || TIPOS.generico;
   const seg = Math.max(0, Math.round(((fim ? execucao.terminouEm : agora) - desde) / 1000));
   const relogio = `${String(Math.floor(seg / 60)).padStart(2, "0")}:${String(seg % 60).padStart(2, "0")}`;
@@ -676,7 +724,9 @@ export default function PainelExecucao({ aba = "" }) {
                 : DESFECHO_CASO[fechado.estado]
             : parcial.has(c.chave)
               ? DESFECHO_CASO[parcial.get(c.chave).estado]
-              : vistos.has(c.chave)
+              : etapas.has(c.chave)
+                ? ETAPA_PONTO[etapas.get(c.chave)] || DESFECHO_CASO.esperando
+                : vistos.has(c.chave)
                 ? { icone: "👁", tom: "ok", texto: "cartão lido ao vivo — gravando…" }
                 : DESFECHO_CASO.esperando;
           return (

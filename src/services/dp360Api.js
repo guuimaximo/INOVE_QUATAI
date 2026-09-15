@@ -250,8 +250,10 @@ export async function dispararEvidenciaUrl(id) {
  * prova basta listar a pasta daquele run, e é isso que o gateway faz (varrendo os quatro
  * robôs, porque a tela sabe o run e o mês, mas não quem fez).
  */
-export async function evidenciasDoRun(runId, ano, mes) {
-  const dados = await chamar({ action: "evidencia_run", run_id: runId, ano, mes });
+export async function evidenciasDoRun(runId, ano, mes, { semUrl = false } = {}) {
+  // `semUrl`: só os nomes — é o que o quadro do lote precisa a cada poucos segundos, e
+  // assinar URL de dezenas de fotos a cada volta é trabalho jogado fora
+  const dados = await chamar({ action: "evidencia_run", run_id: runId, ano, mes, ...(semUrl ? { sem_url: true } : {}) });
   return dados.arquivos || [];
 }
 

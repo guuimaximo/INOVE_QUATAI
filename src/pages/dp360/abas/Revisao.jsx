@@ -31,6 +31,7 @@ import CartaoDoDia, {
   sugBloqueio,
   temSugestaoUtil,
 } from "../CartaoDoDia";
+import PainelExecucao, { acompanharLote } from "../loteEmExecucao";
 import {
   evidenciasDoRun,
   dispararRoboDP360,
@@ -655,14 +656,7 @@ function PainelLancarAjuste({ data, lote, aoFechar, aoConcluir }) {
   const [perguntar, caixaPergunta] = usePergunta();
   const [disparando, setDisparando] = useState(false);
   const [recado, setRecado] = useState(null);
-  /* O QUE ACABOU DE IR PARA O ROBÔ (15/09/2026). Depois do lançamento de verdade o dia é
-     relido, os mesmos cartões passam a constar como "já lançado" e o lote se remonta:
-     "0 no lote · 2 ficam de fora", em vermelho, logo embaixo de "Lançamento disparado". O
-     dono leu erro onde havia sucesso ("não entendi"). O pop-up agora lembra quem ELE
-     mandou e diz isso em verde — e esses não entram na lista de quem ficou de fora. */
-  const [enviado, setEnviado] = useState(null);
-  const chavesEnviadas = new Set(enviado?.confirmar ? enviado.itens.map((i) => i.chave) : []);
-  const foraDeVerdade = lote.fora.filter((i) => !chavesEnviadas.has(i.chave));
+  const foraDeVerdade = lote.fora;
 
   useEffect(() => {
     const escapa = (e) => {
@@ -706,7 +700,7 @@ function PainelLancarAjuste({ data, lote, aoFechar, aoConcluir }) {
             ? `${foraDeVerdade.length} candidato(s) ficaram de fora — a lista com o motivo está na tela.\n\n`
             : "") +
           `Quem executa é o robô, no GitHub Actions. O disparo fica registrado com o seu nome.\n\n` +
-          `O resultado por pessoa NÃO volta sozinho para esta tela: a evidência fica no run do GitHub.`,
+          `O quadro fica no meio da aba acompanhando cada cartão até o robô terminar, e o resultado de cada um fica gravado.`,
       )
     )
       return;
@@ -756,14 +750,77 @@ function PainelLancarAjuste({ data, lote, aoFechar, aoConcluir }) {
       }
 
       setRecado({
-        tipo: "ok",
+        tipo: aviso ? "erro" : "ok",
         texto: `${confirmar ? "Lançamento" : "Ensaio"} disparado — ${fila.length} cartão(ões).${aviso}`,
         painel: resposta?.painel || "",
       });
-      setEnviado({ confirmar, itens: lote.dentro, painel: resposta?.painel || "" });
-      // Recarrega o dia depois do lançamento de verdade: `conferido_em`/Real
-      // manual e o estado da grade mudam por baixo.
-      if (confirmar && aoConcluir) await aoConcluir();
+
+      /* O QUADRO DAS OCORRÊNCIAS, AQUI TAMBÉM (dono, 15/09/2026). O pop-up do lote fecha no
+         disparo e o quadro fica no meio da aba: cada cartão acende pelas fotos que o robô
+         sobe (preenchendo → inseriu → relido) e, no fim, o log diz o que houve com cada um.
+         Esse resultado vira uma linha em `ponto_importacoes` por pessoa, e é ele que a coluna
+         Status lê — AJUSTADO só para quem o robô releu e bateu. */
+      const enviados = lote.dentro;
+      const chaveDoItem = (item) => `${cra8(item.csv.cracha)}|${item.dia}`;
+      acompanharLote({
+        runId: resposta?.execucao?.run_id || null,
+        painel: resposta?.painel || "",
+        robo: "ponto",
+        tipo: "corrigir",
+        ensaio: !confirmar,
+        aba: "revisao",
+        titulo: confirmar ? "🔧 Lançando o ajuste no Transnet" : "🤖 Ensaio do ajuste",
+        casos: enviados.map((item) => ({
+          chave: chaveDoItem(item),
+          cracha: item.csv.cracha,
+          date_ref: item.dia,
+          nome: item.nome || item.cracha,
+          dataBR: fmtData(item.dia),
+        })),
+        aoTerminar: async (_fim, conta) => {
+          if (confirmar && conta?.porCaso) {
+            const resultados = [];
+            for (const item of enviados) {
+              const r = conta.porCaso.get(chaveDoItem(item));
+              const status = !r
+                ? ""
+                : r.estado === "corrigido"
+                  ? "lancado"
+                  : r.estado === "ponto_fechado"
+                    ? "fechado"
+                    : String(r.motivo || "").trim()
+                      ? `falhou: ${String(r.motivo).trim()}`.slice(0, 200)
+                      : "";
+              // sem log não se sabe o que houve: o registro do disparo continua valendo
+              if (!status) continue;
+              resultados.push({
+                cracha: item.csv.cracha,
+                nome: item.nome,
+                date_ref: item.dia,
+                passo: 2,
+                entrada: item.csv.entrada,
+                saida_almoco: item.csv.alm_saida,
+                volta_almoco: item.csv.alm_volta,
+                saida: item.csv.saida,
+                fonte: item.fonte,
+                arquivo: "robô ponto.yml · resultado do log",
+                status,
+              });
+            }
+            try {
+              if (resultados.length) await inserirDP360("ponto_importacoes", resultados);
+            } catch {
+              // o quadro já mostrou o resultado; o histórico só não ficou gravado
+            }
+          }
+          if (aoConcluir) aoConcluir();
+        },
+      });
+      // relê já: a coluna Status passa a "robô rodando" enquanto o quadro acompanha
+      if (confirmar && aoConcluir) aoConcluir();
+      // o pop-up sai da frente do quadro — a não ser que o histórico não tenha gravado, e
+      // aí ele fica com o aviso, porque ninguém mais vai dizer isso
+      if (!aviso) aoFechar();
     } catch (falha) {
       // O erro mostrado é o do SERVIDOR, sem tradução: é ele que diz se o
       // workflow não existe, se a permissão faltou ou se o input foi recusado.
@@ -804,42 +861,10 @@ function PainelLancarAjuste({ data, lote, aoFechar, aoConcluir }) {
         </header>
 
         <div className="rv-corpo" style={{ padding: "14px 18px", display: "grid", gap: 12 }}>
-          {enviado ? (
-            <div className="dp-card" style={{ borderColor: "var(--dp-ok-ink)", background: "var(--dp-ok-bg)" }}>
-              <b style={{ color: "var(--dp-ok-ink)" }}>
-                ✅ {enviado.confirmar ? "Lançamento" : "Ensaio"} disparado — {enviado.itens.length} cartão(ões)
-                foram para o robô
-              </b>
-              <div className="dp-muted" style={{ fontSize: 11.5, margin: "4px 0 8px" }}>
-                {enviado.confirmar ? (
-                  <>
-                    O robô está rodando no Transnet — acompanhe na pílula do topo. Na grade, a coluna
-                    Status mostra <b>robô rodando</b> e vira <b>AJUSTADO</b> quando ele terminar.
-                  </>
-                ) : (
-                  <>Ensaio: o robô preenche a tela e não clica em Inserir. Nada é gravado.</>
-                )}
-              </div>
-              <div className="rv-lote-rol">
-                {enviado.itens.map((item) => (
-                  <div key={item.chave} className="rv-lote-fora">
-                    <span className="dp-mono dp-num">{item.cracha}</span>
-                    <b>{item.nome || "—"}</b>
-                    <span className="dp-mono dp-num">
-                      {[item.csv.entrada, item.csv.alm_saida || "—", item.csv.alm_volta || "—", item.csv.saida].join(" · ")}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {!enviado?.confirmar || lote.dentro.length || foraDeVerdade.length ? (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <span className="dp-pill accent">{lote.dentro.length} no lote</span>
-              {foraDeVerdade.length ? <span className="dp-pill warn">{foraDeVerdade.length} fora do lote</span> : null}
-            </div>
-          ) : null}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span className="dp-pill accent">{lote.dentro.length} no lote</span>
+            {foraDeVerdade.length ? <span className="dp-pill warn">{foraDeVerdade.length} fora do lote</span> : null}
+          </div>
 
           {lote.dentro.length ? (
             <div className="rv-tabela-wrap rv-lote-rol">
@@ -872,7 +897,7 @@ function PainelLancarAjuste({ data, lote, aoFechar, aoConcluir }) {
                 </tbody>
               </table>
             </div>
-          ) : enviado?.confirmar ? null : (
+          ) : (
             <div className="dp-muted" style={{ fontSize: 12.5 }}>
               Nenhuma linha visível pode ir para o robô.{" "}
               {foraDeVerdade.length ? "Os motivos estão abaixo." : "Filtre o dia e a categoria e tente de novo."}
@@ -1268,11 +1293,20 @@ const COLUNAS_GORDURA_GPS = [
 const ESTADO_LANCAMENTO = {
   rodando: { texto: "robô rodando", tom: "warn" },
   ajustado: { texto: "AJUSTADO", tom: "ok" },
-  falhou: { texto: "robô falhou", tom: "danger" },
+  falhou: { texto: "não subiu", tom: "danger" },
+  fechado: { texto: "ponto fechado", tom: "danger" },
 };
 
 function estadoDoLancamento(lancado, runs) {
   if (!lancado) return null;
+  /* O RESULTADO POR PESSOA, QUANDO JÁ EXISTE (15/09/2026). O quadro do lote lê o log do
+     robô no fim e grava, em `ponto_importacoes`, uma linha com o que houve em CADA cartão
+     (`lancado`, `fechado`, `falhou: <motivo>`). O run verde não serve para isso: o robô
+     `ponto` anota a recusa do Transnet e segue, e o dia que não gravou aparecia AJUSTADO. */
+  const resultado = String(lancado.status || "").trim().toLowerCase();
+  if (resultado === "lancado") return "ajustado";
+  if (resultado === "fechado") return "fechado";
+  if (resultado.startsWith("falhou")) return "falhou";
   const quando = Date.parse(lancado.quandoISO || "");
   if (!Number.isFinite(quando)) return "ajustado";
   const perto = (runs || [])
@@ -1964,6 +1998,9 @@ export default function Revisao() {
       const k = chaveDia(l.cracha, l.date_ref);
       const e = estadoDoLancamento(lancados[k], runs);
       if (e === "ajustado" || e === "rodando") m[k] = lancados[k];
+      // competência fechada: mandar de novo só gera outra recusa do Transnet
+      if (e === "fechado")
+        m[k] = { ...lancados[k], motivoLote: `o Transnet não aceita mais este dia — ponto fechado (${lancados[k].quando})` };
     }
     return m;
   }, [linhas, lancados, runs]);
@@ -2072,7 +2109,11 @@ export default function Revisao() {
                   <Pilula
                     texto={estado.texto}
                     tom={estado.tom}
-                    titulo={`Disparado em ${lancado.quando}. Era ${l.status_ponto || "—"}. Abra a linha para ver o que foi lançado.`}
+                    titulo={`${
+                      String(lancado.status || "").startsWith("falhou")
+                        ? `Não subiu — ${String(lancado.status).replace(/^falhou:?\s*/, "")}. `
+                        : ""
+                    }Registrado em ${lancado.quando}. Era ${l.status_ponto || "—"}. Abra a linha para ver o que foi lançado.`}
                   />
                 );
               }
@@ -2584,21 +2625,26 @@ export default function Revisao() {
     >
       {/* ---- grade (a compartilhada: ⚙ colunas, fixar, redimensionar, CSV, preferência
               salva em `tbl_p2`). O filtro é da aba; a grade só ordena o que recebe. ---- */}
-      <TabelaDP
-        chave="p2"
-        colunas={colunas}
-        linhas={visiveis}
-        classeLinha={(l) => classeLinha(l, bloqueios[chaveDia(l.cracha, l.date_ref)])}
-        idLinha={(l) => chaveDia(l.cracha, l.date_ref)}
-        selecionavel
-        aoSelecionar={setSelIds}
-        ocultasPadrao={COLUNAS_OCULTAS_PADRAO}
-        aoClicarLinha={(l) => setAberta(l)}
-        carregando={carregando}
-        mensagemCarregando={`Carregando a revisão de ${fmtData(data)}…`}
-        vazio={linhas.length ? "Nada neste filtro." : "Nenhum cartão para esta categoria e data."}
-        nomeCsv={`revisao_${String(categoria).toLowerCase()}_${data}`}
-      />
+      {/* O QUADRO DO ROBÔ, NO MEIO DA ABA (dono, 15/09/2026: "aqui tem que ser o mesmo
+          esquema da Ocorrência — o pop-up tem que ficar rodando 1 por 1 até acabar"). */}
+      <div className="oc-exec-area">
+        <TabelaDP
+          chave="p2"
+          colunas={colunas}
+          linhas={visiveis}
+          classeLinha={(l) => classeLinha(l, bloqueios[chaveDia(l.cracha, l.date_ref)])}
+          idLinha={(l) => chaveDia(l.cracha, l.date_ref)}
+          selecionavel
+          aoSelecionar={setSelIds}
+          ocultasPadrao={COLUNAS_OCULTAS_PADRAO}
+          aoClicarLinha={(l) => setAberta(l)}
+          carregando={carregando}
+          mensagemCarregando={`Carregando a revisão de ${fmtData(data)}…`}
+          vazio={linhas.length ? "Nada neste filtro." : "Nenhum cartão para esta categoria e data."}
+          nomeCsv={`revisao_${String(categoria).toLowerCase()}_${data}`}
+        />
+        <PainelExecucao aba="revisao" />
+      </div>
 
       <p className="dp-resumo flex items-center gap-1.5" style={{ margin: 0, paddingBottom: 20 }}>
         <MapPin size={12} />

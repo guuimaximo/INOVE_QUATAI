@@ -1423,9 +1423,12 @@ serve(async (req: Request) => {
       const achados: Record<string, unknown>[] = [];
       for (const robo of ["ponto", "ajustes", "comunicado", "ocorrencias"]) {
         const pasta = `${ano}/${mes}/${robo}/${run}`;
+        // AS MAIS NOVAS PRIMEIRO, E MAIS DE 40. O robô `ponto` sobe três fotos por cartão
+        // (preenchido, apos_inserir, relido): com 40 em ordem de nome, o quadro do lote
+        // parava de andar no 13º cartão. O nome começa pela hora, então `desc` é o agora.
         const { data: arquivos } = await pontoAdmin.storage
           .from(BUCKET_EVIDENCIAS)
-          .list(pasta, { limit: 40 });
+          .list(pasta, { limit: 200, sortBy: { column: "name", order: "desc" } });
         for (const a of arquivos ?? []) {
           if (!a?.name) continue;
           achados.push({
@@ -1438,6 +1441,8 @@ serve(async (req: Request) => {
         }
       }
       if (!achados.length) return json({ ok: true, run, arquivos: [] });
+      // o quadro do lote só precisa dos NOMES (por qual caso o robô já passou)
+      if (corpo.sem_url === true) return json({ ok: true, run, arquivos: achados });
 
       const { data: assinadas, error: erroUrl } = await pontoAdmin.storage
         .from(BUCKET_EVIDENCIAS)

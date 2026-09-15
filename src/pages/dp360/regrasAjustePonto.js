@@ -485,7 +485,7 @@ export function montarLoteAjuste(linhas, casos, bloqueios, lancamentos) {
       cartaoHoje: veredito.cartaoHoje,
     };
     const lancado = lancamentos?.[chave];
-    if (lancado) fora.push({ ...base, motivo: `já lançado em ${lancado.quando}` });
+    if (lancado) fora.push({ ...base, motivo: lancado.motivoLote || `já lançado em ${lancado.quando}` });
     else if (veredito.csv) dentro.push({ ...base, csv: veredito.csv });
     else fora.push({ ...base, motivo: veredito.motivo });
   }

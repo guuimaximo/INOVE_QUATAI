@@ -2,6 +2,7 @@
 // valida a sessão do INOVE, exige Administrador e guarda a chave da base de
 // ponto como secret. O navegador nunca vê credencial da base DP360.
 import { supabase } from "../supabase";
+import { getStoredUser } from "../utils/auth";
 
 const LIMITE_PAGINA = 1000;
 
@@ -179,11 +180,27 @@ export function atualizarDP360(tabela, filtros, campos) {
  */
 const CHAVE_CREDENCIAL = "dp360:transnet";
 
+/* A CREDENCIAL TEM DONO (15/09/2026). O dono do sistema entrou no INOVE como Larissa e o
+ * topo mostrava "Transnet · GABRIELLECARNEIRO": a credencial da sessão anterior continuava
+ * na aba, e o robô sairia no nome da Gabrielle. O `logout` apaga, mas nem toda troca de
+ * pessoa passa por ele (a sessão que expira por inatividade limpa o usuário e não a
+ * credencial). Então ela guarda QUEM do INOVE a digitou, e só vale para essa pessoa —
+ * para qualquer outra, é apagada na primeira leitura. Credencial antiga, sem dono, também
+ * é apagada: a pessoa digita de novo uma vez. */
+function donoAtual() {
+  const u = getStoredUser();
+  return String(u?.id ?? u?.usuario_id ?? u?.auth_user_id ?? "").trim();
+}
+
 export function lerCredencialTransnet() {
   try {
     const cru = window.sessionStorage.getItem(CHAVE_CREDENCIAL);
     if (!cru) return null;
-    const { usuario, senha } = JSON.parse(cru);
+    const { usuario, senha, dono } = JSON.parse(cru);
+    if (!dono || String(dono) !== donoAtual()) {
+      window.sessionStorage.removeItem(CHAVE_CREDENCIAL);
+      return null;
+    }
     return usuario && senha ? { usuario, senha } : null;
   } catch {
     return null;
@@ -192,9 +209,11 @@ export function lerCredencialTransnet() {
 
 export function salvarCredencialTransnet(usuario, senha) {
   try {
+    const dono = donoAtual();
+    if (!dono) return; // sem pessoa logada não há de quem ser a credencial
     window.sessionStorage.setItem(
       CHAVE_CREDENCIAL,
-      JSON.stringify({ usuario: String(usuario || "").trim(), senha: String(senha || "") }),
+      JSON.stringify({ usuario: String(usuario || "").trim(), senha: String(senha || ""), dono }),
     );
   } catch {
     /* navegador sem sessionStorage: a pessoa digita de novo, e é só isso */

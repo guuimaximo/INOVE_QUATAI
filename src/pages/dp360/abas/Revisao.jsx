@@ -20,8 +20,8 @@ import CartaoDoDia, {
   ehPontoInvertido,
   ehVerdadeiro,
   fmtData,
-  fmtDataHora,
   fmtDist,
+  fmtInstanteBR,
   fmtHora,
   fmtMin,
   lerReservasInove,
@@ -655,6 +655,14 @@ function PainelLancarAjuste({ data, lote, aoFechar, aoConcluir }) {
   const [perguntar, caixaPergunta] = usePergunta();
   const [disparando, setDisparando] = useState(false);
   const [recado, setRecado] = useState(null);
+  /* O QUE ACABOU DE IR PARA O ROBÔ (15/09/2026). Depois do lançamento de verdade o dia é
+     relido, os mesmos cartões passam a constar como "já lançado" e o lote se remonta:
+     "0 no lote · 2 ficam de fora", em vermelho, logo embaixo de "Lançamento disparado". O
+     dono leu erro onde havia sucesso ("não entendi"). O pop-up agora lembra quem ELE
+     mandou e diz isso em verde — e esses não entram na lista de quem ficou de fora. */
+  const [enviado, setEnviado] = useState(null);
+  const chavesEnviadas = new Set(enviado?.confirmar ? enviado.itens.map((i) => i.chave) : []);
+  const foraDeVerdade = lote.fora.filter((i) => !chavesEnviadas.has(i.chave));
 
   useEffect(() => {
     const escapa = (e) => {
@@ -694,8 +702,8 @@ function PainelLancarAjuste({ data, lote, aoFechar, aoConcluir }) {
         `${cabeca}\n\n${linhasNomes}${resto}\n\n` +
           `Cada linha acima é o CARTÃO INTEIRO (entrada · saída almoço · volta almoço · saída) ` +
           `que vai ser gravado no lugar do que está lá hoje — o robô escreve os quatro campos ou nada.\n\n` +
-          (lote.fora.length
-            ? `${lote.fora.length} candidato(s) ficaram de fora — a lista com o motivo está na tela.\n\n`
+          (foraDeVerdade.length
+            ? `${foraDeVerdade.length} candidato(s) ficaram de fora — a lista com o motivo está na tela.\n\n`
             : "") +
           `Quem executa é o robô, no GitHub Actions. O disparo fica registrado com o seu nome.\n\n` +
           `O resultado por pessoa NÃO volta sozinho para esta tela: a evidência fica no run do GitHub.`,
@@ -752,6 +760,7 @@ function PainelLancarAjuste({ data, lote, aoFechar, aoConcluir }) {
         texto: `${confirmar ? "Lançamento" : "Ensaio"} disparado — ${fila.length} cartão(ões).${aviso}`,
         painel: resposta?.painel || "",
       });
+      setEnviado({ confirmar, itens: lote.dentro, painel: resposta?.painel || "" });
       // Recarrega o dia depois do lançamento de verdade: `conferido_em`/Real
       // manual e o estado da grade mudam por baixo.
       if (confirmar && aoConcluir) await aoConcluir();
@@ -795,10 +804,42 @@ function PainelLancarAjuste({ data, lote, aoFechar, aoConcluir }) {
         </header>
 
         <div className="rv-corpo" style={{ padding: "14px 18px", display: "grid", gap: 12 }}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <span className="dp-pill accent">{lote.dentro.length} no lote</span>
-            {lote.fora.length ? <span className="dp-pill warn">{lote.fora.length} fora do lote</span> : null}
-          </div>
+          {enviado ? (
+            <div className="dp-card" style={{ borderColor: "var(--dp-ok-ink)", background: "var(--dp-ok-bg)" }}>
+              <b style={{ color: "var(--dp-ok-ink)" }}>
+                ✅ {enviado.confirmar ? "Lançamento" : "Ensaio"} disparado — {enviado.itens.length} cartão(ões)
+                foram para o robô
+              </b>
+              <div className="dp-muted" style={{ fontSize: 11.5, margin: "4px 0 8px" }}>
+                {enviado.confirmar ? (
+                  <>
+                    O robô está rodando no Transnet — acompanhe na pílula do topo. Na grade, a coluna
+                    Status mostra <b>robô rodando</b> e vira <b>AJUSTADO</b> quando ele terminar.
+                  </>
+                ) : (
+                  <>Ensaio: o robô preenche a tela e não clica em Inserir. Nada é gravado.</>
+                )}
+              </div>
+              <div className="rv-lote-rol">
+                {enviado.itens.map((item) => (
+                  <div key={item.chave} className="rv-lote-fora">
+                    <span className="dp-mono dp-num">{item.cracha}</span>
+                    <b>{item.nome || "—"}</b>
+                    <span className="dp-mono dp-num">
+                      {[item.csv.entrada, item.csv.alm_saida || "—", item.csv.alm_volta || "—", item.csv.saida].join(" · ")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {!enviado?.confirmar || lote.dentro.length || foraDeVerdade.length ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span className="dp-pill accent">{lote.dentro.length} no lote</span>
+              {foraDeVerdade.length ? <span className="dp-pill warn">{foraDeVerdade.length} fora do lote</span> : null}
+            </div>
+          ) : null}
 
           {lote.dentro.length ? (
             <div className="rv-tabela-wrap rv-lote-rol">
@@ -831,25 +872,25 @@ function PainelLancarAjuste({ data, lote, aoFechar, aoConcluir }) {
                 </tbody>
               </table>
             </div>
-          ) : (
+          ) : enviado?.confirmar ? null : (
             <div className="dp-muted" style={{ fontSize: 12.5 }}>
               Nenhuma linha visível pode ir para o robô.{" "}
-              {lote.fora.length ? "Os motivos estão abaixo." : "Filtre o dia e a categoria e tente de novo."}
+              {foraDeVerdade.length ? "Os motivos estão abaixo." : "Filtre o dia e a categoria e tente de novo."}
             </div>
           )}
 
           {/* NUNCA SUMIR COM A PESSOA. Quem era candidato e não entrou no lote
               aparece aqui com o motivo — sem esta lista, a diferença entre o que
               a grade mostra e o que o robô recebeu seria invisível. */}
-          {!!lote.fora.length && (
+          {!!foraDeVerdade.length && (
             <div className="dp-card" style={{ borderColor: "var(--dp-danger-ink)" }}>
-              <span className="dp-pill danger">⚠ {lote.fora.length} ficam de fora</span>{" "}
+              <span className="dp-pill danger">⚠ {foraDeVerdade.length} ficam de fora</span>{" "}
               <span className="dp-muted" style={{ fontSize: 11.5 }}>
                 Estavam na tela e não vão para o robô — o motivo está ao lado do nome. Nada é gravado no cartão
                 deles.
               </span>
               <div className="rv-lote-rol" style={{ marginTop: 6 }}>
-                {lote.fora.map((item) => (
+                {foraDeVerdade.map((item) => (
                   <div key={item.chave} className="rv-lote-fora">
                     <span className="dp-mono dp-num">{item.cracha}</span>
                     <b>{item.nome || "—"}</b>
@@ -1245,7 +1286,9 @@ function estadoDoLancamento(lancado, runs) {
 
 function lancamentoDaLinha(x) {
   return {
-    quando: fmtDataHora(x.importado_em),
+    // `importado_em` é INSTANTE (timestamptz, UTC). Fatiar o texto mostrava a hora de
+    // Londres: o lançamento das 19:48 aparecia como "22:48" (dono, 15/09/2026).
+    quando: fmtInstanteBR(x.importado_em),
     quandoISO: String(x.importado_em ?? ""),
     cartao: [x.entrada, x.saida_almoco, x.volta_almoco, x.saida].map((h) =>
       String(h ?? "").trim(),
@@ -2623,7 +2666,7 @@ export default function Revisao() {
               <>
                 ✓ <b>Conferido pelo DP</b>
                 {casos[chaveDia(aberta.cracha, aberta.date_ref)]?.conferido_em
-                  ? ` · ${fmtDataHora(casos[chaveDia(aberta.cracha, aberta.date_ref)].conferido_em)}`
+                  ? ` · ${fmtInstanteBR(casos[chaveDia(aberta.cracha, aberta.date_ref)].conferido_em)}`
                   : ""}{" "}
                 — o dia sai da Revisão e conta como certo nas Folgas.
               </>

@@ -98,9 +98,29 @@ async function esperarORun({ runId, robo, desde }) {
  * `aoTerminar` é a única coisa que volta para quem disparou — a tela das Ocorrências usa
  * para reler a grade, e só faz sentido se ela ainda estiver montada.
  */
-export async function acompanharLote({ casos, runId, painel, robo = "ajustes", aoTerminar }) {
+export async function acompanharLote({
+  casos,
+  runId,
+  painel,
+  robo = "ajustes",
+  tipo = "executar",
+  aba = "",
+  titulo = "",
+  ensaio = false,
+  aoTerminar,
+}) {
   const desde = Date.now();
-  estado = { casos, runId: runId || null, painel: painel || "", desde, onde: "mandando o robô" };
+  estado = {
+    casos,
+    runId: runId || null,
+    painel: painel || "",
+    desde,
+    onde: "mandando o robô",
+    tipo: TIPOS[tipo] ? tipo : "generico",
+    aba,
+    titulo,
+    ensaio,
+  };
   avisar();
 
   const meuInicio = desde;
@@ -125,7 +145,17 @@ export async function acompanharLote({ casos, runId, painel, robo = "ajustes", a
   if (!aindaEMeu()) return fim;
   mexer({ fim, terminouEm: Date.now(), onde: "" });
 
-  const conta = await conferidosDepoisDoRobo(casos);
+  /* ENSAIO e robô sem marca por caso no nosso banco não têm o que conferir: o único dado
+     verdadeiro é o desfecho do run. Dizer "conferido" ali seria inventar. */
+  let conta;
+  if (ensaio || estado.tipo === "generico") {
+    const estadoDe = ensaio ? "ensaio" : fim === "success" ? "enviado" : "runFalhou";
+    const porCaso = new Map(casos.map((c) => [c.chave, { estado: estadoDe }]));
+    const feitos = FEITO.has(estadoDe) ? casos : [];
+    conta = { porCaso, feitos, faltaram: casos.filter((c) => !feitos.includes(c)) };
+  } else {
+    conta = await conferidosDepoisDoRobo(casos, estado.tipo);
+  }
   if (!aindaEMeu()) return fim;
   if (!conta) {
     mexer({ erro: "o robô terminou, mas não consegui reler os casos — recarregue a tela" });
@@ -171,9 +201,31 @@ const DESFECHO_CASO = {
   sem_base: { icone: "⚠", tom: "warn", texto: "leitura ao vivo veio vazia — não reescreveu no escuro" },
   pendente: { icone: "⏳", tom: "mute", texto: "continua pendente — o robô não conseguiu mexer" },
   esperando: { icone: "⏳", tom: "mute", texto: "esperando o robô" },
+  // recusar pedido (modo `cancelar pedidos`): o bot marca aceite=cancelado só no dia cuja
+  // recusa inteira confirmou — o resto fica em A decidir, de propósito
+  cancelado: { icone: "✅", tom: "ok", texto: "recusado no Transnet e fechado" },
+  mantido: { icone: "⏳", tom: "warn", texto: "continua em A decidir — nem tudo foi recusado" },
+  // robôs que não deixam marca por caso no nosso banco: só o desfecho do run é verdade
+  enviado: { icone: "✅", tom: "ok", texto: "o robô terminou" },
+  runFalhou: { icone: "⚠", tom: "warn", texto: "o robô terminou com falha — veja o log" },
+  ensaio: { icone: "👁", tom: "mute", texto: "ensaio — nada foi gravado" },
 };
 
-function desfechoDoCaso(caso) {
+/* O QUE CADA TIPO DE DISPARO DIZ. É o mesmo quadro para todos (dono, 15/09/2026: "tudo que
+   for rodar precisa seguir o mesmo padrão, ficar rodando na página"); o que muda é o verbo
+   enquanto roda e o que conta como feito no fim. */
+const TIPOS = {
+  executar: { rodando: "⚙ Lançando no Transnet", feito: "conferido(s) e fora da fila" },
+  conferir: { rodando: "👁 Conferindo no Transnet", feito: "conferido(s) e fechado(s)" },
+  cancelar: { rodando: "⚙ Recusando no Transnet", feito: "recusado(s) e fechado(s)" },
+  generico: { rodando: "⚙ Robô rodando", feito: "enviado(s)" },
+};
+const FEITO = new Set(["conferido", "cancelado", "enviado"]);
+
+function desfechoDoCaso(caso, tipo = "executar") {
+  if (tipo === "cancelar") {
+    return txt(caso?.aceite).toLowerCase() === "cancelado" || txt(caso?.cancelado_em) ? "cancelado" : "mantido";
+  }
   if (!caso) return "pendente";
   if (txt(caso.conferido_em)) return "conferido";
   if (txt(caso.correcao_status) === "ponto_fechado") return "ponto_fechado";
@@ -185,7 +237,7 @@ function desfechoDoCaso(caso) {
 /* `casos` chega PRONTO da tela — `{chave, cracha, date_ref, nome, dataBR}`. Normalizar
    aqui obrigaria este módulo a conhecer a forma do registro das Ocorrências, e ele não é
    de lá: quem dispara é que sabe traduzir a própria linha. */
-async function conferidosDepoisDoRobo(casos_do_lote) {
+async function conferidosDepoisDoRobo(casos_do_lote, tipo = "executar") {
   const alvo = new Map();
   for (const c of casos_do_lote || []) {
     if (c?.chave) alvo.set(c.chave, c);
@@ -199,7 +251,7 @@ async function conferidosDepoisDoRobo(casos_do_lote) {
     // Dois `in.` e o cruzamento aqui: PostgREST não filtra por PARES, e pedir caso a caso
     // seria uma consulta por linha do lote.
     casos = await lerDP360("ponto_caso", {
-      colunas: "cracha,date_ref,conferido_em,usuario,correcao_status,conf_veredito",
+      colunas: "cracha,date_ref,conferido_em,usuario,correcao_status,conf_veredito,aceite,cancelado_em",
       filtros: { cracha: `in.(${crachas.join(",")})`, date_ref: `in.(${dias.join(",")})` },
       limite: 2000,
     });
@@ -216,9 +268,9 @@ async function conferidosDepoisDoRobo(casos_do_lote) {
   const feitos = [];
   const faltaram = [];
   for (const [k, reg] of alvo) {
-    const estado = desfechoDoCaso(porChave.get(k));
+    const estado = desfechoDoCaso(porChave.get(k), tipo);
     porCaso.set(k, { estado, usuario: txt(porChave.get(k)?.usuario) });
-    (estado === "conferido" ? feitos : faltaram).push(reg);
+    (FEITO.has(estado) ? feitos : faltaram).push(reg);
   }
   return { porCaso, feitos, faltaram };
 }
@@ -323,7 +375,7 @@ export function lerLogDoBot(texto) {
  * O acompanhamento continua valendo fora daqui: se o DP trocar de aba, o módulo segue
  * esperando o robô, e ao voltar para a fila o quadro está onde parou.
  */
-export default function PainelExecucao() {
+export default function PainelExecucao({ aba = "" }) {
   const execucao = useLoteEmExecucao();
   const [agora, setAgora] = useState(() => Date.now());
   // o que o robô falou até agora vem do módulo, que lê o log mesmo com a tela fechada
@@ -335,13 +387,16 @@ export default function PainelExecucao() {
   }, [execucao, execucao?.fim]);
 
   if (!execucao) return null;
-  const { casos, onde, fim, painel, desde, porCaso, erro } = execucao;
+  // O QUADRO MORA NA ABA QUE DISPAROU: recusar pedido aparece em A decidir, lançar na Fila.
+  if (aba && execucao.aba && execucao.aba !== aba) return null;
+  const { casos, onde, fim, painel, desde, porCaso, erro, ensaio } = execucao;
+  const tipo = TIPOS[execucao.tipo] || TIPOS.generico;
   const seg = Math.max(0, Math.round(((fim ? execucao.terminouEm : agora) - desde) / 1000));
   const relogio = `${String(Math.floor(seg / 60)).padStart(2, "0")}:${String(seg % 60).padStart(2, "0")}`;
-  const feitos = casos.filter((c) => porCaso?.get(c.chave)?.estado === "conferido").length;
+  const feitos = casos.filter((c) => FEITO.has(porCaso?.get(c.chave)?.estado)).length;
   // encerrou de verdade só quando o banco respondeu (ou quando não deu para conferir)
   const encerrou = Boolean(fim) && (Boolean(porCaso) || Boolean(erro));
-  const tudoCerto = encerrou && !erro && feitos === casos.length;
+  const tudoCerto = encerrou && !erro && (ensaio || feitos === casos.length);
   const tom = !encerrou ? "rodando" : tudoCerto ? "ok" : "pendente";
 
   return (
@@ -349,7 +404,13 @@ export default function PainelExecucao() {
       <header className="oc-exec-topo">
         <div style={{ minWidth: 0 }}>
           <div className="oc-exec-rotulo">
-            {!encerrou ? "⚙ Lançando no Transnet" : tudoCerto ? "✅ Encerrou" : "⚠ Encerrou com pendência"}
+            {!encerrou
+              ? `${ensaio ? "Ensaio · " : ""}${execucao.titulo || tipo.rodando}`
+              : ensaio
+                ? "✅ Ensaio encerrou"
+                : tudoCerto
+                  ? "✅ Encerrou"
+                  : "⚠ Encerrou com pendência"}
           </div>
           <div className="oc-exec-titulo">
             {!encerrou ? (
@@ -358,9 +419,11 @@ export default function PainelExecucao() {
               </>
             ) : erro ? (
               "não consegui conferir o resultado"
+            ) : ensaio ? (
+              "nada foi gravado — nem no Transnet, nem aqui"
             ) : (
               <>
-                {feitos} de {casos.length} conferido(s) e fora da fila
+                {feitos} de {casos.length} {tipo.feito}
               </>
             )}
           </div>

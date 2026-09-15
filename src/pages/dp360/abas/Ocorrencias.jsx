@@ -1624,6 +1624,16 @@ function chaveDoCaso(reg) {
 
 const idsDoDia = (reg) => (reg.ajustes || []).map((o) => txt(o.id_ocorrencia)).filter(Boolean);
 
+/* A linha do registro traduzida para o quadro do robô. Quem conhece a forma do registro das
+   Ocorrências é esta tela; o `loteEmExecucao` só recebe `{chave, cracha, date_ref, nome}`. */
+function casosDoPainel(lista) {
+  return (lista || []).filter(Boolean).map((reg) => {
+    const { cracha, date_ref } = chaveDoCaso(reg);
+    const dia = normData(date_ref) || txt(date_ref || reg.iso).slice(0, 10);
+    return { chave: `${cra8(cracha)}|${dia}`, cracha: txt(cracha), date_ref: dia, nome: reg.nome, dataBR: reg.dataBR };
+  });
+}
+
 /**
  * O QUE O ROBÔ CONSEGUIU, LIDO DO NOSSO BANCO.
  *
@@ -4460,17 +4470,29 @@ export default function Ocorrencias() {
           "ok",
           `${valendo ? "Lançamento" : "Ensaio"} disparado — ${ok.length} dia(s) como ${rotuloTipoDia(tipo)}.` +
             (barrados.length ? ` ${barrados.length} ficou/ficaram de fora: o cartão ganhou batida.` : "") +
-            ` O resultado por dia NÃO volta sozinho: a evidência fica no run.`,
+            " Acompanhe no quadro da aba.",
           r?.painel || "",
         );
-        await atualizarSilencioso();
+        /* Este robô (`ocorrencias`) não deixa marca por caso no nosso banco: o quadro só pode
+           afirmar o desfecho do RUN, e é isso que ele diz — "o robô terminou", não "lançado". */
+        acompanharLote({
+          runId: r?.execucao?.run_id || null,
+          painel: r?.painel || "",
+          robo: "ocorrencias",
+          tipo: "generico",
+          titulo: `⚙ Lançando dia sem ponto (${rotuloTipoDia(tipo)})`,
+          ensaio: !valendo,
+          aba,
+          casos: casosDoPainel(ok),
+          aoTerminar: () => atualizarSilencioso(),
+        });
       } catch (e) {
         avisar("erro", `Falhou: ${e?.message || "Não foi possível disparar o robô."}`);
       } finally {
         setDisparando(false);
       }
     },
-    [atualizarSilencioso],
+    [atualizarSilencioso, aba],
   );
 
   /* ── EXECUÇÃO: manda ao robô uma decisão JÁ GRAVADA, um crachá+dia por vez ──
@@ -4516,10 +4538,19 @@ export default function Ocorrencias() {
         const texto =
           `${valendo ? "Execução" : "Ensaio"} disparado — ${reg.nome} · ${reg.dataBR}` +
           ` (${plano.aceitar.length} aceitar / ${plano.rejeitar.length} rejeitar).` +
-          ` O resultado não volta sozinho: a prova fica no run.`;
+          " Acompanhe no quadro da aba.";
         setResultadoRobo({ tipo: "ok", texto, painel: r?.painel || "" });
         setRecado(texto);
-        await atualizarSilencioso();
+        acompanharLote({
+          runId: r?.execucao?.run_id || null,
+          painel: r?.painel || "",
+          robo: "ajustes",
+          tipo: "executar",
+          ensaio: !valendo,
+          aba,
+          casos: casosDoPainel([reg]),
+          aoTerminar: () => atualizarSilencioso(),
+        });
       } catch (e) {
         const motivo = e?.message || "Não foi possível disparar o robô.";
         setResultadoRobo({ tipo: "erro", texto: `Falhou: ${motivo}` });
@@ -4528,7 +4559,7 @@ export default function Ocorrencias() {
         setDisparando(false);
       }
     },
-    [atualizarSilencioso],
+    [atualizarSilencioso, aba],
   );
 
   /* ══ A CADEIA DO VENCIDO, NUM CLIQUE — E ELA ESPERA O ROBÔ ════════════════
@@ -4656,7 +4687,7 @@ export default function Ocorrencias() {
         const r = await dispararRoboDP360("ajustes", { modo: MODO_EXECUTAR, casos, confirmar: "true" });
         const painel = r?.painel ? ` ${r.painel}` : "";
         const escopo = `${lista.length} crachá+dia (${soma.a} aceitar / ${soma.r} rejeitar)`;
-        setRecado(`⚙ Execução disparada — ${escopo}. Acompanhe na Fila de lançamento.`);
+        setRecado(`⚙ Execução disparada — ${escopo}. Acompanhe no quadro abaixo.`);
         setSelIds([]);
 
         /* A PARTIR DAQUI A TELA LARGA. Quem espera o robô, lê o log e confere o desfecho é
@@ -4668,17 +4699,9 @@ export default function Ocorrencias() {
           runId: r?.execucao?.run_id || null,
           painel: r?.painel || "",
           robo: "ajustes",
-          casos: lista.map((reg) => {
-            const { cracha, date_ref } = chaveDoCaso(reg);
-            const dia = normData(date_ref) || txt(date_ref).slice(0, 10);
-            return {
-              chave: `${cra8(cracha)}|${dia}`,
-              cracha: txt(cracha),
-              date_ref: dia,
-              nome: reg.nome,
-              dataBR: reg.dataBR,
-            };
-          }),
+          tipo: "executar",
+          aba,
+          casos: casosDoPainel(lista),
           // a releitura da grade só interessa se esta tela ainda estiver montada
           // o resultado caso a caso está no quadro da fila; o recado só aponta para lá
           aoTerminar: (fim, conta) => {
@@ -4692,7 +4715,7 @@ export default function Ocorrencias() {
               (sobrou ? "⚠ " : "✅ ") +
                 `Robô encerrou — ${conta.feitos.length} de ${conta.feitos.length + sobrou} conferido(s)` +
                 (sobrou ? `, ${sobrou} com pendência` : "") +
-                ". Detalhe na Fila de lançamento.",
+                ". Detalhe no quadro abaixo.",
             );
           },
         });
@@ -4704,7 +4727,7 @@ export default function Ocorrencias() {
         setDisparando(false);
       }
     },
-    [atualizarSilencioso],
+    [atualizarSilencioso, aba],
   );
 
   /* ── CONFERÊNCIA: lê o cartão ao vivo, NÃO mexe no Transnet ────────────────
@@ -4755,10 +4778,19 @@ export default function Ocorrencias() {
         });
         const texto =
           `Conferência ${valendo ? "valendo" : "em ensaio"} disparada — ${lista.length} crachá+dia.` +
-          ` ${valendo ? "O bot carimba conferido_em durante o run — recarregue daqui a pouco." : "A leitura fica no log do run."}`;
+          " Acompanhe no quadro da aba; a lista recarrega sozinha quando o robô terminar.";
         if (noCasoAberto) setResultadoRobo({ tipo: "ok", texto, painel: r?.painel || "" });
         setRecado(texto);
-        await atualizarSilencioso();
+        acompanharLote({
+          runId: r?.execucao?.run_id || null,
+          painel: r?.painel || "",
+          robo: "ajustes",
+          tipo: "conferir",
+          ensaio: !valendo,
+          aba,
+          casos: casosDoPainel(lista),
+          aoTerminar: () => atualizarSilencioso(),
+        });
       } catch (e) {
         const motivo = e?.message || "Não foi possível disparar o robô.";
         if (noCasoAberto) setResultadoRobo({ tipo: "erro", texto: `Falhou: ${motivo}` });
@@ -4767,7 +4799,7 @@ export default function Ocorrencias() {
         setDisparando(false);
       }
     },
-    [atualizarSilencioso],
+    [atualizarSilencioso, aba],
   );
 
   /* O LOTE DE DECISÃO FOI EMBORA (10/09/2026) — e com ele "Marcar sugestão", "Aplicar
@@ -4844,23 +4876,45 @@ export default function Ocorrencias() {
           confirmar: valendo ? "true" : "false",
         });
         const texto =
-          `${valendo ? "Cancelamento" : "Ensaio do cancelamento"} disparado — ${lista.length} crachá+dia.` +
+          `${valendo ? "Recusa" : "Ensaio da recusa"} disparada — ${lista.length} crachá+dia.` +
           (valendo
-            ? " Acompanhe no aviso do robô, no topo; quando ele parar, recarregue — os dias fechados saem de “A decidir”."
+            ? " Acompanhe no quadro abaixo; quando o robô terminar, a lista recarrega sozinha e os dias fechados saem."
             : " O ensaio só lê a grade: nada é recusado nem fechado.");
         if (noCasoAberto) setResultadoRobo({ tipo: "ok", texto, painel: r?.painel || "" });
-        else setRecado(texto + (r?.painel ? ` ${r.painel}` : ""));
-        // a ✔ só se apaga quando o cancelamento saiu de verdade — e não quando o disparo
-        // veio do caso aberto, que não usa a marcação da grade.
-        if (valendo && !regs?.length) setSelIds([]);
-        await atualizarSilencioso();
+        else setRecado(texto);
+        if (valendo) setSelIds([]);
+        /* ERA AQUI O "RODEI, FICOU VERDE, MAS NÃO SAIU DA TELA" (15/09/2026). A tela relia a
+           lista logo depois do DISPARO — quando o robô nem tinha começado — e nunca mais. Os
+           15 casos foram fechados às 10:34 e continuaram na tela lida às 10:33. Agora quem
+           relê é o fim do acompanhamento. */
+        acompanharLote({
+          runId: r?.execucao?.run_id || null,
+          painel: r?.painel || "",
+          robo: "ajustes",
+          tipo: "cancelar",
+          ensaio: !valendo,
+          aba,
+          casos: casosDoPainel(lista),
+          aoTerminar: (fim, conta) => {
+            atualizarSilencioso();
+            if (!conta || noCasoAberto) return;
+            const sobrou = conta.faltaram.length;
+            setRecado(
+              valendo
+                ? (sobrou ? "⚠ " : "✅ ") +
+                    `Recusa encerrou — ${conta.feitos.length} de ${lista.length} fechado(s)` +
+                    (sobrou ? `, ${sobrou} continua(m) em A decidir` : "") + "."
+                : "✅ Ensaio da recusa encerrou — nada foi gravado.",
+            );
+          },
+        });
       } catch (e) {
         dizer(`Falhou: ${e?.message || "não foi possível disparar o robô."}`, true);
       } finally {
         setDisparando(false);
       }
     },
-    [atualizarSilencioso],
+    [atualizarSilencioso, aba],
   );
 
 
@@ -5689,10 +5743,10 @@ export default function Ocorrencias() {
           </div>
         ) : null}
 
-        {/* O ROBÔ DA FILA, na própria fila: lançando enquanto roda, encerrou quando acaba.
-            Só nesta aba — é daqui que ele é disparado, e é nesta lista que os casos somem
-            quando ele os carimba. */}
-        {grade.loteConferir ? <PainelExecucao /> : null}
+        {/* O ROBÔ, NA ABA QUE O DISPAROU: rodando enquanto roda, encerrou quando acaba — e a
+            lista recarrega sozinha no fim, que é quando os casos fechados saem dela
+            ("rodei, ficou verde, mas não saiu da tela"). */}
+        <PainelExecucao aba={aba} />
 
         <TabelaDP
           key={`${grade.chave}-${versao}`}

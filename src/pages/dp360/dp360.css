@@ -2722,6 +2722,49 @@
   background: var(--dp-danger-ink, #c53434); border-color: var(--dp-danger-ink, #c53434);
 }
 
+/* ══ A CAIXA DENTRO DO `.dp360` (15/09/2026) ═══════════════════════════════════
+   As regras acima nascem sem prefixo porque a caixa também é usada fora do cluster. Só
+   que, DENTRO dele, `.dp360 .dp-btn` (dois níveis) ganha de `.dp-perg-sim` (um nível): o
+   botão de confirmar saía cinza, igual ao de cancelar, numa caixa que manda o robô
+   reescrever cartão de ponto. O dono viu e pediu o padrão da tela. */
+.dp360 .dp-perg-sim,
+.dp360 .dp-perg-sim:hover:not(:disabled) {
+  background: var(--dp-accent);
+  border-color: var(--dp-accent);
+  color: #fff;
+}
+.dp360 .dp-perg-sim.grave,
+.dp360 .dp-perg-sim.grave:hover:not(:disabled) {
+  background: var(--dp-danger-ink);
+  border-color: var(--dp-danger-ink);
+  color: #fff;
+}
+.dp360 .dp-perg-bx { font-size: 13px; }
+/* a lista é a parte que rola: o resto (título, aviso, botões) fica sempre à vista */
+.dp360 .dp-perg-lista,
+.dp-perg-lista { max-height: 38vh; overflow-y: auto; }
+.dp360 .dp-perg-lista li,
+.dp-perg-lista li {
+  padding: 4px 0 4px 14px;
+  border-bottom: 1px solid var(--dp-border);
+}
+.dp360 .dp-perg-lista li:last-child,
+.dp-perg-lista li:last-child { border-bottom: 0; }
+.dp360 .dp-perg-lista .dp-mono,
+.dp-perg-lista .dp-mono { font-family: var(--dp-mono); }
+/* quem ficou de fora: a mesma caixa do aviso, em tom de recusa */
+.dp360 .dp-perg-fora,
+.dp-perg-fora {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  background: var(--dp-danger-bg);
+  color: var(--dp-danger-ink);
+  font-size: 12.5px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
 /* O PEDIDO QUE NÃO CABE NO CARTÃO DE QUATRO (`foraDoCartao`). Fica no card do cartão,
    colado no resumo: é ali que o DP lê "como o dia fica", e é ali que ele precisa saber
    que aceitar aquele horário deixa o ponto com batida a mais. */

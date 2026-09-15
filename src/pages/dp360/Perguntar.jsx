@@ -28,6 +28,38 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const txt = (v) => String(v ?? "").trim();
 
+/* ── O QUE É NÚMERO APARECE COMO NÚMERO ────────────────────────────────────
+ * As listas destas caixas são sempre a mesma coisa: quem, que dia, que horas. Escritas
+ * como texto corrido, elas viram um muro cinza — e é nesse muro que alguém tem de reparar
+ * que uma linha tem `25:35` ou uma data errada. Aqui a linha é lida e remontada: crachá,
+ * data e horário em fonte de número; o nome, em negrito; o resto igual ao que veio.
+ * Nada é interpretado além disso — a caixa não inventa nem esconde texto. */
+const RE_NUMERO = /(\b\d{7,8}\b|\b\d{2}\/\d{2}\/\d{4}\b|\b\d{1,2}:\d{2}\b)/g;
+// O `split` acima devolve também os pedaços capturados; este, SEM o `/g`, diz quais são
+// eles. Testar com o de cima erraria dia sim, dia não: regex com `/g` guarda a posição da
+// última busca entre as chamadas de `.test`.
+const RE_SO_NUMERO = /^(\d{7,8}|\d{2}\/\d{2}\/\d{4}|\d{1,2}:\d{2})$/;
+
+function LinhaFormatada({ texto }) {
+  const bruto = String(texto ?? "");
+  // "NOME 02/09/2026: 12:50 14:43" → o nome é o começo, até o primeiro número
+  const corte = bruto.search(/\d{7,8}\b|\d{2}\/\d{2}\/\d{4}|\d{1,2}:\d{2}/);
+  const nome = corte > 0 ? bruto.slice(0, corte) : "";
+  const resto = corte > 0 ? bruto.slice(corte) : bruto;
+  return (
+    <>
+      {nome ? <b>{nome}</b> : null}
+      {resto.split(RE_NUMERO).map((pedaco, i) =>
+        RE_SO_NUMERO.test(pedaco) ? (
+          <span className="dp-mono dp-num" key={i}>{pedaco}</span>
+        ) : (
+          <span key={i}>{pedaco}</span>
+        ),
+      )}
+    </>
+  );
+}
+
 /* ── O TEXTO QUE JÁ EXISTIA VIRA LAYOUT SEM SER REESCRITO ───────────────────
  * Os avisos desta tela foram escritos para o `confirm()`: parágrafos separados por linha em
  * branco, itens em "· ", passos em "1. ". Em vez de reescrever 13 textos (e correr o risco
@@ -78,14 +110,22 @@ function Corpo({ pedido }) {
         </div>
       ))}
       {blocos.map((b, i) =>
-        b.tipo === "passo" ? (
+        /* O AVISO NÃO É PARÁGRAFO. "ATENÇÃO: …" e "N ficam de fora" são a razão de a caixa
+           existir: quem lê depressa tem de esbarrar neles. */
+        b.tipo === "p" && /^\s*(⚠|ATENÇÃO)/i.test(b.texto) ? (
+          <div className="dp-perg-obs" key={`b${i}`}>{b.texto}</div>
+        ) : b.tipo === "p" && /ficam de fora|ficou de fora|ficam fora/i.test(b.texto) ? (
+          <div className="dp-perg-fora" key={`b${i}`}>{b.texto}</div>
+        ) : b.tipo === "passo" ? (
           <div className="dp-perg-pl" key={`b${i}`}>
             <span className="n">{b.n}.</span>
             <span>{b.texto}</span>
           </div>
         ) : b.tipo === "lista" ? (
           <ul className="dp-perg-lista" key={`b${i}`}>
-            {b.itens.map((it, j) => <li key={j}>{it}</li>)}
+            {b.itens.map((it, j) => (
+              <li key={j}><LinhaFormatada texto={it} /></li>
+            ))}
           </ul>
         ) : (
           <p className="dp-perg-p" key={`b${i}`}>{b.texto}</p>
@@ -93,7 +133,9 @@ function Corpo({ pedido }) {
       )}
       {(linhas || []).length ? (
         <ul className="dp-perg-lista">
-          {linhas.map((l, i) => <li key={i}>{l}</li>)}
+          {linhas.map((l, i) => (
+            <li key={i}><LinhaFormatada texto={l} /></li>
+          ))}
         </ul>
       ) : null}
       {obs ? <div className="dp-perg-obs">{obs}</div> : null}
@@ -174,6 +216,11 @@ export function usePergunta() {
             base.texto = resto.join("\n").replace(/^\n+/, "");
           }
         }
+        /* GRAVE POR PADRÃO NAS AÇÕES QUE ESCREVEM (15/09/2026). O botão de confirmar saía
+           cinza, igual ao de cancelar, numa caixa que manda robô reescrever cartão de ponto.
+           Quem passa `tom` continua mandando; sem ele, o verbo do título decide. */
+        if (!base.tom && /^(ADVERTIR|LANÇAR|EXECUTAR|RECUSAR|CORRIGIR|CANCELAR|MARCAR|FECHAR|CONFERIR)\b/i.test(txt(base.titulo)))
+          base.tom = "erro";
         pendente.current = resolve;
         setPedido(base);
       }),

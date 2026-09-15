@@ -2192,9 +2192,14 @@ function cartaoDaCorrecao(reg) {
 }
 
 function motivoSemCorrigirVencido(reg) {
-  if (!txt(reg?.caso?.advertencia_enviada_em))
+  /* O RECUSADO COM A RECUSA CONFIRMADA CORRIGE MESMO SEM ADVERTÊNCIA (dono, 15/09/2026,
+   * escolhendo entre "trazer o Enviar advertências do desktop" e "liberar a correção": "2").
+   * A ordem "advertência antes da correção" continua para o VENCIDO, que não pediu nada —
+   * ali a advertência é a prova de que o prazo passou. */
+  const recusaConfirmada = txt(reg?.caso?.aceite) === "rejeitado" && txt(reg?.caso?.conferido_em);
+  if (!txt(reg?.caso?.advertencia_enviada_em) && !recusaConfirmada)
     return txt(reg?.caso?.aceite) === "rejeitado"
-      ? "falta a advertência: a recusa foi confirmada no Transnet, mas a advertência não foi enviada (não há registro)"
+      ? "a recusa ainda não foi confirmada no Transnet — ela sai antes, pela Fila de lançamento"
       : "ainda não foi advertido — a advertência vem antes";
   if (txt(reg?.caso?.correcao_final_em)) return "já corrigido";
   const { slots, problema } = cartaoDaCorrecao(reg);

@@ -130,13 +130,23 @@ export function canUserAccessPageKey(user, pageKey, accessProfileMap = {}) {
   if (!user?.nivel) return false;
 
   const nivelNorm = normalizeText(user.nivel).toLowerCase();
-  // DP360 concentra dados pessoais e automações do ponto: acesso exclusivo de
-  // administrador. Vale para o CLUSTER inteiro (dp360, dp360_abandonos,
-  // dp360_banco_horas, dp360_resumo...) — a regra é por prefixo de propósito: página
-  // nova do cluster nasce protegida, sem depender de alguém lembrar de listar aqui.
-  // O Banco de Horas, em especial, mostra folha.
+  // DP360 concentra dados pessoais e automações do ponto. Vale para o CLUSTER inteiro
+  // (dp360, dp360_abandonos, dp360_banco_horas, dp360_resumo...) — a regra é por prefixo
+  // de propósito: página nova do cluster nasce protegida, sem depender de alguém lembrar
+  // de listar aqui. O Banco de Horas, em especial, mostra folha.
+  //
+  // LIBERADA POR PESSOA, E SÓ POR PESSOA (15/09/2026). O dono liberou gente em
+  // Configurações → Usuários → "Liberar" e ninguém via nada: esta função ignorava a
+  // liberação e devolvia "só Administrador". Agora a liberação individual vale — página a
+  // página, e "Bloquear" ganha dela.
+  // O NÍVEL NÃO ABRE: o perfil padrão do Gestor traz TODAS as páginas (e é de acesso
+  // total, `FULL_ACCESS_PROFILES`), então honrar o perfil daria folha a todo Gestor sem
+  // ninguém ter decidido isso. A mesma regra está no gateway `dp360-api`, que é quem
+  // realmente guarda os dados.
   if (key === "dp360" || key.startsWith("dp360_")) {
-    return nivelNorm === "administrador" || nivelNorm === "admin";
+    if (nivelNorm === "administrador" || nivelNorm === "admin") return true;
+    if (new Set(normalizePageKeyArray(user?.paginas_bloqueadas)).has(key)) return false;
+    return new Set(normalizePageKeyArray(user?.paginas_liberadas)).has(key);
   }
 
   // INOVE Guard (guard_fraudes...): mesma regra, e pelo mesmo motivo. A tela de

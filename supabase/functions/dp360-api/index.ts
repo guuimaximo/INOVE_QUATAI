@@ -4,7 +4,11 @@
 // O navegador recebe apenas o que um Administrador do INOVE pode ver.
 //
 // SEGURANCA (nao afrouxar):
-//   1. Exige sessao do INOVE (JWT) E nivel Administrador — conferido no servidor.
+//   1. Exige sessao do INOVE (JWT) E acesso a DP360 — conferido no servidor. Acesso =
+//      Administrador, OU a pessoa liberada pagina a pagina em Configuracoes -> Usuarios
+//      (`paginas_liberadas`). O NIVEL nao abre (o Gestor padrao traz todas as paginas).
+//      Folha (banco_horas) exige a pagina do Banco de Horas; fraude e so Administrador;
+//      disparar robo exige a Gestao de Ponto. Ver `ACESSO_DAS_TABELAS`.
 //   2. ALLOWLIST de tabelas: a base DP360 tambem guarda folha (banco_horas),
 //      ferias, cartao de credito e GPS de outros modulos. So as tabelas de PONTO
 //      listadas em TABELAS passam por aqui — nada mais, nem leitura.
@@ -121,6 +125,19 @@ const TABELAS: Record<string, Acesso> = {
     escrever: ["update"],
     colunasUpdate: ["status", "analisado_em", "analisado_por", "observacao"],
   },
+};
+
+/* QUEM LE CADA TABELA, ALEM DO ADMINISTRADOR (15/09/2026). A liberacao da DP360 e por
+   pessoa e por pagina; a trava de verdade tem de estar AQUI, porque a da tela so esconde.
+   Tabela que nao esta nesta lista e do PONTO e vale qualquer pagina de ponto da DP360. */
+const PAGINAS_DO_PONTO = ["dp360", "dp360_abandonos", "dp360_resumo", "dp360_evidencias"];
+const ACESSO_DAS_TABELAS: Record<string, string[] | "admin"> = {
+  // FOLHA: hora extra e valor em R$ — so quem tem o Banco de Horas liberado
+  banco_horas: ["dp360_banco_horas"],
+  // INOVE Guard: continua exclusivo de Administrador (a pagina guard_* tambem e)
+  fraude_cartao_bloqueado: "admin",
+  fraude_cartao_giros: "admin",
+  fraude_cartao_sequencial: "admin",
 };
 
 const LIMITE_MAX = 5000;
@@ -727,16 +744,33 @@ serve(async (req: Request) => {
   });
   const { data: perfil, error: perfilError } = await inoveAdmin
     .from("usuarios_aprovadores")
-    .select("id, nome, nivel, ativo, status_cadastro")
+    .select("id, nome, nivel, ativo, status_cadastro, paginas_liberadas, paginas_bloqueadas")
     .eq("auth_user_id", authData.user.id)
     .maybeSingle();
 
   const nivel = normalizar(perfil?.nivel);
   const ativo = perfil?.ativo !== false;
   const aprovado = !perfil?.status_cadastro || normalizar(perfil.status_cadastro) === "aprovado";
-  if (perfilError || !perfil || !ativo || !aprovado || (nivel !== "administrador" && nivel !== "admin")) {
-    return json({ ok: false, error: "acesso DP360 exclusivo para Administrador" }, 403);
+  const ehAdmin = nivel === "administrador" || nivel === "admin";
+  // a mesma regra do `access.js` do INOVE: liberação individual, e "Bloquear" ganha dela
+  const chaves = (v: unknown) => new Set((Array.isArray(v) ? v : []).map((x) => String(x ?? "").trim()));
+  const liberadas = chaves(perfil?.paginas_liberadas);
+  const bloqueadas = chaves(perfil?.paginas_bloqueadas);
+  const pode = (pagina: string) => ehAdmin || (liberadas.has(pagina) && !bloqueadas.has(pagina));
+  const podeTabela = (tabela: string) => {
+    const regra = ACESSO_DAS_TABELAS[tabela];
+    if (regra === "admin") return ehAdmin;
+    return (regra ?? PAGINAS_DO_PONTO).some(pode);
+  };
+  const temDp360 = ehAdmin || [...PAGINAS_DO_PONTO, "dp360_banco_horas"].some(pode);
+  if (perfilError || !perfil || !ativo || !aprovado || !temDp360) {
+    return json(
+      { ok: false, error: "sem acesso à DP360 — peça ao Administrador para liberar a página no seu usuário" },
+      403,
+    );
   }
+  const semAcessoTabela = (tabela: string) =>
+    json({ ok: false, error: `seu usuário não tem acesso a esta parte da DP360 (${tabela})` }, 403);
 
   let corpo: Record<string, unknown> = {};
   try {
@@ -779,6 +813,7 @@ serve(async (req: Request) => {
     const tabela = String(corpo.tabela ?? "");
     const cfg = TABELAS[tabela];
     if (!cfg?.ler) return json({ ok: false, error: "tabela não liberada para a DP360" }, 403);
+    if (!podeTabela(tabela)) return semAcessoTabela(tabela);
 
     const coluna = String(corpo.coluna ?? "");
     if (!IDENT.test(coluna)) return json({ ok: false, error: "coluna inválida" }, 400);
@@ -823,6 +858,7 @@ serve(async (req: Request) => {
     const tabela = String(corpo.tabela ?? "");
     const cfg = TABELAS[tabela];
     if (!cfg?.ler) return json({ ok: false, error: "tabela não liberada para a DP360" }, 403);
+    if (!podeTabela(tabela)) return semAcessoTabela(tabela);
 
     const select = colunasValidas(corpo.colunas);
     if (select === null) return json({ ok: false, error: "colunas inválidas" }, 400);
@@ -864,6 +900,7 @@ serve(async (req: Request) => {
     if (!cfg?.escrever?.includes(op as "upsert" | "insert" | "delete" | "update")) {
       return json({ ok: false, error: "operação não liberada para esta tabela" }, 403);
     }
+    if (!podeTabela(tabela)) return semAcessoTabela(tabela);
 
     // UPDATE (PATCH): muda colunas de linhas que JA EXISTEM. Diferente do upsert
     // de proposito — um upsert com a chave errada CRIA linha, e nesta tabela
@@ -972,6 +1009,10 @@ serve(async (req: Request) => {
      e o certo; na falta dele cai no `GITHUB_TOKEN` que ja existe aqui (mesmo
      dono dos dois repos) — sem token, 503 dizendo o que configurar. */
   if (acao === "robo") {
+    // o robô escreve no Transnet: só quem tem a Gestão de Ponto liberada dispara
+    if (!pode("dp360")) {
+      return json({ ok: false, error: "disparar robô exige a página DP360 · Gestão de Ponto liberada" }, 403);
+    }
     const nome = String(corpo.robo ?? "");
     const cfgRobo = ROBOS[nome];
     if (!cfgRobo) return json({ ok: false, error: "robô não permitido" }, 403);
@@ -1293,6 +1334,9 @@ serve(async (req: Request) => {
     "evidencia_run",
   ]);
   if (acoesDaProva.has(acao)) {
+    if (!pode("dp360") && !pode("dp360_evidencias")) {
+      return json({ ok: false, error: "as evidências do robô exigem a Gestão de Ponto ou as Evidências liberadas" }, 403);
+    }
     const token = tokenGitHub();
     const dono = Deno.env.get("DP360_GITHUB_OWNER") ?? "guuimaximo";
     const repo = Deno.env.get("DP360_GITHUB_REPO") ?? "DP360";

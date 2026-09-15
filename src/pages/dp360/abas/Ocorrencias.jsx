@@ -1226,6 +1226,7 @@ function montarRegistros(base) {
     });
     let notas = arruma(previa.notas);
     let sim = previa.batidas;
+    let contratoMin = [];
 
     /* A LISTA E O CASO TÊM DE DIZER A MESMA COISA (10/09/2026). Quando o motor desiste —
      * e ele desiste no cartão de batidas coladas, que é justamente o que o pedido conserta —
@@ -1262,6 +1263,9 @@ function montarRegistros(base) {
       const contratos = grupo.map((o) => txt(o.ponto_depois)).filter(Boolean);
       const contrato = contratos.length ? batidasDoCartao(contratos[contratos.length - 1]) : [];
       if (contrato.length === 2 || contrato.length === 4) sim = contrato;
+      // guardado como ele está: a Fila precisa dizer o que o robô vai fazer valer, INCLUSIVE
+      // quando o cartão congelado não fecha — é aí que o lançamento dá errado lá
+      contratoMin = contrato;
     }
 
     // main.py:6702 (_bloqueio_simulacao) — por que este dia NÃO pode ser julgado.
@@ -1504,6 +1508,7 @@ function montarRegistros(base) {
       // dias" (a advertencia esta escrita la mesmo, main.py:7802).
       antesTexto: textoBatidas(antesMin),
       depois: sim,
+      contratoMin,                          // o cartão congelado no veredito (`ponto_depois`)
       alvo: final,                          // o cartão FINAL, quatro slots + `mudou`
       regua,                                // as quatro pontas do alvo publicado (o pop-up)
       reguaFonte,                           // publicado · aviso · escala — a origem dela
@@ -2183,6 +2188,41 @@ function motivoSemAdvertir(reg) {
   return "";
 }
 
+/* ══ O QUE A FILA VAI LANÇAR — e é o CONTRATO, não o alvo (dono, 15/09/2026) ══════
+ *
+ * "O que vai lançar precisa ter as batidas certas, se não vai dar erro mesmo."
+ *
+ * A coluna mostrava `reg.alvo`, que é o cartão FINAL da tela — e no pedido do colaborador
+ * ele é, muitas vezes, o alvo publicado pela Revisão, que ninguém vai lançar: o robô
+ * `ajustes` aceita ou recusa a ocorrência e, quando o cartão não fica igual ao CONTRATO
+ * congelado no veredito, lança esse contrato por cima (bot_ajustes_app.py:1646). Então o
+ * que a fila tem de mostrar é o contrato — e dizer quando ele não fecha, que é o caso em
+ * que o robô não reescreve nada e a conferência acusa divergência.
+ *
+ * Três respostas, e nenhuma delas inventa cartão:
+ *   · `contrato`     — há cartão congelado: é ele que vai valer (com o problema, se houver);
+ *   · `recusa`       — o dia foi recusado: o robô só recusa, o cartão não muda;
+ *   · `semContrato`  — aceite sem cartão congelado: o robô aceita o pedido e não reescreve. */
+function cartaoDaFila(reg) {
+  const mins = reg?.contratoMin || [];
+  if (mins.length) {
+    const slots =
+      mins.length === 4
+        ? mins.map(min2hm)
+        : mins.length === 2
+          ? [min2hm(mins[0]), "", "", min2hm(mins[1])]
+          : [];
+    return {
+      tipo: "contrato",
+      slots,
+      texto: textoBatidas(mins),
+      problema: validaCartao(mins, reg?.categoria),
+    };
+  }
+  if (txt(reg?.ciclo?.aceite) === "rejeitado") return { tipo: "recusa", slots: [], texto: "" };
+  return { tipo: "semContrato", slots: [], texto: "" };
+}
+
 /** O cartão que a correção vai lançar É O ALVO da tela — o mesmo da coluna e do pop-up. */
 function cartaoDaCorrecao(reg) {
   const slots = (reg?.alvo?.slots || []).map((v) => txt(v));
@@ -2681,6 +2721,50 @@ function Removidas({ antes, depois }) {
  * Slot destacado = veio do pedido; slot normal = herdado do cartão de hoje (o robô não
  * toca nele). Ver `cartaoFinal`.
  */
+/* A CÉLULA DA FILA. O cartão congelado, ou a frase que diz por que não há cartão — nunca
+   um cartão que ninguém vai lançar. */
+function CartaoDaFila({ reg }) {
+  const c = cartaoDaFila(reg);
+  if (c.tipo === "recusa")
+    return (
+      <span style={PILHA}>
+        <span className="dp-pill mute" title="Recusar não mexe no cartão: o robô só marca a ocorrência como recusada no Transnet.">
+          recusa — o cartão não muda
+        </span>
+        {reg.temAviso ? (
+          <span className="dp-faint" style={MINI}>
+            depois da recusa o dia segue para advertência e correção
+          </span>
+        ) : null}
+      </span>
+    );
+  if (c.tipo === "semContrato")
+    return (
+      <span style={PILHA}>
+        <span className="dp-pill warn" title="Nenhum cartão foi congelado no veredito (ponto_ajustes_app.ponto_depois). O robô aceita a ocorrência e não reescreve o cartão — o Transnet fica com as batidas dele mais o que ele pediu.">
+          sem contrato congelado
+        </span>
+        <span className="dp-faint" style={MINI}>
+          o robô só aceita o pedido — o cartão fica como o Transnet montar
+        </span>
+      </span>
+    );
+  return (
+    <span style={PILHA}>
+      <LinhaCartao horas={c.slots} />
+      {c.problema ? (
+        <span className="dp-pill danger" title={`O cartão congelado não é um cartão possível (${c.problema}). O robô aceita a ocorrência, mas não reescreve o cartão — e a conferência vai acusar divergência. Desfaça o veredito e decida de novo com um cartão que feche.`}>
+          não fecha: {c.problema}
+        </span>
+      ) : (
+        <span className="dp-faint" style={MINI}>
+          contrato congelado — é ele que o robô faz valer
+        </span>
+      )}
+    </span>
+  );
+}
+
 function CartaoAlvo({ alvo, legenda = false }) {
   // O QUE ESTÁ TRAVANDO, DITO NA LINHA. Antes a coluna mostrava só a pílula do defeito
   // (ou um traço), e para saber por quê era preciso abrir o caso. O motivo é curto: cabe
@@ -5070,6 +5154,15 @@ export default function Ocorrencias() {
       );
       const comAviso = lista.filter((r) => r.temAviso && txt(r.ciclo.aceite) === "rejeitado"
         && txt(r.ciclo.correcao_status) !== "dispensada").length;
+      /* O CARTÃO QUE O ROBÔ VAI FAZER VALER (dono, 15/09/2026). Aceite cujo contrato não
+         fecha (ou que nem tem contrato) o robô não reescreve: ele clica em aceitar e o
+         cartão fica como o Transnet montar. Isso não impede o disparo — impede é a pessoa
+         achar que o cartão da tela vai ser lançado. */
+      const semCartao = lista.filter((r) => {
+        if (txt(r.ciclo.aceite) !== "aceito") return false;
+        const c = cartaoDaFila(r);
+        return c.tipo !== "contrato" || Boolean(c.problema);
+      });
       if (!await perguntar(
         `EXECUTAR DE VERDADE no Transnet — ${lista.length} crachá+dia.
 
@@ -5080,6 +5173,12 @@ export default function Ocorrencias() {
           `${soma.j ? ` (${soma.j} o Transnet já resolveu — só confere)` : ""}.\n` +
           `Robô: ajustes · modo "${MODO_EXECUTAR}" · casos = ${lista.length} crachá+dia (só estes), em UM disparo.\n` +
           "Ele carimba conferido_em em ponto_caso — é esse carimbo que tira o caso da \"Fila de lançamento\".\n\n" +
+          (semCartao.length
+            ? `ATENÇÃO: ${semCartao.length} aceite(s) sem cartão que feche (${semCartao
+                .slice(0, 3)
+                .map((r) => `${r.nome} ${r.dataBR}`)
+                .join(" · ")}${semCartao.length > 3 ? " …" : ""}): o robô aceita o pedido e NÃO reescreve o cartão — ele fica como o Transnet montar.\n\n`
+            : "") +
           (comAviso
             ? `ATENÇÃO: ${comAviso} recusa(s) MANTÊM o caso na cadeia de advertência e correção — mas o robô NÃO envia a advertência nem corrige o cartão. Isso continua fora desta tela.`
             : "A advertência e a correção do cartão continuam fora desta tela."),
@@ -5686,8 +5785,12 @@ export default function Ocorrencias() {
     titulo: "Vai lançar",
     largura: 268,
     classe: "oc-cel-cartao",
-    valor: (r) => (r.alvo.temAlvo ? r.alvo.slots.filter(Boolean).join(" ") : ""),
-    render: (r) => <CartaoAlvo alvo={r.alvo} />,
+    valor: (r) => {
+      const c = cartaoDaFila(r);
+      if (c.tipo === "contrato") return `${c.texto}${c.problema ? ` (não fecha: ${c.problema})` : ""}`;
+      return c.tipo === "recusa" ? "recusa — o cartão não muda" : "sem contrato congelado";
+    },
+    render: (r) => <CartaoDaFila reg={r} />,
   };
   // O VEREDITO NÃO É O QUE VAI SER LANÇADO — é o julgamento dos pedidos dele. Os dois
   // convivem na fila: a coluna acima diz o cartão, esta diz a decisão que o robô carrega.

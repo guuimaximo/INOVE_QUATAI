@@ -4313,8 +4313,10 @@ export default function Ocorrencias() {
       setRecado("");
       const gravacoes = [];
       gravacoesEmCurso = gravacoes;
+      let deuCerto = false;
       try {
         const aviso = await tarefa();
+        deuCerto = true;
         gravacoesEmCurso = null;
         // NA HORA: o que o banco acabou de aceitar entra na lista antes da releitura
         if (gravacoes.length) {
@@ -4335,6 +4337,7 @@ export default function Ocorrencias() {
       }
       // a releitura confere com o banco POR TRÁS — a tela já está livre para o próximo caso
       atualizarSilencioso();
+      return deuCerto;
     },
     [atualizarSilencioso],
   );
@@ -4434,9 +4437,15 @@ export default function Ocorrencias() {
           `O caso sai de "A decidir" e cai na FILA DE LANÇAMENTO. Nada vai ao Transnet agora: ` +
           `o robô é disparado de lá, com a ✔ e o botão "Executar marcados".`,
       )) return;
-      executarGravacao(`Marcação gravada (${reg.nome} · ${reg.dataBR})`, () =>
+      const gravou = await executarGravacao(`Marcação gravada (${reg.nome} · ${reg.dataBR})`, () =>
         gravarMarcacao(reg, aceitarIds, rejeitarIds, contrato),
       );
+      /* VEREDITO DADO, POP-UP FECHADO (dono, 15/09/2026: "depois de dar o veredito tem que
+         sair"). O pop-up é só veredito: gravado, não há mais nada a fazer nele, e deixá-lo
+         aberto mostrava "não dá para gravar: decisão já gravada" em cima de um caso que já
+         tinha ido para a Fila. O recado do topo confirma o que foi gravado. Se a gravação
+         FALHAR ele fica aberto, com as marcações do DP intactas para tentar de novo. */
+      if (gravou) setAberto(null);
     },
     [executarGravacao],
   );

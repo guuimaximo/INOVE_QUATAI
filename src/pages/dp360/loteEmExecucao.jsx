@@ -306,107 +306,116 @@ export function lerLogDoBot(texto) {
  * não controle. Por isso ele não trava a tela atrás dele enquanto roda — o DP pode fechar,
  * olhar outro caso e voltar pelo aviso do topo.
  */
+/**
+ * O QUADRO DO ROBÔ, DENTRO DA FILA DE LANÇAMENTO (dono, 15/09/2026: "essa parte do robô tem
+ * que ficar só nessa tela de fila de lançamento, para mostrar que está lançando e quando
+ * acabar aparece que encerrou").
+ *
+ * Foi pop-up por um dia e não servia: cobria a tela inteira, em QUALQUER aba, com o
+ * assunto de uma só. Agora é um quadro no alto da própria fila — a lista continua visível
+ * embaixo, e é nela que os casos somem quando o robô os carimba.
+ *
+ * DOIS ESTADOS E NENHUM MEIO-TERMO NA CARA: âmbar enquanto lança, verde (ou âmbar, se
+ * sobrou caso) quando encerra. O botão de fechar só existe DEPOIS de encerrar: antes disso
+ * não há o que dispensar, e fechar interromperia o acompanhamento — o módulo para de ler o
+ * log e de conferir o banco quando o estado some.
+ *
+ * O acompanhamento continua valendo fora daqui: se o DP trocar de aba, o módulo segue
+ * esperando o robô, e ao voltar para a fila o quadro está onde parou.
+ */
 export default function PainelExecucao() {
   const execucao = useLoteEmExecucao();
-  const aoFechar = fecharPainelDoLote;
   const [agora, setAgora] = useState(() => Date.now());
-  // o que o robô falou até agora vem do módulo, que lê o log mesmo com o painel fechado
+  // o que o robô falou até agora vem do módulo, que lê o log mesmo com a tela fechada
   const aoVivo = execucao?.aoVivo ?? VAZIO;
   useEffect(() => {
-    if (execucao?.fim) return undefined;
+    if (!execucao || execucao.fim) return undefined;
     const t = setInterval(() => setAgora(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [execucao?.fim]);
-
-  useEffect(() => {
-    const esc = (e) => e.key === "Escape" && aoFechar();
-    document.addEventListener("keydown", esc);
-    return () => document.removeEventListener("keydown", esc);
-  }, [aoFechar]);
-
+  }, [execucao, execucao?.fim]);
 
   if (!execucao) return null;
   const { casos, onde, fim, painel, desde, porCaso, erro } = execucao;
   const seg = Math.max(0, Math.round(((fim ? execucao.terminouEm : agora) - desde) / 1000));
   const relogio = `${String(Math.floor(seg / 60)).padStart(2, "0")}:${String(seg % 60).padStart(2, "0")}`;
   const feitos = casos.filter((c) => porCaso?.get(c.chave)?.estado === "conferido").length;
+  // encerrou de verdade só quando o banco respondeu (ou quando não deu para conferir)
+  const encerrou = Boolean(fim) && (Boolean(porCaso) || Boolean(erro));
+  const tudoCerto = encerrou && !erro && feitos === casos.length;
+  const tom = !encerrou ? "rodando" : tudoCerto ? "ok" : "pendente";
 
   return (
-    <div
-      className="rv-overlay rv-overlay-alto"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Execução no Transnet"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) aoFechar(); }}
-    >
-      <div className="dp-card rv-box oc-exec" style={{ maxWidth: 720 }}>
-        <header className="rv-head rv-fixo">
-          <div>
-            <div style={{ ...ROTULO_CARD, color: "var(--dp-accent)" }}>Robô · executar decisões</div>
-            <h3 style={{ margin: "4px 0 2px", fontSize: 16, fontWeight: 700 }}>
-              {fim ? (
-                <>
-                  {feitos} de {casos.length} conferido(s)
-                </>
-              ) : (
-                <>
-                  {casos.length} crachá+dia no Transnet <span className="dp-num">· {relogio}</span>
-                </>
-              )}
-            </h3>
-            <div className="dp-muted" style={{ fontSize: 12 }}>
-              {erro
-                ? erro
+    <section className={`dp-card oc-exec oc-exec-${tom}`} aria-live="polite" aria-label="Robô na fila de lançamento">
+      <header className="oc-exec-topo">
+        <div style={{ minWidth: 0 }}>
+          <div className="oc-exec-rotulo">
+            {!encerrou ? "⚙ Lançando no Transnet" : tudoCerto ? "✅ Encerrou" : "⚠ Encerrou com pendência"}
+          </div>
+          <div className="oc-exec-titulo">
+            {!encerrou ? (
+              <>
+                {casos.length} crachá+dia <span className="dp-num">· {relogio}</span>
+              </>
+            ) : erro ? (
+              "não consegui conferir o resultado"
+            ) : (
+              <>
+                {feitos} de {casos.length} conferido(s) e fora da fila
+              </>
+            )}
+          </div>
+          <div className="dp-muted" style={{ fontSize: 12 }}>
+            {erro
+              ? erro
+              : encerrou
+                ? `o robô terminou${fim === "success" ? "" : ` (${fim})`} em ${relogio}`
                 : fim
-                  ? `o robô terminou${fim === "success" ? "" : ` (${fim})`} em ${relogio}`
+                  ? "o robô terminou — conferindo cada caso no banco…"
                   : `${onde || "mandando o robô"}${
                       aoVivo.size ? ` · já passou por ${aoVivo.size} de ${casos.length}` : "…"
                     }`}
-            </div>
           </div>
-          <button type="button" className="dp-btn" onClick={aoFechar} aria-label="Fechar">
-            <X size={14} />
-          </button>
-        </header>
-
-        <div className="rv-corpo" style={{ padding: "4px 0" }}>
-          {casos.map((c) => {
-            /* O BANCO MANDA quando existe; até lá, a palavra do robô; e antes de ele
-               falar deste caso, a espera. */
-            const fechado = porCaso?.get(c.chave);
-            const vivo = aoVivo.get(c.chave);
-            /* PENDENTE É O ÚNICO DESFECHO SEM MOTIVO NO BANCO: a falha técnica não deixa
-               marca nenhuma, de propósito ("o caso continua pendente, que é exatamente o
-               que ele é"). Então, só nele, a última palavra do robô no log é o que
-               responde POR QUÊ — e sem ela a linha diria "não conseguiu mexer" e pararia,
-               escondendo que o Transnet recusou por uma regra dele. */
-            const d = fechado
-              ? fechado.estado === "pendente" && vivo
-                ? { ...DESFECHO_CASO.pendente, texto: `continua pendente — ${vivo.frase}` }
-                : DESFECHO_CASO[fechado.estado]
-              : vivo
-                ? { icone: vivo.tom === "ok" ? "✅" : vivo.tom === "warn" ? "⚙" : "👁", tom: vivo.tom, texto: vivo.frase }
-                : DESFECHO_CASO.esperando;
-            return (
-              <div key={c.chave} className="oc-exec-linha">
-                <span className={`oc-exec-ic ${d.tom}`}>{d.icone}</span>
-                <span className="oc-exec-nome" title={c.nome}>
-                  {c.nome} <span className="dp-muted dp-num">· {c.dataBR}</span>
-                </span>
-                <span className={`oc-exec-est ${d.tom}`} title={d.texto}>{d.texto}</span>
-              </div>
-            );
-          })}
         </div>
-
-        {painel ? (
-          <footer className="rv-fixo" style={{ padding: "8px 2px 0", fontSize: 12 }}>
-            <a href={painel} target="_blank" rel="noreferrer">ver o log do run ↗</a>
-            <span className="dp-faint"> · fechar esta janela não para o robô</span>
-          </footer>
+        {encerrou ? (
+          <button type="button" className="dp-btn" onClick={fecharPainelDoLote} title="Tirar este quadro da tela">
+            <X size={14} /> fechar
+          </button>
         ) : null}
+      </header>
+
+      <div className="oc-exec-lista">
+        {casos.map((c) => {
+          /* O BANCO MANDA quando existe; até lá, a palavra do robô; e antes de ele falar
+             deste caso, a espera. PENDENTE é o único desfecho sem motivo no banco (a falha
+             técnica não deixa marca, de propósito) — só nele a última palavra do robô no log
+             responde POR QUÊ. */
+          const fechado = porCaso?.get(c.chave);
+          const vivo = aoVivo.get(c.chave);
+          const d = fechado
+            ? fechado.estado === "pendente" && vivo
+              ? { ...DESFECHO_CASO.pendente, texto: `continua pendente — ${vivo.frase}` }
+              : DESFECHO_CASO[fechado.estado]
+            : vivo
+              ? { icone: vivo.tom === "ok" ? "✅" : vivo.tom === "warn" ? "⚙" : "👁", tom: vivo.tom, texto: vivo.frase }
+              : DESFECHO_CASO.esperando;
+          return (
+            <div key={c.chave} className="oc-exec-linha">
+              <span className={`oc-exec-ic ${d.tom}`}>{d.icone}</span>
+              <span className="oc-exec-nome" title={c.nome}>
+                {c.nome} <span className="dp-muted dp-num">· {c.dataBR}</span>
+              </span>
+              <span className={`oc-exec-est ${d.tom}`} title={d.texto}>{d.texto}</span>
+            </div>
+          );
+        })}
       </div>
-    </div>
+
+      {painel ? (
+        <footer className="oc-exec-pe">
+          <a href={painel} target="_blank" rel="noreferrer">ver o log do run ↗</a>
+          {!encerrou ? <span className="dp-faint"> · pode sair desta tela, o robô continua</span> : null}
+        </footer>
+      ) : null}
+    </section>
   );
 }
-

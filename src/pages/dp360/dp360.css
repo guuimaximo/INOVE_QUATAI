@@ -888,7 +888,29 @@
 /* Cabeçalho e rodapé não rolam: o botão de fechar e o de gravar ficam sempre à mão. */
 .dp360 .rv-fixo { flex: none; }
 
-/* ── o painel do lote de execução ────────────────────────────────────────── */
+/* ── o quadro do robô na Fila de lançamento ─────────────────────────────── */
+.dp360 .oc-exec {
+  margin: 0 0 12px;
+  padding: 12px 14px 10px;
+  border-left: 4px solid var(--dp-warn-ink);
+}
+.dp360 .oc-exec-rodando { border-left-color: var(--dp-warn-ink); background: var(--dp-warn-bg); }
+.dp360 .oc-exec-ok { border-left-color: var(--dp-ok-ink); background: var(--dp-ok-bg); }
+.dp360 .oc-exec-pendente { border-left-color: var(--dp-warn-ink); }
+.dp360 .oc-exec-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.dp360 .oc-exec-rotulo {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+}
+.dp360 .oc-exec-rodando .oc-exec-rotulo,
+.dp360 .oc-exec-pendente .oc-exec-rotulo { color: var(--dp-warn-ink); }
+.dp360 .oc-exec-ok .oc-exec-rotulo { color: var(--dp-ok-ink); }
+.dp360 .oc-exec-titulo { font-size: 15px; font-weight: 700; margin: 2px 0 1px; }
+.dp360 .oc-exec-lista {
+  margin-top: 8px; border-top: 1px solid var(--dp-border);
+  background: var(--dp-surface); border-radius: 8px; padding: 0 10px;
+}
+.dp360 .oc-exec-pe { padding-top: 8px; font-size: 12px; }
+
 .dp360 .oc-exec-linha {
   display: flex;
   align-items: baseline;

@@ -66,7 +66,7 @@ import {
   slotsDoCartao,
 } from "../vereditoCartao";
 import { usePergunta } from "../Perguntar";
-import { acompanharLote, lotePifou } from "../loteEmExecucao";
+import PainelExecucao, { acompanharLote, lotePifou } from "../loteEmExecucao";
 import CartaoDoDia, {
   agoraUtc,
   aplicarRealManual,
@@ -4656,7 +4656,7 @@ export default function Ocorrencias() {
         const r = await dispararRoboDP360("ajustes", { modo: MODO_EXECUTAR, casos, confirmar: "true" });
         const painel = r?.painel ? ` ${r.painel}` : "";
         const escopo = `${lista.length} crachá+dia (${soma.a} aceitar / ${soma.r} rejeitar)`;
-        setRecado(`⚙ Execução disparada — ${escopo}. Acompanhe no painel.${painel}`);
+        setRecado(`⚙ Execução disparada — ${escopo}. Acompanhe na Fila de lançamento.`);
         setSelIds([]);
 
         /* A PARTIR DAQUI A TELA LARGA. Quem espera o robô, lê o log e confere o desfecho é
@@ -4680,23 +4680,19 @@ export default function Ocorrencias() {
             };
           }),
           // a releitura da grade só interessa se esta tela ainda estiver montada
+          // o resultado caso a caso está no quadro da fila; o recado só aponta para lá
           aoTerminar: (fim, conta) => {
             atualizarSilencioso();
             if (!conta) {
-              setRecado(`Robô terminou (${fim}) — não consegui reler os casos. Recarregue a tela.${painel}`);
+              setRecado(`Robô terminou (${fim}) — não consegui reler os casos. Recarregue a tela.`);
               return;
             }
-            const { feitos, faltaram } = conta;
-            const nomes = faltaram.slice(0, 6).map((x) => `${x.nome} ${x.dataBR}`).join(" · ");
+            const sobrou = conta.faltaram.length;
             setRecado(
-              (faltaram.length ? "⚠ " : "✅ ") +
-                `Robô ${fim === "success" ? "terminou" : `terminou ${fim}`} — ` +
-                `${feitos.length} de ${lista.length} caso(s) conferido(s) e fora da fila.` +
-                (faltaram.length
-                  ? ` ${faltaram.length} ficaram: ${nomes}${faltaram.length > 6 ? " …" : ""}.` +
-                    " Abra o caso para ver por quê (ponto fechado, cartão que não subiu)."
-                  : "") +
-                painel,
+              (sobrou ? "⚠ " : "✅ ") +
+                `Robô encerrou — ${conta.feitos.length} de ${conta.feitos.length + sobrou} conferido(s)` +
+                (sobrou ? `, ${sobrou} com pendência` : "") +
+                ". Detalhe na Fila de lançamento.",
             );
           },
         });
@@ -5672,6 +5668,11 @@ export default function Ocorrencias() {
             />
           </div>
         ) : null}
+
+        {/* O ROBÔ DA FILA, na própria fila: lançando enquanto roda, encerrou quando acaba.
+            Só nesta aba — é daqui que ele é disparado, e é nesta lista que os casos somem
+            quando ele os carimba. */}
+        {grade.loteConferir ? <PainelExecucao /> : null}
 
         <TabelaDP
           key={`${grade.chave}-${versao}`}

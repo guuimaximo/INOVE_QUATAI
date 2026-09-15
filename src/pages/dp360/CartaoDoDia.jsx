@@ -958,7 +958,9 @@ function ModalViagens({ cracha, nome, dia, aoFechar }) {
 }
 
 /* ═════════ O BOTÃO DE DECISÃO DA REVISÃO (bloco extra do rodapé) ═════════
-   main.py `marcar_ponto_ok` (~415). Um registro em `ponto_caso` (tipo='ponto_ok')
+   main.py `marcar_ponto_ok` (~415), com UMA diferença deliberada: aqui ele NÃO grava
+   `aceite`/`ajuste`/`conferido_em` (ver o comentário no payload). Um registro em
+   `ponto_caso` (tipo='ponto_ok')
    tira o dia da Revisão E o conta como certo nas Folgas; desfazer LIMPA a marca.
    Vive aqui — junto do resto da gravação de crachá×dia — mas é a Revisão que o
    pendura no rodapé, via `acoesRodape`: é botão de decisão DELA.
@@ -981,9 +983,18 @@ export function BotaoPontoConferido({ linha, caso, aoRecarregar }) {
       date_ref: dia,
       nm_funcionario: linha?.nm_funcionario || "",
       atualizado_em: agora,
-      ...(ligar
-        ? { origem: "revisao", tipo: "ponto_ok", aceite: "aceito", ajuste: "certo", conferido_em: agora }
-        : { tipo: "", aceite: "pendente", ajuste: null, conferido_em: null }),
+      /* A MARCA DA REVISÃO É SÓ A MARCA DA REVISÃO (dono, 15/09/2026: "só na revisão o
+         ponto não fica ok ainda, pq pode ter coisa na gordura para fazer").
+         O desktop grava também `aceite=aceito`, `ajuste=certo` e `conferido_em`
+         (main.py:415) — e no INOVE esses três campos têm dono:
+           · `aceite`/`ajuste` são o VEREDITO da ocorrência. Marcados aqui, o pedido que o
+             colaborador fizesse depois nesse dia chegava às Ocorrências como "decisão já
+             gravada" e ninguém conseguia julgá-lo;
+           · `conferido_em` é o carimbo do ROBÔ ("executei no Transnet"). Marcado aqui, um
+             dia que estava na Fila de lançamento sairia dela sem o robô ter feito nada.
+         Então a marca é o `tipo` — que é o que a ferramenta lê em `get_pontos_ok` — e mais
+         nada. Desfazer limpa só o `tipo`, pelo mesmo motivo: não apaga veredito de ninguém. */
+      ...(ligar ? { origem: "revisao", tipo: "ponto_ok" } : { tipo: "" }),
     };
     try {
       await upsertDP360("ponto_caso", payload);

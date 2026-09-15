@@ -80,7 +80,8 @@ import { usePergunta } from "../Perguntar";
        regra: a célula SUG editável da grade (`gravarCampoSug`, campo a campo) e o
        bloco "4 · Real manual do DP" do cartão compartilhado;
      · Ponto conferido    -> `ponto_caso` com tipo='ponto_ok' (upsert), e o desfazer
-       grava tipo='' / aceite='pendente' (main.py `marcar_ponto_ok` ~415). O botão é
+       grava tipo='' (main.py `marcar_ponto_ok` ~415, sem o aceite/conferido_em que o
+       desktop grava: eles são o veredito da ocorrência e o carimbo do robô). O botão é
        o `BotaoPontoConferido`, que esta tela pendura no rodapé do cartão.
      · Aviso ao trabalhador -> CSV do comunicado disparado no robô do Transnet
        (`dispararRoboDP360("comunicado", …)`) e, quando o envio é o de verdade,
@@ -1923,8 +1924,12 @@ export default function Revisao() {
       String(l.status_ponto ?? "").toUpperCase() === "OK" ||
       // Só conta como resolvido o que o robô TERMINOU BEM: o que falhou tem de voltar
       // para a fila, e o que ainda está rodando não é resultado de coisa nenhuma.
-      estadoDe(l) === "ajustado",
-    [estadoDe],
+      estadoDe(l) === "ajustado" ||
+      // E o que o DP CONFERIU À MÃO (dono, 15/09/2026): ele olhou o dia e disse que está
+      // certo — na REVISÃO. O que sobrar do dia é assunto da Gordura, que tem lista
+      // própria; deixá-lo aqui é pedir que o mesmo dia seja trabalhado de novo.
+      pontoConferido(casos[chaveDia(l.cracha, l.date_ref)]),
+    [estadoDe, casos],
   );
 
   const contagens = useMemo(() => {
@@ -2129,7 +2134,7 @@ export default function Revisao() {
                     <Pilula
                       texto="✓ conferido"
                       tom="ok"
-                      titulo="O DP marcou este dia como certo — ele conta como OK nas Folgas."
+                      titulo="O DP olhou este dia e disse que a REVISÃO dele está certa. Não decide ocorrência nem carimba execução do robô; o que sobrar do dia é assunto da Gordura."
                     />
                   </>
                 )}
@@ -2710,11 +2715,12 @@ export default function Revisao() {
           rodapeInfo={
             pontoConferido(casos[chaveDia(aberta.cracha, aberta.date_ref)]) ? (
               <>
-                ✓ <b>Conferido pelo DP</b>
-                {casos[chaveDia(aberta.cracha, aberta.date_ref)]?.conferido_em
-                  ? ` · ${fmtInstanteBR(casos[chaveDia(aberta.cracha, aberta.date_ref)].conferido_em)}`
+                ✓ <b>Revisão conferida pelo DP</b>
+                {casos[chaveDia(aberta.cracha, aberta.date_ref)]?.atualizado_em
+                  ? ` · ${fmtInstanteBR(casos[chaveDia(aberta.cracha, aberta.date_ref)].atualizado_em)}`
                   : ""}{" "}
-                — o dia sai da Revisão e conta como certo nas Folgas.
+                — o dia sai da lista da Revisão. Não decide ocorrência e não fecha a Gordura:
+                o que sobrar do dia continua lá.
               </>
             ) : (
               <>

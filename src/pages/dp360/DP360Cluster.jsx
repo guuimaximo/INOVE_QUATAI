@@ -16,6 +16,7 @@ import Motorista from "./abas/Motorista";
 import Importacoes from "./abas/Importacoes";
 import Config from "./abas/Config";
 import RoboNoTopo from "./RoboNoTopo";
+import ContaTransnetNoTopo from "./ContaTransnetNoTopo";
 
 // A aparencia segue a FERRAMENTA (Sistemas/PONTO/app/ui), nao o visual do INOVE:
 // topbar enxuta com abas de texto, fundo cinza, tabela densa. Quem usa o DP passa o
@@ -78,8 +79,14 @@ export default function DP360Cluster() {
         </nav>
 
         {/* O ROBÔ FICA NA BARRA, não dentro de uma aba: quem dispara na Revisão sai
-            para as Ocorrências enquanto espera, e a pergunta "já acabou?" viaja junto. */}
-        <RoboNoTopo />
+            para as Ocorrências enquanto espera, e a pergunta "já acabou?" viaja junto.
+            A CONTA DO TRANSNET FICA AO LADO DELE (dono, 15/09/2026): "conectado?" e "robô
+            rodando?" são as duas perguntas de quem vai disparar, e morava na tela Início,
+            onde só via quem passava por lá. */}
+        <div className="dp-topo-dir">
+          <ContaTransnetNoTopo />
+          <RoboNoTopo />
+        </div>
       </div>
 
       <Conteudo />

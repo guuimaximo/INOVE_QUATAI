@@ -305,13 +305,29 @@ export function desfechosDaCorrecao(casos, log, fim) {
   for (const c of casos || []) {
     const fala = log?.get(c.chave);
     const passo = txt(fala?.passo).toUpperCase();
+    // `motivo` é a frase que fica gravada no caso (`transnet_resposta`) para a linha dizer
+    // por que não subiu depois que este quadro fechar
     let item;
     if (passo === "CONFERIDO") item = { estado: "corrigido" };
-    else if (passo === "FECHADO") item = { estado: "ponto_fechado" };
-    else if (passo === "DIVERGENTE") item = { estado: "divergente", texto: "gravou, mas o cartão relido não ficou igual" };
-    else if (fala) item = { estado: "pendente", texto: `não corrigiu — ${fala.frase}` };
-    else if (!log) item = { estado: fim === "success" ? "semLog" : "runFalhou" };
-    else item = { estado: "pendente", texto: "não corrigiu — o robô não chegou neste dia" };
+    else if (passo === "FECHADO") item = { estado: "ponto_fechado", motivo: fala.frase };
+    else if (passo === "DIVERGENTE")
+      item = {
+        estado: "divergente",
+        texto: "gravou, mas o cartão relido não ficou igual",
+        motivo: `gravou, mas o cartão relido não ficou igual (${fala.frase})`,
+      };
+    else if (fala) item = { estado: "pendente", texto: `não corrigiu — ${fala.frase}`, motivo: fala.frase };
+    else if (!log)
+      item =
+        fim === "success"
+          ? { estado: "semLog" }
+          : { estado: "runFalhou", motivo: `o robô terminou em "${fim}" antes de corrigir — veja o log do run` };
+    else
+      item = {
+        estado: "pendente",
+        texto: "não corrigiu — o robô não chegou neste dia",
+        motivo: "o robô não chegou neste dia (a fila dele parou antes)",
+      };
     porCaso.set(c.chave, item);
     if (item.estado === "corrigido") feitos.push(c);
   }

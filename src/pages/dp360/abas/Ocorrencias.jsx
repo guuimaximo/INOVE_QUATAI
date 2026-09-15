@@ -70,7 +70,7 @@ import {
   vizinhoMovel,
 } from "../vereditoCartao";
 import { usePergunta } from "../Perguntar";
-import PainelExecucao, { acompanharLote, lotePifou } from "../loteEmExecucao";
+import PainelExecucao, { acompanharLote, lotePifou, useLoteEmExecucao } from "../loteEmExecucao";
 import CartaoDoDia, {
   agoraUtc,
   aplicarRealManual,
@@ -2193,7 +2193,9 @@ function cartaoDaCorrecao(reg) {
 
 function motivoSemCorrigirVencido(reg) {
   if (!txt(reg?.caso?.advertencia_enviada_em))
-    return "ainda não foi advertido — a advertência vem antes";
+    return txt(reg?.caso?.aceite) === "rejeitado"
+      ? "falta a advertência: a recusa foi confirmada no Transnet, mas a advertência não foi enviada (não há registro)"
+      : "ainda não foi advertido — a advertência vem antes";
   if (txt(reg?.caso?.correcao_final_em)) return "já corrigido";
   const { slots, problema } = cartaoDaCorrecao(reg);
   if (!slots.some(Boolean)) return "não há alvo publicado para lançar";
@@ -2961,8 +2963,21 @@ function CelulaAjustes({ reg, aoAbrir }) {
   );
 }
 
+/* "ADVERTIDO" SEM ADVERTÊNCIA (15/09/2026). A regra do desktop (main.py:7928 `_situacao`)
+ * chama de advertido o dia recusado com aviso assim que a recusa é confirmada no Transnet —
+ * é a ETAPA, não o envio. Mas o envio é outro passo (`enviar_advertencias`, que carimba
+ * `advertencia_enviada_em`), e em 15/09 só 3 dos 36 "advertidos" tinham esse carimbo. O
+ * dono leu a etiqueta, concluiu que a advertência tinha subido e procurou a correção. A
+ * etiqueta agora diz o que o banco sabe. */
+const semAdvertencia = (reg) =>
+  reg?.situacao === "advertido" && !txt(reg?.caso?.advertencia_enviada_em);
+const etapaDaDisc = (reg) => (semAdvertencia(reg) ? "semadv" : reg?.situacao);
+
 function CelulaSituacao({ reg, campo = "situacao" }) {
-  const s = SIT[reg[campo]] || { rotulo: reg[campo] || "—", cor: "neutro" };
+  const s =
+    campo === "situacao" && semAdvertencia(reg)
+      ? { rotulo: "✗ recusado · advertência não enviada", cor: "alerta" }
+      : SIT[reg[campo]] || { rotulo: reg[campo] || "—", cor: "neutro" };
   return (
     <div style={PILHA}>
       <Selo cor={s.cor}>{s.rotulo}</Selo>
@@ -2971,6 +2986,30 @@ function CelulaSituacao({ reg, campo = "situacao" }) {
           ↻ reaberto
         </Selo>
       ) : null}
+    </div>
+  );
+}
+
+/* A CORREÇÃO, NA LINHA (dono, 15/09/2026: "tem que ter um botão para lançar de novo e, se
+ * não der, tem que falar o porquê"). Três respostas, nesta ordem:
+ *   · já corrigido;
+ *   · a ÚLTIMA TENTATIVA que não subiu, com a frase que o robô deixou (`transnet_resposta`,
+ *     a mesma coluna em que o desktop guarda a recusa do Transnet);
+ *   · e se o dia entra ou não no próximo lançamento — com o motivo quando não entra. */
+function CelulaCorrecao({ reg, motivo }) {
+  if (reg.situacao === "corrigido" || txt(reg.caso?.correcao_final_em))
+    return <Selo cor="ok">🔧 corrigido</Selo>;
+  const ultima = txt(reg.caso?.transnet_resposta);
+  return (
+    <div style={PILHA}>
+      {ultima ? (
+        <span className="oc-cor-falha" title={ultima}>⚠ não subiu: {ultima}</span>
+      ) : null}
+      {motivo ? (
+        <span className="dp-faint" style={MINI} title={motivo}>não entra: {motivo}</span>
+      ) : (
+        <Selo cor="accent">{ultima ? "↻ pode lançar de novo" : "✓ pronta para lançar"}</Selo>
+      )}
     </div>
   );
 }
@@ -4315,6 +4354,9 @@ export default function Ocorrencias() {
   const [perguntar, caixaPergunta] = usePergunta();
   // recarga que NÃO tira a lista da tela (ver `buscar`)
   const [atualizando, setAtualizando] = useState(false);
+  // o quadro do robô desta aba (o mesmo teste do `PainelExecucao`)
+  const loteNaTela = useLoteEmExecucao();
+  const quadroDoRoboNaAba = Boolean(loteNaTela) && (!loteNaTela.aba || loteNaTela.aba === aba);
   // Gravou alguma coisa DENTRO do cartão? A releitura da aba custa a varredura do lake por
   // dia — vale a pena UMA vez, ao fechar, e não a cada campo salvo.
   const cartaoGravou = useRef(false);
@@ -4452,7 +4494,7 @@ export default function Ocorrencias() {
   const respostaDe = (r) =>
     r.situacaoAviso === "vencido" ? "vencido" : r.nAjustes ? "resp" : "semresp";
   const linhas = useMemo(() => {
-    if (abaAtiva === "disc" && sitDisc !== "TODOS") return naAba.filter((r) => r.situacao === sitDisc);
+    if (abaAtiva === "disc" && sitDisc !== "TODOS") return naAba.filter((r) => etapaDaDisc(r) === sitDisc);
     if (respFiltro !== "TODOS") return naAba.filter((r) => respostaDe(r) === respFiltro);
     return naAba;
   }, [naAba, abaAtiva, sitDisc, respFiltro, porta]);
@@ -5278,6 +5320,81 @@ export default function Ocorrencias() {
   );
 
 
+  /* ══ LANÇAR A CORREÇÃO — UM CAMINHO SÓ PARA AS TRÊS PORTAS (15/09/2026) ═══════
+   * Advertidos, a cadeia dos vencidos e os recusados sem aviso chamam isto. Antes eram três
+   * laços parecidos, e dois deles tinham os mesmos dois defeitos:
+   *   · carimbavam CORRIGIDO no disparo (ou no run verde) — e o run do `ponto` sai verde
+   *     mesmo quando o dia não grava (bot_ponto.py `roda_lote` anota e segue);
+   *   · disparavam UM RUN POR DIA sem esperar, e a fila do GitHub (`bots-transnet`) cancela o
+   *     pendente mais velho quando chega outro: os dias do meio sumiam sem aviso.
+   * Agora é um run para todos os dias (o CSV leva a data em cada linha), o quadro da aba
+   * acompanha, e quem decide o desfecho de cada dia é o LOG: CONFERIDO → corrigido;
+   * FECHADO → ponto fechado; o resto fica onde está, com a frase em `transnet_resposta`.
+   * Devolve `true` se o robô saiu. */
+  const lancarCorrecao = useCallback(
+    async ({ podem, cartaoDe, titulo = "🔧 Corrigindo o ponto no Transnet" }) => {
+      const dias = [...new Set(podem.map((r) => r.iso))].sort();
+      const csv = csvDoAjustePonto(
+        podem.map((r) => {
+          const [entrada, alm_saida, alm_volta, saida] = cartaoDe(r).slots;
+          return { cracha: cracha8(r.cracha), data: ddmmaaaa(r.iso), entrada, alm_saida, alm_volta, saida };
+        }),
+      );
+      const resp = await dispararRoboDP360("ponto", { csv, data: ddmmaaaa(dias[0]), confirmar: "true" });
+      const casos = casosDoPainel(podem);
+      const regDaChave = new Map(casos.map((c, i) => [c.chave, podem[i]]));
+      acompanharLote({
+        runId: resp?.execucao?.run_id || null,
+        painel: resp?.painel || "",
+        robo: "ponto",
+        tipo: "corrigir",
+        titulo,
+        aba,
+        casos,
+        aoTerminar: async (fim, conta) => {
+          const agora = agoraISOLocal();
+          const corrigidos = [];
+          const fechados = [];
+          const falhas = [];
+          for (const [chave, item] of conta?.porCaso || []) {
+            const reg = regDaChave.get(chave);
+            if (!reg) continue;
+            const chaveCaso = chaveDoCaso(reg);
+            if (item.estado === "corrigido")
+              corrigidos.push({
+                ...chaveCaso,
+                correcao_status: "corrigido",
+                correcao_final_em: agora,
+                transnet_resposta: null,
+                atualizado_em: agora,
+              });
+            else if (item.estado === "ponto_fechado")
+              fechados.push({
+                ...chaveCaso,
+                correcao_status: "ponto_fechado",
+                transnet_resposta: txt(item.motivo).slice(0, 200) || "Ponto já fechado",
+                atualizado_em: agora,
+              });
+            // sem log não se sabe o que houve: não se escreve motivo inventado
+            else if (txt(item.motivo))
+              falhas.push({ ...chaveCaso, transnet_resposta: txt(item.motivo).slice(0, 200), atualizado_em: agora });
+          }
+          try {
+            // cada lote com as MESMAS chaves (o PostgREST exige)
+            if (corrigidos.length) await gravarNoBanco("ponto_caso", corrigidos);
+            if (fechados.length) await gravarNoBanco("ponto_caso", fechados);
+            if (falhas.length) await gravarNoBanco("ponto_caso", falhas);
+          } catch (e) {
+            setRecado(`O robô terminou, mas não gravei o desfecho no nosso banco: ${e?.message || e}`);
+          }
+          atualizarSilencioso();
+        },
+      });
+      return true;
+    },
+    [atualizarSilencioso, aba],
+  );
+
   const aoAdvertirECorrigir = useCallback(
     async (regs) => {
       const lista = (regs || []).filter(Boolean);
@@ -5391,63 +5508,24 @@ export default function Ocorrencias() {
         }
 
         // ── FASE 2 — só quem foi advertido, e só quem tem cartão que feche ──
+        // o caminho único da correção: um run, o quadro da aba, e o desfecho de cada dia
+        // pelo log (ver `lancarCorrecao`)
         const paraCorrigir = advertidosOk.filter((r) => !cartaoDaCorrecao(r).problema && cartaoDaCorrecao(r).slots.some(Boolean));
-        const diasC = [...new Set(paraCorrigir.map((r) => r.iso))].sort();
-        let corrigidos = 0;
-        for (let i = 0; i < diasC.length; i++) {
-          const dia = diasC[i];
-          const gente = paraCorrigir.filter((r) => r.iso === dia);
-          const passo = `${i + 1}/${diasC.length}`;
-          setRecado(`🔧 ${passo} · corrigindo o ponto de ${paraBR(dia)} (${gente.length}) — disparando…`);
-          const t0 = Date.now();
-          let runId = null;
+        let correcaoSaiu = false;
+        if (paraCorrigir.length) {
+          setRecado(`🔧 corrigindo o ponto de ${paraCorrigir.length} dia(s) — disparando…`);
           try {
-            const r = await dispararRoboDP360("ponto", {
-              csv: csvDoAjustePonto(
-                gente.map((x) => {
-                  const [entrada, alm_saida, alm_volta, saida] = cartaoDaCorrecao(x).slots;
-                  return { cracha: cracha8(x.cracha), data: ddmmaaaa(dia), entrada, alm_saida, alm_volta, saida };
-                }),
-              ),
-              data: ddmmaaaa(dia),
-              confirmar: "true",
-            });
-            runId = r?.execucao?.run_id || null;
+            correcaoSaiu = await lancarCorrecao({ podem: paraCorrigir, cartaoDe: cartaoDaCorrecao });
           } catch (e) {
-            relato.push(`${paraBR(dia)}: advertido, mas a correção não saiu (${e?.message || "erro"})`);
-            continue;
-          }
-          const fim = await esperarRun({ runId, robo: "ponto", desde: t0 }, (onde) =>
-            setRecado(`🔧 ${passo} · correção de ${paraBR(dia)} — ${onde}…`));
-          /* SÓ FECHA O CASO COM O RUN VERDE. "Corrigido" é o fim da linha e vira o histórico
-           * do ponto de uma pessoa: carimbar sem saber seria dizer que o cartão mudou quando
-           * ninguém viu mudar. Sem verde, o caso FICA em "advertido" — visível, com a
-           * correção esperando o botão avulso da aba. */
-          if (fim === "success") {
-            const agora = agoraISOLocal();
-            for (const reg of gente) {
-              await gravarNoBanco("ponto_caso", {
-                ...chaveDoCaso(reg),
-                correcao_status: "corrigido",
-                correcao_final_em: agora,
-                atualizado_em: agora,
-              });
-            }
-            corrigidos += gente.length;
-          } else {
-            relato.push(
-              `${paraBR(dia)}: a correção foi disparada, mas ${
-                fim === "tempo_esgotado" ? `o run passou de ${ESPERA_MAX_MIN} min`
-                : fim === "sem_run" ? "não deu para localizar o run"
-                : `terminou em "${fim}"`
-              } — o caso segue em "Advertências e correções"`,
-            );
+            relato.push(`advertidos, mas a correção não saiu (${e?.message || "erro"})`);
           }
         }
 
         setSelIds([]);
         setRecado(
-          `✓ ${advertidos} advertido(s) · ${corrigidos} ponto(s) corrigido(s).` +
+          `✓ ${advertidos} advertido(s)` +
+            (correcaoSaiu ? ` · correção de ${paraCorrigir.length} dia(s) disparada — acompanhe no quadro da aba` : "") +
+            "." +
             (semCartao.length ? ` ${semCartao.length} sem cartão que feche (advertidos, sem correção).` : "") +
             (relato.length ? ` — ${relato.join(" · ")}` : ""),
         );
@@ -5456,7 +5534,7 @@ export default function Ocorrencias() {
         setDisparando(false);
       }
     },
-    [atualizarSilencioso, esperarRun],
+    [atualizarSilencioso, esperarRun, lancarCorrecao],
   );
 
   /* ══ A CORREÇÃO AVULSA — PARA O QUE FICOU PELA METADE ═════════════════════
@@ -5478,68 +5556,33 @@ export default function Ocorrencias() {
         );
         return;
       }
-      const porDia = {};
-      podem.forEach((r) => (porDia[r.iso] = porDia[r.iso] || []).push(r));
-      const dias = Object.keys(porDia).sort();
-
       // O CARTÃO DE CADA UM NA CONFIRMAÇÃO: é ponto de gente, e o robô ESCREVE — diferente
       // do `ajustes`, que só clica em pedido que já existe.
       const linha = (r) => `· ${r.nome} ${r.dataBR}: ${cartaoDaCorrecao(r).slots.filter(Boolean).join(" ")}`;
       if (!await perguntar(
-        `CORRIGIR O PONTO de ${podem.length} dia(s) no Transnet, em ${dias.length} rodada(s):\n\n` +
+        `LANÇAR A CORREÇÃO de ${podem.length} dia(s) no Transnet:\n\n` +
           podem.slice(0, 12).map(linha).join("\n") +
           (podem.length > 12 ? `\n… e mais ${podem.length - 12}` : "") +
-          `\n\nO robô \`ponto\` REESCREVE o cartão do dia com estas pontas. ` +
-          (barrados.length ? `\n${barrados.length} marcado(s) ficam de fora (${barrados[0].motivo}…).` : "") +
-          `\n\nAo disparar, o caso é fechado como CORRIGIDO no nosso banco (correcao_final_em). ` +
-          `A prova do que o Transnet aceitou fica no run do GitHub.`,
+          `\n\nO robô \`ponto\` REESCREVE o cartão de cada dia com estas pontas, relê e confere. ` +
+          `Só fica CORRIGIDO o dia cujo cartão relido bater; quem não passar continua aqui, com o motivo na coluna Correção.` +
+          (barrados.length
+            ? `\n\n${barrados.length} marcado(s) ficam de fora: ${barrados.slice(0, 3).map((x) => `${x.r.nome} (${x.motivo})`).join(" · ")}`
+            : ""),
       )) return;
 
       setDisparando(true);
       setRecado("");
       try {
-        const falhos = [];
-        let corrigidos = 0;
-        for (const dia of dias) {
-          const gente = porDia[dia];
-          try {
-            await dispararRoboDP360("ponto", {
-              csv: csvDoAjustePonto(
-                gente.map((r) => {
-                  const [entrada, alm_saida, alm_volta, saida] = cartaoDaCorrecao(r).slots;
-                  return { cracha: cracha8(r.cracha), data: ddmmaaaa(dia), entrada, alm_saida, alm_volta, saida };
-                }),
-              ),
-              data: ddmmaaaa(dia),
-              confirmar: "true",
-            });
-            const agora = agoraISOLocal();
-            for (const reg of gente) {
-              await gravarNoBanco("ponto_caso", {
-                ...chaveDoCaso(reg),
-                correcao_status: "corrigido",
-                correcao_final_em: agora,
-                atualizado_em: agora,
-              });
-            }
-            corrigidos += gente.length;
-          } catch (e) {
-            falhos.push(`${paraBR(dia)} (${e?.message || "falhou"})`);
-          }
-        }
+        await lancarCorrecao({ podem, cartaoDe: cartaoDaCorrecao });
         setSelIds([]);
-        setRecado(
-          corrigidos
-            ? `✓ ${corrigidos} ponto(s) mandados para o robô em ${dias.length - falhos.length} rodada(s).` +
-                (falhos.length ? ` ${falhos.length} dia(s) falharam: ${falhos.join(" · ")}.` : "")
-            : `Falhou: nenhuma correção saiu. ${falhos.join(" · ")}`,
-        );
-        await atualizarSilencioso();
+        setRecado(`🔧 Correção disparada — ${podem.length} dia(s). Acompanhe no quadro da aba.`);
+      } catch (e) {
+        setRecado(`Falhou: ${e?.message || "não foi possível disparar o robô."}`);
       } finally {
         setDisparando(false);
       }
     },
-    [atualizarSilencioso],
+    [lancarCorrecao],
   );
 
   /* ══ CORRIGIR O PONTO DOS RECUSADOS (15/09/2026) ═══════════════════════════
@@ -5579,61 +5622,16 @@ export default function Ocorrencias() {
       setDisparando(true);
       setRecado("");
       try {
-        const dias = [...new Set(podem.map((r) => r.iso))].sort();
-        const csv = csvDoAjustePonto(
-          podem.map((r) => {
-            const [entrada, alm_saida, alm_volta, saida] = cartaoDaRecusaCorrigida(r).slots;
-            return { cracha: cracha8(r.cracha), data: ddmmaaaa(r.iso), entrada, alm_saida, alm_volta, saida };
-          }),
-        );
-        const resp = await dispararRoboDP360("ponto", { csv, data: ddmmaaaa(dias[0]), confirmar: "true" });
+        await lancarCorrecao({ podem, cartaoDe: cartaoDaRecusaCorrigida });
         setSelIds([]);
         setRecado(`🔧 Correção disparada — ${podem.length} dia(s). Acompanhe no quadro da aba.`);
-        const casos = casosDoPainel(podem);
-        const regDaChave = new Map(casos.map((c, i) => [c.chave, podem[i]]));
-        acompanharLote({
-          runId: resp?.execucao?.run_id || null,
-          painel: resp?.painel || "",
-          robo: "ponto",
-          tipo: "corrigir",
-          titulo: "🔧 Corrigindo o ponto no Transnet",
-          aba,
-          casos,
-          aoTerminar: async (fim, conta) => {
-            const agora = agoraISOLocal();
-            const corrigidos = [];
-            const fechados = [];
-            for (const [chave, item] of conta?.porCaso || []) {
-              const reg = regDaChave.get(chave);
-              if (!reg) continue;
-              if (item.estado === "corrigido")
-                corrigidos.push({
-                  ...chaveDoCaso(reg),
-                  correcao_status: "corrigido",
-                  correcao_final_em: agora,
-                  usuario: "robô ponto — cartão corrigido e conferido",
-                  atualizado_em: agora,
-                });
-              else if (item.estado === "ponto_fechado")
-                fechados.push({ ...chaveDoCaso(reg), correcao_status: "ponto_fechado", atualizado_em: agora });
-            }
-            try {
-              // as linhas de cada lote têm as MESMAS chaves (o PostgREST exige)
-              if (corrigidos.length) await gravarNoBanco("ponto_caso", corrigidos);
-              if (fechados.length) await gravarNoBanco("ponto_caso", fechados);
-            } catch (e) {
-              setRecado(`O robô terminou, mas não gravei o desfecho no nosso banco: ${e?.message || e}`);
-            }
-            atualizarSilencioso();
-          },
-        });
       } catch (e) {
         setRecado(`Falhou: ${e?.message || "não foi possível disparar o robô."}`);
       } finally {
         setDisparando(false);
       }
     },
-    [atualizarSilencioso, aba],
+    [lancarCorrecao],
   );
 
   /* ── colunas de cada grade (formato do TabelaDP: id/titulo/valor/render) ── */
@@ -5799,6 +5797,18 @@ export default function Ocorrencias() {
 
   const COLS_LISTA = [colColaborador, colDia, colSituacao, colBateu, colAlvo, colPontas, colQuando, colAjustes];
 
+  // a coluna que responde "vai corrigir? se não, por quê?" — cada aba com a sua trava
+  const colCorrecao = (motivoDe) => ({
+    id: "correcao",
+    titulo: "Correção",
+    largura: 250,
+    valor: (r) => txt(r.caso?.transnet_resposta) || motivoDe(r) || "pronta",
+    render: (r) => <CelulaCorrecao reg={r} motivo={motivoDe(r)} />,
+  });
+  const COLS_DISC = [
+    colColaborador, colDia, colSituacao, colBateu, colAlvo, colCorrecao(motivoSemCorrigirVencido), colQuando, colAjustes,
+  ];
+
   /* RECUSADOS: a coluna do alvo vira "Corrigir para". O alvo de um dia recusado sem aviso
      não é lançado por ninguém; o que a correção lança é o Real manual — e é ele que a linha
      tem de mostrar, com o motivo quando não dá. */
@@ -5821,7 +5831,9 @@ export default function Ocorrencias() {
       );
     },
   };
-  const COLS_RECUSADOS = [colColaborador, colDia, colSituacao, colBateu, colCorrigirPara, colQuando, colAjustes];
+  const COLS_RECUSADOS = [
+    colColaborador, colDia, colSituacao, colBateu, colCorrigirPara, colCorrecao(motivoSemCorrigirRecusa), colQuando, colAjustes,
+  ];
 
   // Execução pendente: é aqui que mora o DESFAZER (o bot ainda não executou).
   const COLS_EXEC = [colColaborador, colDia, colBateu, colVaiLancar, colVeredito, colQuando, colDecisao(200)];
@@ -5850,7 +5862,7 @@ export default function Ocorrencias() {
     exec: { chave: "p5_exec", colunas: COLS_EXEC, selecionavel: true, loteConferir: true },
     // A SEGUNDA METADE DA CADEIA DO VENCIDO mora aqui: quem já foi advertido espera a
     // correção do ponto, e é esta aba que mostra os dois desfechos lado a lado.
-    disc: { chave: "p5_disc", colunas: COLS_LISTA, selecionavel: true, loteCorrigir: true },
+    disc: { chave: "p5_disc", colunas: COLS_DISC, selecionavel: true, loteCorrigir: true },
     // o dia recusado com Real manual espera a correção aqui (porta do pedido)
     recusados: { chave: "p5_recusados", colunas: COLS_RECUSADOS, selecionavel: true, loteCorrigirRecusa: true },
   };
@@ -5873,6 +5885,7 @@ export default function Ocorrencias() {
 
   const marcados = linhas.filter((r) => selIds.includes(r.k));
   const corrigiveis = grade.loteCorrigirRecusa ? marcados.filter((r) => !motivoSemCorrigirRecusa(r)) : [];
+  const corrigiveisDisc = grade.loteCorrigir ? marcados.filter((r) => !motivoSemCorrigirVencido(r)) : [];
   // DIA SEM PONTO: os candidatos são os da lista em tela; o escopo do disparo são os
   // MARCADOS entre eles — nunca "a fila", que é a regra desta tela inteira.
   const semPontoNaTela = linhas.filter((r) => r.semBatida);
@@ -6029,9 +6042,12 @@ export default function Ocorrencias() {
     <div style={{ ...FILA, gap: 6 }}>
       {[
         ["TODOS", "Todos", naAba.length],
-        ["advertido", "⚠ advertido", naAba.filter((r) => r.situacao === "advertido").length],
-        ["corrigido", "🔧 corrigido", naAba.filter((r) => r.situacao === "corrigido").length],
-      ].map(([id, rotulo, n]) => (
+        ["advertido", "⚠ advertido", naAba.filter((r) => etapaDaDisc(r) === "advertido").length],
+        ["semadv", "✗ sem advertência", naAba.filter((r) => etapaDaDisc(r) === "semadv").length],
+        ["corrigido", "🔧 corrigido", naAba.filter((r) => etapaDaDisc(r) === "corrigido").length],
+      ]
+        .filter(([id, , n]) => id === "TODOS" || n > 0)
+        .map(([id, rotulo, n]) => (
         <button
           key={id}
           type="button"
@@ -6042,8 +6058,10 @@ export default function Ocorrencias() {
             id === "TODOS"
               ? "Tudo o que já virou desfecho nesta porta."
               : id === "advertido"
-                ? "A advertência subiu; o ponto ainda não foi corrigido."
-                : "O ponto foi corrigido (correcao_final_em carimbado)."
+                ? "A advertência foi enviada (advertencia_enviada_em); o ponto ainda não foi corrigido."
+                : id === "semadv"
+                  ? "A recusa foi confirmada no Transnet, mas a advertência não foi enviada — não há registro de envio."
+                  : "O ponto foi corrigido (correcao_final_em carimbado)."
           }
           onClick={() => setSitDisc((atual) => (atual === id ? "TODOS" : id))}
         >
@@ -6053,21 +6071,28 @@ export default function Ocorrencias() {
       <span className="dp-faint dp-num" style={MINI}>
         {sitDisc === "TODOS" ? `${naAba.length} caso(s)` : `${linhas.length} de ${naAba.length}`}
       </span>
-      {/* O SEGUNDO PASSO. Só entra quem tem `advertencia_enviada_em` — a trava está em
-          `motivoSemCorrigirVencido`, e quem for barrado aparece com o motivo. */}
-      {marcados.length ? (
-        <>
-          <span className="oc-sep" aria-hidden="true" />
-          <BotaoAcao
-            tom="erro"
-            titulo="Dispara o robô `ponto`, uma rodada por dia, com o ALVO de cada um — ele REESCREVE o cartão do dia no Transnet. Só de quem já foi advertido."
-            disabled={gravando || disparando}
-            onClick={() => aoCorrigirAdvertidos(marcados)}
-          >
-            🔧 Corrigir o ponto ({marcados.length})
-          </BotaoAcao>
-        </>
-      ) : null}
+      {/* O SEGUNDO PASSO, SEMPRE À VISTA (dono, 15/09/2026: "tem que ter um botão para lançar
+          de novo"). Ele só aparecia com linha marcada, e ninguém acha um botão que não
+          existe. Quem entra é quem passa em `motivoSemCorrigirVencido`; quem não entra
+          mostra o porquê na coluna Correção. */}
+      <span className="oc-sep" aria-hidden="true" />
+      <span className="dp-muted dp-num" style={MINI}>
+        {marcados.length
+          ? `${corrigiveisDisc.length} de ${marcados.length} marcado(s) podem`
+          : "marque na ✔ os dias para lançar"}
+      </span>
+      <BotaoAcao
+        tom="erro"
+        titulo={
+          marcados.length && !corrigiveisDisc.length
+            ? `Nenhum dos marcados pode: ${motivoSemCorrigirVencido(marcados[0])}`
+            : "Dispara o robô `ponto` UMA vez para os dias marcados, com o ALVO de cada um: ele REESCREVE o cartão, relê e confere. Só vira corrigido o dia que bater; o resto fica com o motivo."
+        }
+        disabled={!corrigiveisDisc.length || gravando || disparando}
+        onClick={() => aoCorrigirAdvertidos(marcados)}
+      >
+        🔧 Lançar a correção ({corrigiveisDisc.length})
+      </BotaoAcao>
     </div>
   ) : null;
 
@@ -6209,7 +6234,9 @@ export default function Ocorrencias() {
           diferentes e o DP precisa saber em qual delas está — principalmente na terceira,
           que é a longa (a releitura varre o lake dia a dia) e agora acontece SEM tirar a
           lista da tela. Círculo sozinho não diz nada; aqui ele vem com o nome. */}
-      {gravando || disparando || atualizando ? (
+      {/* COM O QUADRO DO ROBÔ ABERTO a espera fica aqui em cima, pequena: o quadro já está no
+          meio da aba dizendo o que acontece, e dois avisos no mesmo lugar se cobririam. */}
+      {(gravando || disparando || atualizando) && quadroDoRoboNaAba ? (
         <Selo cor="alerta">
           <span className="dp-espera-circulo mini" aria-hidden="true" />
           {gravando ? "gravando…" : disparando ? "disparando o robô…" : "carregando de novo…"}
@@ -6220,6 +6247,28 @@ export default function Ocorrencias() {
 
   return (
     <>
+      {/* A ESPERA NO MEIO DA PÁGINA (dono, 15/09/2026: "ele está como carregando no topo, mas
+          tem que ficar no meio da página, senão a pessoa acha que não subiu"). A pílula lá
+          em cima, do lado do recado, passava despercebida: quem gravava via a lista parada e
+          clicava de novo. No meio ela não bloqueia nada (`pointer-events: none`) — só não dá
+          para não ver. */}
+      {(gravando || disparando || atualizando) && !quadroDoRoboNaAba ? (
+        <div className="oc-espera-meio" role="status" aria-live="polite">
+          <span className="dp-espera-circulo" aria-hidden="true" />
+          <div>
+            <div className="oc-espera-meio-t">
+              {gravando ? "Gravando…" : disparando ? "Disparando o robô…" : "Atualizando a lista…"}
+            </div>
+            <div className="oc-espera-meio-s">
+              {gravando
+                ? "a decisão está indo para o banco"
+                : disparando
+                  ? "mandando o pedido para o GitHub"
+                  : "o que você gravou já está aqui; conferindo com o banco"}
+            </div>
+          </div>
+        </div>
+      ) : null}
       {/* A CAIXA DE CONFIRMAÇÃO fica FORA do AbaShell e antes de tudo: ela é a camada 400,
           acima do modal do caso — a pergunta sobre advertir ou reescrever ponto não pode
           nascer atrás do pop-up que a disparou. */}

@@ -68,6 +68,16 @@
 
 /* ── o aviso do robô, na barra ────────────────────────────────────────────── */
 .dp360 .dp-robo { position: relative; flex: 0 0 auto; }
+/* a última tentativa de correção que não subiu, na linha: curta, e a frase inteira no title */
+.dp360 .oc-cor-falha {
+  max-width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--dp-danger-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* a direita da barra: a conta do Transnet e o robô, lado a lado */
 .dp360 .dp-topo-dir { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .dp360 .dp-conta-btn.is-ok { border-color: var(--dp-ok-line, var(--dp-border)); background: var(--dp-ok-bg); color: var(--dp-ok-ink); }
@@ -869,6 +879,28 @@
  * independentes (`align-content:start` + `min-width:0`): uma coluna comprida
  * rola dentro do corpo, não empurra a outra nem estica a grade.
  */
+/* A ESPERA NO MEIO DA PÁGINA: por cima de tudo (até do pop-up do caso, que é a camada 50),
+   mas sem pegar clique nenhum — ela avisa, não trava. */
+.dp360 .oc-espera-meio {
+  position: fixed;
+  left: 50%;
+  top: 45%;
+  transform: translate(-50%, -50%);
+  z-index: 380;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: calc(100vw - 32px);
+  padding: 16px 22px;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-border-strong);
+  border-radius: 14px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
+}
+.dp360 .oc-espera-meio .dp-espera-circulo { flex: none; }
+.dp360 .oc-espera-meio-t { font-size: 15px; font-weight: 700; }
+.dp360 .oc-espera-meio-s { font-size: 12px; color: var(--dp-muted); margin-top: 2px; }
 .dp360 .rv-overlay {
   position: fixed;
   inset: 0;

@@ -1850,7 +1850,41 @@ async function gravarDesfazer(reg) {
     aceito_em: null,
     atualizado_em: agoraISOLocal(),
   });
-  return "";
+
+  /* O CONTRATO VAI EMBORA JUNTO (dono, 15/09/2026: "o desfazer apaga o contrato").
+   *
+   * O primeiro veredito congela o cartão resultante em `ponto_ajustes_app.ponto_depois`, e
+   * `gravaContrato` nunca sobrescreve um contrato que já existe. Sem apagar aqui, desfazer
+   * e decidir DIFERENTE deixava o cartão da PRIMEIRA decisão valendo: a coluna "Alvo (o
+   * cartão final)" mostrava o antigo, e o robô de ajustes conferia contra ele — é dessa
+   * coluna que ele lê o "cartão final fechado pelo DP".
+   *
+   * SÓ `ponto_depois`. O `ponto_antes` NÃO é da decisão: a captura da grade grava nele as
+   * batidas que o Transnet mostra no pedido ("ponto eletrônico"), e elas SOMEM de lá quando
+   * o pedido é aceito. Apagar isso seria perder a única memória do cartão de antes.
+   *
+   * São exatamente as linhas em que `gravaContrato` escreve (as ocorrências deste caso), e
+   * só as que têm contrato. Desfazer só chega aqui se o robô ainda não executou o caso —
+   * o `aoDesfazer` barra antes —, então nenhum contrato já usado no Transnet é apagado.
+   *
+   * A ferramenta do PC (`desfazer_decisao`, main.py:9623) ainda não faz isto. */
+  const comContrato = (reg.ajustes || [])
+    .filter((o) => txt(o.ponto_depois))
+    .map((o) => txt(o.id_ocorrencia))
+    .filter(Boolean);
+  if (!comContrato.length) return "";
+  try {
+    await upsertDP360(
+      "ponto_ajustes_app",
+      comContrato.map((id) => ({ id_ocorrencia: id, ponto_depois: null })),
+    );
+    return "";
+  } catch (e) {
+    return (
+      `decisão desfeita, mas o cartão congelado não foi apagado (${e?.message || e}) — ` +
+      "o próximo veredito ainda vai herdar o cartão da decisão anterior"
+    );
+  }
 }
 
 /* ══ "RECUSAR OS PEDIDOS E CORRIGIR O PONTO ASSIM" (app.js:1211 → :5612) ═══════
@@ -4298,7 +4332,11 @@ export default function Ocorrencias() {
       }
       if (!await perguntar(
         `DESFAZER a decisão do dia ${reg.dataBR} de ${reg.nome}.\n\n` +
-          `Grava: aceite=pendente, ajuste=null, aceito_em=null. O caso volta para a fila.`,
+          `Grava: aceite=pendente, ajuste=null, aceito_em=null. O caso volta para a fila.
+
+` +
+          `E apaga o cartão congelado nesta decisão (o "Alvo" que o robô confere): o próximo ` +
+          `veredito congela o cartão novo.`,
       )) return;
       executarGravacao(`Decisão desfeita (${reg.nome} · ${reg.dataBR})`, () => gravarDesfazer(reg));
     },

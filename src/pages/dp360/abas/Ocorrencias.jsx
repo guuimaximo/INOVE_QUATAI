@@ -1260,7 +1260,15 @@ function montarRegistros(base) {
             cartaoFechado: fechado,
           }).batidas
         : antesMin;
-      const contratos = grupo.map((o) => txt(o.ponto_depois)).filter(Boolean);
+      /* O `ponto_depois` DA CAPTURA NÃO É CONTRATO (15/09/2026). A linha do lake chega com
+         `ponto_antes` e `ponto_depois` IGUAIS enquanto a ocorrência está pendente no
+         Transnet — é o retrato "antes e depois" da grade, não o cartão que nós congelamos.
+         Lido como contrato, ele apagava a decisão do DP na tela: a MARIA EDUARDA 30061195 ·
+         24/08 teve o "10:32 → 10:00" aceito e o cartão continuava mostrando 10:32, porque o
+         "contrato" era o cartão de hoje. Contrato é o que DIFERE do antes. */
+      const contratos = grupo
+        .filter((o) => txt(o.ponto_depois) && txt(o.ponto_depois) !== txt(o.ponto_antes))
+        .map((o) => txt(o.ponto_depois));
       const contrato = contratos.length ? batidasDoCartao(contratos[contratos.length - 1]) : [];
       if (contrato.length === 2 || contrato.length === 4) sim = contrato;
       // guardado como ele está: a Fila precisa dizer o que o robô vai fazer valer, INCLUSIVE
@@ -1738,7 +1746,10 @@ async function gravaContrato(reg, ids, antes, depois) {
   (reg.ajustes || []).forEach((o) => {
     const id = txt(o.id_ocorrencia);
     if (!alvo.has(id)) return;
-    if (txt(o.ponto_depois)) return; // já tem contrato — CONGELADO, não mexe
+    // já tem contrato NOSSO — congelado, não mexe. O `ponto_depois` que veio igual ao
+    // `ponto_antes` é o retrato da captura, e esse a decisão sobrescreve (ver o comentário
+    // em `montarRegistros`).
+    if (txt(o.ponto_depois) && txt(o.ponto_depois) !== txt(o.ponto_antes)) return;
     const linha = { id_ocorrencia: id };
     if (txt(antes)) linha.ponto_antes = txt(antes);
     if (dep) linha.ponto_depois = dep;
@@ -4255,6 +4266,16 @@ function Detalhe({
                       é o alvo · o que a correção vai lançar
                     </Selo>
                   </span>
+                ) : v.dia === "recusado" && !reg.temAviso ? (
+                  /* RECUSA SEM AVISO NÃO CORRIGE NADA (15/09/2026). Sem aviso nosso no dia não
+                     há advertência nem correção: o robô recusa a ocorrência e o cartão fica
+                     como está — mais o que tiver sido aceito. Dizer "é o alvo" aqui prometia
+                     um lançamento que ninguém faz. */
+                  <span style={{ marginLeft: 8, textTransform: "none", letterSpacing: 0 }}>
+                    <Selo titulo="Sem aviso nosso neste dia, recusar só recusa: não há advertência nem correção. O cartão fica como está — com o que você aceitou, se aceitou algo.">
+                      recusa só recusa · o cartão fica assim
+                    </Selo>
+                  </span>
                 ) : null}
               </div>
               <div className="oc-vd-blocos">
@@ -5161,7 +5182,7 @@ export default function Ocorrencias() {
       const semCartao = lista.filter((r) => {
         if (txt(r.ciclo.aceite) !== "aceito") return false;
         const c = cartaoDaFila(r);
-        return c.tipo !== "contrato" || Boolean(c.problema);
+        return !["contrato", "aceite"].includes(c.tipo) || Boolean(c.problema);
       });
       if (!await perguntar(
         `EXECUTAR DE VERDADE no Transnet — ${lista.length} crachá+dia.
@@ -5787,7 +5808,8 @@ export default function Ocorrencias() {
     classe: "oc-cel-cartao",
     valor: (r) => {
       const c = cartaoDaFila(r);
-      if (c.tipo === "contrato") return `${c.texto}${c.problema ? ` (não fecha: ${c.problema})` : ""}`;
+      if (c.tipo === "contrato" || c.tipo === "aceite")
+        return `${c.texto}${c.problema ? ` (não fecha: ${c.problema})` : ""}`;
       return c.tipo === "recusa" ? "recusa — o cartão não muda" : "sem contrato congelado";
     },
     render: (r) => <CartaoDaFila reg={r} />,

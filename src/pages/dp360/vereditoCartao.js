@@ -587,8 +587,17 @@ export function montaCompartimentos({
    *
    * O botão "completar com o alvo" continua existindo, e só para o OUTRO caso: o dia que
    * termina ACEITO e tem ponta sem batida. Ali quem escolhe é o DP. */
+  /* ── E SÓ QUANDO A CORREÇÃO EXISTE (15/09/2026) ──────────────────────────
+   * MARIA EDUARDA 30061195 · 24/08 (APRENDIZ): duas alterações, o DP aceitou "10:32 → 10:00"
+   * e recusou a outra. O cartão mostrava 10:32 · 12:51 · 13:51 · 17:05 — a batida dela,
+   * inteira — com a etiqueta "é o alvo · o que a correção vai lançar". Não era: o dia não
+   * tem aviso nosso (então não há advertência nem correção) e não tem alvo publicado
+   * nenhum. O que vai acontecer ali é o robô ACEITAR o 10:00.
+   * A regra vale onde ela nasceu: dia com AVISO, que segue para a correção, e que tem RÉGUA
+   * para ela lançar. Sem isso, quem manda no cartão é o que foi decidido. */
   const recusou = acoes.some((_, i) => marcaDaOcorrencia(reg, marcas, i) === "R");
-  const alvoManda = semPedido || recusou;
+  const temCorrecao = Boolean(reg?.temAviso) && regua.some((v) => v != null);
+  const alvoManda = semPedido ? regua.some((v) => v != null) : recusou && temCorrecao;
 
   // o horário que a MARCAÇÃO aceitou em cada compartimento (a primeira, havendo mais de uma)
   const aceito = {};

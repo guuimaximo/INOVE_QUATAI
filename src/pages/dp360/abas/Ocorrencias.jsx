@@ -632,6 +632,59 @@ async function lerLakePorPares(pares, aoAvancar) {
   return out;
 }
 
+/* ── O VEREDITO MUDA A LISTA NA HORA (dono, 15/09/2026) ───────────────────────
+ * "Quando eu gravo o veredito ele demora um pouco para passar para a outra tela. Precisa
+ * ser na hora, senão a pessoa que está operando pode se perder."
+ *
+ * A demora era a RELEITURA: depois de gravar, a tela relia o `ponto_caso`, os pedidos e o
+ * lake dia a dia, e só então o caso mudava de aba. A gravação em si é uma chamada só.
+ *
+ * Agora toda escrita feita DENTRO de uma gravação passa por `gravarNoBanco`, que anota o
+ * que foi escrito. Assim que a gravação volta, essas linhas são mescladas na lista em
+ * memória — o caso muda de aba no mesmo instante — e a releitura completa segue por trás,
+ * sem segurar a tela, para conferir com o banco.
+ *
+ * SÓ O QUE O BANCO ACEITOU entra na mescla: a linha é anotada antes da chamada, mas se a
+ * tarefa falhar a anotação inteira é descartada. */
+let gravacoesEmCurso = null;
+
+function gravarNoBanco(tabela, linhas) {
+  if (gravacoesEmCurso) {
+    gravacoesEmCurso.push({ tabela, linhas: Array.isArray(linhas) ? linhas : [linhas] });
+  }
+  return upsertDP360(tabela, linhas);
+}
+
+function aplicarGravacoes(base, gravacoes) {
+  if (!base || !gravacoes?.length) return base;
+  const chaveDoDia = (r) => `${cra8(r.cracha)}|${normData(r.date_ref)}`;
+  // `criar`: linha que não existe na lista entra nela. Pedido NÃO se cria — um pedido
+  // fora da janela carregada viraria uma linha de ajuste sem tipo nem horário.
+  const mescla = (lista, linhas, chave, criar) => {
+    const out = [...(lista || [])];
+    const onde = new Map(out.map((r, i) => [chave(r), i]));
+    for (const l of linhas) {
+      const k = chave(l);
+      if (onde.has(k)) out[onde.get(k)] = { ...out[onde.get(k)], ...l };
+      else if (criar) {
+        onde.set(k, out.length);
+        out.push({ ...l });
+      }
+    }
+    return out;
+  };
+  let b = base;
+  for (const g of gravacoes) {
+    if (g.tabela === "ponto_caso") b = { ...b, casos: mescla(b.casos, g.linhas, chaveDoDia, true) };
+    else if (g.tabela === "ponto_ajustes_app") {
+      b = { ...b, pedidos: mescla(b.pedidos, g.linhas, (r) => txt(r.id_ocorrencia), false) };
+    } else if (g.tabela === "ponto_real_manual") {
+      b = { ...b, realManual: mescla(b.realManual, g.linhas, chaveDoDia, true) };
+    }
+  }
+  return b;
+}
+
 async function carregarOcorrencias(aoAvancar) {
   const inicio = isoDiasAtras(JANELA_DIAS);
 
@@ -1684,7 +1737,7 @@ async function gravaContrato(reg, ids, antes, depois) {
   });
   if (!linhas.length) return "";
   try {
-    await upsertDP360("ponto_ajustes_app", linhas);
+    await gravarNoBanco("ponto_ajustes_app", linhas);
     return "";
   } catch (e) {
     return `decisão gravada, mas o contrato antes/depois falhou: ${e?.message || e}`;
@@ -1715,7 +1768,7 @@ async function gravarAceite(reg) {
     reg.antesTexto,
     reg.bloqueio || !cartaoFecha ? "" : textoBatidas(reg.depois),
   );
-  await upsertDP360("ponto_caso", {
+  await gravarNoBanco("ponto_caso", {
     ...chaveDoCaso(reg),
     aceite: "aceito",
     ajuste: "certo",
@@ -1737,7 +1790,7 @@ async function gravarRecusa(reg, modo) {
   const agora = agoraISOLocal();
   const ids = idsDoDia(reg);
   const aviso = await gravaContrato(reg, ids, reg.antesTexto, "");
-  await upsertDP360("ponto_caso", {
+  await gravarNoBanco("ponto_caso", {
     ...chaveDoCaso(reg),
     aceite: "rejeitado",
     ajuste: "errado",
@@ -1778,7 +1831,7 @@ async function gravarMarcacao(reg, aceitar, rejeitar, cartaoDoMontador) {
   const rej = (rejeitar || []).map(txt).filter(Boolean);
   if (!ace.length && !rej.length) throw new Error("Nenhuma marcação.");
   const agora = agoraISOLocal();
-  await upsertDP360("ponto_caso", {
+  await gravarNoBanco("ponto_caso", {
     ...chaveDoCaso(reg),
     aceite: rej.length ? "rejeitado" : "aceito",
     ajuste: rej.length ? "errado" : "certo",
@@ -1837,13 +1890,13 @@ async function gravarForaDoRobo(reg, como, nota) {
     usuario: `${cfg.nota}${obs ? ` — ${obs}` : ""}`.slice(0, 200),
   };
   if (cfg.fecha) linha.correcao_final_em = agora;
-  await upsertDP360("ponto_caso", linha);
+  await gravarNoBanco("ponto_caso", linha);
   return "";
 }
 
 /** main.py:9519 (desfazer_decisao) — o caso volta para a fila. */
 async function gravarDesfazer(reg) {
-  await upsertDP360("ponto_caso", {
+  await gravarNoBanco("ponto_caso", {
     ...chaveDoCaso(reg),
     aceite: "pendente",
     ajuste: null,
@@ -1874,7 +1927,7 @@ async function gravarDesfazer(reg) {
     .filter(Boolean);
   if (!comContrato.length) return "";
   try {
-    await upsertDP360(
+    await gravarNoBanco(
       "ponto_ajustes_app",
       comContrato.map((id) => ({ id_ocorrencia: id, ponto_depois: null })),
     );
@@ -1954,7 +2007,7 @@ async function gravarComoAlteracao(reg, ids, pontos) {
     throw new Error("O almoço deste motorista foi travado pela regra da Revisão.");
 
   const agora = agoraISOLocal();
-  await upsertDP360("ponto_caso", {
+  await gravarNoBanco("ponto_caso", {
     ...chaveDoCaso(reg),
     aceite: "rejeitado",
     ajuste: "errado",
@@ -1965,7 +2018,7 @@ async function gravarComoAlteracao(reg, ids, pontos) {
   });
   const aviso = await gravaContrato(reg, rej, reg.antesTexto, textoBatidas(pontos));
   try {
-    await upsertDP360("ponto_real_manual", {
+    await gravarNoBanco("ponto_real_manual", {
       cracha: cra8(reg.cracha),
       date_ref: reg.iso,
       ...campos,
@@ -4103,7 +4156,10 @@ export default function Ocorrencias() {
    *
    * A consulta é a mesma nas duas: quem decide não pode ficar com base desatualizada.
    */
+  // gravações aplicadas na hora e ainda não confirmadas por uma releitura
+  const gravacoesLocais = useRef([]);
   const buscar = useCallback(async (silencioso) => {
+    const comecouEm = Date.now();
     if (silencioso) setAtualizando(true);
     else setCarregando(true);
     setProgresso(null);
@@ -4111,7 +4167,12 @@ export default function Ocorrencias() {
       const dados = await carregarOcorrencias(
         silencioso ? undefined : (feitos, total) => setProgresso({ feitos, total }),
       );
-      setBase(dados);
+      /* A RELEITURA PODE SER MAIS VELHA QUE A ÚLTIMA GRAVAÇÃO: ela leva segundos, e o DP
+         pode ter dado outro veredito nesse meio tempo. O que foi gravado DEPOIS de ela
+         começar é reaplicado por cima; o que foi gravado antes já está nela e sai da lista. */
+      const posteriores = gravacoesLocais.current.filter((g) => g.em >= comecouEm);
+      gravacoesLocais.current = posteriores;
+      setBase(posteriores.reduce((b, g) => aplicarGravacoes(b, g.gravacoes), dados));
       setErro("");
     } catch (falha) {
       setErro(falha?.message || "Falha ao consultar a base DP360.");
@@ -4250,20 +4311,30 @@ export default function Ocorrencias() {
     async (rotulo, tarefa) => {
       setGravando(true);
       setRecado("");
+      const gravacoes = [];
+      gravacoesEmCurso = gravacoes;
       try {
         const aviso = await tarefa();
+        gravacoesEmCurso = null;
+        // NA HORA: o que o banco acabou de aceitar entra na lista antes da releitura
+        if (gravacoes.length) {
+          gravacoesLocais.current.push({ em: Date.now(), gravacoes });
+          setBase((b) => aplicarGravacoes(b, gravacoes));
+        }
         setRecado(aviso ? `${rotulo} — ${aviso}` : `${rotulo} ✓`);
         // A ✔ é PRÉ-AÇÃO sobre o estado que acabou de mudar: mantê-la depois de gravar é
         // oferecer um segundo clique sobre um dado velho.
         setSelIds([]);
         setVersao((v) => v + 1);
-        await atualizarSilencioso();
       } catch (e) {
+        gravacoesEmCurso = null;
         // o erro REAL do gateway (o dp360Api já desembrulha o motivo do 4xx)
         setRecado(`Falhou: ${e?.message || e}`);
       } finally {
         setGravando(false);
       }
+      // a releitura confere com o banco POR TRÁS — a tela já está livre para o próximo caso
+      atualizarSilencioso();
     },
     [atualizarSilencioso],
   );
@@ -5068,7 +5139,7 @@ export default function Ocorrencias() {
           // desce para "Advertências e correções" mesmo quando não deu para acompanhar o run.
           const agora = agoraISOLocal();
           for (const reg of gente) {
-            await upsertDP360("ponto_caso", {
+            await gravarNoBanco("ponto_caso", {
               ...chaveDoCaso(reg),
               advertencia_enviada_em: agora,
               atualizado_em: agora,
@@ -5124,7 +5195,7 @@ export default function Ocorrencias() {
           if (fim === "success") {
             const agora = agoraISOLocal();
             for (const reg of gente) {
-              await upsertDP360("ponto_caso", {
+              await gravarNoBanco("ponto_caso", {
                 ...chaveDoCaso(reg),
                 correcao_status: "corrigido",
                 correcao_final_em: agora,
@@ -5213,7 +5284,7 @@ export default function Ocorrencias() {
             });
             const agora = agoraISOLocal();
             for (const reg of gente) {
-              await upsertDP360("ponto_caso", {
+              await gravarNoBanco("ponto_caso", {
                 ...chaveDoCaso(reg),
                 correcao_status: "corrigido",
                 correcao_final_em: agora,

@@ -4845,7 +4845,9 @@ export default function Ocorrencias() {
         });
         const texto =
           `${valendo ? "Cancelamento" : "Ensaio do cancelamento"} disparado — ${lista.length} crachá+dia.` +
-          " O resultado não volta sozinho: a prova fica no run.";
+          (valendo
+            ? " Acompanhe no aviso do robô, no topo; quando ele parar, recarregue — os dias fechados saem de “A decidir”."
+            : " O ensaio só lê a grade: nada é recusado nem fechado.");
         if (noCasoAberto) setResultadoRobo({ tipo: "ok", texto, painel: r?.painel || "" });
         else setRecado(texto + (r?.painel ? ` ${r.painel}` : ""));
         // a ✔ só se apaga quando o cancelamento saiu de verdade — e não quando o disparo
@@ -5418,7 +5420,25 @@ export default function Ocorrencias() {
             ✗ Cancelar marcados ({marcados.length})
           </BotaoAcao>
         </>
-      ) : null}
+      ) : (
+        /* E NA PORTA DO PEDIDO TAMBÉM (dono, 15/09/2026, revendo o 09/09): "nesses casos em
+           que já fechei o ponto e não tem o que fazer mais, é entrar no Transnet, se tiver a
+           ocorrência mesmo lá, recusa todos e fecha no nosso banco — eu não preciso dar
+           veredito". São pedidos antigos de competência já fechada: não há cartão a
+           corrigir, e abrir 158 casos um por um para dizer "não" é trabalho sem decisão.
+           É o MESMO robô e o mesmo handler da porta do aviso (`cancelar pedidos`): lê a
+           grade ao vivo, recusa só o que ainda estiver pendente e fecha como cancelado —
+           inclusive o dia que já não tem pendência lá. Nesta porta não há aviso nosso,
+           então recusar aqui não vira advertência. */
+        <BotaoAcao
+          tom="erro"
+          titulo="Para pedido de ponto já fechado: o robô abre a grade AO VIVO, recusa no Transnet as ocorrências destes dias que ainda estiverem pendentes e fecha o caso no nosso banco. Sem veredito, sem advertência. Dia que já não tem ocorrência lá também é fechado."
+          disabled={!marcados.length || gravando || disparando}
+          onClick={() => aoCancelarSelecionados(true, marcados)}
+        >
+          ✗ Recusar marcados e fechar ({marcados.length})
+        </BotaoAcao>
+      )}
     </div>
   ) : grade.loteConferir ? (
     <div style={{ ...FILA, gap: 8 }}>

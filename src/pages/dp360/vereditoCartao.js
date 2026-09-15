@@ -396,6 +396,85 @@ export function alvoDaEscala(cartao, categoria) {
   return [min2hm(e), min2hm(saida), min2hm(saida + ALMOCO_INTERNO_MIN), min2hm(s)];
 }
 
+/* ═══════════ RECUSAR E CORRIGIR O PONTO ASSIM (dono, 15/09/2026) ══════════════
+ *
+ * "Consigo recusar os dois e ajustar o cartão ali mesmo?" — é o botão do desktop
+ * "✎ Recusar os pedidos e corrigir o ponto assim" (app.js:5626 `aplicarComoAlteracao`):
+ * recusa as ocorrências e grava o cartão montado como REAL MANUAL, que é o topo da régua e
+ * o que a correção lança. As duas funções abaixo são as duas pontas dessa ida e volta.
+ */
+
+/**
+ * O CARTÃO DO POP-UP VIRANDO REAL MANUAL. Devolve `{ campos, erro }`.
+ *
+ * `campos` só traz o que deve ser ESCRITO — coluna ausente no upsert não é tocada, a mesma
+ * regra do Cartão do dia. As horas vão como o cartão as desenha ("27:06" na saída que vira
+ * a meia-noite): é a forma que o `ponto_real_manual` e o CSV do robô `ponto` já aceitam.
+ *
+ * O ALMOÇO TRAVADO PELA REVISÃO (`almoco_travado`) não entra — o servidor recusaria o dia
+ * inteiro. No motorista ele fica de fora e a correção o tira da régua publicada; no interno,
+ * se o DP mexeu justamente nele, é erro dito com todas as letras, antes de gravar qualquer
+ * coisa. No motorista sem trava o almoço vai junto: é o que está na tela, e sem ele a
+ * correção lançaria o dia sem a refeição que ele já tem.
+ */
+export function camposParaRealManual(v, { almocoTravado = false } = {}) {
+  if (!v) return { campos: null, erro: "sem cartão" };
+  if (!v.fecha) return { campos: null, erro: v.problema || "o cartão montado não fecha" };
+  const cheios = (v.blocos || []).filter((b) => b.min != null);
+  const hora = (chave) => (v.blocos || []).find((b) => b.chave === chave)?.hora || "";
+  const campos = { entrada: hora("entrada"), saida: hora("saida") };
+  if (!campos.entrada || !campos.saida) return { campos: null, erro: "falta entrada ou saída" };
+  const temAlmoco = cheios.length === 4;
+  if (almocoTravado) {
+    const mexeuNoMiolo = (v.blocos || [])
+      .filter((b) => MIOLO.includes(b.chave))
+      .some((b) => ["manual", "movido", "limpo"].includes(b.origem));
+    if (mexeuNoMiolo)
+      return {
+        campos: null,
+        erro: "o almoço deste dia foi travado pela Revisão — ele não pode ser cravado à mão",
+      };
+    return { campos, erro: "" };
+  }
+  campos.alm_saida = temAlmoco ? hora("almSaida") : null;
+  campos.alm_volta = temAlmoco ? hora("almVolta") : null;
+  return { campos, erro: "" };
+}
+
+/**
+ * O CARTÃO QUE A CORREÇÃO DE UM DIA RECUSADO LANÇA — a volta do caminho acima.
+ *
+ * É o Real manual do dia com a régua publicada por baixo (`alvoPublicado`, a mesma cascata
+ * do pop-up e da Revisão): entrada e saída vêm do Real; o almoço, do Real ou, sem ele, da
+ * refeição publicada. Sem Real manual NÃO há cartão — um dia recusado sem ninguém ter dito
+ * como ele fica não se corrige no chute.
+ *
+ * A virada do dia é desenrolada como no pop-up (o "03:06" de saída de quem entra 20:13 é
+ * 27:06), e quem diz se o cartão existe é o `validaCartao` do montador — mais a hora de
+ * almoço do interno, que é proposta nossa e não se lança menor que 1 hora.
+ */
+export function cartaoDaRecusaCorrigida(reg) {
+  const rm = reg?.realManual || {};
+  const vazio = { slots: ["", "", "", ""], mins: [], problema: "", semRealManual: true };
+  if (!horaSlot(rm.entrada) && !horaSlot(rm.saida)) return vazio;
+  const slots = alvoPublicado(reg?.cartao || {}, rm, ["", "", "", ""]) || ["", "", "", ""];
+  let anterior = null;
+  const desenrolado = slots.map((h) => {
+    const m = hm2min(h);
+    if (m == null) return "";
+    let x = m;
+    while (anterior != null && x < anterior) x += 1440;
+    anterior = x;
+    return min2hm(x);
+  });
+  const mins = desenrolado.map(hm2min).filter((m) => m != null);
+  const cat = txt(reg?.categoria).toUpperCase();
+  let problema = validaCartao(mins, cat);
+  if (!problema && !mioloTravado(cat) && mins.length === 4 && mins[2] - mins[1] < ALMOCO_INTERNO_MIN)
+    problema = `almoço de ${mins[2] - mins[1]} min — não dá para lançar menos de 1 hora para o interno`;
+  return { slots: desenrolado, mins, problema, semRealManual: false };
+}
+
 /* ─────────────────────── mover um card de lugar ─────────────────────────── */
 
 /**
@@ -768,25 +847,12 @@ export function montaCompartimentos({
     almocoCurto && !mioloProposto
       ? `ele fez ${mins[2] - mins[1]} min de almoço — abaixo da hora a que tem direito`
       : "";
-  /* O QUE A MÃO MUDOU E ROBÔ NENHUM FAZ. O robô `ajustes` só clica "aceitar" no pedido: o
-   * cartão do Transnet vira as batidas dele MAIS os pedidos aceitos, e nada além. Então,
-   * quando o DP crava ou arrasta, a tela diz o que fica diferente do contrato — a hora
-   * digitada que ninguém vai pôr, e a batida que ficou fora do cartão mas continua lá.
-   * Mudar a POSIÇÃO de uma batida não entra aqui: o Transnet guarda a lista em ordem, e a
-   * lista é a mesma. */
+  /* O DP MEXEU NO CARTÃO À MÃO? É o que decide o que a tela diz sobre o destino dele: com
+   * aceite, o robô `ajustes` lança o contrato por cima quando o Transnet não fica igual
+   * (bot_ajustes_app.py:1646); tudo recusado, ele vira Real manual ("recusar e corrigir
+   * assim"). */
   const tocou = Object.keys(mao).length > 0 || Object.keys(maoVazia).length > 0;
-  const noCartao = new Set(mins.map(clock));
-  const jaAvisadas = new Set(foraDoCartao.map((h) => clock(hm2min(h))));
-  const aMao = {
-    tocou,
-    poe: tocou ? blocos.filter((b) => b.origem === "manual").map((b) => b.hora) : [],
-    fica: tocou
-      ? [...new Set([...batidasDeHoje, ...aceitasNoRelogio])]
-          .filter((m) => !noCartao.has(m) && !jaAvisadas.has(m))
-          .sort((a, b) => a - b)
-          .map(min2hm)
-      : [],
-  };
+  const aMao = { tocou };
   const { liquida, almoco } = jornadaDoCartao(mins);
   const contagem = { A: 0, R: 0, sem: 0 };
   acoes.forEach((_, i) => {

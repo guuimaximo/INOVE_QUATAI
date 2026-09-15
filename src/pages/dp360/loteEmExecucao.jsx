@@ -124,6 +124,8 @@ export async function acompanharLote({
   aoParcial,
 }) {
   const desde = Date.now();
+  // o tipo do MEU lote: `estado` pode virar outro lote (ou nada) enquanto este espera
+  const tipoDoLote = TIPOS[tipo] ? tipo : "generico";
   estado = {
     casos,
     runId: runId || null,
@@ -204,6 +206,28 @@ export async function acompanharLote({
   }
 
   const fim = await esperarORun({ runId, robo, desde });
+  const runDoLote = (aindaEMeu() && estado.runId) || runId;
+
+  /* A CORREÇÃO NÃO DEPENDE DO QUADRO (15/09/2026). No `corrigir` quem grava o desfecho no
+     nosso banco é a TELA, com o que o log diz — o robô `ponto` não escreve caso nenhum. Se
+     o DP disparou outro lote enquanto este rodava, o quadro já é do outro, mas o resultado
+     deste ainda tem de chegar ao banco: senão o dia corrigido de verdade continuaria na
+     lista esperando correção. */
+  if (tipoDoLote === "corrigir" && !ensaio) {
+    const log = await lerLogComPaciencia(runDoLote);
+    const conta = desfechosDaCorrecao(casos, log, fim);
+    if (aindaEMeu()) {
+      mexer({ fim, terminouEm: Date.now(), onde: "", aoVivo: log || VAZIO_LOG });
+      mexer({ porCaso: conta.porCaso, feitos: conta.feitos, faltaram: conta.faltaram });
+    }
+    try {
+      await aoTerminar?.(fim, conta);
+    } catch {
+      // a tela que disparou pode já ter sido desmontada; isso não é problema daqui
+    }
+    return fim;
+  }
+
   if (!aindaEMeu()) return fim;
   mexer({ fim, terminouEm: Date.now(), onde: "" });
 
@@ -221,13 +245,13 @@ export async function acompanharLote({
   /* ENSAIO e robô sem marca por caso no nosso banco não têm o que conferir: o único dado
      verdadeiro é o desfecho do run. Dizer "conferido" ali seria inventar. */
   let conta;
-  if (ensaio || estado.tipo === "generico") {
+  if (ensaio || tipoDoLote === "generico" || tipoDoLote === "corrigir") {
     const estadoDe = ensaio ? "ensaio" : fim === "success" ? "enviado" : "runFalhou";
     const porCaso = new Map(casos.map((c) => [c.chave, { estado: estadoDe }]));
     const feitos = FEITO.has(estadoDe) ? casos : [];
     conta = { porCaso, feitos, faltaram: casos.filter((c) => !feitos.includes(c)) };
   } else {
-    conta = await conferidosDepoisDoRobo(casos, estado.tipo);
+    conta = await conferidosDepoisDoRobo(casos, tipoDoLote);
   }
   if (!aindaEMeu()) return fim;
   if (!conta) {
@@ -241,6 +265,57 @@ export async function acompanharLote({
     // a tela que disparou pode já ter sido desmontada; isso não é problema daqui
   }
   return fim;
+}
+
+/* O LOG DE UM RUN QUE ACABOU DE FECHAR pode demorar alguns segundos para ser servido. Na
+   correção ele é a ÚNICA prova por dia, então vale insistir um pouco antes de desistir. */
+const VAZIO_LOG = new Map();
+async function lerLogComPaciencia(runId) {
+  if (!runId) return null;
+  for (let tentativa = 0; tentativa < 4; tentativa++) {
+    if (tentativa) await new Promise((r) => setTimeout(r, 6000));
+    try {
+      const texto = await logRoboDP360(runId);
+      if (texto) return lerLogDoBot(texto);
+    } catch {
+      // função sem a ação ou log ainda não publicado: tenta de novo
+    }
+  }
+  return null;
+}
+
+/**
+ * O QUE O ROBÔ `ponto` FEZ EM CADA DIA — e só o log sabe.
+ *
+ * O run dele sai VERDE mesmo quando um dia não grava: ele anota o resultado por linha e
+ * segue (bot_ponto.py `roda_lote`). Então verde não é "corrigido". O que é: a linha
+ * `CONFERIDO <crachá> <dia>`, que ele só escreve depois de INSERIR, reabrir o cartão e ver
+ * as quatro pontas iguais ao que mandou (`lancar_registro`, "Só é confirmado depois de abrir
+ * o cartão de novo"). As outras palavras dele viram o motivo de quem não passou:
+ *   FECHADO     → a competência fechou; o Transnet não grava mais esse dia
+ *   DIVERGENTE  → inseriu, mas o cartão relido não ficou igual
+ *   RECUSADO    → o Transnet recusou, com a frase do alerta
+ *   VERIFICAR   → não deu para confirmar (sem releitura não há prova)
+ * Sem log nenhum (a função `robo_log` não respondeu) NINGUÉM vira corrigido: o dia continua
+ * na lista, e o quadro diz que é para conferir.
+ */
+export function desfechosDaCorrecao(casos, log, fim) {
+  const porCaso = new Map();
+  const feitos = [];
+  for (const c of casos || []) {
+    const fala = log?.get(c.chave);
+    const passo = txt(fala?.passo).toUpperCase();
+    let item;
+    if (passo === "CONFERIDO") item = { estado: "corrigido" };
+    else if (passo === "FECHADO") item = { estado: "ponto_fechado" };
+    else if (passo === "DIVERGENTE") item = { estado: "divergente", texto: "gravou, mas o cartão relido não ficou igual" };
+    else if (fala) item = { estado: "pendente", texto: `não corrigiu — ${fala.frase}` };
+    else if (!log) item = { estado: fim === "success" ? "semLog" : "runFalhou" };
+    else item = { estado: "pendente", texto: "não corrigiu — o robô não chegou neste dia" };
+    porCaso.set(c.chave, item);
+    if (item.estado === "corrigido") feitos.push(c);
+  }
+  return { porCaso, feitos, faltaram: (casos || []).filter((c) => !feitos.includes(c)) };
 }
 
 /** O disparo falhou antes de virar run: o painel diz isso em vez de esperar para sempre. */
@@ -282,6 +357,9 @@ const DESFECHO_CASO = {
   enviado: { icone: "✅", tom: "ok", texto: "o robô terminou" },
   runFalhou: { icone: "⚠", tom: "warn", texto: "o robô terminou com falha — veja o log" },
   ensaio: { icone: "👁", tom: "mute", texto: "ensaio — nada foi gravado" },
+  // correção pelo robô `ponto` (o desfecho sai do log, ver `desfechosDaCorrecao`)
+  corrigido: { icone: "✅", tom: "ok", texto: "corrigido — o robô releu o cartão e bate" },
+  semLog: { icone: "⚠", tom: "warn", texto: "o robô terminou, mas não li o resultado deste dia — confira antes de dar por corrigido" },
 };
 
 /* O QUE CADA TIPO DE DISPARO DIZ. É o mesmo quadro para todos (dono, 15/09/2026: "tudo que
@@ -292,8 +370,10 @@ const TIPOS = {
   conferir: { rodando: "👁 Conferindo no Transnet", feito: "conferido(s) e fechado(s)" },
   cancelar: { rodando: "⚙ Recusando no Transnet", feito: "recusado(s) e fechado(s)" },
   generico: { rodando: "⚙ Robô rodando", feito: "enviado(s)" },
+  // robô `ponto` corrigindo dia recusado: só conta o dia que ele releu e bateu
+  corrigir: { rodando: "🔧 Corrigindo o ponto no Transnet", feito: "corrigido(s) e conferido(s)" },
 };
-const FEITO = new Set(["conferido", "cancelado", "enviado"]);
+const FEITO = new Set(["conferido", "cancelado", "enviado", "corrigido"]);
 
 function desfechoDoCaso(caso, tipo = "executar") {
   if (tipo === "cancelar") {
@@ -573,9 +653,11 @@ export default function PainelExecucao({ aba = "" }) {
           const fechado = porCaso?.get(c.chave);
           const vivo = aoVivo.get(c.chave);
           const d = fechado
-            ? fechado.estado === "pendente" && vivo
-              ? { ...DESFECHO_CASO.pendente, texto: `continua pendente — ${vivo.frase}` }
-              : DESFECHO_CASO[fechado.estado]
+            ? fechado.texto
+              ? { ...(DESFECHO_CASO[fechado.estado] || DESFECHO_CASO.pendente), texto: fechado.texto }
+              : fechado.estado === "pendente" && vivo
+                ? { ...DESFECHO_CASO.pendente, texto: `continua pendente — ${vivo.frase}` }
+                : DESFECHO_CASO[fechado.estado]
             : parcial.has(c.chave)
               ? DESFECHO_CASO[parcial.get(c.chave).estado]
               : vistos.has(c.chave)

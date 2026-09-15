@@ -57,6 +57,8 @@ import {
   alvoDaEscala,
   alvoPublicado,
   alvoQuatroSlots,
+  camposParaRealManual,
+  cartaoDaRecusaCorrigida,
   horaSlot,
   cartaoCronologico,
   marcaDaOcorrencia,
@@ -2035,6 +2037,48 @@ async function gravarComoAlteracao(reg, ids, pontos) {
   return aviso;
 }
 
+/* ══ RECUSAR E CORRIGIR O PONTO ASSIM, NO POP-UP (dono, 15/09/2026) ═══════════
+ * "Consigo recusar os dois e ajustar o cartão ali mesmo?" É o `aplicarComoAlteracao` do
+ * desktop (app.js:5626) com o cartão que o DP montou no pop-up — cravado à mão ou com os
+ * cards arrastados — no lugar da projeção "se fossem alterações".
+ *
+ * O REAL MANUAL VAI PRIMEIRO, ao contrário do desktop. Se ele falhar, nada foi gravado e o
+ * caso continua em "A decidir" para tentar de novo. Na ordem de lá, a recusa ficava gravada
+ * sem o cartão, e o dia ia para Recusados sem nada para corrigir — sem ninguém perceber.
+ *
+ * `correcao_status = "pendente"` é a intenção, como no desktop; mas quem diz que o dia tem
+ * correção a fazer é o REAL MANUAL, não esse campo: o robô `ajustes`, ao fechar um dia só de
+ * recusa, grava `correcao_status = null` por cima (bot_ajustes_app.py `_linhas_do_dia`).
+ * O contrato (`ponto_depois`) congela o mesmo cartão, e é contra ele que o dia se lê depois.
+ */
+async function gravarRecusaECorrecao(reg, ids, campos, contrato) {
+  const rej = (ids || []).map(txt).filter(Boolean);
+  if (!rej.length) throw new Error("Nenhum pedido para recusar.");
+  if (!txt(campos?.entrada) || !txt(campos?.saida))
+    throw new Error("O cartão corrigido precisa de entrada e saída.");
+  if (reg.almocoTravado && ("alm_saida" in campos || "alm_volta" in campos))
+    throw new Error("O almoço deste dia foi travado pela Revisão — ele não vai no Real manual.");
+  await gravarNoBanco("ponto_real_manual", {
+    cracha: cra8(reg.cracha),
+    date_ref: reg.iso,
+    ...campos,
+    definido_por: quemEstaUsando(),
+    // instante (timestamptz): aqui o UTC é o certo, como no Cartão do dia
+    definido_em: agoraUtc(),
+  });
+  const agora = agoraISOLocal();
+  await gravarNoBanco("ponto_caso", {
+    ...chaveDoCaso(reg),
+    aceite: "rejeitado",
+    ajuste: "errado",
+    ajuste_ids: rej.map((i) => `R:${i}`).join(","),
+    aceito_em: agora,
+    correcao_status: "pendente",
+    atualizado_em: agora,
+  });
+  return gravaContrato(reg, rej, reg.antesTexto, contrato);
+}
+
 /* ══ LANÇAR DIA SEM PONTO (main.py:4389) ══════════════════════════════════════
  * Dia com ZERO batida não é correção de ponta: não há ponta. Sem esta saída ele entra no
  * motor de correção, vira um cartão de 4 campos inventado, o Transnet recusa e ele gira na
@@ -2154,6 +2198,29 @@ function motivoSemCorrigirVencido(reg) {
   const { slots, problema } = cartaoDaCorrecao(reg);
   if (!slots.some(Boolean)) return "não há alvo publicado para lançar";
   if (problema) return problema;
+  return "";
+}
+
+/* ══ A CORREÇÃO DO DIA RECUSADO SEM AVISO (15/09/2026) ════════════════════════
+ * O desktop corrige esse dia (`_pendentes_correcao` pega o `correcao_status` pendente); o
+ * INOVE só corrigia quem já tinha levado advertência, e o dia que o DP recusou e montou
+ * certo ficava sem ninguém para lançar — o mesmo buraco do RICHARD 30061188 07/08.
+ *
+ * TRÊS CONDIÇÕES, NESTA ORDEM, e cada uma diz o seu motivo:
+ *   1. a recusa JÁ FOI EXECUTADA no Transnet (`recusado` = `conferido_em` do robô). Corrigir
+ *      antes deixaria a ocorrência pendente lá, e quem a aceitasse depois desfaria o cartão;
+ *   2. existe REAL MANUAL — o dia recusado sem ninguém dizer como ele fica não se corrige no
+ *      chute (e é por isso que `correcao_status`, que o robô zera, não serve de sinal);
+ *   3. o cartão do Real FECHA, pela régua do montador. */
+function motivoSemCorrigirRecusa(reg) {
+  if (!reg) return "sem caso";
+  if (txt(reg.caso?.correcao_final_em) || reg.situacao === "corrigido") return "já corrigido";
+  if (reg.situacao !== "recusado")
+    return "a recusa ainda não foi executada no Transnet — ela sai antes, pela Fila de lançamento";
+  const c = cartaoDaRecusaCorrigida(reg);
+  if (c.semRealManual)
+    return "sem Real manual — monte o cartão no caso (recusar e corrigir) ou crave no Cartão do dia";
+  if (c.problema) return `o Real manual não fecha: ${c.problema}`;
   return "";
 }
 
@@ -3848,7 +3915,16 @@ function RelatorioCaso({ reg, montado }) {
 // os quatro campos à mão; no motorista o módulo só lê as duas pontas
 const MANUAL_VAZIO = { entrada: "", almSaida: "", almVolta: "", saida: "" };
 
-function Detalhe({ reg, aoFechar, gravando, aoMarcar, aoAbrirCartao, abrindoCartao, erroCartao }) {
+function Detalhe({
+  reg,
+  aoFechar,
+  gravando,
+  aoMarcar,
+  aoRecusarECorrigir,
+  aoAbrirCartao,
+  abrindoCartao,
+  erroCartao,
+}) {
   /* ── AS MARCAS: uma por ocorrência, e agora só A ou R ────────────────────────
    * A MARCA GRAVADA MANDA; só o que não tem marca cai na pré-marcação do MOTOR
    * (`julgaAcoes.ok`). Reabrir um dia já marcado e repintar tudo pelo veredito faz o DP
@@ -3920,6 +3996,14 @@ function Detalhe({ reg, aoFechar, gravando, aoMarcar, aoAbrirCartao, abrindoCart
   const aceitarIds = idsMarcados("A");
   const rejeitarIds = idsMarcados("R");
   const semResposta = v.contagem.sem;
+  /* RECUSAR E CORRIGIR ASSIM: tudo recusado e o cartão mexido à mão. Mexer no cartão e
+   * recusar tudo só faz sentido se o cartão for para algum lugar — e o lugar é o Real
+   * manual. Quem só quer recusar limpa o que mexeu (↺ limpar) e o botão volta a ser o de
+   * sempre. */
+  const corrigeAssim = v.contagem.R > 0 && v.contagem.A === 0 && !semResposta && Boolean(v.aMao?.tocou);
+  const realDoCartao = corrigeAssim
+    ? camposParaRealManual(v, { almocoTravado: Boolean(reg.almocoTravado) })
+    : null;
   const motivoBotao = reg.decJa
     ? `decisão já gravada: ${reg.decJa.aceito ? "aceito" : "recusado"} em ${reg.decJa.quando}`
     : travaMarcar
@@ -3928,7 +4012,9 @@ function Detalhe({ reg, aoFechar, gravando, aoMarcar, aoAbrirCartao, abrindoCart
         ? "não há pedido neste dia para julgar — este dia segue para a correção, na tela principal"
         : semResposta
           ? `falta responder ${semResposta} ocorrência(s): cada uma sai aceita ou recusada`
-          : "";
+          : realDoCartao?.erro
+            ? `o cartão montado não vira Real manual: ${realDoCartao.erro} — ajuste, ou ↺ limpar para só recusar`
+            : "";
 
   return (
     /* MODAL, como na ferramenta (app.js:638 monta em `modal-root`). O cabeçalho fica fixo e
@@ -4078,27 +4164,29 @@ function Detalhe({ reg, aoFechar, gravando, aoMarcar, aoAbrirCartao, abrindoCart
                   completar com o alvo põe a hora inteira.
                 </div>
               ) : null}
-              {/* O QUE A MÃO MUDOU E ROBÔ NENHUM FAZ. Mudar a hora de lugar não entra aqui
-                  (o Transnet guarda a lista em ordem, e a lista é a mesma); hora digitada e
-                  batida deixada de fora, sim. */}
-              {v.aMao?.tocou &&
-              (v.contagem.A > 0
-                ? v.aMao.poe.length || v.aMao.fica.length
-                : v.contagem.R > 0 || !reg.acoes?.length) ? (
-                <div className="oc-vd-critica" style={{ marginTop: 8 }}>
-                  ⚠ {v.contagem.A > 0 ? (
+              {/* PARA ONDE VAI O CARTÃO MEXIDO À MÃO — dito como o robô faz de verdade.
+                  COM ACEITE: o `ajustes` aceita, relê o cartão e, se não ficou igual ao
+                  contrato, LANÇA O CONTRATO POR CIMA e confere de novo
+                  (bot_ajustes_app.py:1646). TUDO RECUSADO: o cartão vira Real manual, e a
+                  correção lança ele depois que a recusa sair. */}
+              {v.aMao?.tocou && (v.contagem.A > 0 || corrigeAssim) ? (
+                <div className="oc-mt-n" style={{ marginTop: 8 }}>
+                  ✎ {v.contagem.A > 0 ? (
                     <>
-                      O robô só aceita o pedido: ele não
-                      {v.aMao.poe.length ? <> põe <b>{v.aMao.poe.join(" · ")}</b></> : null}
-                      {v.aMao.poe.length && v.aMao.fica.length ? " nem" : ""}
-                      {v.aMao.fica.length ? <> tira <b>{v.aMao.fica.join(" · ")}</b></> : null}
-                      {" "}do Transnet. O contrato congela este cartão, e a conferência vai acusar
-                      a diferença até alguém lançar isso lá.
+                      Com aceite, o robô <b>ajustes</b> aceita o pedido, relê o cartão e, se ele
+                      não ficou igual a este, <b>lança este cartão por cima</b> e confere de novo.
+                    </>
+                  ) : reg.temAviso ? (
+                    <>
+                      <b>Recusar e corrigir assim:</b> este cartão vira o Real manual do dia. A
+                      recusa sai pela Fila de lançamento, o dia segue para advertência, e a
+                      correção dos advertidos lança este cartão.
                     </>
                   ) : (
                     <>
-                      Sem pedido aceito não se congela contrato: o que foi cravado aqui não vai
-                      a robô nenhum. Para a correção lançar este cartão, crave no 🗂 Cartão do dia.
+                      <b>Recusar e corrigir assim:</b> este cartão vira o Real manual do dia.
+                      Primeiro a recusa sai pela Fila de lançamento; depois, em <b>Recusados</b>,
+                      o 🔧 Corrigir o ponto manda o robô <b>ponto</b> escrever este cartão.
                     </>
                   )}
                 </div>
@@ -4134,17 +4222,33 @@ function Detalhe({ reg, aoFechar, gravando, aoMarcar, aoAbrirCartao, abrindoCart
               congela como contrato o cartão desenhado acima. O dia é consequência das
               marcas. O LANÇAMENTO — robô, advertência, correção — é na tela principal. */}
           <div className="oc-vd-rodape">
-            <BotaoAcao
-              tom={v.dia === "recusado" ? "erro" : "ok"}
-              disabled={Boolean(motivoBotao) || (!aceitarIds.length && !rejeitarIds.length)}
-              titulo={
-                motivoBotao ||
-                "Grava A:/R: por ocorrência em ajuste_ids (main.py:marcar_ajustes) e congela como contrato o cartão ao lado. O aceite do dia sai das marcas: havendo recusa, o dia fica recusado."
-              }
-              onClick={() => aoMarcar(reg, aceitarIds, rejeitarIds, v.contrato)}
-            >
-              Gravar veredito ({v.contagem.A} aceitar / {v.contagem.R} recusar)
-            </BotaoAcao>
+            {corrigeAssim ? (
+              <BotaoAcao
+                tom="erro"
+                disabled={Boolean(motivoBotao) || !realDoCartao?.campos}
+                titulo={
+                  motivoBotao ||
+                  "Grava o cartão ao lado como Real manual do dia (ponto_real_manual), a recusa por ocorrência (R: em ajuste_ids) e o contrato. Nada vai ao Transnet agora."
+                }
+                onClick={() =>
+                  aoRecusarECorrigir(reg, rejeitarIds, realDoCartao.campos, textoBatidas(v.mins))
+                }
+              >
+                ✎ Recusar ({v.contagem.R}) e corrigir o ponto assim
+              </BotaoAcao>
+            ) : (
+              <BotaoAcao
+                tom={v.dia === "recusado" ? "erro" : "ok"}
+                disabled={Boolean(motivoBotao) || (!aceitarIds.length && !rejeitarIds.length)}
+                titulo={
+                  motivoBotao ||
+                  "Grava A:/R: por ocorrência em ajuste_ids (main.py:marcar_ajustes) e congela como contrato o cartão ao lado. O aceite do dia sai das marcas: havendo recusa, o dia fica recusado."
+                }
+                onClick={() => aoMarcar(reg, aceitarIds, rejeitarIds, v.contrato)}
+              >
+                Gravar veredito ({v.contagem.A} aceitar / {v.contagem.R} recusar)
+              </BotaoAcao>
+            )}
             <span style={MINI}>
               {v.dia === "recusado" ? (
                 <>o dia fica <b>recusado</b></>
@@ -4533,6 +4637,36 @@ export default function Ocorrencias() {
          aberto mostrava "não dá para gravar: decisão já gravada" em cima de um caso que já
          tinha ido para a Fila. O recado do topo confirma o que foi gravado. Se a gravação
          FALHAR ele fica aberto, com as marcações do DP intactas para tentar de novo. */
+      if (gravou) setAberto(null);
+    },
+    [executarGravacao],
+  );
+
+  /* ── RECUSAR E CORRIGIR ASSIM (o botão do rodapé quando tudo é recusa e o cartão foi
+   * mexido à mão). A confirmação diz o cartão e os DOIS passos que ainda faltam: nada disto
+   * vai ao Transnet no clique. */
+  const aoRecusarECorrigir = useCallback(
+    async (reg, rejeitarIds, campos, contrato) => {
+      const trava = motivoSemDecisao(reg);
+      if (trava) { setRecado(`Não dá para recusar: ${trava}.`); return; }
+      if (!rejeitarIds?.length || !campos) { setRecado("Nada para recusar e corrigir."); return; }
+      const cartao = [campos.entrada, campos.alm_saida, campos.alm_volta, campos.saida]
+        .filter(Boolean)
+        .join(" · ");
+      if (!await perguntar(
+        `RECUSAR ${rejeitarIds.length} pedido(s) de ${reg.nome} em ${reg.dataBR} e CORRIGIR O PONTO para:\n\n` +
+          `   ${cartao}\n\n` +
+          `Grava este cartão como Real manual do dia (ponto_real_manual) — é ele que a correção lança —, ` +
+          `a recusa por ocorrência (R: ${rejeitarIds.join(", ")}) e o contrato.` +
+          (reg.almocoTravado ? `\nO almoço fica o da Revisão: ele está travado.` : "") +
+          `\n\nNada vai ao Transnet agora. ` +
+          (reg.temAviso
+            ? `A recusa sai pela Fila de lançamento, o dia segue para advertência e a correção dos advertidos lança este cartão.`
+            : `1) A recusa sai pela Fila de lançamento (▶ Executar). 2) Depois, em Recusados, o 🔧 Corrigir o ponto manda o robô \`ponto\` escrever este cartão.`),
+      )) return;
+      const gravou = await executarGravacao(`Recusado e cartão cravado (${reg.nome} · ${reg.dataBR})`, () =>
+        gravarRecusaECorrecao(reg, rejeitarIds, campos, contrato),
+      );
       if (gravou) setAberto(null);
     },
     [executarGravacao],
@@ -5408,6 +5542,100 @@ export default function Ocorrencias() {
     [atualizarSilencioso],
   );
 
+  /* ══ CORRIGIR O PONTO DOS RECUSADOS (15/09/2026) ═══════════════════════════
+   * O robô é o `ponto`, o mesmo da correção dos advertidos: ele REESCREVE o cartão do dia
+   * com as quatro pontas do CSV — aqui, o Real manual. UM RUN SÓ para todos os dias: o CSV
+   * leva a data em cada linha e o robô reabre a tela quando ela muda (bot_ponto.py
+   * `roda_lote`). Vários runs seguidos se atropelariam na fila do GitHub, que cancela o
+   * pendente mais velho quando chega outro.
+   *
+   * SÓ O QUE O ROBÔ RELEU E BATEU VIRA CORRIGIDO. O run dele sai verde mesmo quando um dia
+   * não grava, então o desfecho de cada dia sai do log (`desfechosDaCorrecao`) e é a tela que
+   * grava: CONFERIDO → corrigido; FECHADO → ponto fechado; o resto fica aqui, com o motivo. */
+  const aoCorrigirRecusados = useCallback(
+    async (regs) => {
+      const lista = (regs || []).filter(Boolean);
+      const barrados = lista.map((r) => ({ r, motivo: motivoSemCorrigirRecusa(r) })).filter((x) => x.motivo);
+      const podem = lista.filter((r) => !motivoSemCorrigirRecusa(r));
+      if (!podem.length) {
+        setRecado(
+          "Nenhum dos marcados pode ser corrigido" +
+            (barrados.length ? `: ${barrados.slice(0, 4).map((x) => `${x.r.nome} (${x.motivo})`).join(" · ")}` : "."),
+        );
+        return;
+      }
+      const linha = (r) => `· ${r.nome} ${r.dataBR}: ${cartaoDaRecusaCorrigida(r).slots.filter(Boolean).join(" ")}`;
+      if (!await perguntar(
+        `CORRIGIR O PONTO de ${podem.length} dia(s) recusado(s) no Transnet:\n\n` +
+          podem.slice(0, 12).map(linha).join("\n") +
+          (podem.length > 12 ? `\n… e mais ${podem.length - 12}` : "") +
+          `\n\nO robô \`ponto\` REESCREVE o cartão de cada dia com o Real manual acima, relê e confere. ` +
+          `Só fica CORRIGIDO no nosso banco o dia cujo cartão relido bater; quem não passar continua em Recusados, com o motivo.` +
+          (barrados.length
+            ? `\n\n${barrados.length} marcado(s) ficam de fora: ${barrados.slice(0, 3).map((x) => `${x.r.nome} (${x.motivo})`).join(" · ")}`
+            : ""),
+      )) return;
+
+      setDisparando(true);
+      setRecado("");
+      try {
+        const dias = [...new Set(podem.map((r) => r.iso))].sort();
+        const csv = csvDoAjustePonto(
+          podem.map((r) => {
+            const [entrada, alm_saida, alm_volta, saida] = cartaoDaRecusaCorrigida(r).slots;
+            return { cracha: cracha8(r.cracha), data: ddmmaaaa(r.iso), entrada, alm_saida, alm_volta, saida };
+          }),
+        );
+        const resp = await dispararRoboDP360("ponto", { csv, data: ddmmaaaa(dias[0]), confirmar: "true" });
+        setSelIds([]);
+        setRecado(`🔧 Correção disparada — ${podem.length} dia(s). Acompanhe no quadro da aba.`);
+        const casos = casosDoPainel(podem);
+        const regDaChave = new Map(casos.map((c, i) => [c.chave, podem[i]]));
+        acompanharLote({
+          runId: resp?.execucao?.run_id || null,
+          painel: resp?.painel || "",
+          robo: "ponto",
+          tipo: "corrigir",
+          titulo: "🔧 Corrigindo o ponto no Transnet",
+          aba,
+          casos,
+          aoTerminar: async (fim, conta) => {
+            const agora = agoraISOLocal();
+            const corrigidos = [];
+            const fechados = [];
+            for (const [chave, item] of conta?.porCaso || []) {
+              const reg = regDaChave.get(chave);
+              if (!reg) continue;
+              if (item.estado === "corrigido")
+                corrigidos.push({
+                  ...chaveDoCaso(reg),
+                  correcao_status: "corrigido",
+                  correcao_final_em: agora,
+                  usuario: "robô ponto — cartão corrigido e conferido",
+                  atualizado_em: agora,
+                });
+              else if (item.estado === "ponto_fechado")
+                fechados.push({ ...chaveDoCaso(reg), correcao_status: "ponto_fechado", atualizado_em: agora });
+            }
+            try {
+              // as linhas de cada lote têm as MESMAS chaves (o PostgREST exige)
+              if (corrigidos.length) await gravarNoBanco("ponto_caso", corrigidos);
+              if (fechados.length) await gravarNoBanco("ponto_caso", fechados);
+            } catch (e) {
+              setRecado(`O robô terminou, mas não gravei o desfecho no nosso banco: ${e?.message || e}`);
+            }
+            atualizarSilencioso();
+          },
+        });
+      } catch (e) {
+        setRecado(`Falhou: ${e?.message || "não foi possível disparar o robô."}`);
+      } finally {
+        setDisparando(false);
+      }
+    },
+    [atualizarSilencioso, aba],
+  );
+
   /* ── colunas de cada grade (formato do TabelaDP: id/titulo/valor/render) ── */
 
   const acoesDecisao = { gravando, aoAbrir: abrir, aoDesfazer };
@@ -5571,6 +5799,30 @@ export default function Ocorrencias() {
 
   const COLS_LISTA = [colColaborador, colDia, colSituacao, colBateu, colAlvo, colPontas, colQuando, colAjustes];
 
+  /* RECUSADOS: a coluna do alvo vira "Corrigir para". O alvo de um dia recusado sem aviso
+     não é lançado por ninguém; o que a correção lança é o Real manual — e é ele que a linha
+     tem de mostrar, com o motivo quando não dá. */
+  const colCorrigirPara = {
+    id: "corrigir",
+    titulo: "Corrigir para",
+    largura: 268,
+    classe: "oc-cel-cartao",
+    valor: (r) => cartaoDaRecusaCorrigida(r).slots.filter(Boolean).join(" "),
+    render: (r) => {
+      if (r.situacao === "corrigido") return <Selo cor="ok">🔧 corrigido</Selo>;
+      const c = cartaoDaRecusaCorrigida(r);
+      if (c.semRealManual)
+        return <span className="dp-faint" style={MINI}>sem Real manual — só recusa</span>;
+      return (
+        <div style={PILHA}>
+          <LinhaCartao horas={c.slots} />
+          {c.problema ? <Selo cor="erro">não fecha: {c.problema}</Selo> : null}
+        </div>
+      );
+    },
+  };
+  const COLS_RECUSADOS = [colColaborador, colDia, colSituacao, colBateu, colCorrigirPara, colQuando, colAjustes];
+
   // Execução pendente: é aqui que mora o DESFAZER (o bot ainda não executou).
   const COLS_EXEC = [colColaborador, colDia, colBateu, colVaiLancar, colVeredito, colQuando, colDecisao(200)];
 
@@ -5599,6 +5851,8 @@ export default function Ocorrencias() {
     // A SEGUNDA METADE DA CADEIA DO VENCIDO mora aqui: quem já foi advertido espera a
     // correção do ponto, e é esta aba que mostra os dois desfechos lado a lado.
     disc: { chave: "p5_disc", colunas: COLS_LISTA, selecionavel: true, loteCorrigir: true },
+    // o dia recusado com Real manual espera a correção aqui (porta do pedido)
+    recusados: { chave: "p5_recusados", colunas: COLS_RECUSADOS, selecionavel: true, loteCorrigirRecusa: true },
   };
   const grade = GRADE[abaAtiva] || { chave: "p5_lista", colunas: COLS_LISTA };
   // A ✔ só existe onde ela SERVE para alguma coisa: conferir no Transnet e lançar dia sem
@@ -5618,6 +5872,7 @@ export default function Ocorrencias() {
   };
 
   const marcados = linhas.filter((r) => selIds.includes(r.k));
+  const corrigiveis = grade.loteCorrigirRecusa ? marcados.filter((r) => !motivoSemCorrigirRecusa(r)) : [];
   // DIA SEM PONTO: os candidatos são os da lista em tela; o escopo do disparo são os
   // MARCADOS entre eles — nunca "a fila", que é a regra desta tela inteira.
   const semPontoNaTela = linhas.filter((r) => r.semBatida);
@@ -5748,6 +6003,26 @@ export default function Ocorrencias() {
         onClick={() => aoConferirRobo(marcados, true)}
       >
         🔒 Conferir marcados e fechar no nosso banco
+      </BotaoAcao>
+    </div>
+  ) : grade.loteCorrigirRecusa ? (
+    <div style={{ ...FILA, gap: 8 }}>
+      <span className="dp-muted dp-num" style={MINI}>
+        {marcados.length
+          ? `${corrigiveis.length} de ${marcados.length} marcado(s) com cartão para corrigir`
+          : `${naAba.filter((r) => !motivoSemCorrigirRecusa(r)).length} dia(s) com Real manual esperando correção — marque na ✔`}
+      </span>
+      <BotaoAcao
+        tom="erro"
+        titulo={
+          marcados.length && !corrigiveis.length
+            ? `Nenhum dos marcados pode: ${motivoSemCorrigirRecusa(marcados[0])}`
+            : "Dispara o robô `ponto` UMA vez para os dias marcados: ele REESCREVE o cartão de cada um com o Real manual, relê e confere. Só vira corrigido o dia que bater."
+        }
+        disabled={!corrigiveis.length || gravando || disparando}
+        onClick={() => aoCorrigirRecusados(marcados)}
+      >
+        🔧 Corrigir o ponto ({corrigiveis.length})
       </BotaoAcao>
     </div>
   ) : abaAtiva === "disc" ? (
@@ -6005,6 +6280,7 @@ export default function Ocorrencias() {
           aoFechar={() => setAberto(null)}
           gravando={gravando || disparando}
           aoMarcar={aoMarcar}
+          aoRecusarECorrigir={aoRecusarECorrigir}
           aoAbrirCartao={abrirCartaoDoDia}
           abrindoCartao={abrindoCartao}
           erroCartao={erroCartao}

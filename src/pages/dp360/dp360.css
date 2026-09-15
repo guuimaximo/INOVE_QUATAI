@@ -2440,6 +2440,14 @@
 }
 .dp360 .oc-vd-mao-t { font-size: 12px; font-weight: 700; }
 .dp360 .oc-vd-mao-campos { display: flex; gap: 10px; margin: 7px 0 5px; flex-wrap: wrap; }
+/* o interno tem quatro campos, na ordem do cartão: uma linha só, e o campo encolhe junto */
+.dp360 .oc-vd-mao-campos.quatro { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.dp360 .oc-vd-mao-campos.quatro .oc-vd-campo { min-width: 0; }
+.dp360 .oc-vd-mao-campos.quatro .oc-vd-campo > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dp360 .oc-vd-mao-campos.quatro .oc-vd-campo > input { width: 100%; min-width: 0; box-sizing: border-box; }
+@media (max-width: 560px) {
+  .dp360 .oc-vd-mao-campos.quatro { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .dp360 .oc-vd-campo { display: flex; flex-direction: column; gap: 2px; min-width: 96px; }
 .dp360 .oc-vd-campo > span {
   font-size: 10.5px;
@@ -2496,6 +2504,34 @@
 .dp360 .oc-vd-bloco.falta { border-color: var(--dp-danger-line); background: var(--dp-danger-bg); }
 /* miolo travado: discreto de propósito — ele não é uma decisão de ninguém. */
 .dp360 .oc-vd-bloco.travado { border-style: dashed; }
+/* MOVER O CARD (15/09/2026): o que se pega tem a mãozinha; onde vai cair se acende. */
+.dp360 .oc-vd-bloco.movel { cursor: grab; }
+.dp360 .oc-vd-bloco.movel:active { cursor: grabbing; }
+.dp360 .oc-vd-bloco.sobre { border-color: var(--dp-accent); box-shadow: 0 0 0 2px var(--dp-accent-bg, rgba(59, 130, 246, 0.18)); }
+.dp360 .oc-vd-setas { display: flex; justify-content: space-between; width: 100%; margin-top: 2px; }
+.dp360 .oc-vd-setas > button {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--dp-border);
+  border-radius: 5px;
+  background: var(--dp-surface);
+  color: var(--dp-muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.dp360 .oc-vd-setas > button:hover:not(:disabled) { color: var(--dp-accent); border-color: var(--dp-accent); }
+.dp360 .oc-vd-setas > button:disabled { opacity: 0.35; cursor: default; }
+.dp360 .oc-vd-mao-limpa {
+  border: 0;
+  background: transparent;
+  padding: 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--dp-accent);
+  cursor: pointer;
+}
 .dp360 .oc-vd-bloco-r {
   font-size: 10px;
   font-weight: 700;

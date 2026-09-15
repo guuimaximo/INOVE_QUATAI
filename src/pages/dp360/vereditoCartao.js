@@ -168,8 +168,21 @@ export const MIOLO = ["almSaida", "almVolta"];
 /** A hora de almoço do interno/aprendiz (main.py `_TPL.interno_almoco`: "o descanso mínimo
  *  de 1 hora é um direito do colaborador"). Não vale para motorista. */
 export const ALMOCO_INTERNO_MIN = 60;
-// só as pontas têm campo à mão: o miolo do motorista é travado e o do interno é do montador
+// as duas pontas têm campo à mão em qualquer categoria
 export const PONTAS_MANUAIS = ["entrada", "saida"];
+
+/* ══ O ALMOÇO À MÃO É DO INTERNO (dono, 15/09/2026) ══════════════════════════
+ * "Para internos tem que dar a opção de colocar a hora de almoço manual também." No
+ * motorista o miolo continua sem campo: é a refeição que NÓS lançamos, travada. No
+ * interno/aprendiz ele é livre — o montador encaixa quando dá, e quando não dá (o cartão
+ * de seis batidas do WILKER 30061203) quem sabe onde fica o almoço é o DP. */
+export const camposAMao = (categoria) =>
+  mioloTravado(categoria) ? PONTAS_MANUAIS : COMPARTIMENTOS.map((c) => c.chave);
+
+/* O TRAÇO NO CAMPO = "ESTA PONTA FICA VAZIA". É o que sobra quando o DP arrasta a hora
+ * de um compartimento para outro: sem ele, a ponta de onde a hora saiu voltaria a mostrar
+ * a batida de hoje, e a mesma hora apareceria em dois lugares. */
+export const VAZIO_A_MAO = "-";
 
 /**
  * DE ONDE VEIO A PONTA — a pílula do bloco. `cor` é a classe `.dp-pill` do dp360.css.
@@ -177,6 +190,8 @@ export const PONTAS_MANUAIS = ["entrada", "saida"];
  */
 export const ORIGENS = {
   manual: { rotulo: "cravado à mão", cor: "accent", ajuda: "você digitou no campo à mão — é o topo da precedência." },
+  movido: { rotulo: "batida movida", cor: "accent", ajuda: "é uma batida dele que você mudou de compartimento — a hora é dele, a posição é sua." },
+  limpo: { rotulo: "vazia à mão", cor: "accent", ajuda: "você deixou esta ponta vazia (o traço no campo à mão). Apague o traço para ela voltar." },
   pedido: { rotulo: "pedido aceito", cor: "ok", ajuda: "é o horário que ele pediu e você aceitou; quem lança é o robô `ajustes`." },
   alvo: { rotulo: "do alvo", cor: "accent", ajuda: "é o alvo publicado pela Revisão — o que a correção vai lançar nesta ponta." },
   escala: { rotulo: "da escala", cor: "alerta", ajuda: "não há batida nem alvo apurado neste dia: o horário é o PROGRAMADO da escala, a jornada combinada com ele. Confira antes de gravar." },
@@ -239,6 +254,7 @@ export function horaDoPedido(item) {
 export function leHoraDigitada(bruto) {
   const s = txt(bruto);
   if (!s) return { min: null, erro: "" };
+  if (s === VAZIO_A_MAO || s === "—") return { min: null, erro: "", vazio: true };
   let h;
   let mi;
   if (s.includes(":")) {
@@ -380,6 +396,56 @@ export function alvoDaEscala(cartao, categoria) {
   return [min2hm(e), min2hm(saida), min2hm(saida + ALMOCO_INTERNO_MIN), min2hm(s)];
 }
 
+/* ─────────────────────── mover um card de lugar ─────────────────────────── */
+
+/**
+ * ARRASTAR UM CARD (dono, 15/09/2026: "dá a opção de movimentar eles para fechar o ponto").
+ *
+ * Recebe os blocos que estão na tela e devolve os CAMPOS À MÃO que produzem o novo arranjo
+ * — mover não é um estado à parte, é um atalho de digitação: o DP vê nos campos o que
+ * mexeu, e apaga ali o que não quiser.
+ *   · soltou numa ponta VAZIA → a hora vai para lá e a de origem fica vazia (o traço);
+ *   · soltou numa ponta OCUPADA → as do meio andam uma casa na direção de onde ela saiu,
+ *     como se reordena uma lista. Entre vizinhos isso é uma troca.
+ * Reordenar, e não trocar, é o que fecha o cartão de gente como o WILKER 30061203 · 20/08
+ * (03:06 · 20:13 · 22:11 · 23:05): o 03:06 é o fim da jornada da noite, e arrastá-lo para a
+ * saída tem de deixar 20:13 · 22:11 · 23:05 · 03:06 — trocar deixaria 23:05 na entrada.
+ *
+ * O miolo travado do motorista não entra na conta: nem sai, nem recebe, nem anda.
+ * Devolve `null` quando não há o que mover.
+ */
+export function moverCompartimento(blocos, de, para) {
+  const lista = blocos || [];
+  const moveis = lista.map((b, i) => (b.travado ? -1 : i)).filter((i) => i >= 0);
+  const a = moveis.indexOf(de);
+  const b = moveis.indexOf(para);
+  if (a < 0 || b < 0 || a === b) return null;
+  const relogio = (m) => (m == null ? null : ((m % 1440) + 1440) % 1440);
+  const horas = moveis.map((i) => relogio(lista[i].min));
+  if (horas[a] == null) return null;
+  const novo = [...horas];
+  if (horas[b] == null) {
+    novo[b] = horas[a];
+    novo[a] = null;
+  } else {
+    const [h] = novo.splice(a, 1);
+    novo.splice(b, 0, h);
+  }
+  const campos = {};
+  moveis.forEach((i, k) => {
+    if (novo[k] === horas[k]) return;
+    campos[lista[i].chave] = novo[k] == null ? VAZIO_A_MAO : min2hm(novo[k]);
+  });
+  return Object.keys(campos).length ? campos : null;
+}
+
+/** O vizinho móvel de um compartimento (−1 = o de antes, +1 = o de depois), ou −1. */
+export function vizinhoMovel(blocos, i, sentido) {
+  const moveis = (blocos || []).map((b, j) => (b.travado ? -1 : j)).filter((j) => j >= 0);
+  const k = moveis.indexOf(i);
+  return k < 0 ? -1 : (moveis[k + sentido] ?? -1);
+}
+
 /* ──────────────────── os quatro compartimentos, montados ─────────────────── */
 
 /**
@@ -388,7 +454,8 @@ export function alvoDaEscala(cartao, categoria) {
  * Entradas:
  *   `reg`          — o registro do dia (`slotsHoje`, `regua`, `acoes`, `categoria`)
  *   `marcas`       — { índice da ocorrência: "A" | "R" | "" }, o que está na tela AGORA
- *   `manual`       — { entrada, saida } como o DP digitou (texto cru)
+ *   `manual`       — { entrada, almSaida, almVolta, saida } como o DP digitou (texto cru;
+ *                    o miolo só vale no interno, e o traço deixa a ponta vazia)
  *   `completar`    — { entrada: true, … } as pontas em que ele clicou "completar com o alvo"
  *   `ficaMontador` — o cartão que o montador encaixou (só interno/aprendiz usa o miolo dele)
  *
@@ -517,19 +584,43 @@ export function montaCompartimentos({
   /* ── o campo à mão: entra ao digitar, e só se a ordem do cartão aceitar ──
    * A referência de cada ponta é o MIOLO (entrada × saída do almoço, saída × volta do
    * almoço); num dia sem miolo, é a outra ponta. */
+  /* NO INTERNO O MIOLO TAMBÉM TEM CAMPO (15/09/2026), e aí a referência de cada campo passa
+   * a ser o VIZINHO que o DP está vendo: o que ele digitou manda, depois a régua, depois a
+   * batida. A saída do almoço mede contra a entrada; a volta, contra a saída do almoço. A
+   * ponta deixada vazia à mão (o traço) não serve de referência para ninguém. */
   const criticas = {};
   const mao = {};
-  PONTAS_MANUAIS.forEach((chave) => {
-    const { min, erro } = leHoraDigitada(manual[chave]);
+  const maoVazia = {};
+  const campos = camposAMao(cat);
+  const lidos = {};
+  campos.forEach((chave) => {
+    lidos[chave] = leHoraDigitada(manual[chave]);
+  });
+  const idx = (chave) => COMPARTIMENTOS.findIndex((c) => c.chave === chave);
+  const pega = (i) => {
+    const l = lidos[COMPARTIMENTOS[i].chave];
+    if (l?.vazio) return null;
+    if (l && !l.erro && l.min != null) return l.min;
+    return regua[i] != null ? regua[i] : hoje[i];
+  };
+  campos.forEach((chave) => {
+    const { min, erro, vazio } = lidos[chave];
     if (erro) {
       criticas[chave] = erro;
       return;
     }
+    if (vazio) {
+      maoVazia[chave] = true;
+      return;
+    }
     if (min == null) return;
-    const iMiolo = chave === "entrada" ? 1 : 2;
-    const iOutra = chave === "entrada" ? 3 : 0;
-    const pega = (i) => (regua[i] != null ? regua[i] : hoje[i]);
-    const ref = pega(iMiolo) != null ? pega(iMiolo) : pega(iOutra);
+    const i = idx(chave);
+    // a ponta mede contra o miolo e, sem miolo, contra a outra ponta; o miolo mede contra
+    // o compartimento de antes
+    const refs =
+      chave === "entrada" ? [1, 2, 3] : chave === "saida" ? [2, 1, 0] : i === 1 ? [0] : [1, 0];
+    const iRef = refs.find((j) => pega(j) != null);
+    const ref = iRef == null ? null : pega(iRef);
     const critica = criticaOrdem(chave, min, ref);
     if (critica) {
       criticas[chave] = critica;
@@ -538,11 +629,27 @@ export function montaCompartimentos({
     mao[chave] = min;
   });
 
+  /* DE ONDE VEIO A HORA À MÃO. Quem arrasta um card não inventa horário: a hora continua
+   * sendo a batida dele (ou o pedido que ele fez), só em outro compartimento — e o almoço
+   * de 57 min que ELE bateu é fato, não proposta nossa (a regra da hora, lá embaixo). */
+  const clock = (m) => ((m % 1440) + 1440) % 1440;
+  const batidasDeHoje = new Set(hoje.filter((m) => m != null).map(clock));
+  const aceitasNoRelogio = new Set([...horasAceitas].map(clock));
+  const origemAMao = (m, i) =>
+    hoje[i] != null && clock(m) === clock(hoje[i])
+      ? "batida"
+      : batidasDeHoje.has(clock(m))
+        ? "movido"
+        : aceitasNoRelogio.has(clock(m))
+          ? "pedido"
+          : "manual";
+
   const montaBruto = (alvoManda) => COMPARTIMENTOS.map((c, i) => {
     const base = { chave: c.chave, rotulo: c.rotulo, ponta: c.ponta, travado: false, porClique: false };
+    const tocada = mao[c.chave] != null || maoVazia[c.chave];
     // O INTERNO QUE FECHA EM QUATRO: o cartão já está ordenado — pelo montador, ou pela
     // leitura cronológica quando ele desiste.
-    if (quatro && !alvoManda && mao[c.chave] == null)
+    if (quatro && !alvoManda && !tocada)
       return { ...base, min: quatro[i], origem: origemDoEncaixe(quatro[i], i) };
     if (MIOLO.includes(c.chave)) {
       if (travaMiolo) {
@@ -554,7 +661,8 @@ export function montaCompartimentos({
       }
       // (o encaixe do interno já respondeu acima, pelas quatro posições)
     }
-    if (mao[c.chave] != null) return { ...base, min: mao[c.chave], origem: "manual" };
+    if (maoVazia[c.chave]) return { ...base, min: null, origem: "limpo" };
+    if (mao[c.chave] != null) return { ...base, min: mao[c.chave], origem: origemAMao(mao[c.chave], i) };
     if (aceito[c.chave] != null) return { ...base, min: aceito[c.chave], origem: "pedido" };
     // o dia da correção: o alvo manda na ponta inteira, tenha ela batida ou não
     if (alvoManda && regua[i] != null)
@@ -660,6 +768,25 @@ export function montaCompartimentos({
     almocoCurto && !mioloProposto
       ? `ele fez ${mins[2] - mins[1]} min de almoço — abaixo da hora a que tem direito`
       : "";
+  /* O QUE A MÃO MUDOU E ROBÔ NENHUM FAZ. O robô `ajustes` só clica "aceitar" no pedido: o
+   * cartão do Transnet vira as batidas dele MAIS os pedidos aceitos, e nada além. Então,
+   * quando o DP crava ou arrasta, a tela diz o que fica diferente do contrato — a hora
+   * digitada que ninguém vai pôr, e a batida que ficou fora do cartão mas continua lá.
+   * Mudar a POSIÇÃO de uma batida não entra aqui: o Transnet guarda a lista em ordem, e a
+   * lista é a mesma. */
+  const tocou = Object.keys(mao).length > 0 || Object.keys(maoVazia).length > 0;
+  const noCartao = new Set(mins.map(clock));
+  const jaAvisadas = new Set(foraDoCartao.map((h) => clock(hm2min(h))));
+  const aMao = {
+    tocou,
+    poe: tocou ? blocos.filter((b) => b.origem === "manual").map((b) => b.hora) : [],
+    fica: tocou
+      ? [...new Set([...batidasDeHoje, ...aceitasNoRelogio])]
+          .filter((m) => !noCartao.has(m) && !jaAvisadas.has(m))
+          .sort((a, b) => a - b)
+          .map(min2hm)
+      : [],
+  };
   const { liquida, almoco } = jornadaDoCartao(mins);
   const contagem = { A: 0, R: 0, sem: 0 };
   acoes.forEach((_, i) => {
@@ -682,6 +809,9 @@ export function montaCompartimentos({
     avisoAlmoco,
     foraDoCartao,
     criticas,
+    aMao,
+    // os campos que o "cravar à mão" desenha: duas pontas no motorista, as quatro no interno
+    campos,
     travaMiolo,
     // O DIA É CONSEQUÊNCIA DAS MARCAS: havendo recusa, a recusa manda (é ela que abre a
     // cadeia de advertência/correção) — a mesma regra do `aplicar_marcados`.
@@ -695,4 +825,4 @@ export function montaCompartimentos({
   };
 }
 
-export default { COMPARTIMENTOS, ORIGENS, montaCompartimentos, marcaDaOcorrencia, leHoraDigitada, criticaOrdem };
+export default { COMPARTIMENTOS, ORIGENS, montaCompartimentos, marcaDaOcorrencia, leHoraDigitada, criticaOrdem, moverCompartimento };

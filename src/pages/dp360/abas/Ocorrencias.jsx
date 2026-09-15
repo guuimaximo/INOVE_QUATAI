@@ -62,8 +62,10 @@ import {
   marcaDaOcorrencia,
   mioloTravado,
   montaCompartimentos,
+  moverCompartimento,
   pedidoMiraOMiolo,
   slotsDoCartao,
+  vizinhoMovel,
 } from "../vereditoCartao";
 import { usePergunta } from "../Perguntar";
 import PainelExecucao, { acompanharLote, lotePifou } from "../loteEmExecucao";
@@ -2916,7 +2918,7 @@ function CelulaSituacao({ reg, campo = "situacao" }) {
  * As peças abaixo são as do desenho, e só elas:
  *   ESQUERDA  · `ItemAcao`     — uma ocorrência: horário, o que é, o veredito do motor, os
  *                                dois rádios (aceitar/rejeitar; "não marcar" não existe mais)
- *             · `CravarAMao`   — as duas pontas à mão
+ *             · `CravarAMao`   — as pontas à mão (e o almoço, no interno)
  *   DIREITA   · `BlocoPonta`   — um compartimento: rótulo, horário final, DE ONDE VEIO e a
  *                                distância do alvo
  *             · `CompletarComAlvo` / `ResumoDoCartao`
@@ -3008,46 +3010,58 @@ function ItemAcao({ item, marca, aoMarcar, travado, motivo }) {
   );
 }
 
-/* ── CRAVAR À MÃO — as duas pontas, e nada além delas ─────────────────────────────
+/* ── CRAVAR À MÃO — as pontas e, no interno, o almoço ─────────────────────────────
  *
  * ENTRA SOZINHO AO DIGITAR: não há botão "Usar" porque não há segundo estado — o que está no
  * campo é o que está no cartão ao lado, imediatamente.
  *
- * O miolo NÃO tem campo: no motorista ele é a refeição travada, e no interno é o montador
- * que o encaixa.
+ * O MIOLO SÓ TEM CAMPO NO INTERNO/APRENDIZ (dono, 15/09/2026: "para internos tem que dar a
+ * opção de colocar a hora de almoço manual também"). No motorista ele segue sem campo: é a
+ * refeição travada que nós lançamos. Quais campos aparecem é o módulo que diz (`v.campos`).
+ *
+ * ARRASTAR UM CARD DO CARTÃO ESCREVE AQUI. Mover não é estado à parte: é atalho de
+ * digitação, e o traço ("-") é a ponta que ficou vazia. O DP vê o que mexeu e desfaz no campo.
  *
  * E ELE NÃO GRAVA `ponto_real_manual`. O que ele faz é formar o cartão que o botão do rodapé
  * congela como contrato (`ponto_depois`). Cravar de verdade na régua do dia é no Cartão do
  * dia — o botão está no topo deste pop-up.
  */
-function CravarAMao({ valores, criticas, travado, aoMudar }) {
+function CravarAMao({ campos, valores, criticas, travado, aoMudar, aoLimpar }) {
+  const algum = campos.some((chave) => txt(valores[chave]));
   return (
     <div className="oc-vd-mao">
-      <div className="oc-vd-mao-t">✎ Cravar à mão</div>
-      <div className="oc-vd-mao-campos">
-        {[
-          ["entrada", "entrada"],
-          ["saida", "saída"],
-        ].map(([chave, rot]) => (
-          <label key={chave} className="oc-vd-campo">
-            <span>{rot}</span>
+      <div style={{ ...FILA, justifyContent: "space-between" }}>
+        <div className="oc-vd-mao-t">✎ Cravar à mão</div>
+        {algum && !travado ? (
+          <button type="button" className="oc-vd-mao-limpa" onClick={aoLimpar}
+            title="apaga tudo o que foi digitado ou arrastado: o cartão volta a ser o do dia">
+            ↺ limpar
+          </button>
+        ) : null}
+      </div>
+      <div className={`oc-vd-mao-campos${campos.length > 2 ? " quatro" : ""}`}>
+        {COMPARTIMENTOS.filter((c) => campos.includes(c.chave)).map((c) => (
+          <label key={c.chave} className="oc-vd-campo">
+            <span>{c.rotulo}</span>
             <input
               type="text"
               inputMode="numeric"
-              placeholder="2200"
+              placeholder={c.chave === "almSaida" || c.chave === "almVolta" ? "1200" : "2200"}
               maxLength={5}
-              className={criticas[chave] ? "ruim" : ""}
+              className={criticas[c.chave] ? "ruim" : ""}
               disabled={travado}
-              value={valores[chave] || ""}
-              onChange={(e) => aoMudar(chave, e.target.value)}
+              value={valores[c.chave] || ""}
+              onChange={(e) => aoMudar(c.chave, e.target.value)}
             />
-            <em>{criticas[chave] || ""}</em>
+            <em>{criticas[c.chave] || ""}</em>
           </label>
         ))}
       </div>
       <div className="dp-faint" style={MINI}>
         entra no cartão ao digitar · aceita <span className="dp-mono">2200</span> e{" "}
-        <span className="dp-mono">22:00</span> · não grava régua: forma o cartão do contrato
+        <span className="dp-mono">22:00</span> · <span className="dp-mono">-</span> deixa a ponta
+        vazia · arraste os cards do cartão (ou use ‹ ›) para mudar a hora de lugar · não grava
+        régua: forma o cartão do contrato
       </div>
     </div>
   );
@@ -3057,12 +3071,34 @@ function CravarAMao({ valores, criticas, travado, aoMudar }) {
  * O horário grande, a pílula que diz DE ONDE ELE VEIO e, embaixo, a distância do alvo. A
  * pílula é o ponto do desenho: o DP não pode olhar um cartão fechado sem saber se aquela
  * hora é a batida do colaborador, o que ele pediu, o alvo ou o que o DP mesmo cravou. */
-function BlocoPonta({ bloco, aoDesfazer }) {
+/* ARRASTAR (dono, 15/09/2026: "dá a opção de movimentar eles para fechar o ponto"). O card
+ * com hora pega e solta em outro; as setas fazem o mesmo com o vizinho — é o caminho de quem
+ * está no celular, onde o arrastar do navegador não existe. A conta de para onde cada hora
+ * vai é do `moverCompartimento`; aqui só se diz de onde saiu e onde caiu. */
+function BlocoPonta({ bloco, aoDesfazer, mover }) {
   const o = ORIGENS[bloco.origem] || ORIGENS.batida;
   const d = bloco.dist;
+  const [sobre, setSobre] = useState(false);
+  const pega = Boolean(mover?.pode && bloco.hora && !bloco.travado);
+  const recebe = Boolean(mover?.pode && !bloco.travado);
   return (
     <div
-      className={`oc-vd-bloco${bloco.origem === "falta" ? " falta" : ""}${bloco.travado ? " travado" : ""}`}
+      className={`oc-vd-bloco${bloco.origem === "falta" ? " falta" : ""}${bloco.travado ? " travado" : ""}${
+        pega ? " movel" : ""}${sobre ? " sobre" : ""}`}
+      draggable={pega}
+      title={pega ? "arraste para outro compartimento" : undefined}
+      onDragStart={pega ? (e) => {
+        e.dataTransfer.setData("text/plain", String(mover.indice));
+        e.dataTransfer.effectAllowed = "move";
+      } : undefined}
+      onDragOver={recebe ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setSobre(true); } : undefined}
+      onDragLeave={recebe ? () => setSobre(false) : undefined}
+      onDrop={recebe ? (e) => {
+        e.preventDefault();
+        setSobre(false);
+        const de = Number(e.dataTransfer.getData("text/plain"));
+        if (Number.isInteger(de)) mover.aoMover(de, mover.indice);
+      } : undefined}
     >
       <div className="oc-vd-bloco-r">{bloco.rotulo}</div>
       <div className="oc-vd-bloco-h dp-mono dp-num">{bloco.hora || "—"}</div>
@@ -3090,6 +3126,18 @@ function BlocoPonta({ bloco, aoDesfazer }) {
               ? "no alvo"
               : `${d > 0 ? "+" : "−"}${Math.abs(d)} min`}
       </div>
+      {pega ? (
+        <div className="oc-vd-setas">
+          <button type="button" disabled={mover.antes < 0}
+            title="passa esta hora para o compartimento de antes"
+            aria-label={`mover ${bloco.hora} para o compartimento de antes`}
+            onClick={() => mover.aoMover(mover.indice, mover.antes)}>‹</button>
+          <button type="button" disabled={mover.depois < 0}
+            title="passa esta hora para o compartimento de depois"
+            aria-label={`mover ${bloco.hora} para o compartimento de depois`}
+            onClick={() => mover.aoMover(mover.indice, mover.depois)}>›</button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -3797,6 +3845,9 @@ function RelatorioCaso({ reg, montado }) {
  * mesmo pop-up compartilhado da Revisão e da Gordura, que já mostra tudo aquilo e é onde se
  * crava a régua de verdade.
  */
+// os quatro campos à mão; no motorista o módulo só lê as duas pontas
+const MANUAL_VAZIO = { entrada: "", almSaida: "", almVolta: "", saida: "" };
+
 function Detalhe({ reg, aoFechar, gravando, aoMarcar, aoAbrirCartao, abrindoCartao, erroCartao }) {
   /* ── AS MARCAS: uma por ocorrência, e agora só A ou R ────────────────────────
    * A MARCA GRAVADA MANDA; só o que não tem marca cai na pré-marcação do MOTOR
@@ -3820,10 +3871,10 @@ function Detalhe({ reg, aoFechar, gravando, aoMarcar, aoAbrirCartao, abrindoCart
 
   // o que o DP digitou à mão e as pontas que ele mandou completar com o alvo — zeram quando
   // o pop-up troca de caso, senão o dia seguinte abriria com o horário do anterior no campo
-  const [manual, setManual] = useState({ entrada: "", saida: "" });
+  const [manual, setManual] = useState(MANUAL_VAZIO);
   const [completar, setCompletar] = useState({});
   useEffect(() => {
-    setManual({ entrada: "", saida: "" });
+    setManual(MANUAL_VAZIO);
     setCompletar({});
   }, [reg?.k]);
 
@@ -3968,10 +4019,12 @@ function Detalhe({ reg, aoFechar, gravando, aoMarcar, aoAbrirCartao, abrindoCart
                 </p>
               )}
               <CravarAMao
+                campos={v.campos}
                 valores={manual}
                 criticas={v.criticas}
                 travado={travado}
                 aoMudar={(chave, valor) => setManual((m) => ({ ...m, [chave]: valor }))}
+                aoLimpar={() => setManual(MANUAL_VAZIO)}
               />
             </div>
 
@@ -3991,11 +4044,21 @@ function Detalhe({ reg, aoFechar, gravando, aoMarcar, aoAbrirCartao, abrindoCart
                 ) : null}
               </div>
               <div className="oc-vd-blocos">
-                {v.blocos.map((b) => (
+                {v.blocos.map((b, i) => (
                   <BlocoPonta
                     key={b.chave}
                     bloco={b}
                     aoDesfazer={() => setCompletar((c) => ({ ...c, [b.chave]: false }))}
+                    mover={{
+                      pode: !travado,
+                      indice: i,
+                      antes: vizinhoMovel(v.blocos, i, -1),
+                      depois: vizinhoMovel(v.blocos, i, 1),
+                      aoMover: (de, para) => {
+                        const campos = moverCompartimento(v.blocos, de, para);
+                        if (campos) setManual((m) => ({ ...m, ...campos }));
+                      },
+                    }}
                   />
                 ))}
               </div>
@@ -4013,6 +4076,31 @@ function Detalhe({ reg, aoFechar, gravando, aoMarcar, aoAbrirCartao, abrindoCart
                 <div className="oc-vd-critica" style={{ marginTop: 8 }}>
                   ⚠ {v.avisoAlmoco}. O cartão fecha assim; se for para corrigir, cravar à mão ou
                   completar com o alvo põe a hora inteira.
+                </div>
+              ) : null}
+              {/* O QUE A MÃO MUDOU E ROBÔ NENHUM FAZ. Mudar a hora de lugar não entra aqui
+                  (o Transnet guarda a lista em ordem, e a lista é a mesma); hora digitada e
+                  batida deixada de fora, sim. */}
+              {v.aMao?.tocou &&
+              (v.contagem.A > 0
+                ? v.aMao.poe.length || v.aMao.fica.length
+                : v.contagem.R > 0 || !reg.acoes?.length) ? (
+                <div className="oc-vd-critica" style={{ marginTop: 8 }}>
+                  ⚠ {v.contagem.A > 0 ? (
+                    <>
+                      O robô só aceita o pedido: ele não
+                      {v.aMao.poe.length ? <> põe <b>{v.aMao.poe.join(" · ")}</b></> : null}
+                      {v.aMao.poe.length && v.aMao.fica.length ? " nem" : ""}
+                      {v.aMao.fica.length ? <> tira <b>{v.aMao.fica.join(" · ")}</b></> : null}
+                      {" "}do Transnet. O contrato congela este cartão, e a conferência vai acusar
+                      a diferença até alguém lançar isso lá.
+                    </>
+                  ) : (
+                    <>
+                      Sem pedido aceito não se congela contrato: o que foi cravado aqui não vai
+                      a robô nenhum. Para a correção lançar este cartão, crave no 🗂 Cartão do dia.
+                    </>
+                  )}
                 </div>
               ) : null}
               {v.foraDoCartao?.length ? (

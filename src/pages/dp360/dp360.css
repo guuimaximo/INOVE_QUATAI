@@ -889,11 +889,30 @@
 .dp360 .rv-fixo { flex: none; }
 
 /* ── o quadro do robô na Fila de lançamento ─────────────────────────────── */
-.dp360 .oc-exec {
-  margin: 0 0 12px;
-  padding: 12px 14px 10px;
-  border-left: 4px solid var(--dp-warn-ink);
+.dp360 .oc-exec-area { position: relative; }
+/* só ganha altura quando há pop-up: lista curta não pode cortar o cartão ao meio */
+.dp360 .oc-exec-area:has(> .oc-exec-veu) { min-height: 460px; }
+.dp360 .oc-exec-veu {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: rgba(15, 20, 32, 0.38);
+  border-radius: var(--dp-radius);
+  padding: 0 16px;
 }
+.dp360 .oc-exec {
+  position: sticky;
+  top: 22vh;
+  width: min(640px, 100%);
+  margin: 48px auto 0;
+  padding: 14px 16px 12px;
+  border-left: 4px solid var(--dp-warn-ink);
+  box-shadow: 0 18px 50px rgba(15, 20, 32, 0.28);
+  max-height: 64vh;
+  display: flex;
+  flex-direction: column;
+}
+.dp360 .oc-exec .oc-exec-lista { overflow: auto; min-height: 0; }
 .dp360 .oc-exec-rodando { border-left-color: var(--dp-warn-ink); background: var(--dp-warn-bg); }
 .dp360 .oc-exec-ok { border-left-color: var(--dp-ok-ink); background: var(--dp-ok-bg); }
 .dp360 .oc-exec-pendente { border-left-color: var(--dp-warn-ink); }

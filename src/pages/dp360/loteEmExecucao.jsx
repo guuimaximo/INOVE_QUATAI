@@ -399,8 +399,14 @@ export default function PainelExecucao({ aba = "" }) {
   const tudoCerto = encerrou && !erro && (ensaio || feitos === casos.length);
   const tom = !encerrou ? "rodando" : tudoCerto ? "ok" : "pendente";
 
+  /* POP-UP NO MEIO DA ABA (dono, 15/09/2026: "a aba vai ficar com um pop-up no meio dela
+     carregando os lançamentos até finalizar, e passa 1 por 1"). O véu cobre a área da aba —
+     a lista fica atrás, esmaecida — e o cartão fica preso no meio da parte visível da tela
+     (`position: sticky`), então continua no meio mesmo numa lista de 158 linhas. A barra da
+     DP360 fica de fora do véu: trocar de aba continua possível, e o acompanhamento segue. */
   return (
-    <section className={`dp-card oc-exec oc-exec-${tom}`} aria-live="polite" aria-label="Robô na fila de lançamento">
+    <div className="oc-exec-veu" role="dialog" aria-modal="false" aria-label="Robô rodando nesta aba">
+    <section className={`dp-card oc-exec oc-exec-${tom}`} aria-live="polite">
       <header className="oc-exec-topo">
         <div style={{ minWidth: 0 }}>
           <div className="oc-exec-rotulo">
@@ -480,5 +486,6 @@ export default function PainelExecucao({ aba = "" }) {
         </footer>
       ) : null}
     </section>
+    </div>
   );
 }

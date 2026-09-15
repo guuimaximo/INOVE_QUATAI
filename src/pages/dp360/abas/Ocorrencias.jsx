@@ -230,6 +230,7 @@ const SIT = {
   recusa_exec_pendente: { rotulo: "⏳ recusado · aguardando bot", cor: "neutro" },
   ponto_fechado: { rotulo: "🔒 ponto fechado no Transnet", cor: "erro" },
   recusado: { rotulo: "✗ recusado", cor: "erro" },
+  recusado_lote: { rotulo: "✗ recusado em lote · sem veredito", cor: "erro" },
   aguardando: { rotulo: "📤 enviada · sem resposta", cor: "neutro" },
   // estados que só existem no monitor de avisos (main.py:4286-4361)
   comunicado: { rotulo: "📣 comunicado", cor: "neutro" },
@@ -397,6 +398,16 @@ function situacaoDoCaso(veredito, caso, temAviso) {
   const c = caso || {};
   // Ponto fechado é DESFECHO, não pendência: vem antes de tudo, até de corrigido.
   if (txt(c.correcao_status) === "ponto_fechado") return "ponto_fechado";
+  /* RECUSADO EM LOTE, SEM VEREDITO (15/09/2026). O "✗ Recusar marcados e fechar" grava
+   * `aceite = "cancelado"` — é o que o robô `cancelar pedidos` escreve depois de recusar no
+   * Transnet. Esta função não conhecia esse valor: nenhuma linha abaixo o pegava, o caso
+   * caía em `conf` e voltava para "A decidir". O dono recusou 15 pela manhã, o robô fechou
+   * os 15 às 10:34, e eles continuaram lá — um deles foi recusado DE NOVO às 12:05, porque
+   * seguia na tela ("se já decidimos e recusamos, ela tem que ir para Recusados").
+   *
+   * SÓ NA PORTA DO PEDIDO. Na porta do aviso o cancelamento já tem aba própria
+   * ("Cancelamento", que filtra pelo próprio `aceite`) e ali não se mexe. */
+  if (!temAviso && txt(c.aceite).toLowerCase() === "cancelado") return "recusado_lote";
   if (txt(c.correcao_final_em)) return "corrigido";
   if (txt(c.aceite) === "rejeitado") {
     const dispensada = txt(c.correcao_status) === "dispensada";
@@ -1580,7 +1591,7 @@ function linhasDaAba(registros, porta, aba) {
     fechado: ["ponto_fechado"],
     // app.js:3315 — advertência e correção são vistas do MESMO caso: uma aba só.
     disc: ["advertido", "corrigido"],
-    recusados: ["recusado", "corrigido"],
+    recusados: ["recusado", "recusado_lote", "corrigido"],
   }[aba];
   return cfg ? base.filter((r) => cfg.includes(r.situacao)) : base;
 }
@@ -2354,7 +2365,7 @@ const LINHA_SIT = {
   conf_certo: "row-ok", conf_errado: "row-sem", conf: "row-sug",
   ok: "row-ok", advertido: "row-sem", corrigido: "row-ok",
   exec_pendente: "row-sug", recusa_exec_pendente: "row-sug",
-  ponto_fechado: "row-sem", recusado: "row-sem", aguardando: "row-sug",
+  ponto_fechado: "row-sem", recusado: "row-sem", recusado_lote: "row-sem", aguardando: "row-sug",
   comunicado: "", posterior: "row-sug", ajustou: "row-ok",
   ajustou_certo: "row-ok", ajustou_errado: "row-sem", ajustou_julgar: "row-sug",
   vencido: "row-sem", cancelado: "",
@@ -5746,23 +5757,26 @@ export default function Ocorrencias() {
         {/* O ROBÔ, NA ABA QUE O DISPAROU: rodando enquanto roda, encerrou quando acaba — e a
             lista recarrega sozinha no fim, que é quando os casos fechados saem dela
             ("rodei, ficou verde, mas não saiu da tela"). */}
-        <PainelExecucao aba={aba} />
-
-        <TabelaDP
-          key={`${grade.chave}-${versao}`}
-          chave={grade.chave}
-          colunas={grade.colunas}
-          linhas={linhas}
-          classeLinha={(l) => classeDaLinha(l, porta)}
-          aoClicarLinha={(l) => abrir(l)}
-          idLinha={(l) => l.k}
-          selecionavel={selecionavel}
-          aoSelecionar={(ids) => setSelIds(ids)}
-          acoes={barraLote}
-          nomeCsv={`dp360_ocorrencias_${porta}_${abaAtiva}`}
-          vazio={VAZIOS[abaAtiva] || "Nada por aqui."}
-          pinPadrao={2}
-        />
+        {/* A LISTA E O POP-UP DO ROBÔ dividem o mesmo espaço: o véu cobre só a aba, não a
+            barra da DP360 — dá para trocar de aba enquanto o robô trabalha. */}
+        <div className="oc-exec-area">
+          <TabelaDP
+            key={`${grade.chave}-${versao}`}
+            chave={grade.chave}
+            colunas={grade.colunas}
+            linhas={linhas}
+            classeLinha={(l) => classeDaLinha(l, porta)}
+            aoClicarLinha={(l) => abrir(l)}
+            idLinha={(l) => l.k}
+            selecionavel={selecionavel}
+            aoSelecionar={(ids) => setSelIds(ids)}
+            acoes={barraLote}
+            nomeCsv={`dp360_ocorrencias_${porta}_${abaAtiva}`}
+            vazio={VAZIOS[abaAtiva] || "Nada por aqui."}
+            pinPadrao={2}
+          />
+          <PainelExecucao aba={aba} />
+        </div>
 
         {/* O POP-UP É SÓ VEREDITO: `aoMarcar` é o ÚNICO gravador que chega nele. Os outros
             (aceitar/rejeitar o dia, aplicar marcados, robô, conferir, fechar à mão,

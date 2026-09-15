@@ -121,6 +121,7 @@ export async function acompanharLote({
   titulo = "",
   ensaio = false,
   aoTerminar,
+  aoParcial,
 }) {
   const desde = Date.now();
   estado = {
@@ -160,6 +161,43 @@ export async function acompanharLote({
           if (aindaEMeu() && vistos.size !== (estado.vistos?.size || 0)) mexer({ vistos });
         } catch {
           // sem a prova (bucket fora, gateway sem os secrets): o robô segue, a tela só não narra
+        }
+      }
+    })();
+  }
+
+  /* O BANCO, DURANTE O RUN (15/09/2026). O robô passou a gravar cada caso quando termina
+     (DP360 5fb981a) — então a tela pode mostrar o desfecho de cada um assim que ele sai, e
+     tirar da lista quem já foi fechado, em vez de esperar o robô inteiro ("só recarrega a
+     página quando finaliza tudo").
+     A FOTO DE PARTIDA é tirada no disparo, antes de o robô chegar ao Transnet: um caso só
+     conta como terminado quando a assinatura dele MUDOU desde ali e o estado é final.
+     Sem isso, um caso que já estava "divergente" de uma rodada anterior apareceria como
+     resolvido no primeiro segundo. */
+  const terminais = TERMINAL[estado.tipo];
+  if (terminais && !ensaio) {
+    (async () => {
+      const partida = await conferidosDepoisDoRobo(casos, estado.tipo).catch(() => null);
+      if (!partida || !aindaEMeu()) return;
+      let ultimaRecarga = 0;
+      while (aindaEMeu() && !estado.fim) {
+        await new Promise((r) => setTimeout(r, RITMO_BANCO_MS));
+        if (!aindaEMeu() || estado.fim) break;
+        const agoraBanco = await conferidosDepoisDoRobo(casos, estado.tipo).catch(() => null);
+        if (!agoraBanco || !aindaEMeu()) continue;
+        const parcial = casosQueTerminaram(partida, agoraBanco, terminais);
+        if (parcial.size !== (estado.parcial?.size || 0)) {
+          mexer({ parcial });
+          // a lista da aba recarrega aos poucos — mas a releitura é pesada, então no máximo
+          // uma a cada 15 s; o fim do run recarrega de novo de qualquer jeito
+          if (aoParcial && Date.now() - ultimaRecarga >= RECARGA_MIN_MS) {
+            ultimaRecarga = Date.now();
+            try {
+              aoParcial();
+            } catch {
+              // a aba pode ter sido fechada; isso não é problema daqui
+            }
+          }
         }
       }
     })();
@@ -272,6 +310,37 @@ function desfechoDoCaso(caso, tipo = "executar") {
 /* `casos` chega PRONTO da tela — `{chave, cracha, date_ref, nome, dataBR}`. Normalizar
    aqui obrigaria este módulo a conhecer a forma do registro das Ocorrências, e ele não é
    de lá: quem dispara é que sabe traduzir a própria linha. */
+/* A ASSINATURA DE UM CASO: tudo que o robô escreve quando termina. As linhas de
+   "divergente" e "ponto fechado" que ele grava não trazem hora (`atualizado_em`), então não
+   dá para perguntar "gravou depois do disparo?". Dá para perguntar "MUDOU desde o disparo?"
+   — e é isso que a assinatura responde. */
+function assinaturaDoCaso(c) {
+  if (!c) return "";
+  return [c.aceite, c.conferido_em, c.cancelado_em, c.correcao_status, c.conf_veredito, c.atualizado_em]
+    .map(txt)
+    .join("|");
+}
+
+/* O que conta como "o robô terminou este caso" durante o run. `pendente` e `mantido` NÃO
+   entram: no meio do run eles querem dizer "ainda não chegou", e só no fim viram desfecho. */
+const TERMINAL = {
+  executar: new Set(["conferido", "ponto_fechado", "divergente", "sem_base"]),
+  conferir: new Set(["conferido", "ponto_fechado", "divergente", "sem_base"]),
+  cancelar: new Set(["cancelado"]),
+};
+/** Os casos que o robô já gravou: estado final E assinatura diferente da foto de partida. */
+function casosQueTerminaram(partida, atual, terminais) {
+  const parcial = new Map();
+  for (const [k, v] of atual?.porCaso || []) {
+    const antes = partida?.porCaso?.get(k);
+    if (terminais.has(v.estado) && v.assinatura !== antes?.assinatura) parcial.set(k, v);
+  }
+  return parcial;
+}
+
+const RITMO_BANCO_MS = 8000;
+const RECARGA_MIN_MS = 15000;
+
 async function conferidosDepoisDoRobo(casos_do_lote, tipo = "executar") {
   const alvo = new Map();
   for (const c of casos_do_lote || []) {
@@ -286,7 +355,8 @@ async function conferidosDepoisDoRobo(casos_do_lote, tipo = "executar") {
     // Dois `in.` e o cruzamento aqui: PostgREST não filtra por PARES, e pedir caso a caso
     // seria uma consulta por linha do lote.
     casos = await lerDP360("ponto_caso", {
-      colunas: "cracha,date_ref,conferido_em,usuario,correcao_status,conf_veredito,aceite,cancelado_em",
+      colunas:
+        "cracha,date_ref,conferido_em,usuario,correcao_status,conf_veredito,aceite,cancelado_em,atualizado_em",
       filtros: { cracha: `in.(${crachas.join(",")})`, date_ref: `in.(${dias.join(",")})` },
       limite: 2000,
     });
@@ -303,8 +373,9 @@ async function conferidosDepoisDoRobo(casos_do_lote, tipo = "executar") {
   const feitos = [];
   const faltaram = [];
   for (const [k, reg] of alvo) {
-    const estado = desfechoDoCaso(porChave.get(k), tipo);
-    porCaso.set(k, { estado, usuario: txt(porChave.get(k)?.usuario) });
+    const linha = porChave.get(k);
+    const estado = desfechoDoCaso(linha, tipo);
+    porCaso.set(k, { estado, usuario: txt(linha?.usuario), assinatura: assinaturaDoCaso(linha) });
     (FEITO.has(estado) ? feitos : faltaram).push(reg);
   }
   return { porCaso, feitos, faltaram };
@@ -426,6 +497,7 @@ export default function PainelExecucao({ aba = "" }) {
   if (aba && execucao.aba && execucao.aba !== aba) return null;
   const { casos, onde, fim, painel, desde, porCaso, erro, ensaio } = execucao;
   const vistos = execucao.vistos || VAZIO;
+  const parcial = execucao.parcial || VAZIO;
   const tipo = TIPOS[execucao.tipo] || TIPOS.generico;
   const seg = Math.max(0, Math.round(((fim ? execucao.terminouEm : agora) - desde) / 1000));
   const relogio = `${String(Math.floor(seg / 60)).padStart(2, "0")}:${String(seg % 60).padStart(2, "0")}`;
@@ -477,7 +549,11 @@ export default function PainelExecucao({ aba = "" }) {
                 : fim
                   ? "o robô terminou — conferindo cada caso no banco…"
                   : `${onde || "mandando o robô"}${
-                      vistos.size ? ` · já passou por ${vistos.size} de ${casos.length}` : "…"
+                      parcial.size
+                        ? ` · ${parcial.size} de ${casos.length} gravado(s)`
+                        : vistos.size
+                          ? ` · já passou por ${vistos.size} de ${casos.length}`
+                          : "…"
                     }`}
           </div>
         </div>
@@ -500,9 +576,11 @@ export default function PainelExecucao({ aba = "" }) {
             ? fechado.estado === "pendente" && vivo
               ? { ...DESFECHO_CASO.pendente, texto: `continua pendente — ${vivo.frase}` }
               : DESFECHO_CASO[fechado.estado]
-            : vistos.has(c.chave)
-              ? { icone: "👁", tom: "ok", texto: "cartão lido ao vivo — resultado no fim" }
-              : DESFECHO_CASO.esperando;
+            : parcial.has(c.chave)
+              ? DESFECHO_CASO[parcial.get(c.chave).estado]
+              : vistos.has(c.chave)
+                ? { icone: "👁", tom: "ok", texto: "cartão lido ao vivo — gravando…" }
+                : DESFECHO_CASO.esperando;
           return (
             <div key={c.chave} className="oc-exec-linha">
               <span className={`oc-exec-ic ${d.tom}`}>{d.icone}</span>

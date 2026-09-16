@@ -2120,7 +2120,7 @@ export default function Revisao() {
               const s = String(l.status_ponto ?? "").trim();
               const e = ESTADO_LANCAMENTO[estadoDe(l)];
               if (e) return `${e.texto} (${s})`;
-              return pontoConferido(casos[chaveDia(l.cracha, l.date_ref)]) ? `${s} · conferido` : s;
+              return pontoConferido(casos[chaveDia(l.cracha, l.date_ref)]) ? `CONFERIDO (${s})` : s;
             },
             render: (l) => {
               /* AJUSTADO TOMA O LUGAR DO STATUS, não fica ao lado. O status original
@@ -2142,22 +2142,26 @@ export default function Revisao() {
                   />
                 );
               }
+              /* CONFERIDO TAMBÉM TOMA O LUGAR DO STATUS (dono, 16/09/2026: "aqui precisa sair o
+                 REVISAR e virar o CONFERIDO, igual está o AJUSTADO"). O status de antes fica
+                 no title e no CSV. */
+              if (pontoConferido(casos[chaveDia(l.cracha, l.date_ref)])) {
+                return (
+                  <Pilula
+                    texto="✓ CONFERIDO"
+                    tom="ok"
+                    titulo={`O DP olhou este dia e disse que a REVISÃO dele está certa. Era ${
+                      l.status_ponto || "—"
+                    }. Não decide ocorrência nem carimba execução do robô; o que sobrar do dia é assunto da Gordura.`}
+                  />
+                );
+              }
               return (
               <>
                 <Pilula
                   texto={l.status_ponto || "—"}
                   tom={String(l.status_ponto ?? "").toUpperCase() === "OK" ? "ok" : "warn"}
                 />
-                {pontoConferido(casos[chaveDia(l.cracha, l.date_ref)]) && (
-                  <>
-                    {" "}
-                    <Pilula
-                      texto="✓ conferido"
-                      tom="ok"
-                      titulo="O DP olhou este dia e disse que a REVISÃO dele está certa. Não decide ocorrência nem carimba execução do robô; o que sobrar do dia é assunto da Gordura."
-                    />
-                  </>
-                )}
               </>
               );
             },

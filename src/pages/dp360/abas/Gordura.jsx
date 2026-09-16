@@ -1352,7 +1352,7 @@ function situacaoNaRevisao(pd, caso, lancado) {
         titulo: `O ajuste foi mandado ao robô em ${quando}, sem resultado gravado — confira na Revisão.`,
       };
   } else if (pontoConferido(caso)) {
-    principal = { texto: "✓ CONFERIDO", tom: "ok", titulo: `O DP conferiu este dia na Revisão. Status: ${status || "—"}.` };
+    principal = { texto: "CONFERIDO", tom: "ok", titulo: `O DP conferiu este dia na Revisão. Status: ${status || "—"}.` };
   } else if (status.toUpperCase() === "OK") {
     principal = { texto: "OK", tom: "ok", titulo: "A Revisão considera o ponto deste dia OK." };
   } else {

@@ -2148,7 +2148,7 @@ export default function Revisao() {
               if (pontoConferido(casos[chaveDia(l.cracha, l.date_ref)])) {
                 return (
                   <Pilula
-                    texto="✓ CONFERIDO"
+                    texto="CONFERIDO"
                     tom="ok"
                     titulo={`O DP olhou este dia e disse que a REVISÃO dele está certa. Era ${
                       l.status_ponto || "—"

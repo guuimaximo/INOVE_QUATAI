@@ -21,7 +21,7 @@ import {
 // do DP360. Por isso ela não está (nem deve estar) na allowlist do gateway
 // `dp360-api`: lê-se com o cliente Supabase normal do INOVE, exatamente como o app
 // antigo faz em ferramenta/supabase_client.py:695-715.
-import CartaoDoDia, { aplicarRealManual, lerReservasInove, pontoConferido } from "../CartaoDoDia";
+import CartaoDoDia, { aplicarRealManual, lerReservasInove, pontoConferido, pontoCorrigido } from "../CartaoDoDia";
 import { usePergunta } from "../Perguntar";
 import { runIncerto } from "../esperarRobo";
 import PainelExecucao, { acompanharLote } from "../loteEmExecucao";
@@ -1351,6 +1351,12 @@ function situacaoNaRevisao(pd, caso, lancado) {
         tom: "warn",
         titulo: `O ajuste foi mandado ao robô em ${quando}, sem resultado gravado — confira na Revisão.`,
       };
+  } else if (pontoCorrigido(caso)) {
+    principal = {
+      texto: "CORRIGIDO",
+      tom: "ok",
+      titulo: `O ponto deste dia já foi corrigido (${instanteCurto(caso.correcao_final_em)}). Era ${status || "—"}.`,
+    };
   } else if (pontoConferido(caso)) {
     principal = { texto: "CONFERIDO", tom: "ok", titulo: `O DP conferiu este dia na Revisão. Status: ${status || "—"}.` };
   } else if (status.toUpperCase() === "OK") {

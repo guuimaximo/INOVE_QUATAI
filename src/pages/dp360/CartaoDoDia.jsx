@@ -318,6 +318,10 @@ export function marcacaoAusente(r) {
 /** Este dia já foi marcado como conferido pelo DP? (main.py `get_pontos_ok`) */
 export const pontoConferido = (caso) => String(caso?.tipo ?? "").trim() === "ponto_ok";
 
+/** A correção deste dia já foi lançada? (aviso → advertência/recusa → correção). A ferramenta
+ *  carimba `correcao_final_em` só quando o robô confirma; "ponto fechado" não carimba. */
+export const pontoCorrigido = (caso) => !!String(caso?.correcao_final_em ?? "").trim();
+
 /* ---------- Real manual do DP (overlay de exibição) ---------- */
 // Porte de main.py `get_revisao._rm`: o Real cravado pelo DP substitui a
 // sugestão na tela. AQUI É SÓ LEITURA — nada é gravado nesta fase.
@@ -2150,12 +2154,25 @@ export default function CartaoDoDia({
               titulo="O gestor lançou reserva para este dia no Controle de Reservas — a anotação está no cartão."
             />
           )}
-          {statusSelo || (
-            <Pilula
-              texto={linha.status_ponto || "—"}
-              tom={String(linha.status_ponto ?? "").toUpperCase() === "OK" ? "ok" : "warn"}
-            />
-          )}
+          {/* CORRIGIDO e CONFERIDO tomam o lugar do status da régua (dono, 16/09/2026: "o
+              status sai de REVISAR e vira CORRIGIDO"). O status de antes fica no title. */}
+          {statusSelo ||
+            (pontoCorrigido(caso) ? (
+              <Pilula
+                texto="CORRIGIDO"
+                tom="ok"
+                titulo={`O ponto deste dia foi corrigido em ${fmtInstanteBR(caso.correcao_final_em)}. Era ${
+                  linha.status_ponto || "—"
+                }.`}
+              />
+            ) : pontoConferido(caso) ? (
+              <Pilula texto="CONFERIDO" tom="ok" titulo={`O DP conferiu este dia. Era ${linha.status_ponto || "—"}.`} />
+            ) : (
+              <Pilula
+                texto={linha.status_ponto || "—"}
+                tom={String(linha.status_ponto ?? "").toUpperCase() === "OK" ? "ok" : "warn"}
+              />
+            ))}
           <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar">
             <X size={14} />
           </button>

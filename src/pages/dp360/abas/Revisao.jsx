@@ -27,6 +27,7 @@ import CartaoDoDia, {
   lerReservasInove,
   marcacaoAusente,
   pontoConferido,
+  pontoCorrigido,
   quemEstaUsando,
   sugBloqueio,
   temSugestaoUtil,
@@ -162,8 +163,8 @@ function estadoAviso(caso) {
   const enviado = String(caso?.aviso_enviado_em ?? "").trim();
   if (!enviado) return { texto: "não", tom: "mute", titulo: "Nenhum aviso registrado para este dia" };
   const quando = fmtData(enviado.slice(0, 10));
-  if (String(caso.correcao_final_em ?? "").trim())
-    return { texto: "🔧 corrigido", tom: "ok", titulo: `Aviso em ${quando} — ponto já corrigido` };
+  if (pontoCorrigido(caso))
+    return { texto: "CORRIGIDO", tom: "ok", titulo: `Aviso em ${quando} — ponto já corrigido` };
   if (String(caso.advertencia_enviada_em ?? "").trim())
     return { texto: "⚠ advertido", tom: "danger", titulo: `Aviso em ${quando} — depois virou advertência` };
   if (String(caso.aceite ?? "").trim() === "aceito")
@@ -1948,7 +1949,9 @@ export default function Revisao() {
       // E o que o DP CONFERIU À MÃO (dono, 15/09/2026): ele olhou o dia e disse que está
       // certo — na REVISÃO. O que sobrar do dia é assunto da Gordura, que tem lista
       // própria; deixá-lo aqui é pedir que o mesmo dia seja trabalhado de novo.
-      pontoConferido(casos[chaveDia(l.cracha, l.date_ref)]),
+      pontoConferido(casos[chaveDia(l.cracha, l.date_ref)]) ||
+      // E o que a correção JÁ LANÇOU (16/09/2026): o dia deixou de ser REVISAR.
+      pontoCorrigido(casos[chaveDia(l.cracha, l.date_ref)]),
     [estadoDe, casos],
   );
 
@@ -2120,7 +2123,9 @@ export default function Revisao() {
               const s = String(l.status_ponto ?? "").trim();
               const e = ESTADO_LANCAMENTO[estadoDe(l)];
               if (e) return `${e.texto} (${s})`;
-              return pontoConferido(casos[chaveDia(l.cracha, l.date_ref)]) ? `CONFERIDO (${s})` : s;
+              const caso = casos[chaveDia(l.cracha, l.date_ref)];
+              if (pontoCorrigido(caso)) return `CORRIGIDO (${s})`;
+              return pontoConferido(caso) ? `CONFERIDO (${s})` : s;
             },
             render: (l) => {
               /* AJUSTADO TOMA O LUGAR DO STATUS, não fica ao lado. O status original
@@ -2142,10 +2147,25 @@ export default function Revisao() {
                   />
                 );
               }
+              /* CORRIGIDO TOMA O LUGAR DO STATUS (dono, 16/09/2026: "o status sai de REVISAR e
+                 vira CORRIGIDO, tanto avisado quanto status"): a cadeia aviso → correção já
+                 lançou o cartão deste dia. */
+              const casoDoDia = casos[chaveDia(l.cracha, l.date_ref)];
+              if (pontoCorrigido(casoDoDia)) {
+                return (
+                  <Pilula
+                    texto="CORRIGIDO"
+                    tom="ok"
+                    titulo={`O ponto deste dia foi corrigido em ${fmtInstanteBR(casoDoDia.correcao_final_em)}. Era ${
+                      l.status_ponto || "—"
+                    }.`}
+                  />
+                );
+              }
               /* CONFERIDO TAMBÉM TOMA O LUGAR DO STATUS (dono, 16/09/2026: "aqui precisa sair o
                  REVISAR e virar o CONFERIDO, igual está o AJUSTADO"). O status de antes fica
                  no title e no CSV. */
-              if (pontoConferido(casos[chaveDia(l.cracha, l.date_ref)])) {
+              if (pontoConferido(casoDoDia)) {
                 return (
                   <Pilula
                     texto="CONFERIDO"
@@ -2307,6 +2327,7 @@ export default function Revisao() {
     (l) =>
       String(l.status_ponto ?? "").toUpperCase() !== "OK" &&
       !pontoConferido(casos[chaveDia(l.cracha, l.date_ref)]) &&
+      !pontoCorrigido(casos[chaveDia(l.cracha, l.date_ref)]) &&
       !ehPontoInvertido(l) &&
       !!marcacaoAusente(l),
     [casos],
@@ -2348,6 +2369,7 @@ export default function Revisao() {
     let pulados = 0;
     for (const l of marcadas) {
       if (pontoConferido(casos[chaveDia(l.cracha, l.date_ref)])) continue;
+      if (pontoCorrigido(casos[chaveDia(l.cracha, l.date_ref)])) continue;
       const { modelo, divergencia } = rotaAvisoInterno(l, medianas);
       if (!modelo) {
         if (String(l.status_ponto ?? "").toUpperCase() === "REVISAR") pulados += 1;
@@ -2412,6 +2434,8 @@ export default function Revisao() {
     if (!aberta) return "";
     if (pontoConferido(casos[chaveDia(aberta.cracha, aberta.date_ref)]))
       return "Este dia já foi marcado como conferido pelo DP — não há o que pedir.";
+    if (pontoCorrigido(casos[chaveDia(aberta.cracha, aberta.date_ref)]))
+      return "O ponto deste dia já foi corrigido — não há o que pedir.";
     if (ehInterno) {
       if (carregandoMedianas) return "Carregando o histórico de jornada do interno…";
       const { modelo } = rotaAvisoInterno(aberta, medianas);

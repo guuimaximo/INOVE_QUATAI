@@ -17,11 +17,13 @@ import {
   FaChartBar,
   FaChartPie,
   FaClock,
+  FaLock,
 } from "react-icons/fa";
 import * as XLSX from "xlsx";
 
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
+import { autorizarGestor } from "../../utils/autorizacaoGestor";
 
 const STATUS = [
   { value: "ABERTA", label: "Aberta", cor: "amber" },
@@ -59,6 +61,30 @@ const OPERACIONAL_KEYWORDS = [
   "auxiliar de servi", "auxiliar de limp", "limpeza",
   "borracheiro", "vigia", "porteiro",
 ];
+/* A DATA DE ABERTURA (dono, 16/09/2026). Nasce automática — é o `criado_em`, gravado na
+   hora em que a vaga entra no sistema — e continua assim. Um gestor (ou acima) pode
+   corrigi-la com o login e a senha dele; a correção vai para `data_abertura`, com quem
+   alterou, quando e por quê. O `criado_em` NUNCA muda: é o registro de quando a vaga foi
+   aberta aqui. Tudo que conta prazo (SLA, dias aberta, tempo até contratar, dashboard, a
+   planilha) lê a data EFETIVA desta função. */
+function aberturaDe(vaga) {
+  const d = String(vaga?.data_abertura || "").slice(0, 10);
+  // dia sem hora vira meia-noite LOCAL: com o "Z" do UTC, 04/09 viraria 03/09 no Brasil
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? `${d}T00:00:00` : vaga?.criado_em;
+}
+const CAMPOS_DA_ABERTURA = [
+  "data_abertura",
+  "data_abertura_alterada_por",
+  "data_abertura_alterada_em",
+  "data_abertura_motivo",
+];
+
+// Data de HOJE no fuso local. `toISOString()` devolve UTC e, depois das 21h, já é amanhã.
+function toISODateLocal(d) {
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60 * 1000);
+  return local.toISOString().slice(0, 10);
+}
+
 function getSLADias(nome_cargo) {
   const s = String(nome_cargo || "").toLowerCase();
   if (OPERACIONAL_KEYWORDS.some((k) => s.includes(k))) return SLA_OPERACIONAL;
@@ -74,7 +100,7 @@ function getDiasAberta(criado_em) {
 function calcularSLA(vaga) {
   const aberta = !["CONCLUIDA", "CANCELADA"].includes(vaga?.status);
   const sla = getSLADias(vaga?.nome_cargo);
-  const dias = getDiasAberta(vaga?.criado_em);
+  const dias = getDiasAberta(aberturaDe(vaga));
   const vencida = aberta && dias > sla;
   const restante = sla - dias;
   return { sla, dias, vencida, restante, aberta };
@@ -202,18 +228,159 @@ function ModalShell({ title, subtitle, onClose, footer, children, maxWidth = "ma
   );
 }
 
-function VagaForm({ open, mode, initial, onClose, onSave, saving }) {
+/* A JANELA QUE AUTORIZA A TROCA DA DATA. O gestor digita o login e a senha ali mesmo —
+   quem está logado pode ser o RH. Os campos pedem ao navegador para NÃO preencher sozinho:
+   senão entraria o login salvo de quem está na tela, e a autorização seria dele. */
+function AlterarAberturaModal({ vaga, onClose, onConfirmar }) {
+  const hoje = toISODateLocal(new Date());
+  const atual = toISODateLocal(new Date(aberturaDe(vaga)));
+  const [data, setData] = useState(atual);
+  const [motivo, setMotivo] = useState("");
+  const [login, setLogin] = useState("");
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  const contratacao = String(vaga?.data_contratacao || "").slice(0, 10);
+  const problema = !data
+    ? "Escolha a nova data."
+    : data > hoje
+      ? "A data de abertura não pode ser no futuro."
+      : contratacao && data > contratacao
+        ? `A vaga foi preenchida em ${formatDate(`${contratacao}T00:00:00`)}; a abertura não pode ser depois disso.`
+        : data === atual
+          ? "É a mesma data de hoje na vaga."
+          : "";
+
+  async function confirmar() {
+    if (problema) return setErro(problema);
+    setEnviando(true);
+    setErro("");
+    try {
+      await onConfirmar({ data, motivo: safeText(motivo), login: safeText(login), senha });
+      onClose();
+    } catch (e) {
+      setErro(e?.message || "Não foi possível alterar a data.");
+      setSenha("");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80]">
+      <ModalShell
+        title="Alterar data de abertura"
+        subtitle={`Vaga ${vaga.numero_vaga || ""} — ${vaga.nome_cargo || ""}`}
+        maxWidth="max-w-md"
+        onClose={onClose}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200">Cancelar</button>
+            <button
+              type="button"
+              disabled={enviando || !login.trim() || !senha}
+              onClick={confirmar}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+            >
+              <FaLock /> {enviando ? "Conferindo..." : "Autorizar e alterar"}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+            A data muda o SLA da vaga. Só <b>Gestor</b> ou <b>Administrador</b> pode autorizar, com o
+            próprio login e senha. Hoje ela é <b>{formatDate(aberturaDe(vaga))}</b>
+            {vaga.data_abertura ? " (já alterada antes)" : " (automática)"}.
+          </div>
+          <Field label="Nova data de abertura" required>
+            <input type="date" className={inputCls} value={data} max={hoje} onChange={(e) => setData(e.target.value)} />
+          </Field>
+          <Field label="Motivo" hint="Opcional — fica registrado na vaga">
+            <input className={inputCls} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex: requisição chegou por e-mail antes" />
+          </Field>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Login do gestor" required>
+              <input className={inputCls} value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="off" name="autorizador-login" />
+            </Field>
+            <Field label="Senha" required>
+              <input
+                type="password"
+                className={inputCls}
+                value={senha}
+                onChange={(e) => setSenha(e.target.value)}
+                autoComplete="new-password"
+                name="autorizador-senha"
+                onKeyDown={(e) => { if (e.key === "Enter") confirmar(); }}
+              />
+            </Field>
+          </div>
+          {erro ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700" role="alert">
+              {erro}
+            </div>
+          ) : null}
+        </div>
+      </ModalShell>
+    </div>
+  );
+}
+
+function QuadroAbertura({ vaga, onAlterar }) {
+  const alterada = Boolean(vaga?.data_abertura);
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+      <div className="text-xs text-slate-600">
+        <span className="font-bold uppercase tracking-wide text-slate-500">Data de abertura: </span>
+        <b className="text-slate-800">{formatDate(aberturaDe(vaga))}</b>
+        {alterada ? (
+          <span className="text-slate-500">
+            {" "}· alterada por {vaga.data_abertura_alterada_por || "-"} em {formatDateTime(vaga.data_abertura_alterada_em)}
+            {vaga.data_abertura_motivo ? ` — ${vaga.data_abertura_motivo}` : ""}
+            {" "}(no sistema desde {formatDate(vaga.criado_em)})
+          </span>
+        ) : (
+          <span className="text-slate-500"> · automática (quando a vaga foi aberta no sistema)</span>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onAlterar}
+        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-100"
+        title="Pede o login e a senha de um Gestor ou Administrador"
+      >
+        <FaLock /> Alterar data
+      </button>
+    </div>
+  );
+}
+
+function VagaForm({ open, mode, initial, onClose, onSave, saving, onAlterarAbertura }) {
   const [form, setForm] = useState(initial || {});
+  const [alterandoData, setAlterandoData] = useState(false);
 
   useEffect(() => {
     if (open) setForm(initial || {});
+    if (!open) setAlterandoData(false);
   }, [open, initial]);
 
   if (!open) return null;
   const set = (k, v) => setForm((current) => ({ ...current, [k]: v }));
   const isEdit = mode === "edit";
 
+  // a troca da data grava NA HORA (é a autorização que vale), e o formulário passa a
+  // mostrar a data nova — o "Salvar alterações" não mexe nela
+  async function trocarData(pedido) {
+    const campos = await onAlterarAbertura(form, pedido);
+    setForm((c) => ({ ...c, ...campos }));
+  }
+
   return (
+    <>
+    {alterandoData && isEdit ? (
+      <AlterarAberturaModal vaga={form} onClose={() => setAlterandoData(false)} onConfirmar={trocarData} />
+    ) : null}
     <ModalShell
       title={isEdit ? `Editar vaga ${form.numero_vaga || ""}` : "Nova requisicao de vaga"}
       subtitle="Pessoas · RH"
@@ -237,6 +404,14 @@ function VagaForm({ open, mode, initial, onClose, onSave, saving }) {
         <div className="rounded-xl border border-blue-100 bg-blue-50/60 px-3 py-2 text-[11px] text-blue-800">
           Preencha o maximo de campos. O RH usa essas informacoes para encontrar o candidato adequado.
         </div>
+
+        {isEdit ? (
+          <QuadroAbertura vaga={form} onAlterar={() => setAlterandoData(true)} />
+        ) : (
+          <div className="text-[11px] text-slate-500">
+            A data de abertura é a de hoje, automática. Depois de aberta, um gestor pode alterá-la em <b>Editar</b>.
+          </div>
+        )}
 
         <div>
           <div className="mb-2 text-sm font-black uppercase tracking-wide text-slate-700">Identificacao da vaga</div>
@@ -323,6 +498,7 @@ function VagaForm({ open, mode, initial, onClose, onSave, saving }) {
         </div>
       </div>
     </ModalShell>
+    </>
   );
 }
 
@@ -344,7 +520,12 @@ function DetalheVaga({ vaga, onClose, onUpdateStatus, onEditar, onConcluir, savi
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-xs text-slate-500">
-            Aberta em {formatDateTime(vaga.criado_em)} por <strong>{vaga.criado_por_nome || vaga.criado_por_login || "-"}</strong>
+            Aberta em {vaga.data_abertura ? formatDate(aberturaDe(vaga)) : formatDateTime(vaga.criado_em)} por <strong>{vaga.criado_por_nome || vaga.criado_por_login || "-"}</strong>
+            {vaga.data_abertura ? (
+              <span title={`No sistema desde ${formatDateTime(vaga.criado_em)}${vaga.data_abertura_motivo ? ` · motivo: ${vaga.data_abertura_motivo}` : ""}`}>
+                {" "}· data alterada por {vaga.data_abertura_alterada_por || "-"} em {formatDate(vaga.data_abertura_alterada_em)}
+              </span>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => onEditar(vaga)} className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200">
@@ -433,13 +614,13 @@ function DetalheVaga({ vaga, onClose, onUpdateStatus, onEditar, onConcluir, savi
 function ConcluirModal({ open, vaga, onClose, onConfirm, saving }) {
   const [nome, setNome] = useState("");
   const [id, setId] = useState("");
-  const [data, setData] = useState(() => new Date().toISOString().slice(0, 10));
+  const [data, setData] = useState(() => toISODateLocal(new Date()));
 
   useEffect(() => {
     if (open) {
       setNome("");
       setId("");
-      setData(new Date().toISOString().slice(0, 10));
+      setData(toISODateLocal(new Date()));
     }
   }, [open]);
 
@@ -538,9 +719,12 @@ export default function VagasCentral() {
     try {
       const agora = new Date().toISOString();
       if (formMode === "edit") {
+        // a data de abertura só muda pela autorização do gestor (`alterarAbertura`)
+        const campos = { ...payload };
+        CAMPOS_DA_ABERTURA.forEach((k) => delete campos[k]);
         const { error } = await supabase
           .from("vagas_solicitacao")
-          .update({ ...payload, atualizado_em: agora })
+          .update({ ...campos, atualizado_em: agora })
           .eq("id", payload.id);
         if (error) throw error;
       } else {
@@ -565,6 +749,29 @@ export default function VagasCentral() {
     } finally {
       setSaving(false);
     }
+  }
+
+  /* A DATA DE ABERTURA MUDA SÓ COM O GESTOR. `autorizarGestor` confere login, senha e
+     nível; sem isso nada é gravado. Grava quem autorizou (não quem está logado): é ele
+     quem responde pela data. */
+  async function alterarAbertura(vaga, { data, motivo, login, senha }) {
+    const quem = await autorizarGestor(login, senha);
+    const agora = new Date().toISOString();
+    const campos = {
+      data_abertura: data,
+      data_abertura_alterada_por: quem.login && quem.login !== quem.nome ? `${quem.nome} (${quem.login})` : quem.nome,
+      data_abertura_alterada_em: agora,
+      data_abertura_motivo: motivo || null,
+    };
+    const { data: gravadas, error } = await supabase
+      .from("vagas_solicitacao")
+      .update({ ...campos, atualizado_em: agora })
+      .eq("id", vaga.id)
+      .select("id");
+    if (error) throw new Error(error.message || "Não foi possível gravar a data.");
+    if (!gravadas?.length) throw new Error("A data não foi gravada — verifique a permissão da tabela de vagas.");
+    await carregar();
+    return campos;
   }
 
   async function atualizarStatus(vaga, novoStatus) {
@@ -699,7 +906,8 @@ export default function VagasCentral() {
       Formacao: r.formacao,
       "Tempo experiencia": r.tempo_experiencia,
       "Salario proposto": r.salario_proposto,
-      "Aberta em": formatDate(r.criado_em),
+      "Aberta em": formatDate(aberturaDe(r)),
+      "Data de abertura alterada por": r.data_abertura_alterada_por || "",
       "Quem abriu": r.criado_por_nome,
       "Contratado": r.contratado_nome,
       "Data contratacao": formatDate(r.data_contratacao),
@@ -709,7 +917,7 @@ export default function VagasCentral() {
     ws["!cols"] = Object.keys(linhas[0]).map(() => ({ wch: 18 }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Vagas");
-    XLSX.writeFile(wb, `vagas_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `vagas_${toISODateLocal(new Date())}.xlsx`);
   }
 
   return (
@@ -829,7 +1037,10 @@ export default function VagasCentral() {
                   </div>
                   <div className="text-[11px] text-slate-500">
                     Gestor: {r.gestor || "-"} · {r.tipo_vaga === "NOVA" ? "Nova" : r.tipo_vaga === "SUBSTITUICAO" ? "Substituicao" : "—"}
-                    {r.contratado_nome ? ` · Contratado: ${r.contratado_nome}` : ""} · Aberta {formatDate(r.criado_em)}
+                    {r.contratado_nome ? ` · Contratado: ${r.contratado_nome}` : ""} · Aberta {formatDate(aberturaDe(r))}
+                    {r.data_abertura ? (
+                      <span className="text-amber-700" title={`Data alterada por ${r.data_abertura_alterada_por || "-"} · no sistema desde ${formatDate(r.criado_em)}`}> (alterada)</span>
+                    ) : null}
                   </div>
                 </button>
                 <div className="flex flex-wrap gap-2">
@@ -872,6 +1083,7 @@ export default function VagasCentral() {
         onClose={() => setFormOpen(false)}
         onSave={salvarForm}
         saving={saving}
+        onAlterarAbertura={alterarAbertura}
       />
 
       <DetalheVaga
@@ -897,7 +1109,13 @@ export default function VagasCentral() {
 // ─────────────────────────────────────────────────────────────────────────
 // Dashboard BI — painel de Recrutamento e Vagas
 // ─────────────────────────────────────────────────────────────────────────
-function DashboardVagas({ rows }) {
+function DashboardVagas({ rows: vagas }) {
+  // o painel inteiro conta a partir da data de abertura EFETIVA (`aberturaDe`): as contas
+  // abaixo leem `criado_em`, que aqui passa a ser essa data
+  const rows = useMemo(
+    () => (vagas || []).map((r) => (r.data_abertura ? { ...r, criado_em: aberturaDe(r) } : r)),
+    [vagas],
+  );
   const [periodo, setPeriodo] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;

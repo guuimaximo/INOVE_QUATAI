@@ -64,3 +64,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 clienteRef = supabase;
+
+// Endereço e chave PÚBLICA (anon) do projeto — os mesmos do cliente acima. Servem a quem
+// precisa de um cliente à parte que não mexa na sessão de quem está logado (ex.: conferir
+// o login e a senha de um gestor que autoriza uma ação, `utils/autorizacaoGestor.js`).
+export const SUPABASE_URL = supabaseUrl;
+export const SUPABASE_ANON_KEY = supabaseAnonKey;

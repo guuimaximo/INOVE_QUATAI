@@ -32,7 +32,7 @@
 //
 // 🔒 SEGURANÇA DESTA TELA
 //   · `numero_cartao` não é lido por esta tela (16/09/2026: a aba de bloqueados
-//     deixou de ler o cadastro da bilhetagem, que era o único lugar que o tinha).
+//     deixou de ler o cadastro da bilhetagem; ela mostra o ciclo da fila de bloqueio).
 //   · nenhum `console.log` de dado.
 //   · A ÚNICA GRAVAÇÃO é a TRIAGEM (status, analisado_em, analisado_por,
 //     observacao). O gateway recusa qualquer outra coluna desta tabela: cartão,
@@ -153,28 +153,6 @@ const COLUNAS_GIRO = [
   "defasagem_telemetria_seg",
 ].join(",");
 
-// "CARTÕES BLOQUEADOS" = OS QUE NÓS MARCAMOS (16/09/2026, pedido do dono: "não tem
-// como o cartão passar depois de bloqueado / vamos trazer só os bloqueios que nós
-// marcarmos"). A aba lia o cadastro de restrição da bilhetagem
-// (`fraude_cartao_bloqueado`), que no lago parou em 29/08/2025 e mostrava cartão
-// "restrito" passando na catraca. Agora são duas fontes, as duas do INOVE:
-//   · aba Bloqueio → "Bloquear este cartão" (fraude_bloqueio_cartao, situacao=bloqueado);
-//   · aba Casos    → "Pedir bloqueio" (fraude_cartao_sequencial, status=bloqueio).
-const COLUNAS_MARCA_BLOQUEIO = [
-  "cru_id",
-  "id_usuario",
-  "tipo_cartao",
-  "situacao",
-  "bloqueado_em",
-  "bloqueado_por",
-  "observacao",
-].join(",");
-// A CONTAGEM COMEÇA ZERADA EM 16/09/2026 (pedido do dono: "tira esses que já pedi o
-// bloqueio, deixa zerado"). Os 82 pedidos de 19/08 continuam gravados — a aba Casos
-// ainda mostra "bloqueio pedido" neles —, só não entram nesta lista.
-const MARCAS_DESDE = "2026-09-16T00:00:00-03:00";
-const COLUNAS_MARCA_CASO = ["cru_id", "id_usuario", "data_ref", "status", "analisado_em", "analisado_por", "observacao"].join(",");
-
 /* ────────────────────────────── utilidades puras ─────────────────────────── */
 
 const txt = (valor) => String(valor ?? "").trim();
@@ -227,27 +205,6 @@ function moeda(valor) {
   const n = numero(valor);
   if (n == null) return "—";
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-// instante gravado (timestamptz, em UTC) → data/hora de Brasília. `dataHoraBR` fatia
-// texto e serve para horário LOCAL (passagem); marca de gente vem em UTC.
-function instanteBR(ts) {
-  const t = Date.parse(txt(ts));
-  if (!Number.isFinite(t)) return "—";
-  return new Date(t).toLocaleString("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-// o DIA (AAAA-MM-DD) de um instante, no fuso de Brasília
-function diaDoInstante(ts) {
-  const t = Date.parse(txt(ts));
-  if (!Number.isFinite(t)) return "";
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(t));
 }
 
 function inteiro(valor) {
@@ -657,128 +614,6 @@ const COLS_GIROS = [
   },
 ];
 
-/** Junta as duas marcas por cartão e mede o que veio DEPOIS da marca mais recente. */
-function juntarMarcados(marcasBloqueio, marcasCaso, casosDosMarcados) {
-  const porCartao = new Map();
-  const pega = (cru) => {
-    if (!porCartao.has(cru)) porCartao.set(cru, { cru_id: cru, id_usuario: "", tipo: "", marcas: [] });
-    return porCartao.get(cru);
-  };
-  for (const m of marcasBloqueio) {
-    const g = pega(txt(m.cru_id));
-    g.id_usuario = g.id_usuario || txt(m.id_usuario);
-    g.tipo = g.tipo || txt(m.tipo_cartao);
-    g.marcas.push({ origem: "bloqueio", em: txt(m.bloqueado_em), por: txt(m.bloqueado_por), obs: txt(m.observacao) });
-  }
-  // o pedido da aba Casos marca VÁRIAS ocorrências de uma vez: vale o instante mais novo
-  const pedidos = new Map();
-  for (const c of marcasCaso) {
-    const cru = txt(c.cru_id);
-    const atual = pedidos.get(cru);
-    if (!atual || txt(c.analisado_em) > txt(atual.analisado_em)) pedidos.set(cru, c);
-  }
-  for (const [cru, c] of pedidos) {
-    const g = pega(cru);
-    g.id_usuario = g.id_usuario || txt(c.id_usuario);
-    g.marcas.push({ origem: "casos", em: txt(c.analisado_em), por: txt(c.analisado_por), obs: txt(c.observacao) });
-  }
-
-  const casosPorCartao = new Map();
-  for (const c of casosDosMarcados) {
-    const cru = txt(c.cru_id);
-    if (!casosPorCartao.has(cru)) casosPorCartao.set(cru, []);
-    casosPorCartao.get(cru).push(c);
-  }
-
-  return [...porCartao.values()]
-    .map((g) => {
-      const marcas = g.marcas.sort((a, b) => b.em.localeCompare(a.em));
-      const ultima = marcas[0];
-      const diaMarca = diaDoInstante(ultima.em);
-      const casos = (casosPorCartao.get(g.cru_id) || []).sort((a, b) => txt(b.data_ref).localeCompare(txt(a.data_ref)));
-      const depois = diaMarca ? casos.filter((c) => txt(c.data_ref).slice(0, 10) > diaMarca) : [];
-      const origens = new Set(marcas.map((m) => m.origem));
-      return {
-        cru_id: g.cru_id,
-        id_usuario: g.id_usuario || txt(casos[0]?.id_usuario),
-        tipo: g.tipo,
-        origem: origens.size > 1 ? "as duas" : origens.has("bloqueio") ? "aba Bloqueio" : "aba Casos",
-        marcadoEm: ultima.em,
-        por: [...new Set(marcas.map((m) => m.por).filter(Boolean))].join(", "),
-        detalhe: marcas.map((m) => m.obs).filter(Boolean).join(" · "),
-        casosDepois: depois.length,
-        diasDepois: new Set(depois.map((c) => txt(c.data_ref).slice(0, 10))).size,
-        debitadoDepois: depois.reduce((soma, c) => soma + (numero(c.valor_total_debitado) || 0), 0),
-        ultimoCaso: txt(casos[0]?.data_ref).slice(0, 10),
-        // o pop-up abre no caso mais recente; cartão sem caso lido não abre
-        recente: casos[0] ? { ...casos[0], passagens: passagensDoCaso(casos[0]) } : null,
-      };
-    })
-    .sort((a, b) => b.casosDepois - a.casosDepois || b.marcadoEm.localeCompare(a.marcadoEm));
-}
-
-const COLS_MARCADOS = [
-  {
-    id: "id_usuario",
-    titulo: "Usuário",
-    largura: 104,
-    classe: "dp-mono",
-    valor: (g) => g.id_usuario,
-    render: (g) => <b>{g.id_usuario || "—"}</b>,
-  },
-  { id: "cru_id", titulo: "Cartão (CRU)", largura: 110, classe: "dp-mono", valor: (g) => g.cru_id },
-  {
-    id: "origem",
-    titulo: "Marcado na",
-    largura: 120,
-    valor: (g) => g.origem,
-    render: (g) => <span className={`dp-pill ${g.origem === "aba Casos" ? "mute" : "accent"}`}>{g.origem}</span>,
-  },
-  {
-    id: "marcadoEm",
-    titulo: "Marcado em",
-    largura: 140,
-    classe: "dp-mono",
-    valor: (g) => g.marcadoEm,
-    render: (g) => instanteBR(g.marcadoEm),
-  },
-  { id: "por", titulo: "Por", largura: 150, valor: (g) => g.por || "—" },
-  {
-    id: "casosDepois",
-    titulo: "Casos depois",
-    largura: 110,
-    alinhar: "right",
-    valor: (g) => g.casosDepois,
-    // caso depois do dia da marca = o cartão continuou passando
-    render: (g) =>
-      g.casosDepois > 0 ? (
-        <span className="dp-pill danger" title={`${g.diasDepois} dia(s) com caso depois do dia da marca`}>
-          {g.casosDepois} em {g.diasDepois} dia{g.diasDepois === 1 ? "" : "s"}
-        </span>
-      ) : (
-        <span className="dp-faint">nenhum</span>
-      ),
-  },
-  {
-    id: "debitadoDepois",
-    titulo: "Debitado depois",
-    largura: 120,
-    alinhar: "right",
-    classe: "dp-num",
-    valor: (g) => g.debitadoDepois,
-    render: (g) => (g.casosDepois ? moeda(g.debitadoDepois) : <span className="dp-faint">—</span>),
-  },
-  {
-    id: "ultimoCaso",
-    titulo: "Último caso",
-    largura: 110,
-    classe: "dp-mono",
-    valor: (g) => g.ultimoCaso,
-    render: (g) => (g.ultimoCaso ? paraBR(g.ultimoCaso) : "—"),
-  },
-  { id: "detalhe", titulo: "Detalhe", largura: 300, valor: (g) => g.detalhe || "—" },
-];
-
 /* ─────────────────────────────────── a tela ──────────────────────────────── */
 
 export default function GuardFraudes() {
@@ -795,9 +630,6 @@ export default function GuardFraudes() {
   const [truncado, setTruncado] = useState(false);
   const [recarga, setRecarga] = useState(0);
 
-  const [bloqueados, setBloqueados] = useState([]);
-  const [carregandoBloq, setCarregandoBloq] = useState(false);
-  const [erroBloq, setErroBloq] = useState("");
 
   // filtros (todos client-side, menos a recência — essa vira filtro no servidor)
   const [minPassagens, setMinPassagens] = useState(PADRAO_PASSAGENS);
@@ -886,62 +718,7 @@ export default function GuardFraudes() {
     };
   }, [podeAcessar, recencia, recarga]);
 
-  /* ── cartões bloqueados = os que NÓS marcamos (só quando a aba é aberta) ── */
-  useEffect(() => {
-    if (!podeAcessar || aba !== "bloqueados") return undefined;
-    let vivo = true;
-    setCarregandoBloq(true);
-    setErroBloq("");
-
-    (async () => {
-      try {
-        const [naBloqueio, naCasos] = await Promise.all([
-          lerTudoDP360("fraude_bloqueio_cartao", {
-            colunas: COLUNAS_MARCA_BLOQUEIO,
-            filtros: { situacao: "eq.bloqueado", bloqueado_em: `gte.${MARCAS_DESDE}` },
-            ordem: "cru_id.asc",
-          }),
-          lerTudoDP360(
-            "fraude_cartao_sequencial",
-            {
-              colunas: COLUNAS_MARCA_CASO,
-              filtros: { status: `eq.${ST_BLOQUEIO}`, analisado_em: `gte.${MARCAS_DESDE}` },
-              ordem: "cru_id.asc,data_ref.asc",
-            },
-            TETO_PAGINAS_CASOS,
-          ),
-        ]);
-        // os casos DESSES cartões, para medir o que veio depois da marca e abrir o pop-up
-        const cartoes = [...new Set([...naBloqueio, ...naCasos].map((l) => txt(l.cru_id)).filter(Boolean))];
-        if (!cartoes.length) {
-          if (vivo) setBloqueados([]);
-          return;
-        }
-        const casosDosMarcados = [];
-        for (let i = 0; i < cartoes.length; i += 80) {
-          const lote = cartoes.slice(i, i + 80);
-          casosDosMarcados.push(
-            ...(await lerTudoDP360(
-              "fraude_cartao_sequencial",
-              { colunas: COLUNAS_CASO, filtros: { cru_id: `in.(${lote.join(",")})` }, ordem: "data_ref.desc,id_evento_final" },
-              TETO_PAGINAS_CASOS,
-            )),
-          );
-        }
-        if (vivo) setBloqueados(juntarMarcados(naBloqueio, naCasos, casosDosMarcados));
-      } catch (falha) {
-        if (vivo) setErroBloq(falha?.message || "Não foi possível ler os cartões bloqueados.");
-      } finally {
-        if (vivo) setCarregandoBloq(false);
-      }
-    })();
-
-    return () => {
-      vivo = false;
-    };
-  }, [podeAcessar, aba, recarga]);
-
-  // trocar de aba fecha o pop-up (ele abre das abas Casos e Cartões bloqueados)
+  // trocar de aba fecha o pop-up do caso
   useEffect(() => {
     setCaso(null);
   }, [aba]);
@@ -1331,8 +1108,8 @@ export default function GuardFraudes() {
         </nav>
       </div>
 
-      {/* ═════════ BLOQUEIO — a fila (3+ dias com rajada nos últimos 15) ═════════ */}
-      {aba === "bloqueio" && <FraudeBloqueio />}
+      {/* ═════════ BLOQUEIO — só o que precisa bloquear (3+ dias com rajada nos últimos 15) ═════════ */}
+      {aba === "bloqueio" && <FraudeBloqueio modo="fila" />}
 
       {/* ══════════════════════════════ CASOS ══════════════════════════════ */}
       {aba === "casos" && (
@@ -1513,9 +1290,8 @@ export default function GuardFraudes() {
           {/* ── POP-UP DO CARTÃO: usos por dia + mapa + passagens ──────────
               Vive fora da grade de propósito. Enquanto era painel embaixo da
               tabela, abrir um caso empurrava a lista para fora da tela e a
-              pessoa perdia o lugar onde estava. Abre das abas Casos e Cartões
-              bloqueados. */}
-          {caso && (aba === "casos" || aba === "bloqueados") && (
+              pessoa perdia o lugar onde estava. */}
+          {caso && aba === "casos" && (
             <div
               className="gd-modal"
               role="dialog"
@@ -1745,51 +1521,11 @@ export default function GuardFraudes() {
             </div>
           )}
 
-      {/* ═══════════════════════ CARTÕES BLOQUEADOS ════════════════════════ */}
-      {aba === "bloqueados" && (
-        <>
-          <div className="dp-viewbar">
-            <div className="dp-vazio" style={{ flex: 1, border: 0, padding: 0 }}>
-              Só os cartões que <b>nós marcamos a partir de 16/09/2026</b>: "Bloquear este cartão" na
-              aba Bloqueio e "Pedir bloqueio" na aba Casos (os pedidos de 19/08 ficaram de fora).{" "}
-              <b>Casos depois</b> = o cartão continuou passando depois do dia da marca — confira se o
-              bloqueio foi feito na bilhetagem.
-            </div>
-            <button type="button" className="dp-btn" onClick={recarregar}>
-              <RefreshCw size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
-              Atualizar
-            </button>
-          </div>
-
-          {erroBloq && (
-            <div className="dp-resumo">
-              <span className="dp-pill danger">{erroBloq}</span>
-            </div>
-          )}
-
-          {!erroBloq && (
-            <div className="dp-resumo">
-              <b className="dp-num">{bloqueados.length}</b> cartão(ões) marcado(s) ·{" "}
-              <b className="dp-num">{bloqueados.filter((g) => g.casosDepois > 0).length}</b> com caso
-              depois da marca
-            </div>
-          )}
-
-          <TabelaDP
-            chave="guard_marcados"
-            colunas={COLS_MARCADOS}
-            linhas={bloqueados}
-            carregando={carregandoBloq}
-            mensagemCarregando="Carregando os cartões marcados…"
-            idLinha={(g) => g.cru_id}
-            classeLinha={(g) => (g.casosDepois > 0 ? "row-p1" : "")}
-            aoClicarLinha={(g) => (g.recente ? setCaso(g.recente) : null)}
-            nomeCsv={`inove_guard_bloqueados_${isoDataLocal(new Date())}`}
-            vazio="Nenhum cartão marcado para bloqueio ainda."
-            pinPadrao={2}
-          />
-        </>
-      )}
+      {/* ═══════════════════════ CARTÕES BLOQUEADOS ════════════════════════
+          O ciclo de quem JÁ SAIU da fila (16/09/2026, dono: "os bloqueados têm que ficar
+          em outra aba"): bloqueados, desbloqueados, "não é fraude" e o histórico. A aba
+          Bloqueio mostra só o que precisa bloquear. */}
+      {aba === "bloqueados" && <FraudeBloqueio modo="gestao" />}
 
       {/* ════════════════════════ COMO A REGRA FUNCIONA ════════════════════ */}
       {aba === "regra" && (

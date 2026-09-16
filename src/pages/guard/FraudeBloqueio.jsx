@@ -50,11 +50,13 @@ const JANELA_DIAS = 15;
 // "ativo" = rajada nos últimos N dias DA BASE (não de hoje: a base tem defasagem)
 const DIAS_ATIVO = 10;
 
-const SITUACOES = [
-  { k: "pendente", rotulo: "A bloquear" },
+// A aba Bloqueio mostra SÓ o que precisa bloquear; o resto do ciclo mora na aba "Cartões
+// bloqueados" (dono, 16/09/2026: "ali eu quero na cara da pessoa o que precisa bloquear, e
+// acabou / os bloqueados têm que ficar em outra aba").
+const SITUACOES_GESTAO = [
   { k: "bloqueado", rotulo: "Bloqueados" },
   { k: "desbloqueado", rotulo: "Desbloqueados" },
-  { k: "descartado", rotulo: "Descartados" },
+  { k: "descartado", rotulo: "Não é fraude" },
 ];
 const ROTULO_SITUACAO = {
   pendente: "a bloquear",
@@ -114,6 +116,11 @@ function quandoBR(ts) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+function diaDoInstante(ts) {
+  const t = Date.parse(txt(ts));
+  if (!Number.isFinite(t)) return "";
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(t));
 }
 function isoDataLocal(d) {
   return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
@@ -382,7 +389,8 @@ function acaoDoHistorico(h) {
   const de = txt(h.de);
   const para = txt(h.para);
   if (txt(h.quem) === "deteccao") {
-    if (para === "pendente") return "entrou na fila";
+    // desbloqueado que voltou a fazer rajada: o robô devolve para a fila (fila.py)
+    if (para === "pendente") return de ? "voltou para a fila" : "entrou na fila";
     if (para === "saiu_da_janela") return "saiu da lista";
     return ROTULO_SITUACAO[para] || para;
   }
@@ -410,6 +418,8 @@ const quemFez = (h) => {
 function detalheDoHistorico(h) {
   const m = txt(h.motivo);
   if (txt(h.quem) !== "deteccao") return m;
+  // a volta para a fila traz a frase do robô; as datas dela vêm em ISO
+  if (txt(h.de)) return m.replace(/base ate/g, "base até").replace(/(\d{4})-(\d{2})-(\d{2})/g, "$3/$2/$1");
   const base = /base ate (\d{4}-\d{2}-\d{2})/.exec(m);
   const ate = base ? `base até ${paraBR(base[1])}` : "";
   if (txt(h.para) === "saiu_da_janela") {
@@ -881,7 +891,8 @@ function HistoricoBloqueio({ historico, cartoes, termo, carregando, onAbrir }) {
   const linhas = useMemo(() => {
     const t = termo.trim().toLowerCase();
     return historico
-      .filter((h) => comRegra || txt(h.quem) !== "deteccao")
+      // a volta de um desbloqueado para a fila aparece sempre: é decisão da regra sobre um cartão já tratado
+      .filter((h) => comRegra || txt(h.quem) !== "deteccao" || (txt(h.de) && txt(h.para) === "pendente"))
       .filter(
         (h) =>
           !t ||
@@ -978,13 +989,28 @@ function HistoricoBloqueio({ historico, cartoes, termo, carregando, onAbrir }) {
 
 /* ──────────────────────────────── a aba ──────────────────────────────────── */
 
-export default function FraudeBloqueio() {
+/** A última rajada é de um dia DEPOIS do bloqueio? (o dia do bloqueio não conta: a
+ *  bilhetagem pode levar o dia para aplicar). Devolve a data da rajada ou "". */
+function rajadaDepoisDoBloqueio(c) {
+  const dia = diaDoInstante(c?.bloqueado_em);
+  const ultima = txt(c?.ultima_rajada).slice(0, 10);
+  return dia && ultima && ultima > dia ? ultima : "";
+}
+
+/**
+ * `modo="fila"` (aba Bloqueio): só os cartões A BLOQUEAR, e mais nada.
+ * `modo="gestao"` (aba Cartões bloqueados): bloqueados, desbloqueados, "não é fraude" e o
+ * histórico. Desbloqueado que volta a fazer rajada volta sozinho para a fila — quem faz isso
+ * é o robô (PROGRAMA_FRAUDES/fraudes/fila.py).
+ */
+export default function FraudeBloqueio({ modo = "fila" }) {
+  const gestao = modo === "gestao";
   const [cartoes, setCartoes] = useState([]);
   const [historico, setHistorico] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [recarga, setRecarga] = useState(0);
-  const [aba, setAba] = useState("pendente");
+  const [aba, setAba] = useState(gestao ? "bloqueado" : "pendente");
   const [termo, setTermo] = useState("");
   const [ordem, setOrdem] = useState("dias_com_rajada");
   const [selecionados, setSelecionados] = useState([]);
@@ -1025,8 +1051,8 @@ export default function FraudeBloqueio() {
   const baseParadaHa = baseAte ? diasAtras(isoDataLocal(new Date()), baseAte) * -1 : 0;
 
   const contagem = useMemo(() => {
-    const c = {};
-    SITUACOES.forEach((s) => {
+    const c = { pendente: 0 };
+    SITUACOES_GESTAO.forEach((s) => {
       c[s.k] = 0;
     });
     cartoes.forEach((x) => {
@@ -1043,6 +1069,8 @@ export default function FraudeBloqueio() {
       ativos: p.filter((c) => diasAtras(c.ultima_rajada, baseAte) <= DIAS_ATIVO).length,
       debitado: soma(p, "valor_debitado"),
       saldo: soma(p, "saldo"),
+      // bloqueado que fez rajada DEPOIS do dia do bloqueio: o bloqueio não pegou na bilhetagem
+      passandoBloqueado: cartoes.filter((c) => situacaoDe(c) === "bloqueado" && rajadaDepoisDoBloqueio(c)).length,
     };
   }, [cartoes, baseAte]);
 
@@ -1148,6 +1176,22 @@ export default function FraudeBloqueio() {
       base.push(
         { id: "bloqueado_em", titulo: "Bloqueado em", largura: 140, valor: (c) => quandoBR(c.bloqueado_em) },
         { id: "bloqueado_por", titulo: "Por", largura: 150, valor: (c) => txt(c.bloqueado_por) },
+        {
+          id: "rajada_depois",
+          titulo: "Rajada depois?",
+          largura: 130,
+          valor: (c) => rajadaDepoisDoBloqueio(c),
+          render: (c) => {
+            const dia = rajadaDepoisDoBloqueio(c);
+            return dia ? (
+              <span className="dp-pill danger" title="Fez rajada depois do dia do bloqueio — confira se a bilhetagem bloqueou">
+                sim · {paraBR(dia).slice(0, 5)}
+              </span>
+            ) : (
+              <span className="dp-faint">não</span>
+            );
+          },
+        },
       );
     }
     if (aba === "desbloqueado") {
@@ -1332,6 +1376,13 @@ export default function FraudeBloqueio() {
         {recado ? <span className={`dp-pill ${recado.tom}`}>{recado.texto}</span> : null}
       </div>
 
+      {gestao ? (
+        <div className="gd-hint">
+          Os cartões que <b>já saíram da fila</b>: bloqueados, desbloqueados e marcados como "não é fraude",
+          e o histórico de quem fez cada coisa. <b>Desbloqueado que volta a fazer rajada volta sozinho para a
+          aba Bloqueio.</b> {baseAte ? `Base até ${paraBR(baseAte)}.` : ""}
+        </div>
+      ) : (
       <div className="gd-hint">
         Fraude = <b>{MIN_PASSAGENS} ou mais passagens dentro de {JANELA_MIN} minutos</b>, em <b>{DIAS_COM_RAJADA} dias ou mais</b>{" "}
         (seguidos ou não) nos <b>últimos {JANELA_DIAS} dias da base</b> · só passagem que girou a catraca ·{" "}
@@ -1342,36 +1393,51 @@ export default function FraudeBloqueio() {
           </span>
         ) : null}
       </div>
+      )}
 
-      <div className="gd-bq-kpis">
-        <div className="gd-bq-kpi al">
-          <b>{kpis.pendentes}</b>
-          <span>a bloquear</span>
+      {gestao ? (
+        <div className="gd-bq-kpis">
+          <div className="gd-bq-kpi ok">
+            <b>{contagem.bloqueado || 0}</b>
+            <span>bloqueados</span>
+          </div>
+          <div className={`gd-bq-kpi${kpis.passandoBloqueado ? " al" : ""}`}>
+            <b>{kpis.passandoBloqueado}</b>
+            <span>bloqueados com rajada depois</span>
+          </div>
+          <div className="gd-bq-kpi">
+            <b>{contagem.desbloqueado || 0}</b>
+            <span>desbloqueados</span>
+          </div>
+          <div className="gd-bq-kpi">
+            <b>{contagem.descartado || 0}</b>
+            <span>não é fraude</span>
+          </div>
         </div>
-        <div className="gd-bq-kpi al">
-          <b>{kpis.ativos}</b>
-          <span>ativos ({DIAS_ATIVO} dias da base)</span>
+      ) : (
+        <div className="gd-bq-kpis">
+          <div className="gd-bq-kpi al">
+            <b>{kpis.pendentes}</b>
+            <span>a bloquear</span>
+          </div>
+          <div className="gd-bq-kpi al">
+            <b>{kpis.ativos}</b>
+            <span>ativos ({DIAS_ATIVO} dias da base)</span>
+          </div>
+          <div className="gd-bq-kpi">
+            <b>{brl(kpis.debitado)}</b>
+            <span>debitado nas rajadas</span>
+          </div>
+          <div className="gd-bq-kpi">
+            <b>{brl(kpis.saldo)}</b>
+            <span>saldo a recuperar</span>
+          </div>
         </div>
-        <div className="gd-bq-kpi">
-          <b>{brl(kpis.debitado)}</b>
-          <span>debitado nas rajadas</span>
-        </div>
-        <div className="gd-bq-kpi">
-          <b>{brl(kpis.saldo)}</b>
-          <span>saldo a recuperar</span>
-        </div>
-        <div className="gd-bq-kpi ok">
-          <b>{contagem.bloqueado || 0}</b>
-          <span>já bloqueados</span>
-        </div>
-        <div className="gd-bq-kpi">
-          <b>{contagem.desbloqueado || 0}</b>
-          <span>desbloqueados</span>
-        </div>
-      </div>
+      )}
 
+      {gestao ? (
       <div className="dp-viewbar" style={{ paddingTop: 4 }}>
-        {SITUACOES.map((s) => (
+        {SITUACOES_GESTAO.map((s) => (
           <button
             key={s.k}
             type="button"
@@ -1396,6 +1462,7 @@ export default function FraudeBloqueio() {
           Histórico <span className="n">{historico.filter((h) => txt(h.quem) !== "deteccao").length}</span>
         </button>
       </div>
+      ) : null}
 
       {erro ? (
         <div className="dp-resumo">
@@ -1426,7 +1493,7 @@ export default function FraudeBloqueio() {
         aoSelecionar={(ids) => setSelecionados(ids)}
         classeLinha={(c) => (diasAtras(c.ultima_rajada, baseAte) <= DIAS_ATIVO && aba === "pendente" ? "row-p1" : "")}
         nomeCsv={`bloqueio_${aba}_${isoDataLocal(new Date())}`}
-        vazio={aba === "pendente" ? "Nada a bloquear. Fila limpa. 👍" : "Nenhum cartão aqui."}
+        vazio={aba === "pendente" ? "Nada a bloquear. Fila limpa. 👍" : "Nenhum cartão nesta situação."}
         pinPadrao={1}
         acoes={
           aba === "pendente" ? (

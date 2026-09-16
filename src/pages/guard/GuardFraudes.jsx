@@ -266,7 +266,8 @@ function pilulaPassagens(n) {
 const COLS_CASOS = [
   {
     id: "data_ref",
-    titulo: "Dia",
+    // cada linha é UM caso (um bloco de passagens do cartão no mesmo local); o dia é o dele
+    titulo: "Dia do caso",
     largura: 96,
     classe: "dp-mono",
     valor: (l) => txt(l.data_ref).slice(0, 10),
@@ -749,6 +750,23 @@ export default function GuardFraudes() {
     setFoco(null);
     setRecadoTriagem(null);
   }, [caso]);
+  const diaDoCaso = caso ? txt(caso.data_ref).slice(0, 10) : "";
+
+  /* A LISTA DE DIAS ROLA ATÉ O DIA ABERTO (16/09/2026). Ela é o cartão inteiro, do dia
+     mais novo para o mais antigo; quem clicava num caso de 22/08 via a lista começando
+     em 12/09 e achava que o pop-up tinha aberto no dia errado ("pq quando você abre o
+     último dia é dia 12"). Rola só a lista, não a página. */
+  const listaDiasRef = useRef(null);
+  useEffect(() => {
+    const lista = listaDiasRef.current;
+    const el = lista?.querySelector(".gd-dia.on");
+    if (!lista || !el) return;
+    const caixa = lista.getBoundingClientRect();
+    const item = el.getBoundingClientRect();
+    if (item.top < caixa.top || item.bottom > caixa.bottom) {
+      lista.scrollTop += item.top - caixa.top - 8;
+    }
+  }, [diaSel, carregandoGiros, cartaoAberto]);
 
   // Esc fecha, como qualquer pop-up. Sem isto o unico jeito de sair e achar o X.
   useEffect(() => {
@@ -1260,7 +1278,8 @@ export default function GuardFraudes() {
                               : "sem triagem"}
                       </span>
                       <br />
-                      histórico do cartão inteiro — não só o dia que você clicou.
+                      você abriu o caso de <b>{paraBR(caso.data_ref)}</b> · a lista de dias é o cartão
+                      inteiro, do mais novo para o mais antigo.
                     </div>
                   </div>
 
@@ -1364,7 +1383,7 @@ export default function GuardFraudes() {
                     {carregandoGiros ? (
                       <div className="dp-vazio">Carregando o histórico do cartão…</div>
                     ) : (
-                      <div className="gd-dias">
+                      <div className="gd-dias" ref={listaDiasRef}>
                         <button
                           type="button"
                           className={`gd-dia${diaSel === "" ? " on" : ""}`}
@@ -1389,7 +1408,10 @@ export default function GuardFraudes() {
                               setFoco(null);
                             }}
                           >
-                            <span className="d">{paraBR(d.dia)}</span>
+                            <span className="d">
+                              {paraBR(d.dia)}
+                              {d.dia === diaDoCaso ? <span className="gd-dia-clicado">caso aberto</span> : null}
+                            </span>
                             <span className="n">
                               <b className="dp-num">{d.passagens || d.doCaso}</b> passagem(ns)
                               {d.blocos.size > 1 ? ` · ${d.blocos.size} blocos` : ""}

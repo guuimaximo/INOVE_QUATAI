@@ -241,6 +241,16 @@
   border-color: var(--dp-accent);
 }
 .dp360 .gd-dia .d { font-size: 12.5px; font-weight: 650; }
+/* o dia do caso que a pessoa clicou na grade (aba Casos) */
+.dp360 .gd-dia-clicado {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 650;
+  background: var(--dp-warn-bg);
+  color: var(--dp-warn-ink);
+}
 .dp360 .gd-dia .v { font-size: 12px; font-weight: 650; text-align: right; }
 .dp360 .gd-dia .n { grid-column: 1; font-size: 11.5px; color: var(--dp-muted); }
 .dp360 .gd-dia .l {

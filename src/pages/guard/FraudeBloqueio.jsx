@@ -8,7 +8,8 @@
 // A REGRA NÃO MORA AQUI. Quem decide que um cartão entra na fila é o bot
 // (PROGRAMA_FRAUDES/fraudes/regra.py → fila.py), e a fila chega pronta em
 // `fraude_bloqueio_cartao`, uma linha por CARTÃO:
-//     rajada = 5 ou mais passagens efetivas (girou a catraca) dentro de 10 minutos
+//     rajada = 5 ou mais passagens efetivas (girou a catraca) dentro de 30 minutos
+//              (eram 10 minutos até 16/09/2026 — o cartão 484361 passava devagar)
 //     fraude = rajada em 3+ dias, seguidos ou não, nos últimos 15 dias da base
 //              (era "3 dias seguidos" até 16/09/2026)
 // A tela refaz a janela deslizante só para DESENHAR a evidência (quais passagens formam
@@ -38,7 +39,8 @@ const GIROS = "fraude_cartao_giros";
 
 // Só para desenhar a evidência — a mesma régua de fraudes/regra.py.
 const MIN_PASSAGENS = 5;
-const JANELA_SEG = 10 * 60;
+const JANELA_SEG = 30 * 60; // a mesma de fraudes/regra.py (era 10 min até 16/09/2026)
+const JANELA_MIN = JANELA_SEG / 60;
 // A regra (16/09/2026): rajada em 3+ dias, SEGUIDOS OU NÃO, nos últimos 15 dias da
 // base. Antes eram 3 dias seguidos — quem usava qui/sex, parava no fim de semana e
 // voltava na segunda escapava. Quem sai da janela ainda pendente sai da fila (o
@@ -134,7 +136,7 @@ const girou = (g) => g?.giro_efetuado === true || String(g?.giro_efetuado) === "
 /**
  * AS RAJADAS DO CARTÃO, dia a dia — a evidência que sustenta o pedido.
  * Cada bloco (mesmo cartão, mesmo endereço) com 5+ passagens efetivas vira rajada se a
- * pior janela de 10 min (dois ponteiros sobre a lista ordenada) tiver 5+ passagens.
+ * pior janela de 30 min (dois ponteiros sobre a lista ordenada) tiver 5+ passagens.
  */
 function rajadasDoCartao(giros) {
   const porBloco = new Map();
@@ -827,7 +829,7 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
                             key={g._id}
                             className={`${g._id === foco ? "gd-foco" : ""}${g._janela ? " gd-bqm-pior" : ""}`}
                             onMouseEnter={() => setFoco(g._id)}
-                            title={g._janela ? "dentro da pior janela de 10 minutos" : ""}
+                            title={g._janela ? `dentro da pior janela de ${JANELA_MIN} minutos` : ""}
                           >
                             <td className="dp-num">{g._n}</td>
                             <td className="dp-mono">{horaDe(g.giro_dthora)}</td>
@@ -842,7 +844,7 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
                   </div>
                 </div>
                 <div className="gd-hint gd-bqm-leg">
-                  <span className="gd-bqm-marca" /> pior janela de 10 minutos do dia · o número do pino é a ordem da
+                  <span className="gd-bqm-marca" /> pior janela de {JANELA_MIN} minutos do dia · o número do pino é a ordem da
                   passagem · o bloco é sempre o mesmo endereço, então os pinos ficam um em cima do outro · passe o mouse
                   numa linha para achar o ponto
                 </div>
@@ -1331,7 +1333,7 @@ export default function FraudeBloqueio() {
       </div>
 
       <div className="gd-hint">
-        Fraude = <b>{MIN_PASSAGENS} ou mais passagens dentro de 10 minutos</b>, em <b>{DIAS_COM_RAJADA} dias ou mais</b>{" "}
+        Fraude = <b>{MIN_PASSAGENS} ou mais passagens dentro de {JANELA_MIN} minutos</b>, em <b>{DIAS_COM_RAJADA} dias ou mais</b>{" "}
         (seguidos ou não) nos <b>últimos {JANELA_DIAS} dias da base</b> · só passagem que girou a catraca ·{" "}
         {baseAte ? `base até ${paraBR(baseAte)}` : "base sem data"}
         {baseParadaHa > 3 ? (

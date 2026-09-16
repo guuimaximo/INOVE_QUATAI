@@ -77,7 +77,16 @@ type Acesso = {
   escrever?: Array<"upsert" | "insert" | "delete" | "update">;
   colunasUpdate?: string[];
   conflito?: string;
+  // `colunasInsert`: quais colunas um INSERT pode trazer (sem a lista, qualquer uma)
+  colunasInsert?: string[];
+  // `valores`: coluna -> valores aceitos (o resto e recusado)
+  valores?: Record<string, string[]>;
+  // `autorEm`: colunas que dizem QUEM FEZ. O gateway escreve nelas o nome de quem esta
+  // logado — a tela nao escolhe o autor do bloqueio.
+  autorEm?: string[];
 };
+
+const SITUACOES_BLOQUEIO = ["pendente", "bloqueado", "desbloqueado", "descartado"];
 
 const TABELAS: Record<string, Acesso> = {
   // — snapshots do lake (somente leitura; quem preenche e o importador) —
@@ -129,7 +138,50 @@ const TABELAS: Record<string, Acesso> = {
     escrever: ["update"],
     colunasUpdate: ["status", "analisado_em", "analisado_por", "observacao"],
   },
+  // A FILA DE BLOQUEIO (16/09/2026): uma linha por CARTAO que a regra da operacao pegou
+  // (5+ passagens em 10 min, 3 dias seguidos). Quem cria a linha e o bot
+  // (PROGRAMA_FRAUDES/fraudes/fila.py); a tela so move o cartao entre as situacoes. Mesmo
+  // contrato do painel_bloqueio (sql/09): so as colunas de FLUXO — evidencia, valor e
+  // cartao sao a prova da deteccao.
+  fraude_bloqueio_cartao: {
+    ler: true,
+    escrever: ["update"],
+    colunasUpdate: [
+      "situacao", "bloqueado_em", "bloqueado_por", "desbloqueado_em",
+      "desbloqueado_por", "motivo_desbloqueio", "descartado_em", "observacao",
+    ],
+    valores: { situacao: SITUACOES_BLOQUEIO },
+    autorEm: ["bloqueado_por", "desbloqueado_por"],
+  },
+  // O HISTORICO so cresce: a tela insere, ninguem altera nem apaga.
+  fraude_bloqueio_historico: {
+    ler: true,
+    escrever: ["insert"],
+    colunasInsert: ["cru_id", "id_usuario", "de", "para", "quem", "motivo"],
+    valores: { para: SITUACOES_BLOQUEIO },
+    autorEm: ["quem"],
+  },
 };
+
+/** Algum valor fora da lista aceita? Devolve a frase do erro, ou "". */
+function valorRecusado(cfg: Acesso, linhas: Record<string, unknown>[]) {
+  for (const [coluna, aceitos] of Object.entries(cfg.valores ?? {})) {
+    for (const l of linhas) {
+      if (!(coluna in l)) continue;
+      const v = l[coluna];
+      if (v == null || !aceitos.includes(String(v))) return `valor não aceito em ${coluna}: ${String(v)}`;
+    }
+  }
+  return "";
+}
+
+/** Escreve o nome de quem esta logado nas colunas de autor que vieram preenchidas. */
+function carimbarAutor(cfg: Acesso, linhas: Record<string, unknown>[], nome: string | null | undefined) {
+  if (!cfg.autorEm?.length || !nome) return;
+  for (const l of linhas) {
+    for (const c of cfg.autorEm) if (c in l && l[c] != null) l[c] = nome;
+  }
+}
 
 /* QUEM LE CADA TABELA, ALEM DO ADMINISTRADOR (15/09/2026). A liberacao da DP360 e por
    pessoa e por pagina; a trava de verdade tem de estar AQUI, porque a da tela so esconde.
@@ -142,6 +194,8 @@ const ACESSO_DAS_TABELAS: Record<string, string[] | "admin"> = {
   fraude_cartao_bloqueado: "admin",
   fraude_cartao_giros: "admin",
   fraude_cartao_sequencial: "admin",
+  fraude_bloqueio_cartao: "admin",
+  fraude_bloqueio_historico: "admin",
 };
 
 const LIMITE_MAX = 5000;
@@ -1016,6 +1070,9 @@ serve(async (req: Request) => {
       if (!chaves.length) return json({ ok: false, error: "campos ausentes" }, 400);
       const proibida = chaves.find((c) => !permitidas.has(c));
       if (proibida) return json({ ok: false, error: `coluna não liberada: ${proibida}` }, 403);
+      const recusado = valorRecusado(cfg, [campos as Record<string, unknown>]);
+      if (recusado) return json({ ok: false, error: recusado }, 400);
+      carimbarAutor(cfg, [campos as Record<string, unknown>], perfil?.nome);
 
       try {
         const r = await fetch(`${base}/rest/v1/${tabela}?${filtros.qs}`, {
@@ -1072,6 +1129,14 @@ serve(async (req: Request) => {
     // O QUE JA ESTAVA LA, para a trilha poder dizer "de X para Y"
     const chavesTabela = String(cfg.conflito ?? "").split(",").map((c) => c.trim()).filter(Boolean);
     const colunasMexidas = [...new Set(linhas.flatMap((l) => Object.keys(l as Record<string, unknown>)))];
+    if (op === "insert" && cfg.colunasInsert) {
+      const livres = new Set(cfg.colunasInsert);
+      const fora = colunasMexidas.find((c) => !livres.has(c));
+      if (fora) return json({ ok: false, error: `coluna não liberada: ${fora}` }, 403);
+    }
+    const recusadoLinha = valorRecusado(cfg, linhas as Record<string, unknown>[]);
+    if (recusadoLinha) return json({ ok: false, error: recusadoLinha }, 400);
+    carimbarAutor(cfg, linhas as Record<string, unknown>[], perfil?.nome);
     const antes = op === "upsert"
       ? await lerAntes(base, hDp, tabela, chavesTabela, linhas as Record<string, unknown>[], colunasMexidas)
       : new Map();

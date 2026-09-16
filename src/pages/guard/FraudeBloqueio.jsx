@@ -38,6 +38,12 @@ const GIROS = "fraude_cartao_giros";
 // Só para desenhar a evidência — a mesma régua de fraudes/regra.py.
 const MIN_PASSAGENS = 5;
 const JANELA_SEG = 10 * 60;
+// A regra (16/09/2026): rajada em 3+ dias, SEGUIDOS OU NÃO, nos últimos 15 dias da
+// base. Antes eram 3 dias seguidos — quem usava qui/sex, parava no fim de semana e
+// voltava na segunda escapava. Quem sai da janela ainda pendente sai da fila (o
+// robô registra no histórico como `saiu_da_janela`).
+const DIAS_COM_RAJADA = 3;
+const JANELA_DIAS = 15;
 // "ativo" = rajada nos últimos N dias DA BASE (não de hoje: a base tem defasagem)
 const DIAS_ATIVO = 10;
 
@@ -52,12 +58,14 @@ const ROTULO_SITUACAO = {
   bloqueado: "bloqueado",
   desbloqueado: "desbloqueado",
   descartado: "não é fraude",
+  saiu_da_janela: "saiu da lista",
 };
 const TOM_SITUACAO = { pendente: "danger", bloqueado: "ok", desbloqueado: "warn", descartado: "mute" };
 
 const ORDENS = [
-  { k: "dias_seguidos", rotulo: "Mais dias seguidos" },
+  { k: "dias_com_rajada", rotulo: "Mais dias com rajada" },
   { k: "ultima_rajada", rotulo: "Rajada mais recente" },
+  { k: "dias_seguidos", rotulo: "Mais dias seguidos" },
   { k: "valor_debitado", rotulo: "Maior valor" },
   { k: "saldo", rotulo: "Maior saldo" },
   { k: "maior_pico", rotulo: "Maior pico" },
@@ -396,6 +404,7 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
 
   const s = situacaoDe(cartao);
   const atras = diasAtras(cartao.ultima_rajada, baseAte);
+  const naJanela = (dia) => diasAtras(dia, baseAte) < JANELA_DIAS;
 
   return (
     <div
@@ -472,13 +481,16 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
           <div className="gd-modal-dias">
             <div className="gd-secao">A prova</div>
             <dl className="gd-ficha">
-              <dt>Dias seguidos</dt>
-              <dd>
-                <b>{num(cartao.dias_seguidos)}</b> ({paraBR(cartao.sequencia_de)} a {paraBR(cartao.sequencia_ate)})
-              </dd>
               <dt>Dias com rajada</dt>
               <dd>
-                {num(cartao.dias_com_rajada)} · {num(cartao.rajadas)} rajadas · {num(cartao.passagens)} passagens
+                <b>{num(cartao.dias_com_rajada)}</b> nos últimos {JANELA_DIAS} dias da base (
+                {paraBR(cartao.sequencia_de)} a {paraBR(cartao.sequencia_ate)})
+              </dd>
+              <dt>Rajadas</dt>
+              <dd>
+                {num(cartao.rajadas)} rajadas · {num(cartao.passagens)} passagens · maior sequência{" "}
+                {num(cartao.dias_seguidos)} dia{num(cartao.dias_seguidos) === 1 ? "" : "s"} seguido
+                {num(cartao.dias_seguidos) === 1 ? "" : "s"}
               </dd>
               <dt>Pior janela</dt>
               <dd>
@@ -518,8 +530,14 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
                     <b>{ROTULO_SITUACAO[txt(h.para)] || txt(h.para)}</b>
                     {txt(h.de) ? <span className="dp-faint"> (era {ROTULO_SITUACAO[txt(h.de)] || txt(h.de)})</span> : null}
                     {" · "}
-                    {txt(h.quem) === "deteccao" ? "detectado pela regra" : txt(h.quem) || "—"}
-                    {txt(h.motivo) && txt(h.quem) !== "deteccao" ? <div className="dp-faint">{h.motivo}</div> : null}
+                    {txt(h.quem) === "deteccao"
+                      ? txt(h.para) === "pendente"
+                        ? "detectado pela regra"
+                        : "pela regra"
+                      : txt(h.quem) || "—"}
+                    {txt(h.motivo) && (txt(h.quem) !== "deteccao" || txt(h.para) !== "pendente") ? (
+                      <div className="dp-faint">{h.motivo}</div>
+                    ) : null}
                   </div>
                 ))
               ) : (
@@ -530,7 +548,10 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
 
           <div className="gd-modal-mapa">
             <div className="gd-secao">
-              Rajadas dia a dia {blocos.length ? `— ${blocos.length}` : ""}
+              Rajadas dia a dia{" "}
+              {blocos.length
+                ? `— ${blocos.length}, ${blocos.filter((b) => naJanela(b.dia)).length} nos últimos ${JANELA_DIAS} dias`
+                : ""}
             </div>
             {erro ? <div className="gd-modal-erro"><span className="dp-pill danger">{erro}</span></div> : null}
             {giros === null && !erro ? <div className="gd-hint">Carregando as passagens…</div> : null}
@@ -545,7 +566,8 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
                     <button
                       key={b.id}
                       type="button"
-                      className={`gd-dia${aberto?.id === b.id ? " on" : ""}`}
+                      className={`gd-dia${aberto?.id === b.id ? " on" : ""}${naJanela(b.dia) ? "" : " fora"}`}
+                      title={naJanela(b.dia) ? undefined : `Fora dos últimos ${JANELA_DIAS} dias — não conta para a regra`}
                       onClick={() => {
                         setBlocoAberto(b.id);
                         setFoco(null);
@@ -617,7 +639,7 @@ export default function FraudeBloqueio() {
   const [recarga, setRecarga] = useState(0);
   const [aba, setAba] = useState("pendente");
   const [termo, setTermo] = useState("");
-  const [ordem, setOrdem] = useState("dias_seguidos");
+  const [ordem, setOrdem] = useState("dias_com_rajada");
   const [selecionados, setSelecionados] = useState([]);
   const [aberto, setAberto] = useState("");
   const [acao, setAcao] = useState(null);
@@ -698,21 +720,28 @@ export default function FraudeBloqueio() {
       { id: "cru_id", titulo: "Cartão", largura: 90, classe: "dp-mono", valor: (c) => txt(c.cru_id) },
       { id: "tipo_cartao", titulo: "Tipo", largura: 150, valor: (c) => txt(c.tipo_cartao) },
       {
-        id: "dias_seguidos",
-        titulo: "Dias seg.",
-        largura: 86,
+        id: "dias_com_rajada",
+        titulo: "Dias c/ rajada",
+        largura: 96,
         classe: "dp-num",
-        valor: (c) => num(c.dias_seguidos),
+        valor: (c) => num(c.dias_com_rajada),
         render: (c) =>
-          num(c.dias_seguidos) >= 4 ? (
-            <span className="dp-pill danger">{num(c.dias_seguidos)} dias</span>
+          num(c.dias_com_rajada) > DIAS_COM_RAJADA ? (
+            <span className="dp-pill danger">{num(c.dias_com_rajada)} dias</span>
           ) : (
-            num(c.dias_seguidos)
+            num(c.dias_com_rajada)
           ),
       },
       {
+        id: "dias_seguidos",
+        titulo: "Seguidos",
+        largura: 76,
+        classe: "dp-num dp-faint",
+        valor: (c) => num(c.dias_seguidos),
+      },
+      {
         id: "periodo",
-        titulo: "Período",
+        titulo: "Primeira → última",
         largura: 150,
         valor: (c) => `${paraBR(c.sequencia_de)} a ${paraBR(c.sequencia_ate)}`,
         render: (c) => (
@@ -909,8 +938,9 @@ export default function FraudeBloqueio() {
       </div>
 
       <div className="gd-hint">
-        Fraude = <b>5 ou mais passagens dentro de 10 minutos</b>, em <b>3 dias seguidos</b> · só passagem que girou a
-        catraca · {baseAte ? `base até ${paraBR(baseAte)}` : "base sem data"}
+        Fraude = <b>{MIN_PASSAGENS} ou mais passagens dentro de 10 minutos</b>, em <b>{DIAS_COM_RAJADA} dias ou mais</b>{" "}
+        (seguidos ou não) nos <b>últimos {JANELA_DIAS} dias da base</b> · só passagem que girou a catraca ·{" "}
+        {baseAte ? `base até ${paraBR(baseAte)}` : "base sem data"}
         {baseParadaHa > 3 ? (
           <span className="dp-pill warn" style={{ marginLeft: 8 }}>
             a detecção está {baseParadaHa} dias atrás — a fila só anda quando o robô de fraudes roda

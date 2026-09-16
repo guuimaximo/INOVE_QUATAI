@@ -234,6 +234,8 @@
   color: inherit;
 }
 .dp360 .gd-dia:hover { background: var(--dp-surface-2); }
+/* rajada fora dos últimos 15 dias: aparece como histórico, não conta para a regra */
+.dp360 .gd-dia.fora { opacity: 0.55; border-style: dashed; }
 .dp360 .gd-dia.on {
   background: var(--dp-accent-soft);
   border-color: var(--dp-accent);

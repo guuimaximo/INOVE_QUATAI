@@ -28,7 +28,7 @@
 // ============================================================================
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, Search } from "lucide-react";
-import { atualizarDP360, inserirDP360, lerDP360, lerTudoDP360 } from "../../services/dp360Api";
+import { atualizarDP360, inserirDP360, lerTudoDP360 } from "../../services/dp360Api";
 import TabelaDP from "../dp360/TabelaDP";
 import MapaPassagens from "./MapaPassagens";
 
@@ -404,6 +404,85 @@ const quemFez = (h) => {
   return q;
 };
 
+// o motivo da regra automática é a descrição inteira dela; na linha do tempo basta a base
+function detalheDoHistorico(h) {
+  const m = txt(h.motivo);
+  if (txt(h.quem) !== "deteccao") return m;
+  const base = /base ate (\d{4}-\d{2}-\d{2})/.exec(m);
+  const ate = base ? `base até ${paraBR(base[1])}` : "";
+  if (txt(h.para) === "saiu_da_janela") {
+    return `sem rajada em ${DIAS_COM_RAJADA} dias nos últimos ${JANELA_DIAS} dias${ate ? ` · ${ate}` : ""}`;
+  }
+  return ate;
+}
+
+/**
+ * O HISTÓRICO DE UM CARTÃO, num pop-up por cima do cartão (pedido do dono, 16/09/2026:
+ * "quando clicar no cartão já aparece o histórico desse cartão / faz um botão que abre
+ * outro pop-up"). Tudo o que aconteceu com ele, do mais novo para o mais antigo: quem
+ * bloqueou, desbloqueou, descartou, devolveu ou anotou (nome do login do INOVE) e as
+ * entradas e saídas automáticas da regra.
+ */
+function HistoricoDoCartao({ cartao, historico, carregando, onFechar }) {
+  useEffect(() => {
+    const tecla = (e) => {
+      if (e.key === "Escape") onFechar();
+    };
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, [onFechar]);
+  const pessoas = historico.filter((h) => txt(h.quem) !== "deteccao").length;
+
+  return (
+    <div
+      className="gd-modal gd-modal-acima"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Histórico do cartão ${txt(cartao.cru_id)}`}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onFechar();
+      }}
+    >
+      <div className="gd-acao-box gd-bqm-histbox">
+        <div className="gd-bqm-histhead">
+          <div>
+            <b style={{ fontSize: 16 }}>Histórico do cartão</b>
+            <div className="dp-faint" style={{ fontSize: 12.5, marginTop: 2 }}>
+              código <b className="dp-mono">{txt(cartao.id_usuario) || "—"}</b> · cartão{" "}
+              <span className="dp-mono">{txt(cartao.cru_id)}</span> · {pessoas} ação(ões) de pessoas ·{" "}
+              {historico.length - pessoas} da regra automática
+            </div>
+          </div>
+          <button type="button" className="dp-btn" onClick={onFechar} aria-label="Fechar">
+            ✕
+          </button>
+        </div>
+        {carregando ? (
+          <div className="gd-hint">Carregando o histórico…</div>
+        ) : historico.length ? (
+          <ol className="gd-bqm-tempo">
+            {historico.map((h) => (
+              <li key={h.id} className={`t-${tomDoHistorico(h)}`}>
+                <div className="topo">
+                  <span className={`dp-pill ${tomDoHistorico(h)}`}>{acaoDoHistorico(h)}</span>
+                  <b>{quemFez(h)}</b>
+                  <span className="dp-mono dp-faint quando">{quandoBR(h.em)}</span>
+                </div>
+                {txt(h.de) && txt(h.de) !== txt(h.para) ? (
+                  <div className="dp-faint">estava: {ROTULO_SITUACAO[txt(h.de)] || txt(h.de)}</div>
+                ) : null}
+                {detalheDoHistorico(h) ? <div>{detalheDoHistorico(h)}</div> : null}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <div className="dp-faint">Sem registro ainda.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Uma rajada na lista da esquerda. */
 function ItemRajada({ b, on, fora, onClick }) {
   return (
@@ -429,12 +508,14 @@ function ItemRajada({ b, on, fora, onClick }) {
  * O POP-UP DO CARTÃO (redesenhado em 16/09/2026 — "ta muito jogado"). Em faixas, de
  * cima para baixo: quem é o cartão e o que fazer · os números da prova · os 15 dias da
  * regra, um quadrado por dia (é a repetição em dias diferentes que denuncia o cartão) ·
- * embaixo, as rajadas e o histórico à esquerda e o dia aberto (mapa + passagens) à
- * direita, ocupando o resto da altura.
+ * embaixo, as rajadas à esquerda e o dia aberto (mapa + passagens) à direita, ocupando
+ * o resto da altura. O histórico abre em outro pop-up pelo botão do cabeçalho, que já
+ * mostra a última movimentação.
  */
 function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
   const [giros, setGiros] = useState(null);
-  const [historico, setHistorico] = useState([]);
+  const [historico, setHistorico] = useState(null);
+  const [verHistorico, setVerHistorico] = useState(false);
   const [erro, setErro] = useState("");
   const [blocoAberto, setBlocoAberto] = useState("");
   const [foco, setFoco] = useState(null);
@@ -447,7 +528,7 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
     setErro("");
     Promise.all([
       lerTudoDP360(GIROS, { filtros: { cru_id: `eq.${cru}` }, ordem: "giro_dthora.asc" }),
-      lerDP360(HIST, { filtros: { cru_id: `eq.${cru}` }, ordem: "em.desc", limite: 50 }).catch(() => []),
+      lerTudoDP360(HIST, { filtros: { cru_id: `eq.${cru}` }, ordem: "id.desc" }).catch(() => []),
     ])
       .then(([g, h]) => {
         if (!vivo) return;
@@ -503,8 +584,10 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
   const diasComRajada = giros === null ? num(cartao.dias_com_rajada) : new Set(dentro.map((b) => b.dia)).size;
   const local = txt(cartao.local_fraude);
   const placasDoDia = aberto ? [...new Set(aberto.passagens.map((g) => txt(g.vei_placa)).filter(Boolean))] : [];
+  const ultima = historico?.[0] || null;
 
   return (
+    <>
     <div
       className="gd-modal gd-modal-bqm"
       role="dialog"
@@ -539,8 +622,29 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
               cartão <span className="dp-mono">{cru}</span> · {txt(cartao.tipo_cartao) || "tipo não informado"}
               {local ? ` · ${local}` : ""}
             </div>
+            <div className="sub gd-bqm-ultima">
+              {historico === null ? (
+                "lendo o histórico…"
+              ) : ultima ? (
+                <>
+                  última movimentação: <b>{acaoDoHistorico(ultima)}</b> · {quemFez(ultima)} ·{" "}
+                  <span className="dp-mono">{quandoBR(ultima.em)}</span>
+                </>
+              ) : (
+                "sem histórico ainda"
+              )}
+            </div>
           </div>
           <div className="gd-det-acoes">
+            <button
+              type="button"
+              className="dp-btn gd-bqm-btn-hist"
+              onClick={() => setVerHistorico(true)}
+              disabled={historico === null}
+              title="Quem bloqueou, desbloqueou ou mexeu neste cartão, e quando"
+            >
+              Histórico <span className="n">{historico === null ? "…" : historico.length}</span>
+            </button>
             {txt(cartao.link_maps) ? (
               <a className="dp-btn" href={cartao.link_maps} target="_blank" rel="noreferrer">
                 Abrir no Maps ↗
@@ -683,25 +787,6 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
             {antes.map((b) => (
               <ItemRajada key={b.id} b={b} on={aberto?.id === b.id} fora onClick={() => abrir(b.id)} />
             ))}
-
-            <div className="gd-bqm-sec" style={{ marginTop: 10 }}>
-              Histórico
-            </div>
-            <div className="gd-bqm-hist">
-              {historico.length ? (
-                historico.map((h) => (
-                  <div key={h.id} className={`t-${tomDoHistorico(h)}`}>
-                    <div>
-                      <b>{acaoDoHistorico(h)}</b> <span className="dp-faint">· {quemFez(h)}</span>
-                    </div>
-                    <div className="dp-mono dp-faint">{quandoBR(h.em)}</div>
-                    {txt(h.motivo) && txt(h.quem) !== "deteccao" ? <div>{h.motivo}</div> : null}
-                  </div>
-                ))
-              ) : (
-                <div className="dp-faint">Sem registro ainda.</div>
-              )}
-            </div>
           </aside>
 
           <section className="gd-bqm-dia">
@@ -771,6 +856,15 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
         </div>
       </div>
     </div>
+    {verHistorico ? (
+      <HistoricoDoCartao
+        cartao={cartao}
+        historico={historico || []}
+        carregando={historico === null}
+        onFechar={() => setVerHistorico(false)}
+      />
+    ) : null}
+    </>
   );
 }
 

@@ -546,12 +546,57 @@
 }
 .dp360 .gd-bqm-item .r { font-size: 11px; color: var(--dp-muted); text-align: right; font-variant-numeric: tabular-nums; }
 
-.dp360 .gd-bqm-hist { display: grid; gap: 8px; font-size: 12px; line-height: 1.45; }
-.dp360 .gd-bqm-hist > div { padding: 2px 0 2px 10px; border-left: 3px solid var(--dp-border); }
-.dp360 .gd-bqm-hist > div.t-ok { border-left-color: var(--dp-ok-ink); }
-.dp360 .gd-bqm-hist > div.t-warn { border-left-color: var(--dp-warn-ink); }
-.dp360 .gd-bqm-hist > div.t-danger { border-left-color: var(--dp-danger-ink); }
-.dp360 .gd-bqm-hist .dp-mono { font-size: 11px; }
+/* a última movimentação, no cabeçalho, e o botão que abre o histórico */
+.dp360 .gd-bqm-head .sub.gd-bqm-ultima { margin-top: 1px; }
+.dp360 .gd-bqm-ultima b { font-size: 12px; font-weight: 650; color: var(--dp-ink); }
+.dp360 .gd-bqm-btn-hist .n {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 17px;
+  text-align: center;
+  background: var(--dp-accent-soft);
+  color: var(--dp-accent);
+}
+
+/* o pop-up do histórico de um cartão (fica por cima do cartão) */
+.dp360 .gd-acao-box.gd-bqm-histbox {
+  width: min(760px, 100%);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  overflow: hidden;
+}
+.dp360 .gd-bqm-histhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.dp360 .gd-bqm-tempo {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0 4px 2px 0;
+  list-style: none;
+  overflow-y: auto;
+}
+.dp360 .gd-bqm-tempo li {
+  display: grid;
+  gap: 3px;
+  padding: 9px 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-border);
+  border-left: 4px solid var(--dp-border-strong);
+  border-radius: 10px;
+}
+.dp360 .gd-bqm-tempo li.t-ok { border-left-color: var(--dp-ok-ink); }
+.dp360 .gd-bqm-tempo li.t-warn { border-left-color: var(--dp-warn-ink); }
+.dp360 .gd-bqm-tempo li.t-danger { border-left-color: var(--dp-danger-ink); }
+.dp360 .gd-bqm-tempo .topo { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.dp360 .gd-bqm-tempo .quando { margin-left: auto; font-size: 11.5px; }
 
 .dp360 .gd-bqm-dia { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
 .dp360 .gd-bqm-dia-tit { display: flex; flex-direction: column; gap: 2px; }

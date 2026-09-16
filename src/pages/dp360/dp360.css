@@ -79,6 +79,15 @@
   text-overflow: ellipsis;
 }
 /* a direita da barra: a conta do Transnet e o robô, lado a lado */
+/* o título da tabela de fontes, embaixo do Resumo embutido na aba Início */
+.dp360 .dp-fontes-t {
+  margin: 18px 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dp-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 .dp360 .dp-topo-dir { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .dp360 .dp-conta-btn.is-ok { border-color: var(--dp-ok-line, var(--dp-border)); background: var(--dp-ok-bg); color: var(--dp-ok-ink); }
 .dp360 .dp-conta-btn.is-sem { border-color: var(--dp-warn-ink); background: var(--dp-warn-bg); color: var(--dp-warn-ink); }

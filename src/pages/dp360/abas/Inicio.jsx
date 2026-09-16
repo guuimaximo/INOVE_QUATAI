@@ -1,5 +1,15 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useContext, useEffect, useState } from "react";
 import AbaShell from "./AbaShell";
+import { AuthContext } from "../../../context/AuthContext";
+import { useAccessGovernance } from "../../../context/AccessContext";
+import { canUserAccessPath } from "../../../utils/access";
+
+/* O RESUMO MORA AQUI TAMBÉM (dono, 15/09/2026: "essa tela de resumo coloca na de Início do
+ * DP360"). É o MESMO componente da página `/dp360-resumo`, desenhado sem a moldura dela —
+ * duas cópias do gerencial seria duas contas para o mesmo mês.
+ * SOB DEMANDA (`lazy`): ele é a maior tela do cluster e lê a competência inteira; carregá-lo
+ * junto com as abas deixaria a DP360 mais lenta para quem nem passa aqui. */
+const DP360Resumo = lazy(() => import("../DP360Resumo"));
 import { carregarResumoDP360 } from "../../../services/dp360Api";
 
 function formatarData(valor) {
@@ -18,6 +28,10 @@ function formatarData(valor) {
  * esta tela e disparava sem saber se estava conectado. */
 
 export default function Inicio() {
+  const { user } = useContext(AuthContext);
+  const { profileMap } = useAccessGovernance();
+  // o Resumo é uma página com liberação própria: quem não a tem vê só as fontes
+  const podeVerResumo = canUserAccessPath(user, "/dp360-resumo", profileMap);
   const [resumo, setResumo] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
@@ -39,6 +53,20 @@ export default function Inicio() {
       erro={erro}
       resumo="Até quando cada fonte do ponto está atualizada. Se uma delas atrasa, as telas mostram dado velho."
     >
+      {podeVerResumo ? (
+        <Suspense
+          fallback={
+            <div className="dp-espera" role="status" aria-live="polite">
+              <span className="dp-espera-circulo" aria-hidden="true" />
+              <span className="dp-espera-txt">Abrindo o Resumo…</span>
+            </div>
+          }
+        >
+          <DP360Resumo embutido />
+        </Suspense>
+      ) : null}
+
+      <div className="dp-fontes-t">Fontes do ponto</div>
       <div className="dp-tabela-wrap">
         <table className="dp-tabela">
           <thead>

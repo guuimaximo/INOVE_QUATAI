@@ -873,7 +873,14 @@ async function lerReservasDoPeriodo(ini, fim) {
 
 /* ================================ componente ============================== */
 
-export default function DP360Resumo() {
+/**
+ * `embutido`: desenhado DENTRO de outra tela (a aba Início do cluster, dono 15/09/2026:
+ * "essa tela de resumo coloca na de Início do DP360"). Aí ele entra sem a moldura da
+ * página — sem a barra do topo, que já é a do cluster, e sem a margem negativa que
+ * encosta a página na borda. O resto é o mesmo Resumo, com a mesma competência e o mesmo
+ * Recarregar: uma tela só, em dois lugares.
+ */
+export default function DP360Resumo({ embutido = false }) {
   // A confirmação é a da ferramenta, não a do navegador (ver `Perguntar.jsx`): o
   // `window.confirm` escrevia "inovequatai.onrender.com diz" em cima da pergunta,
   // ignorava o tema e espremia tudo num bloco só.
@@ -1298,19 +1305,21 @@ export default function DP360Resumo() {
   const semDados = !ocupado && !erro && !temConteudo;
 
   return (
-    <div className="dp360 -m-4 sm:-m-6">
+    <div className={embutido ? undefined : "dp360 -m-4 sm:-m-6"}>
       {caixaPergunta}
-      <div className="dp-topbar">
-        <div className="dp-brand">
-          <div className="dp-brand-mark">DP</div>
-          <div>
-            <div className="dp-brand-title">Resumo</div>
-            <div className="dp-brand-sub">
-              Gerencial de ponto + painel de captura, na mesma competência
+      {embutido ? null : (
+        <div className="dp-topbar">
+          <div className="dp-brand">
+            <div className="dp-brand-mark">DP</div>
+            <div>
+              <div className="dp-brand-title">Resumo</div>
+              <div className="dp-brand-sub">
+                Gerencial de ponto + painel de captura, na mesma competência
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className="dp-viewbar">
         <select

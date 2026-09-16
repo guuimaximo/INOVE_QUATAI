@@ -70,6 +70,7 @@ import {
 
 import { supabase } from "../../../supabase";
 import { usePergunta } from "../Perguntar";
+import { esperarRunDoRobo, runIncerto, runNaoFez } from "../esperarRobo";
 /* =============================================================================
    Revisão (Passo 2) — porte da tela do DP360 (Sistemas/PONTO: app/ui/app.js
    `viewP2`/`COLS_REV`/`p2RowClass`/`fmtCol`/`pontoDetalhe`).
@@ -449,12 +450,39 @@ function ModalComunicado({
       // prazo de 48 h correr e a advertência nascer; gravá-lo antes de saber se o robô
       // saiu deixaria alguém "avisado" por um disparo que o GitHub recusou. O contrário
       // (mensagem enviada e caso não gravado) é barulho recuperável — e a tela grita.
+      const desde = Date.now();
       const r = await dispararRoboDP360("comunicado", {
         csv: p.csv,
         data: p.datas[0],
         motivo: MOTIVO_AVISO, // aviso. Advertência (103) não sai desta tela.
         confirmar: confirmar ? "true" : "false",
       });
+
+      // O AVISO SÓ CONTA QUANDO O ROBÔ TERMINA BEM (16/09/2026). O GitHub aceitar o disparo
+      // não é o comunicado ter saído: quatro envios de 09/09 morreram antes de abrir o
+      // Transnet e os 17 já estavam gravados como avisados. Ver `esperarRobo.js`.
+      let incerto = false;
+      if (confirmar && p.casos.length) {
+        const esperando = (onde) =>
+          setRecado({
+            tipo: "ok",
+            texto: `⏳ Envio disparado — ${onde}. Os avisos só são marcados quando o robô terminar; não feche esta janela.`,
+            painel: r?.painel || "",
+          });
+        esperando("aguardando o robô");
+        const fim = await esperarRunDoRobo({ runId: r?.execucao?.run_id, robo: "comunicado", desde }, esperando);
+        if (runNaoFez(fim)) {
+          setRecado({
+            tipo: "erro",
+            texto:
+              `O robô terminou em "${fim}": os comunicados NÃO saíram e ninguém foi marcado como avisado. ` +
+              "Veja o log no painel do robô antes de disparar de novo.",
+            painel: r?.painel || "",
+          });
+          return;
+        }
+        incerto = runIncerto(fim);
+      }
 
       let alerta = "";
       let reavisados = [];
@@ -474,7 +502,10 @@ function ModalComunicado({
         texto:
           `${confirmar ? "Envio" : "Ensaio"} disparado — ${p.itens.length} comunicado(s) do dia ${p.datas[0]}.` +
           (reavisados.length ? ` ${reavisados.length} já tinham sido avisados antes (o alvo original ficou).` : "") +
-          alerta,
+          alerta +
+          (incerto
+            ? " Não deu para ver o fim do robô a tempo: os avisos foram marcados assim mesmo — confira o run no painel."
+            : ""),
         painel: r?.painel || "",
       });
       if (confirmar && aoConcluir) await aoConcluir();

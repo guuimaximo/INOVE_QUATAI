@@ -36,7 +36,6 @@ import {
   lerTrilhaDP360,
   logRoboDP360,
   lerTudoDP360,
-  statusRoboDP360,
   upsertDP360,
 } from "../../../services/dp360Api";
 // A TRILHA DO ROBÔ mora no projeto do PRÓPRIO INOVE (`dp360_robo_execucao`), não na base
@@ -71,6 +70,7 @@ import {
   vizinhoMovel,
 } from "../vereditoCartao";
 import { usePergunta } from "../Perguntar";
+import { ESPERA_MAX_MIN, esperarRunDoRobo, runNaoFez } from "../esperarRobo";
 import PainelExecucao, { acompanharLote, lotePifou, useLoteEmExecucao } from "../loteEmExecucao";
 import CartaoDoDia, {
   agoraUtc,
@@ -5393,48 +5393,8 @@ export default function Ocorrencias() {
    * É LENTO POR NATUREZA, e a confirmação diz isso: são N envios + N rodadas, um de cada
    * vez. Na ferramenta eram 14 dias em ~9 min com o bot na própria máquina; aqui cada run
    * ainda paga o tempo de subir a máquina do GitHub. */
-  const ESPERA_PASSO_MS = 15000;
-  const ESPERA_MAX_MIN = 14;
-
-  /* O ID DO RUN NEM SEMPRE VEM. O gateway casa o disparo com a execução logo depois do
-   * dispatch, e o run pode não ter nascido ainda ("nao_encontrado") ou dois caírem na mesma
-   * janela ("ambiguo"). Sem plano B, todo disparo assim viraria "não sei se saiu" e a
-   * correção nunca sairia — então o plano B é o mesmo que uma pessoa faria: olhar o run
-   * DAQUELE robô que começou depois do meu clique. */
-  const esperarRun = useCallback(async ({ runId, robo, desde }, dizendo) => {
-    const limite = Date.now() + ESPERA_MAX_MIN * 60000;
-    let visto = "";
-    while (Date.now() < limite) {
-      await new Promise((r) => setTimeout(r, ESPERA_PASSO_MS));
-      let runs = [];
-      try {
-        runs = await statusRoboDP360(2);
-      } catch {
-        continue; // falha de leitura não é falha do run: tenta de novo
-      }
-      const meu = runId
-        ? (runs || []).find((x) => String(x.id) === String(runId))
-        : (runs || [])
-            .filter(
-              (x) =>
-                txt(x.nome).toLowerCase().includes(txt(robo).toLowerCase()) &&
-                Date.parse(txt(x.comecou_em)) >= desde - 60000,
-            )
-            .sort((a, b) => Date.parse(txt(b.comecou_em)) - Date.parse(txt(a.comecou_em)))[0];
-      if (!meu) continue;
-      if (txt(meu.status) !== "completed") {
-        // só fala quando MUDA: os dois usuários desta espera escrevem no recado, e repetir
-        // a mesma frase a cada 15 s só faz a tela piscar.
-        if (txt(meu.status) !== visto) {
-          visto = txt(meu.status);
-          dizendo?.(visto === "queued" ? "na fila do GitHub" : "rodando no Transnet");
-        }
-        continue;
-      }
-      return txt(meu.conclusao) || "sem_conclusao";
-    }
-    return "tempo_esgotado";
-  }, []);
+  // a espera do run mora em `esperarRobo.js` (é a mesma da Revisão e da Gordura)
+  const esperarRun = useCallback((alvo, dizendo) => esperarRunDoRobo(alvo, dizendo), []);
 
   /* ── EXECUTAR EM LOTE — o passo que faltava (09/09/2026) ─────────────────────
    * O dono, olhando 63 casos parados: "mas não podia ficar em pronto para executar, tinha
@@ -5918,8 +5878,14 @@ export default function Ocorrencias() {
           }
           const fim = await esperarRun({ runId, robo: "comunicado", desde: t0 }, (onde) =>
             setRecado(`⚙ ${passo} · advertência de ${paraBR(dia)} — ${onde}…`));
-          // O DISPARO FOI ACEITO: a advertência saiu (ou está a caminho). Carimba, e o caso
-          // desce para "Advertências e correções" mesmo quando não deu para acompanhar o run.
+          // O RUN FALHOU = A ADVERTÊNCIA NÃO SAIU (16/09/2026). Nada é carimbado: gravar
+          // "advertido" aqui poria na ficha um ato que não aconteceu, e o dia sumiria da fila.
+          if (runNaoFez(fim)) {
+            relato.push(`${paraBR(dia)}: o robô terminou em "${fim}" — a advertência NÃO saiu e ninguém foi marcado`);
+            continue;
+          }
+          // O DISPARO FOI ACEITO e o run não falhou: carimba, e o caso desce para
+          // "Advertências e correções" mesmo quando não deu para acompanhar o fim do run.
           const agora = agoraISOLocal();
           for (const reg of gente) {
             await gravarNoBanco("ponto_caso", {

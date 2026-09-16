@@ -6,6 +6,7 @@ import { supabase } from "../../supabase";
 import { getStoredUser } from "../../utils/auth";
 import { RAIO_LOCAL, RAIO_VEIC, reguaLocal, resumoGps } from "./regrasGps";
 import { usePergunta } from "./Perguntar";
+import { esperarRunDoRobo, runIncerto, runNaoFez } from "./esperarRobo";
 import {
   MOTIVO_AVISO,
   TIPO,
@@ -1253,12 +1254,39 @@ function ModalPedirExclusao({ linha, caso, aoFechar, aoConcluir }) {
     setRecado(null);
     try {
       // ORDEM DELIBERADA: dispara PRIMEIRO, grava o caso DEPOIS.
+      const desde = Date.now();
       const r = await dispararRoboDP360("comunicado", {
         csv: p.csv,
         data: p.datas[0],
         motivo: MOTIVO_AVISO, // aviso (102). Advertência não sai desta rota — nem poderia:
         confirmar: confirmar ? "true" : "false", // não há alvo, então não há o que corrigir depois.
       });
+
+      // O AVISO SÓ CONTA QUANDO O ROBÔ TERMINA BEM (16/09/2026). O GitHub aceitar o disparo
+      // não é o comunicado ter saído: quatro envios de 09/09 morreram antes de abrir o
+      // Transnet e os 17 já estavam gravados como avisados. Ver `esperarRobo.js`.
+      let incerto = false;
+      if (confirmar && p.casos.length) {
+        const esperando = (onde) =>
+          setRecado({
+            tipo: "ok",
+            texto: `⏳ Envio disparado — ${onde}. Os avisos só são marcados quando o robô terminar; não feche esta janela.`,
+            painel: r?.painel || "",
+          });
+        esperando("aguardando o robô");
+        const fim = await esperarRunDoRobo({ runId: r?.execucao?.run_id, robo: "comunicado", desde }, esperando);
+        if (runNaoFez(fim)) {
+          setRecado({
+            tipo: "erro",
+            texto:
+              `O robô terminou em "${fim}": os comunicados NÃO saíram e ninguém foi marcado como avisado. ` +
+              "Veja o log no painel do robô antes de disparar de novo.",
+            painel: r?.painel || "",
+          });
+          return;
+        }
+        incerto = runIncerto(fim);
+      }
 
       let alerta = "";
       let reavisados = [];
@@ -1278,7 +1306,10 @@ function ModalPedirExclusao({ linha, caso, aoFechar, aoConcluir }) {
         texto:
           `${confirmar ? "Pedido de exclusão" : "Ensaio"} disparado — ${item.nome || item.cracha}, ${item.data}.` +
           (reavisados.length ? " Este dia já tinha sido avisado antes (o registro original ficou)." : "") +
-          alerta,
+          alerta +
+          (incerto
+            ? " Não deu para ver o fim do robô a tempo: os avisos foram marcados assim mesmo — confira o run no painel."
+            : ""),
         painel: r?.painel || "",
       });
       if (confirmar && aoConcluir) await aoConcluir();

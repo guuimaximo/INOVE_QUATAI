@@ -169,6 +169,10 @@ const COLUNAS_MARCA_BLOQUEIO = [
   "bloqueado_por",
   "observacao",
 ].join(",");
+// A CONTAGEM COMEÇA ZERADA EM 16/09/2026 (pedido do dono: "tira esses que já pedi o
+// bloqueio, deixa zerado"). Os 82 pedidos de 19/08 continuam gravados — a aba Casos
+// ainda mostra "bloqueio pedido" neles —, só não entram nesta lista.
+const MARCAS_DESDE = "2026-09-16T00:00:00-03:00";
 const COLUNAS_MARCA_CASO = ["cru_id", "id_usuario", "data_ref", "status", "analisado_em", "analisado_por", "observacao"].join(",");
 
 /* ────────────────────────────── utilidades puras ─────────────────────────── */
@@ -894,14 +898,14 @@ export default function GuardFraudes() {
         const [naBloqueio, naCasos] = await Promise.all([
           lerTudoDP360("fraude_bloqueio_cartao", {
             colunas: COLUNAS_MARCA_BLOQUEIO,
-            filtros: { situacao: "eq.bloqueado" },
+            filtros: { situacao: "eq.bloqueado", bloqueado_em: `gte.${MARCAS_DESDE}` },
             ordem: "cru_id.asc",
           }),
           lerTudoDP360(
             "fraude_cartao_sequencial",
             {
               colunas: COLUNAS_MARCA_CASO,
-              filtros: { status: `eq.${ST_BLOQUEIO}` },
+              filtros: { status: `eq.${ST_BLOQUEIO}`, analisado_em: `gte.${MARCAS_DESDE}` },
               ordem: "cru_id.asc,data_ref.asc",
             },
             TETO_PAGINAS_CASOS,
@@ -909,6 +913,10 @@ export default function GuardFraudes() {
         ]);
         // os casos DESSES cartões, para medir o que veio depois da marca e abrir o pop-up
         const cartoes = [...new Set([...naBloqueio, ...naCasos].map((l) => txt(l.cru_id)).filter(Boolean))];
+        if (!cartoes.length) {
+          if (vivo) setBloqueados([]);
+          return;
+        }
         const casosDosMarcados = [];
         for (let i = 0; i < cartoes.length; i += 80) {
           const lote = cartoes.slice(i, i + 80);
@@ -1742,9 +1750,10 @@ export default function GuardFraudes() {
         <>
           <div className="dp-viewbar">
             <div className="dp-vazio" style={{ flex: 1, border: 0, padding: 0 }}>
-              Só os cartões que <b>nós marcamos</b>: "Bloquear este cartão" na aba Bloqueio e "Pedir
-              bloqueio" na aba Casos. <b>Casos depois</b> = o cartão continuou passando depois do dia
-              da marca — confira se o bloqueio foi feito na bilhetagem.
+              Só os cartões que <b>nós marcamos a partir de 16/09/2026</b>: "Bloquear este cartão" na
+              aba Bloqueio e "Pedir bloqueio" na aba Casos (os pedidos de 19/08 ficaram de fora).{" "}
+              <b>Casos depois</b> = o cartão continuou passando depois do dia da marca — confira se o
+              bloqueio foi feito na bilhetagem.
             </div>
             <button type="button" className="dp-btn" onClick={recarregar}>
               <RefreshCw size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />

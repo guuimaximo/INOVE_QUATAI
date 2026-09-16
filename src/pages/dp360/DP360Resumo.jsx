@@ -333,6 +333,7 @@ function competenciasEntre(dataMin, dataMax) {
 }
 
 const fmtDia = (iso) => (dia10(iso).length >= 10 ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "—");
+const fmtDiaAno = (iso) => (dia10(iso).length >= 10 ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "—");
 
 // "745" -> "12h25". Aceita minutos fracionados (a base guarda tudo como texto).
 function hhmm(minutos) {
@@ -906,6 +907,14 @@ export default function DP360Resumo({ embutido = false }) {
   const [erro, setErro] = useState("");
   const [avisoCasos, setAvisoCasos] = useState("");
   const [recarga, setRecarga] = useState(0);
+  // ATÉ QUANDO CADA FONTE CHEGOU (dono, 16/09/2026: "preciso saber qual foi o último dia que
+  // capturamos a gordura"). A gordura vem por outro importador e atrasa sozinha; sem a data
+  // na cara, o "Oportunidade" parece completo quando faltam dias.
+  const [ultimoPonto, setUltimoPonto] = useState("");
+  const [ultimaGordura, setUltimaGordura] = useState("");
+  // na aba Início, o que é detalhe fica fechado até alguém pedir
+  const [verDetalhes, setVerDetalhes] = useState(false);
+  const enxuto = embutido;
 
   // Oportunidade (gordura): estado PRÓPRIO e leitura própria. É a parte mais cara
   // da tela (~10 mil linhas de `ponto_gordura` na competência, mais linha 99 e as
@@ -937,20 +946,25 @@ export default function DP360Resumo({ embutido = false }) {
     setErro("");
     (async () => {
       try {
-        const [maisNovo, maisAntigo] = await Promise.all([
+        const [maisNovo, maisAntigo, gorduraNova] = await Promise.all([
           lerDP360("ponto_diario", { colunas: "date_ref", ordem: "date_ref.desc", limite: 1 }),
           lerDP360("ponto_diario", { colunas: "date_ref", ordem: "date_ref.asc", limite: 1 }),
+          lerDP360("ponto_gordura", { colunas: "data_ref", ordem: "data_ref.desc", limite: 1 })
+            .catch(() => []),
         ]);
         if (!vivo) return;
+        setUltimoPonto(dia10(maisNovo?.[0]?.date_ref));
+        setUltimaGordura(dia10(gorduraNova?.[0]?.data_ref));
         const lista = competenciasEntre(maisAntigo?.[0]?.date_ref, maisNovo?.[0]?.date_ref);
         setCompetencias(lista);
-        // main.py `get_gerencial`: a mais recente costuma estar EM ANDAMENTO —
-        // o padrão é a última já fechada. Escolha já feita (inclusive "Todas") é
-        // preservada no recarregar; por isso o teste é contra `null`, não contra falsy.
+        // A MAIS RECENTE (dono, 16/09/2026). O desktop (`get_gerencial`) abre na última já
+        // FECHADA, porque a mais nova está em andamento — e aqui isso deixava a tela abrindo
+        // no mês passado, quando o que se acompanha é o mês corrente. Escolha já feita
+        // (inclusive "Todas") é preservada no recarregar; por isso o teste é contra `null`.
         setCompetencia((atual) => (
           atual !== null && (atual === TODAS || lista.includes(atual))
             ? atual
-            : (lista[1] || lista[0] || TODAS)
+            : (lista[0] || TODAS)
         ));
 
         // Valor da hora (main.py `set_valor_hora` grava em app_config). Serve pra
@@ -1299,6 +1313,11 @@ export default function DP360Resumo({ embutido = false }) {
   }
 
   const ocupado = carregandoBase || carregando || carregandoCasos;
+  // quantos dias a gordura está atrás do ponto (os dois são datas de calendário, sem hora)
+  const atrasoGordura =
+    ultimoPonto && ultimaGordura
+      ? Math.round((Date.parse(`${ultimoPonto}T12:00:00`) - Date.parse(`${ultimaGordura}T12:00:00`)) / 86400000)
+      : 0;
   // Em "Todas" quem diz se há o que mostrar é a `ponto_caso`; nas outras, o ponto.
   const temConteudo = modoTodas ? casos.length > 0 : linhas.length > 0;
   const semDados = !ocupado && !erro && !temConteudo;
@@ -1342,8 +1361,25 @@ export default function DP360Resumo({ embutido = false }) {
           <RefreshCw size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
           Recarregar
         </button>
-        <span className="dp-faint" style={{ marginLeft: "auto", fontSize: 12 }}>
-          a competência vai do dia 20 ao 19 · só o valor da hora é gravado aqui
+        <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          {ultimoPonto ? (
+            <span className="dp-pill mute" title="Último dia de ponto importado (ponto_diario).">
+              ponto importado até {fmtDiaAno(ultimoPonto)}
+            </span>
+          ) : null}
+          {ultimaGordura ? (
+            <span
+              className={`dp-pill ${atrasoGordura > 2 ? "warn" : "ok"}`}
+              title={
+                atrasoGordura > 2
+                  ? `A gordura está ${atrasoGordura} dia(s) atrás do ponto: a Oportunidade desses dias ainda não existe.`
+                  : "Último dia com gordura capturada (ponto_gordura)."
+              }
+            >
+              gordura capturada até {fmtDiaAno(ultimaGordura)}
+              {atrasoGordura > 2 ? ` · ${atrasoGordura} dias atrás do ponto` : ""}
+            </span>
+          ) : null}
         </span>
       </div>
 
@@ -1466,7 +1502,10 @@ export default function DP360Resumo({ embutido = false }) {
             </Grupo>
           </div>
 
-          {/* ------- o valor da hora: o único campo que esta tela grava ---- */}
+          {/* ------- o valor da hora: o único campo que esta tela grava ----
+              Só na página própria do Resumo: na aba Início ele é configuração no meio do
+              acompanhamento, e o valor já aparece nas notas dos cartões de dinheiro. */}
+          {!enxuto && (
           <div style={{ padding: "12px 20px 0" }}>
             <div
               className="dp-card"
@@ -1525,21 +1564,22 @@ export default function DP360Resumo({ embutido = false }) {
               </div>
             </div>
           </div>
+          )}
 
           {/* ---------------- esteira de captura (gordura + ponto_caso) ---- */}
           <Secao
             titulo="Esteira de captura"
             tag="clique na placa para abrir a lista"
-            rodape={
+            rodape={enxuto ? undefined : (
               "A esteira separa o que ainda é potencial (nunca avisado), o que exige ação "
               + "agora e o que já foi comprovado no Transnet. Só entra caso com origem "
               + "`gordura`: correção de revisão ou refeição fecha cartão, mas não é hora de "
               + "gordura recuperada."
-            }
+            )}
           >
             <div style={{ display: "grid", gap: 10,
               gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))" }}>
-              {placas.map((c) => (
+              {placas.filter((c) => !enxuto || c.qtd || c.indisponivel).map((c) => (
                 <button
                   key={c.id}
                   type="button"
@@ -1584,6 +1624,7 @@ export default function DP360Resumo({ embutido = false }) {
               />
             </div>
 
+            {!enxuto && (
             <div className="dp-det-foot">
               Ciclo do aviso {modoTodas ? "na base inteira" : "na competência"}:{" "}
               <b>{ciclo.avisados}</b> avisados ·{" "}
@@ -1601,17 +1642,30 @@ export default function DP360Resumo({ embutido = false }) {
                 </>
               )}
             </div>
+            )}
           </Secao>
+
+          {/* MAIS DETALHES (aba Início). A oportunidade por faixa e os baldes por categoria
+              são leitura de análise, não de acompanhamento do dia: ficam fechados até
+              alguém pedir, e na página própria do Resumo continuam abertos. */}
+          {enxuto && !modoTodas && (
+            <div style={{ padding: "14px 20px 0" }}>
+              <button type="button" className="dp-btn" onClick={() => setVerDetalhes((v) => !v)}
+                aria-expanded={verDetalhes}>
+                {verDetalhes ? "▾ Menos detalhes" : "▸ Mais detalhes — oportunidade de gordura e ponto por categoria"}
+              </button>
+            </div>
+          )}
 
           {/* ------- oportunidade de gordura (ponto_gordura + 4 camadas) ---
               Fora em "Todas as competências": a gordura não é lida lá. */}
-          {!modoTodas && (
+          {!modoTodas && (!enxuto || verDetalhes) && (
           <Secao
             titulo="Oportunidade de gordura"
             tag={oportunidade
               ? `${oportunidade.diasBase} dia(s)-pessoa medidos · só motorista`
               : "gordura de ponto"}
-            rodape={
+            rodape={enxuto ? undefined :
               "Gordura = tempo que o motorista bateu ponto a mais do que operou, medido só "
               + "nas PONTAS. O número sai da `ponto_gordura` DEPOIS das quatro camadas do DP "
               + "(linha 99 · reserva lançada · reserva por GPS · alvo da Revisão), a mesma "
@@ -1730,11 +1784,11 @@ export default function DP360Resumo({ embutido = false }) {
 
           {/* ---------------- baldes por categoria (ponto_diario) ----------
               Fora em "Todas as competências": a `ponto_diario` não é lida lá. */}
-          {!modoTodas && (
+          {!modoTodas && (!enxuto || verDetalhes) && (
           <Secao
             titulo="Resumo do ponto por categoria"
             tag="clique no número para ver as ocorrências"
-            rodape={
+            rodape={enxuto ? undefined :
               "Mesmos baldes do painel original (corretos / incorretos / ponto sem operação / "
               + "justificado / sem ponto), contados na janela da competência em vez do mês "
               + "de calendário — a página inteira usa um recorte só."
@@ -1801,7 +1855,7 @@ export default function DP360Resumo({ embutido = false }) {
           <Secao
             titulo="Gerencial de ponto"
             tag={`${pessoasVisiveis.length} ${pessoasVisiveis.length === 1 ? "pessoa" : "pessoas"}`}
-            rodape={
+            rodape={enxuto ? undefined :
               "Muito grave: bateu e não operou · cartão não fecha · jornada suspeita/inválida/>13h · "
               + "ou 3+ dias errados no período pra mesma pessoa. Folga, férias, atestado e "
               + "afastamento não entram."

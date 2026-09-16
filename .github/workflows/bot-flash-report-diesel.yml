@@ -83,5 +83,6 @@ jobs:
           path: |
             flash-report-diesel/*.pdf
             flash-report-diesel/*.png
+            flash-report-diesel/dados_flash.json
           if-no-files-found: ignore
           retention-days: 14

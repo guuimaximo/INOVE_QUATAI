@@ -2253,3 +2253,14 @@ print(f"[layout] {_NUM[0]} paginas numeradas + capa + indice = {_NUM[0] + 1} esp
 html = html.replace("@@TOTAL@@", str(_NUM[0]))
 (OUT / "flash_report_diesel_v3.html").write_text(html, encoding="utf-8")
 print("HTML v3 gerado.")
+
+# Os numeros do mes em JSON, para o RGI (apresentacao mensal) sair do MESMO calculo do
+# Flash em vez de ser redigitado a partir do PDF. Vai no artefato do run, nao no commit.
+import json as _json
+_dados = {k: getattr(gfd, k) for k in dir(gfd)
+          if k.isupper() and not k.startswith("_")
+          and isinstance(getattr(gfd, k), (list, tuple, dict, int, float, str, bool))}
+_dados["_PERIODO"] = PERIODO
+(OUT / "dados_flash.json").write_text(
+    _json.dumps(_dados, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+print("dados_flash.json gerado.")

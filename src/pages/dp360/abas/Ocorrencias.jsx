@@ -380,8 +380,19 @@ function rotuloCaso(origem, tipo) {
 // O aceite guardado é do ciclo anterior e não decide o pedido novo.
 function ehReaberto(caso) {
   const av = txt(caso?.aviso_enviado_em);
-  const cf = txt(caso?.conferido_em);
-  return Boolean(av && cf && av > cf);
+  /* O CICLO FECHA COM O QUE VEIO POR ÚLTIMO (16/09/2026): o robô executando
+     (`conferido_em`) OU o caso sendo cancelado (`cancelado_em`, `aviso_cancelado_em`).
+     Comparando só com `conferido_em`, o cancelamento de hoje de um dia avisado depois da
+     última execução contava como "ciclo reaberto" — a decisão era zerada na leitura e o
+     caso voltava para "A decidir" (9 dos 16 cancelados em lote às 08:31). Aviso mais novo
+     que o cancelamento continua reabrindo, como sempre. */
+  const fechou =
+    [caso?.conferido_em, caso?.cancelado_em, caso?.aviso_cancelado_em]
+      .map(txt)
+      .filter(Boolean)
+      .sort()
+      .pop() || "";
+  return Boolean(av && fechou && av > fechou);
 }
 
 // main.py:9170 — no ciclo reaberto os campos de decisão do ciclo velho são zerados.
@@ -474,7 +485,14 @@ function decisaoJaTomada(caso) {
 function jaTratado(reg) {
   if (["advertido", "corrigido", "ajustou"].includes(reg.situacaoAviso)) return true;
   if (reg.reaberto) return false; // aviso novo reabre
-  return ["aceito", "rejeitado"].includes(txt(reg.caso?.aceite));
+  /* CANCELADO TAMBÉM ESTÁ TRATADO (16/09/2026). "Cancelar marcados" fecha o caso com
+     `aceite = cancelado` e ele passa a morar na aba Cancelamento — mas esta função só
+     conhecia aceito/recusado, e o caso aparecia nas DUAS abas: o dono cancelou 16 em lote,
+     o quadro disse "16 de 16 fechados" e todos continuaram em "A decidir". */
+  const c = reg.caso || {};
+  if (txt(c.aceite).toLowerCase() === "cancelado" || txt(c.cancelado_em) || txt(c.aviso_cancelado_em))
+    return true;
+  return ["aceito", "rejeitado"].includes(txt(c.aceite));
 }
 
 /* ─────────────────────────────── carga de dados ──────────────────────────── */

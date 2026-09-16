@@ -327,6 +327,93 @@ function AlterarAberturaModal({ vaga, onClose, onConfirmar }) {
   );
 }
 
+/* A JANELA QUE AUTORIZA A EXCLUSÃO (16/09/2026, dono: "faz a mesma coisa para o botão
+   excluir, colocar para gestor e adm e apenas com senha deles"). Mesmo desenho da troca
+   da data: quem está na tela pode ser o RH, e quem autoriza é um Gestor ou Administrador
+   com o próprio login e senha. O navegador não preenche os campos sozinho. */
+function ExcluirVagaModal({ vaga, onClose, onConfirmar }) {
+  const [motivo, setMotivo] = useState("");
+  const [login, setLogin] = useState("");
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  async function confirmar() {
+    if (!login.trim() || !senha) return setErro("Informe o login e a senha de quem autoriza.");
+    setEnviando(true);
+    setErro("");
+    try {
+      await onConfirmar({ motivo: safeText(motivo), login: safeText(login), senha });
+      onClose();
+    } catch (e) {
+      setErro(e?.message || "Não foi possível excluir a vaga.");
+      setSenha("");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80]">
+      <ModalShell
+        title="Excluir vaga"
+        subtitle={`Vaga ${vaga.numero_vaga || ""} — ${vaga.nome_cargo || ""}`}
+        maxWidth="max-w-md"
+        onClose={onClose}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200">Cancelar</button>
+            <button
+              type="button"
+              disabled={enviando || !login.trim() || !senha}
+              onClick={confirmar}
+              className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60"
+            >
+              <FaLock /> {enviando ? "Conferindo..." : "Autorizar e excluir"}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-800">
+            A vaga é apagada <b>definitivamente</b> e não volta. Só <b>Gestor</b> ou <b>Administrador</b> pode
+            autorizar, com o próprio login e senha. Fica registrado quem autorizou, quando e uma cópia da vaga.
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+            <b>{vaga.numero_vaga}</b> · {vaga.nome_cargo || "—"}
+            {vaga.area ? ` · ${vaga.area}` : ""} · {vaga.status || "—"}
+            {vaga.contratado_nome ? ` · Contratado: ${vaga.contratado_nome}` : ""}
+          </div>
+          <Field label="Motivo" hint="Opcional — fica no registro da exclusão">
+            <input className={inputCls} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex: vaga aberta em duplicidade" />
+          </Field>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Login do gestor" required>
+              <input className={inputCls} value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="off" name="autorizador-login" />
+            </Field>
+            <Field label="Senha" required>
+              <input
+                type="password"
+                className={inputCls}
+                value={senha}
+                onChange={(e) => setSenha(e.target.value)}
+                autoComplete="new-password"
+                name="autorizador-senha"
+                onKeyDown={(e) => { if (e.key === "Enter") confirmar(); }}
+              />
+            </Field>
+          </div>
+          {erro ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700" role="alert">
+              {erro}
+            </div>
+          ) : null}
+        </div>
+      </ModalShell>
+    </div>
+  );
+}
+
 function QuadroAbertura({ vaga, onAlterar }) {
   const alterada = Boolean(vaga?.data_abertura);
   return (
@@ -662,7 +749,6 @@ function ConcluirModal({ open, vaga, onClose, onConfirm, saving }) {
 
 export default function VagasCentral() {
   const { user } = useContext(AuthContext) || {};
-  const isAdmin = String(user?.nivel || "").toLowerCase() === "administrador";
   const userName = safeText(user?.nome) || safeText(user?.login) || "Usuario";
 
   const [rows, setRows] = useState([]);
@@ -678,6 +764,7 @@ export default function VagasCentral() {
 
   const [detalhe, setDetalhe] = useState(null);
   const [concluindo, setConcluindo] = useState(null);
+  const [excluindo, setExcluindo] = useState(null);
 
   async function carregar() {
     setLoading(true);
@@ -823,9 +910,40 @@ export default function VagasCentral() {
     atualizarStatus(vaga, "CANCELADA");
   }
 
-  async function excluirVaga(vaga) {
-    if (!isAdmin) return alert("Apenas Administradores podem excluir.");
-    if (!confirm(`Excluir definitivamente a vaga ${vaga.numero_vaga} - ${vaga.nome_cargo}? Esta ação não pode ser desfeita.`)) return;
+  /* A EXCLUSÃO SÓ COM GESTOR OU ADMINISTRADOR (16/09/2026). `autorizarGestor` confere
+     login, senha e nível; sem isso nada é apagado. A vaga some da tabela, então quem
+     autorizou fica em `vagas_exclusoes`, com uma cópia dela — o registro é gravado ANTES
+     e removido se a exclusão não acontecer. */
+  async function excluirVaga(vaga, { motivo, login, senha }) {
+    const quem = await autorizarGestor(login, senha);
+    const { data: registro, error: erroRegistro } = await supabase
+      .from("vagas_exclusoes")
+      .insert({
+        vaga_id: String(vaga.id),
+        numero_vaga: vaga.numero_vaga || null,
+        nome_cargo: vaga.nome_cargo || null,
+        dados: vaga,
+        motivo: motivo || null,
+        autorizado_por: quem.nome,
+        autorizado_login: quem.login || null,
+        autorizado_nivel: quem.nivel || null,
+        excluido_por: userName,
+      })
+      .select("id")
+      .maybeSingle();
+    if (erroRegistro || !registro?.id) {
+      throw new Error(
+        `Não deu para registrar a exclusão — nada foi apagado (${erroRegistro?.message || "sem retorno do banco"}).`,
+      );
+    }
+    const desfazRegistro = async () => {
+      try {
+        await supabase.from("vagas_exclusoes").delete().eq("id", registro.id);
+      } catch {
+        /* o registro sobra, mas a vaga continua lá — a tela avisa */
+      }
+    };
+
     setSaving(true);
     try {
       // Tenta apagar dependências comuns primeiro (não falha se a tabela não existe)
@@ -839,7 +957,7 @@ export default function VagasCentral() {
         .from("vagas_solicitacao")
         .delete()
         .eq("id", vaga.id)
-        .select();
+        .select("id");
       if (error) throw error;
       if (!data || data.length === 0) {
         // RLS bloqueou silenciosamente
@@ -849,10 +967,10 @@ export default function VagasCentral() {
       }
       setDetalhe((d) => (d?.id === vaga.id ? null : d));
       await carregar();
-      alert("Vaga excluída.");
     } catch (error) {
       console.error("excluirVaga:", error);
-      alert(error?.message || "Erro ao excluir.");
+      await desfazRegistro();
+      throw new Error(error?.message || "Erro ao excluir.");
     } finally {
       setSaving(false);
     }
@@ -1057,16 +1175,14 @@ export default function VagasCentral() {
                       </button>
                     </>
                   ) : null}
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => excluirVaga(r)}
-                      className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-red-700"
-                      title="Excluir (Admin)"
-                    >
-                      Excluir
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => setExcluindo(r)}
+                    className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-red-700"
+                    title="Excluir — pede login e senha de um Gestor ou Administrador"
+                  >
+                    <FaLock className="inline mr-1" /> Excluir
+                  </button>
                 </div>
               </div>
             ))}
@@ -1102,6 +1218,14 @@ export default function VagasCentral() {
         onConfirm={concluirContratacao}
         saving={saving}
       />
+
+      {excluindo ? (
+        <ExcluirVagaModal
+          vaga={excluindo}
+          onClose={() => setExcluindo(null)}
+          onConfirmar={(pedido) => excluirVaga(excluindo, pedido)}
+        />
+      ) : null}
     </div>
   );
 }

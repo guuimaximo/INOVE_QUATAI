@@ -81,6 +81,8 @@ type Acesso = {
   colunasInsert?: string[];
   // `valores`: coluna -> valores aceitos (o resto e recusado)
   valores?: Record<string, string[]>;
+  // `valoresInsert`: a mesma trava, so para o INSERT (mais estreita que a do update)
+  valoresInsert?: Record<string, string[]>;
   // `autorEm`: colunas que dizem QUEM FEZ. O gateway escreve nelas o nome de quem esta
   // logado — a tela nao escolhe o autor do bloqueio.
   autorEm?: string[];
@@ -139,18 +141,30 @@ const TABELAS: Record<string, Acesso> = {
     colunasUpdate: ["status", "analisado_em", "analisado_por", "observacao"],
   },
   // A FILA DE BLOQUEIO (16/09/2026): uma linha por CARTAO que a regra da operacao pegou
-  // (5+ passagens em 10 min, 3 dias seguidos). Quem cria a linha e o bot
-  // (PROGRAMA_FRAUDES/fraudes/fila.py); a tela so move o cartao entre as situacoes. Mesmo
-  // contrato do painel_bloqueio (sql/09): so as colunas de FLUXO — evidencia, valor e
-  // cartao sao a prova da deteccao.
+  // (5+ passagens em 30 min, em 3+ dias dos ultimos 15). Quem poe e tira cartao PENDENTE
+  // e o bot (PROGRAMA_FRAUDES/fraudes/fila.py); o UPDATE da tela so move o cartao entre as
+  // situacoes, e so nas colunas de FLUXO — evidencia, valor e cartao sao a prova.
+  // O INSERT (16/09/2026, dono: "deixa movel em campos"): a aba Bloqueio recalcula a regra
+  // com os numeros que a pessoa digita, e um cartao que so aparece com a regra dela ainda
+  // nao tem linha. A tela cria a linha JA com a decisao — bloqueado ou "nao e fraude",
+  // nunca pendente (a fila de pendentes continua sendo do bot) —, com a evidencia que ela
+  // calculou das mesmas passagens. O autor e o do login, escrito aqui.
   fraude_bloqueio_cartao: {
     ler: true,
-    escrever: ["update"],
+    escrever: ["update", "insert"],
     colunasUpdate: [
       "situacao", "bloqueado_em", "bloqueado_por", "desbloqueado_em",
       "desbloqueado_por", "motivo_desbloqueio", "descartado_em", "observacao",
     ],
+    colunasInsert: [
+      "cru_id", "id_usuario", "tipo_cartao", "id_empresa", "dias_seguidos",
+      "sequencia_de", "sequencia_ate", "qtd_sequencias", "dias_com_rajada", "rajadas",
+      "maior_pico", "menor_janela_seg", "passagens", "valor_debitado", "saldo",
+      "ultima_rajada", "local_fraude", "latitude", "longitude", "link_maps", "base_ate",
+      "situacao", "bloqueado_em", "bloqueado_por", "descartado_em", "observacao",
+    ],
     valores: { situacao: SITUACOES_BLOQUEIO },
+    valoresInsert: { situacao: ["bloqueado", "descartado"] },
     autorEm: ["bloqueado_por", "desbloqueado_por"],
   },
   // O HISTORICO so cresce: a tela insere, ninguem altera nem apaga.
@@ -1133,6 +1147,18 @@ serve(async (req: Request) => {
       const livres = new Set(cfg.colunasInsert);
       const fora = colunasMexidas.find((c) => !livres.has(c));
       if (fora) return json({ ok: false, error: `coluna não liberada: ${fora}` }, 403);
+    }
+    if (op === "insert" && cfg.valoresInsert) {
+      // coluna travada TEM de vir (sem ela, o default da tabela decide — ex.: situacao 'pendente')
+      const recusado = valorRecusado(
+        { ler: true, valores: cfg.valoresInsert },
+        (linhas as Record<string, unknown>[]).map((l) => {
+          const cheia = { ...l };
+          for (const c of Object.keys(cfg.valoresInsert ?? {})) if (!(c in cheia)) cheia[c] = null;
+          return cheia;
+        }),
+      );
+      if (recusado) return json({ ok: false, error: recusado }, 400);
     }
     const recusadoLinha = valorRecusado(cfg, linhas as Record<string, unknown>[]);
     if (recusadoLinha) return json({ ok: false, error: recusadoLinha }, 400);

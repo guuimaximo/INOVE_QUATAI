@@ -49,6 +49,7 @@ import { atualizarDP360, lerDP360, lerTudoDP360 } from "../../services/dp360Api"
 import TabelaDP from "../dp360/TabelaDP";
 import MapaPassagens from "./MapaPassagens";
 import FraudeBloqueio from "./FraudeBloqueio";
+import { REGRA_PADRAO } from "./regraBloqueio";
 import "../dp360/dp360.css";
 import "./guard.css";
 
@@ -1080,7 +1081,7 @@ export default function GuardFraudes() {
             type="button"
             className={`dp-tab${aba === "bloqueio" ? " is-active" : ""}`}
             onClick={() => setAba("bloqueio")}
-            title="Cartões com rajada (5+ passagens em 30 min) em 3 dias ou mais dos últimos 15 — o que bloquear hoje"
+            title="O que bloquear hoje — cartões com rajada em vários dias; a regra se ajusta nos campos da própria aba"
           >
             Bloqueio
           </button>
@@ -1108,7 +1109,7 @@ export default function GuardFraudes() {
         </nav>
       </div>
 
-      {/* ═════════ BLOQUEIO — só o que precisa bloquear (3+ dias com rajada nos últimos 15) ═════════ */}
+      {/* ═════════ BLOQUEIO — só o que precisa bloquear, pela regra dos campos da aba ═════════ */}
       {aba === "bloqueio" && <FraudeBloqueio modo="fila" />}
 
       {/* ══════════════════════════════ CASOS ══════════════════════════════ */}
@@ -1531,6 +1532,45 @@ export default function GuardFraudes() {
       {aba === "regra" && (
         <div className="gd-cards">
           <div className="gd-card">
+            <h4>Bloqueio (a primeira aba)</h4>
+            <ul>
+              <li>
+                <b>Rajada</b> = {REGRA_PADRAO.passagens}+ passagens que giraram a catraca em até{" "}
+                {REGRA_PADRAO.minutos} min, dentro do mesmo bloco. A janela é deslizante: vale a pior
+                janela do bloco.
+              </li>
+              <li>
+                <b>Fraude</b> = rajada em {REGRA_PADRAO.diasComRajada}+ dias, seguidos ou não, nos
+                últimos {REGRA_PADRAO.dias} dias da base (a base chega com uns 3 dias de atraso).
+              </li>
+              <li>
+                Os quatro números são <b>campos</b> no topo da aba, junto com a data final da janela. A
+                lista é recalculada na hora das passagens; "Voltar ao padrão" devolve a regra acima.
+              </li>
+              <li>
+                O <b>robô de fraudes</b> (06:30) continua usando o padrão: ele põe na fila quem entra,
+                tira o pendente que saiu da janela e devolve o desbloqueado que voltou a fazer rajada.
+              </li>
+              <li>
+                Cartão que só aparece com a regra da tela entra marcado "só nesta regra"; bloquear ou
+                descartar grava o cartão com a decisão e a regra usada fica no histórico.
+              </li>
+            </ul>
+          </div>
+
+          <div className="gd-card">
+            <h4>Cartões bloqueados</h4>
+            <ul>
+              <li>Só o que nós decidimos pelo INOVE: bloqueados, desbloqueados e "não é fraude".</li>
+              <li>
+                "Rajada depois?" avisa o bloqueado que ainda passou depois do dia do bloqueio — sinal de
+                que a bilhetagem não aplicou.
+              </li>
+              <li>O Histórico mostra quem bloqueou, desbloqueou ou descartou cada cartão, e quando.</li>
+            </ul>
+          </div>
+
+          <div className="gd-card">
             <h4>Captura (na origem, SQL diário)</h4>
             <ul>
               <li>Empresa 046, dia fechado 00:00 → 00:00.</li>
@@ -1579,8 +1619,12 @@ export default function GuardFraudes() {
             <h4>O que esta tela faz</h4>
             <ul>
               <li>
-                Apresenta e filtra o que a origem já calculou. <b>Não recalcula a regra</b> e{" "}
-                <b>não grava nada</b> nesta fase.
+                A aba <b>Casos</b> apresenta e filtra os blocos que a origem já calculou; o único registro
+                dela é o "Pedir bloqueio" (status do caso), que não põe o cartão na fila.
+              </li>
+              <li>
+                As abas <b>Bloqueio</b> e <b>Cartões bloqueados</b> gravam a decisão sobre o cartão e o
+                histórico — nunca a prova (passagens, valor, local).
               </li>
               <li>
                 O número do cartão nunca é exibido inteiro — só{" "}

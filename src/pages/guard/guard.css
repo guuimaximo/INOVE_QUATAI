@@ -282,6 +282,77 @@
 /* ── aba BLOQUEIO (a fila dos 3 dias seguidos) ─────────────────────────────
  * Porte da tela de bloqueio do PROGRAMA_FRAUDES: o CÓDIGO é o dado que sai da tela,
  * então ele aparece grande e com botão de copiar. */
+
+/* a regra móvel (16/09/2026): os quatro números em campos, no topo da aba */
+.dp360 .gd-regra {
+  margin: 2px 20px 8px;
+  padding: 10px 12px 8px;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-border);
+  border-radius: 10px;
+}
+.dp360 .gd-regra-campos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+}
+.dp360 .gd-regra-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
+  background: var(--dp-surface-2);
+  border: 1px solid var(--dp-border);
+  border-radius: 9px;
+}
+.dp360 .gd-regra-campo .rot {
+  font-size: 10.5px;
+  font-weight: 650;
+  color: var(--dp-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.dp360 .gd-regra-campo .val {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--dp-ink);
+}
+.dp360 .gd-regra-campo em { font-style: normal; color: var(--dp-faint); }
+.dp360 .gd-regra-campo input {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  padding: 3px 6px;
+  color: var(--dp-ink);
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-border-strong);
+  border-radius: 7px;
+}
+.dp360 .gd-regra-campo input[type="number"] { width: 62px; text-align: center; }
+.dp360 .gd-regra-campo input:focus { outline: 2px solid var(--dp-accent); outline-offset: 1px; }
+.dp360 .gd-regra-campo input.mudou { border-color: var(--dp-warn-ink); background: var(--dp-warn-bg); }
+.dp360 .gd-regra-campo input.erro { border-color: var(--dp-danger-ink); background: var(--dp-danger-bg); }
+.dp360 .gd-regra-padrao { align-self: center; margin-left: auto; }
+.dp360 .gd-regra-rodape {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--dp-muted);
+}
+.dp360 .gd-regra-rodape .dp-pill { white-space: normal; max-width: 100%; }
+@media (max-width: 520px) {
+  .dp360 .gd-regra { margin: 2px 12px 8px; }
+  .dp360 .gd-regra-campo { flex: 1 1 100%; }
+  .dp360 .gd-regra-padrao { margin-left: 0; }
+}
 .dp360 .gd-bq-kpis {
   display: flex;
   flex-wrap: wrap;
@@ -471,9 +542,17 @@
 }
 .dp360 .gd-bqm-faixa {
   display: grid;
-  grid-template-columns: repeat(15, minmax(0, 1fr));
+  /* a quantidade de dias é a da regra: a tela escreve --dias-linha */
+  grid-template-columns: repeat(var(--dias-linha, 15), minmax(0, 1fr));
   gap: 5px;
+  max-height: 190px;
+  overflow-y: auto;
 }
+.dp360 .gd-bqm-faixa.compacta { gap: 3px; }
+.dp360 .gd-bqm-faixa.compacta .gd-bqm-d { padding: 3px 0 4px; border-radius: 6px; }
+.dp360 .gd-bqm-faixa.compacta .gd-bqm-d .s { display: none; }
+.dp360 .gd-bqm-faixa.compacta .gd-bqm-d .n { font-size: 9.5px; }
+.dp360 .gd-bqm-faixa.compacta .gd-bqm-d .p { font-size: 13px; }
 .dp360 .gd-bqm-d {
   display: flex;
   flex-direction: column;

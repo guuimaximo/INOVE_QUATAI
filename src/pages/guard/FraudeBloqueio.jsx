@@ -5,15 +5,21 @@
 // a que a bilhetagem abre de manhã. Pedido do dono (16/09/2026): "a tela de bloqueio +3
 // dias".
 //
-// A REGRA NÃO MORA AQUI. Quem decide que um cartão entra na fila é o bot
-// (PROGRAMA_FRAUDES/fraudes/regra.py → fila.py), e a fila chega pronta em
-// `fraude_bloqueio_cartao`, uma linha por CARTÃO:
+// A FILA DO ROBÔ usa a regra PADRÃO (PROGRAMA_FRAUDES/fraudes/regra.py → fila.py) e chega
+// em `fraude_bloqueio_cartao`, uma linha por CARTÃO:
 //     rajada = 5 ou mais passagens efetivas (girou a catraca) dentro de 30 minutos
 //              (eram 10 minutos até 16/09/2026 — o cartão 484361 passava devagar)
 //     fraude = rajada em 3+ dias, seguidos ou não, nos últimos 15 dias da base
 //              (era "3 dias seguidos" até 16/09/2026)
-// A tela refaz a janela deslizante só para DESENHAR a evidência (quais passagens formam
-// a pior janela de cada dia).
+//
+// A REGRA É MÓVEL NA ABA BLOQUEIO (16/09/2026, dono: "deixa móvel em campos / data de
+// dias + 15 e aí eu escrevo / quantos dias com rajada / quantidade rajada / tempo total
+// rajadas"). Os quatro números viram campos, e a aba RECALCULA a lista das passagens
+// (`regraBloqueio.js`, o porte de regra.py — com o padrão, dá o mesmo resultado do robô).
+// A fila do robô continua valendo para quem entra e sai sozinho; a tela só usa a situação
+// gravada dela (bloqueado, "não é fraude", desbloqueado) para tirar da lista quem já foi
+// decidido. Cartão que só aparece com a regra da tela não tem linha: ao bloquear ou
+// descartar, a tela CRIA a linha já com a decisão (o gateway não deixa criar pendente).
 //
 // O CICLO DO CARTÃO são quatro situações — pendente (a bloquear), bloqueado,
 // desbloqueado e descartado. Cada mudança grava a situação na fila E uma linha em
@@ -27,26 +33,49 @@
 // 🔒 Quem grava é o gateway `dp360-api` (só Administrador), e só as colunas de fluxo.
 //    O nome de quem bloqueou é o do login do INOVE, escrito pelo servidor.
 // ============================================================================
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, Search } from "lucide-react";
-import { atualizarDP360, inserirDP360, lerTudoDP360 } from "../../services/dp360Api";
+import { atualizarDP360, inserirDP360, lerDP360, lerTudoDP360 } from "../../services/dp360Api";
 import TabelaDP from "../dp360/TabelaDP";
 import MapaPassagens from "./MapaPassagens";
+import {
+  LIMITES,
+  REGRA_PADRAO,
+  cartoesDaRegra,
+  descreverRegra,
+  diasDaJanela,
+  ehPadrao,
+  inicioDaJanela,
+  rajadas,
+  regraDosCampos,
+} from "./regraBloqueio";
 
 const TAB = "fraude_bloqueio_cartao";
 const HIST = "fraude_bloqueio_historico";
 const GIROS = "fraude_cartao_giros";
+const OCORRENCIAS = "fraude_cartao_sequencial";
 
-// Só para desenhar a evidência — a mesma régua de fraudes/regra.py.
-const MIN_PASSAGENS = 5;
-const JANELA_SEG = 30 * 60; // a mesma de fraudes/regra.py (era 10 min até 16/09/2026)
-const JANELA_MIN = JANELA_SEG / 60;
-// A regra (16/09/2026): rajada em 3+ dias, SEGUIDOS OU NÃO, nos últimos 15 dias da
-// base. Antes eram 3 dias seguidos — quem usava qui/sex, parava no fim de semana e
-// voltava na segunda escapava. Quem sai da janela ainda pendente sai da fila (o
-// robô registra no histórico como `saiu_da_janela`).
-const DIAS_COM_RAJADA = 3;
-const JANELA_DIAS = 15;
+// O que a lista precisa das passagens e das ocorrências da janela (o resto só o pop-up lê)
+const COLUNAS_GIROS = "id_evento,id_evento_final,cru_id,data_ref,giro_dthora,giro_efetuado";
+const COLUNAS_OCORRENCIAS =
+  "id_evento_final,id_usuario,id_tipo_cartao,id_empresa,valor_total_debitado,saldo,local_fraude,latitude,longitude,link_maps";
+// 90 dias são ~41 mil passagens (medido na base até 13/09/2026: 15 dias = 6,5 mil)
+const PAGINAS_DA_JANELA = 100;
+// a regra só é relida quando a pessoa para de digitar
+const ESPERA_DIGITAR_MS = 600;
+// os números da regra ficam guardados neste navegador (a data não: ela segue a base)
+const CHAVE_REGRA = "guard_bloqueio_regra";
+
+// Linha nova (cartão que só aparece com a regra da tela): a evidência que a tela calculou
+// e, da decisão, só o que o gateway aceita na criação.
+const COLUNAS_EVIDENCIA = [
+  "cru_id", "id_usuario", "tipo_cartao", "id_empresa", "dias_seguidos", "sequencia_de",
+  "sequencia_ate", "qtd_sequencias", "dias_com_rajada", "rajadas", "maior_pico",
+  "menor_janela_seg", "passagens", "valor_debitado", "saldo", "ultima_rajada",
+  "local_fraude", "latitude", "longitude", "link_maps", "base_ate",
+];
+const CAMPOS_NA_CRIACAO = ["bloqueado_em", "bloqueado_por", "descartado_em", "observacao"];
+
 // "ativo" = rajada nos últimos N dias DA BASE (não de hoje: a base tem defasagem)
 const DIAS_ATIVO = 10;
 
@@ -125,8 +154,6 @@ function diaDoInstante(ts) {
 function isoDataLocal(d) {
   return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
 }
-// "2026-09-01 07:12:33" → segundos (relógio local, só para diferença entre passagens)
-const segundos = (ts) => Date.parse(txt(ts).replace(" ", "T")) / 1000;
 
 /** Dias entre a rajada e o ÚLTIMO DIA DA BASE — medir contra hoje faria o cartão mais
  *  recente parecer parado só porque a carga ainda não chegou. */
@@ -135,56 +162,6 @@ function diasAtras(dia, baseAte) {
   if (!d) return 999;
   const ref = baseAte ? Date.parse(`${baseAte}T12:00:00`) : Date.now();
   return Math.round((ref - Date.parse(`${d}T12:00:00`)) / 86400000);
-}
-
-// passagem efetiva = girou a catraca (a origem manda 1/"1"/true)
-const girou = (g) => g?.giro_efetuado === true || String(g?.giro_efetuado) === "1";
-
-/**
- * AS RAJADAS DO CARTÃO, dia a dia — a evidência que sustenta o pedido.
- * Cada bloco (mesmo cartão, mesmo endereço) com 5+ passagens efetivas vira rajada se a
- * pior janela de 30 min (dois ponteiros sobre a lista ordenada) tiver 5+ passagens.
- */
-function rajadasDoCartao(giros) {
-  const porBloco = new Map();
-  for (const g of giros || []) {
-    const k = txt(g.id_evento_final);
-    if (!porBloco.has(k)) porBloco.set(k, []);
-    porBloco.get(k).push(g);
-  }
-  const blocos = [];
-  for (const [id, linhas] of porBloco) {
-    const passagens = linhas.filter(girou).sort((a, b) => txt(a.giro_dthora).localeCompare(txt(b.giro_dthora)));
-    if (passagens.length < MIN_PASSAGENS) continue;
-    const t = passagens.map((g) => segundos(g.giro_dthora));
-    let melhor = 0;
-    let ini = 0;
-    let faixa = [0, 0];
-    for (let f = 0; f < t.length; f += 1) {
-      while (t[f] - t[ini] >= JANELA_SEG) ini += 1;
-      if (f - ini + 1 > melhor) {
-        melhor = f - ini + 1;
-        faixa = [ini, f];
-      }
-    }
-    if (melhor < MIN_PASSAGENS) continue;
-    blocos.push({
-      id,
-      dia: txt(passagens[0].data_ref).slice(0, 10),
-      local: txt(passagens[0].local_fraude),
-      pico: melhor,
-      dur: Math.round(t[faixa[1]] - t[faixa[0]]),
-      valor: passagens.reduce((soma, g) => soma + num(g.valor), 0),
-      passagens: passagens.map((g, i) => ({
-        ...g,
-        _n: i + 1,
-        _gap: i ? Math.round(t[i] - t[i - 1]) : null,
-        _janela: i >= faixa[0] && i <= faixa[1],
-        _id: `${id}#${i + 1}`,
-      })),
-    });
-  }
-  return blocos.sort((a, b) => b.dia.localeCompare(a.dia) || b.pico - a.pico);
 }
 
 async function copiar(texto) {
@@ -369,11 +346,21 @@ const DIA_SEMANA_LONGO = ["domingo", "segunda", "terça", "quarta", "quinta", "s
 const semanaDe = (iso) => new Date(`${txt(iso).slice(0, 10)}T12:00:00`).getDay();
 const maiuscula = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
-/** Os dias da janela da regra, do mais antigo ao último dia da base (ISO). */
-function diasDaJanela(baseAte, n = JANELA_DIAS) {
-  if (!baseAte) return [];
-  const fim = Date.parse(`${baseAte}T12:00:00`);
-  return Array.from({ length: n }, (_, i) => isoDataLocal(new Date(fim - (n - 1 - i) * 86400000)));
+/** Quantos quadrados por linha na faixa de dias: até 16 numa linha só; mais que isso, no
+ *  máximo 3 linhas (90 dias = 3 linhas de 30, e aí o quadrado fica compacto). */
+const diasPorLinha = (n) => (n <= 16 ? n : Math.max(15, Math.ceil(n / 3)));
+
+function lerRegraGuardada() {
+  const padrao = Object.fromEntries(Object.entries(REGRA_PADRAO).map(([k, v]) => [k, String(v)]));
+  try {
+    const r = JSON.parse(window.localStorage.getItem(CHAVE_REGRA) || "null");
+    if (r && typeof r === "object") {
+      return Object.fromEntries(Object.keys(REGRA_PADRAO).map((k) => [k, String(r[k] ?? padrao[k])]));
+    }
+  } catch {
+    /* navegador sem armazenamento: fica o padrão */
+  }
+  return padrao;
 }
 
 // 243 → "4min03s"; 58 → "58s"
@@ -423,7 +410,7 @@ function detalheDoHistorico(h) {
   const base = /base ate (\d{4}-\d{2}-\d{2})/.exec(m);
   const ate = base ? `base até ${paraBR(base[1])}` : "";
   if (txt(h.para) === "saiu_da_janela") {
-    return `sem rajada em ${DIAS_COM_RAJADA} dias nos últimos ${JANELA_DIAS} dias${ate ? ` · ${ate}` : ""}`;
+    return `sem rajada em ${REGRA_PADRAO.diasComRajada} dias nos últimos ${REGRA_PADRAO.dias} dias${ate ? ` · ${ate}` : ""}`;
   }
   return ate;
 }
@@ -501,7 +488,7 @@ function ItemRajada({ b, on, fora, onClick }) {
     <button
       type="button"
       className={`gd-bqm-item${on ? " on" : ""}${fora ? " fora" : ""}`}
-      title={fora ? `Fora dos últimos ${JANELA_DIAS} dias — não conta para a regra` : undefined}
+      title={fora ? "Fora da janela da regra — não conta" : undefined}
       onClick={onClick}
     >
       <span className="d">
@@ -524,7 +511,7 @@ function ItemRajada({ b, on, fora, onClick }) {
  * o resto da altura. O histórico abre em outro pop-up pelo botão do cabeçalho, que já
  * mostra a última movimentação.
  */
-function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
+function CartaoAberto({ cartao, baseAte, regra = REGRA_PADRAO, podeAnotar = true, onFechar, onAcao }) {
   const [giros, setGiros] = useState(null);
   const [historico, setHistorico] = useState(null);
   const [verHistorico, setVerHistorico] = useState(false);
@@ -555,8 +542,8 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
     };
   }, [cru, cartao.situacao, cartao.observacao]);
 
-  const blocos = useMemo(() => rajadasDoCartao(giros || []), [giros]);
-  const janela = useMemo(() => diasDaJanela(baseAte), [baseAte]);
+  const blocos = useMemo(() => rajadas(giros || [], regra, { detalhe: true }), [giros, regra]);
+  const janela = useMemo(() => diasDaJanela(baseAte, regra.dias), [baseAte, regra.dias]);
   const inicioJanela = janela[0] || "";
   const naJanela = (dia) => !!inicioJanela && dia >= inicioJanela && dia <= baseAte;
   const dentro = blocos.filter((b) => naJanela(b.dia));
@@ -687,9 +674,11 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
                 Voltar para a fila
               </button>
             )}
-            <button type="button" className="dp-btn" onClick={() => onAcao("anotar", [cartao])}>
-              Anotar
-            </button>
+            {podeAnotar ? (
+              <button type="button" className="dp-btn" onClick={() => onAcao("anotar", [cartao])}>
+                Anotar
+              </button>
+            ) : null}
             <button type="button" className="dp-btn" onClick={onFechar} aria-label="Fechar">
               ✕
             </button>
@@ -701,9 +690,9 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
           <div className="gd-bqm-kpi al">
             <span>Dias com rajada</span>
             <b>
-              {diasComRajada} <small>de {JANELA_DIAS}</small>
+              {diasComRajada} <small>de {regra.dias}</small>
             </b>
-            <em>a regra pede {DIAS_COM_RAJADA}</em>
+            <em>a regra pede {regra.diasComRajada}</em>
           </div>
           <div className="gd-bqm-kpi">
             <span>Rajadas</span>
@@ -720,7 +709,7 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
           <div className="gd-bqm-kpi">
             <span>Debitado</span>
             <b>{brl(cartao.valor_debitado)}</b>
-            <em>nas rajadas dos {JANELA_DIAS} dias</em>
+            <em>nas rajadas dos {regra.dias} dias</em>
           </div>
           <div className="gd-bqm-kpi">
             <span>Saldo</span>
@@ -743,12 +732,17 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
         {janela.length ? (
           <div className="gd-bqm-faixa-box">
             <div className="gd-bqm-faixa-tit">
-              <b>Últimos {JANELA_DIAS} dias da base</b>
+              <b>
+                {regra.dias === 1 ? "O dia" : `Os ${regra.dias} dias`} da regra
+              </b>
               <span className="dp-faint">
                 {paraBR(inicioJanela)} a {paraBR(baseAte)} · o número é o pico de passagens do dia · clique para ver
               </span>
             </div>
-            <div className="gd-bqm-faixa">
+            <div
+              className={`gd-bqm-faixa${diasPorLinha(janela.length) > 20 ? " compacta" : ""}`}
+              style={{ "--dias-linha": diasPorLinha(janela.length) }}
+            >
               {janela.map((d) => {
                 const b = piorDoDia.get(d);
                 const sem = semanaDe(d);
@@ -789,12 +783,16 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
             </div>
             {giros === null && !erro ? <div className="gd-hint">Carregando as passagens…</div> : null}
             {giros !== null && !blocos.length ? <div className="gd-hint">Sem rajada na base para este cartão.</div> : null}
-            {dentro.length ? <div className="gd-bqm-grupo">Nos últimos {JANELA_DIAS} dias · {dentro.length}</div> : null}
+            {dentro.length ? (
+              <div className="gd-bqm-grupo">
+                Na janela da regra ({regra.dias} dias) · {dentro.length}
+              </div>
+            ) : null}
             {dentro.map((b) => (
               <ItemRajada key={b.id} b={b} on={aberto?.id === b.id} onClick={() => abrir(b.id)} />
             ))}
             {antes.length ? (
-              <div className="gd-bqm-grupo">Antes da janela · {antes.length} — não contam para a regra</div>
+              <div className="gd-bqm-grupo">Fora da janela · {antes.length} — não contam para a regra</div>
             ) : null}
             {antes.map((b) => (
               <ItemRajada key={b.id} b={b} on={aberto?.id === b.id} fora onClick={() => abrir(b.id)} />
@@ -809,7 +807,7 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
                     <b>
                       {maiuscula(DIA_SEMANA_LONGO[semanaDe(aberto.dia)])}, {paraBR(aberto.dia)}
                     </b>{" "}
-                    {naJanela(aberto.dia) ? null : <span className="dp-pill mute">fora dos {JANELA_DIAS} dias</span>}
+                    {naJanela(aberto.dia) ? null : <span className="dp-pill mute">fora da janela da regra</span>}
                   </div>
                   <div className="dp-faint">
                     {aberto.passagens.length} passagens · pior janela <b>{aberto.pico}</b> em {duracao(aberto.dur)} ·{" "}
@@ -839,7 +837,7 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
                             key={g._id}
                             className={`${g._id === foco ? "gd-foco" : ""}${g._janela ? " gd-bqm-pior" : ""}`}
                             onMouseEnter={() => setFoco(g._id)}
-                            title={g._janela ? `dentro da pior janela de ${JANELA_MIN} minutos` : ""}
+                            title={g._janela ? `dentro da pior janela de ${regra.minutos} minutos` : ""}
                           >
                             <td className="dp-num">{g._n}</td>
                             <td className="dp-mono">{horaDe(g.giro_dthora)}</td>
@@ -854,7 +852,7 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
                   </div>
                 </div>
                 <div className="gd-hint gd-bqm-leg">
-                  <span className="gd-bqm-marca" /> pior janela de {JANELA_MIN} minutos do dia · o número do pino é a ordem da
+                  <span className="gd-bqm-marca" /> pior janela de {regra.minutos} minutos do dia · o número do pino é a ordem da
                   passagem · o bloco é sempre o mesmo endereço, então os pinos ficam um em cima do outro · passe o mouse
                   numa linha para achar o ponto
                 </div>
@@ -987,7 +985,147 @@ function HistoricoBloqueio({ historico, cartoes, termo, carregando, onAbrir }) {
   );
 }
 
+/* ─────────────────────────── os campos da regra ─────────────────────────── */
+
+/**
+ * OS QUATRO NÚMEROS DA REGRA, editáveis (dono, 16/09/2026). A janela termina no último dia
+ * com passagem na base, ou na data escolhida. Campo inválido fica vermelho e, enquanto
+ * isso, vale o número do padrão (ou o limite mais próximo).
+ */
+function CamposDaRegra({ campos, onCampo, regra, ate, fimBase, onAte, onPadrao, lendo, comparacao, truncada, baseParadaHa }) {
+  const padrao = ehPadrao(regra) && (!ate || ate === fimBase);
+  const numero = (k, rotulo) => {
+    const [min, limite] = LIMITES[k];
+    const max = k === "diasComRajada" ? Math.min(limite, regra.dias) : limite;
+    const bruto = String(campos[k] ?? "");
+    const n = Number(bruto);
+    const invalido = bruto.trim() === "" || !Number.isInteger(n) || n < min || n > max;
+    return (
+      <input
+        type="number"
+        inputMode="numeric"
+        min={min}
+        max={max}
+        step={1}
+        value={bruto}
+        className={`${invalido ? "erro" : ""}${regra[k] !== REGRA_PADRAO[k] ? " mudou" : ""}`}
+        onChange={(e) => onCampo(k, e.target.value)}
+        aria-label={rotulo}
+        title={
+          invalido
+            ? `Use um número de ${min} a ${max} — enquanto isso vale ${regra[k]}`
+            : `padrão do robô: ${REGRA_PADRAO[k]}`
+        }
+      />
+    );
+  };
+
+  return (
+    <section className="gd-regra" aria-label="Regra da lista">
+      <div className="gd-regra-campos">
+        <div className="gd-regra-campo">
+          <span className="rot">Janela</span>
+          <span className="val">
+            últimos {numero("dias", "Quantos dias")} dias até
+            <input
+              type="date"
+              value={ate || ""}
+              max={fimBase || undefined}
+              className={ate && fimBase && ate !== fimBase ? "mudou" : ""}
+              onChange={(e) => onAte(e.target.value)}
+              aria-label="Até o dia"
+              title={fimBase ? `a base tem passagem até ${paraBR(fimBase)}` : undefined}
+            />
+          </span>
+        </div>
+        <div className="gd-regra-campo">
+          <span className="rot">Dias com rajada</span>
+          <span className="val">
+            {numero("diasComRajada", "Quantos dias com rajada")} ou mais <em>seguidos ou não</em>
+          </span>
+        </div>
+        <div className="gd-regra-campo">
+          <span className="rot">Quantidade na rajada</span>
+          <span className="val">{numero("passagens", "Quantas passagens na rajada")} passagens ou mais</span>
+        </div>
+        <div className="gd-regra-campo">
+          <span className="rot">Tempo da rajada</span>
+          <span className="val">em até {numero("minutos", "Tempo da rajada em minutos")} min</span>
+        </div>
+        <button
+          type="button"
+          className="dp-btn gd-regra-padrao"
+          onClick={onPadrao}
+          disabled={padrao}
+          title={`A regra do robô: ${descreverRegra(REGRA_PADRAO)}, até o último dia da base`}
+        >
+          Voltar ao padrão
+        </button>
+      </div>
+      <div className="gd-regra-rodape">
+        <span>
+          {ate ? (
+            <>
+              período <b>{paraBR(inicioDaJanela(ate, regra.dias))}</b> a <b>{paraBR(ate)}</b>
+            </>
+          ) : (
+            "base sem data"
+          )}
+        </span>
+        <span className="dp-faint">· só conta passagem que girou a catraca</span>
+        {lendo ? <span className="dp-pill">lendo as passagens…</span> : null}
+        {!ehPadrao(regra) ? (
+          <span className="dp-pill warn" title="O robô continua pondo e tirando cartões da fila pelo padrão">
+            regra diferente da do robô ({descreverRegra(REGRA_PADRAO)})
+          </span>
+        ) : null}
+        {comparacao?.novos ? (
+          <span className="dp-pill warn" title="Cartões que o robô não pôs na fila: só aparecem com esta regra">
+            {comparacao.novos} fora da fila do robô
+          </span>
+        ) : null}
+        {comparacao?.deFora ? (
+          <span className="dp-pill mute" title="Estão na fila do robô, mas não passam nesta regra — ficam escondidos">
+            {comparacao.deFora} da fila do robô não entram
+          </span>
+        ) : null}
+        {truncada ? <span className="dp-pill danger">leitura cortada — diminua os dias</span> : null}
+        {baseParadaHa > 3 ? (
+          <span className="dp-pill warn">
+            a base de passagens está {baseParadaHa} dias atrás — só anda quando o robô de fraudes roda
+          </span>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 /* ──────────────────────────────── a aba ──────────────────────────────────── */
+
+/** CARTÃO QUE SÓ APARECE COM A REGRA DA TELA não tem linha na fila: a decisão cria a linha,
+ *  com a evidência calculada e a situação já decidida (o gateway recusa criar pendente e
+ *  escreve o autor). Se o robô pôs o cartão na fila nesse meio-tempo, a criação bate na
+ *  chave e a decisão vira a mudança de situação de sempre. */
+async function criarLinha(c, situacao, mudancas, rotulo) {
+  const linha = { situacao };
+  for (const k of COLUNAS_EVIDENCIA) linha[k] = c[k] ?? null;
+  for (const k of CAMPOS_NA_CRIACAO) if (mudancas[k] != null) linha[k] = mudancas[k];
+  try {
+    await inserirDP360(TAB, [linha], rotulo);
+  } catch (e) {
+    const msg = String(e?.message || "");
+    if (/409|duplicate|conflict/i.test(msg)) {
+      await atualizarDP360(TAB, { cru_id: `eq.${txt(c.cru_id)}` }, { situacao, ...mudancas }, rotulo);
+      return;
+    }
+    if (/não liberada/i.test(msg)) {
+      throw new Error(
+        `O cartão ${txt(c.cru_id)} só aparece com a regra desta tela e o servidor ainda não aceita gravá-lo — avise o administrador.`,
+      );
+    }
+    throw e;
+  }
+}
 
 /** A última rajada é de um dia DEPOIS do bloqueio? (o dia do bloqueio não conta: a
  *  bilhetagem pode levar o dia para aplicar). Devolve a data da rajada ou "". */
@@ -998,7 +1136,7 @@ function rajadaDepoisDoBloqueio(c) {
 }
 
 /**
- * `modo="fila"` (aba Bloqueio): só os cartões A BLOQUEAR, e mais nada.
+ * `modo="fila"` (aba Bloqueio): só os cartões A BLOQUEAR, pela regra dos campos.
  * `modo="gestao"` (aba Cartões bloqueados): bloqueados, desbloqueados, "não é fraude" e o
  * histórico. Desbloqueado que volta a fazer rajada volta sozinho para a fila — quem faz isso
  * é o robô (PROGRAMA_FRAUDES/fraudes/fila.py).
@@ -1018,6 +1156,27 @@ export default function FraudeBloqueio({ modo = "fila" }) {
   const [acao, setAcao] = useState(null);
   const [recado, setRecado] = useState(null);
 
+  // ── a regra móvel (só na aba Bloqueio) ──
+  const [campos, setCampos] = useState(lerRegraGuardada);
+  const regra = useMemo(() => regraDosCampos(campos), [campos]);
+  const [ateEscolhido, setAteEscolhido] = useState("");
+  const [fimBase, setFimBase] = useState("");
+  const [janelaLida, setJanelaLida] = useState(null);
+  const [lendoJanela, setLendoJanela] = useState(false);
+  const [erroJanela, setErroJanela] = useState("");
+  const [recargaJanela, setRecargaJanela] = useState(0);
+  const [chavePedida, setChavePedida] = useState("");
+  const jaLeuJanela = useRef(false);
+
+  useEffect(() => {
+    if (gestao) return;
+    try {
+      window.localStorage.setItem(CHAVE_REGRA, JSON.stringify(campos));
+    } catch {
+      /* navegador sem armazenamento: a regra vale só nesta visita */
+    }
+  }, [campos, gestao]);
+
   useEffect(() => {
     let vivo = true;
     setCarregando(true);
@@ -1026,11 +1185,16 @@ export default function FraudeBloqueio({ modo = "fila" }) {
       lerTudoDP360(TAB, { ordem: "cru_id.asc" }),
       // o histórico não pode derrubar a fila: sem ele, só a aba Histórico fica vazia
       lerTudoDP360(HIST, { ordem: "id.desc" }).catch(() => []),
+      // o último dia com passagem: é onde a janela da regra termina
+      gestao
+        ? Promise.resolve([])
+        : lerDP360(GIROS, { colunas: "data_ref", ordem: "data_ref.desc", limite: 1 }).catch(() => []),
     ])
-      .then(([linhas, hist]) => {
+      .then(([linhas, hist, ultimo]) => {
         if (!vivo) return;
         setCartoes(linhas || []);
         setHistorico(hist || []);
+        if (!gestao) setFimBase(txt(ultimo?.[0]?.data_ref).slice(0, 10));
       })
       .catch((e) => {
         if (vivo) setErro(e?.message || "Não consegui ler a fila de bloqueio.");
@@ -1041,14 +1205,102 @@ export default function FraudeBloqueio({ modo = "fila" }) {
     return () => {
       vivo = false;
     };
-  }, [recarga]);
+  }, [recarga, gestao]);
 
   const baseAte = useMemo(
     () => cartoes.map((c) => txt(c.base_ate).slice(0, 10)).filter(Boolean).sort().pop() || "",
     [cartoes],
   );
+  // onde a janela da regra termina: a data escolhida, ou o último dia com passagem
+  const fimDaBase = fimBase || baseAte;
+  const ate = ateEscolhido && fimDaBase && ateEscolhido < fimDaBase ? ateEscolhido : fimDaBase;
   // a base parada é informação de operação: a fila não anda se a detecção não roda
-  const baseParadaHa = baseAte ? diasAtras(isoDataLocal(new Date()), baseAte) * -1 : 0;
+  const baseParadaHa = fimDaBase ? diasAtras(isoDataLocal(new Date()), fimDaBase) * -1 : 0;
+
+  /* AS PASSAGENS DA JANELA. Só os dias e a data pedem leitura nova; passagens, minutos e
+     dias com rajada recalculam em cima do que já veio. A leitura espera a pessoa parar de
+     digitar (a primeira sai na hora). */
+  const chaveJanela = !gestao && ate ? `${inicioDaJanela(ate, regra.dias)}|${ate}` : "";
+  useEffect(() => {
+    if (!chaveJanela) return undefined;
+    const t = setTimeout(() => setChavePedida(chaveJanela), jaLeuJanela.current ? ESPERA_DIGITAR_MS : 0);
+    return () => clearTimeout(t);
+  }, [chaveJanela]);
+
+  useEffect(() => {
+    if (!chavePedida) return undefined;
+    let vivo = true;
+    const [de, fimJanela] = chavePedida.split("|");
+    const periodo = { data_ref: [`gte.${de}`, `lte.${fimJanela}`] };
+    setLendoJanela(true);
+    setErroJanela("");
+    Promise.all([
+      lerTudoDP360(GIROS, { colunas: COLUNAS_GIROS, filtros: periodo, ordem: "id_evento.asc" }, PAGINAS_DA_JANELA),
+      lerTudoDP360(
+        OCORRENCIAS,
+        { colunas: COLUNAS_OCORRENCIAS, filtros: periodo, ordem: "id_evento_final.asc" },
+        PAGINAS_DA_JANELA,
+      ),
+    ])
+      .then(([giros, ocorrencias]) => {
+        if (!vivo) return;
+        jaLeuJanela.current = true;
+        setJanelaLida({
+          chave: chavePedida,
+          giros: giros || [],
+          ocorrencias: new Map((ocorrencias || []).map((o) => [txt(o.id_evento_final), o])),
+          truncada: (giros || []).length >= PAGINAS_DA_JANELA * 1000,
+        });
+      })
+      .catch((e) => {
+        if (vivo) setErroJanela(e?.message || "Não consegui ler as passagens da janela.");
+      })
+      .finally(() => {
+        if (vivo) setLendoJanela(false);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [chavePedida, recargaJanela]);
+
+  const janelaPronta = !gestao && !!janelaLida && janelaLida.chave === chaveJanela;
+  const calculados = useMemo(
+    () => (janelaPronta ? cartoesDaRegra(janelaLida.giros, janelaLida.ocorrencias, regra, ate) : null),
+    [janelaPronta, janelaLida, regra, ate],
+  );
+
+  /* A LISTA A BLOQUEAR = quem a regra pegou, menos quem já tem decisão gravada. Bloqueado e
+     "não é fraude" saem; desbloqueado só fica se fez rajada DEPOIS do dia do desbloqueio (o
+     mesmo critério com que o robô o devolve para a fila). Cartão sem linha é marcado
+     `_naFila: false`: a decisão sobre ele CRIA a linha. */
+  const porCru = useMemo(() => new Map(cartoes.map((c) => [txt(c.cru_id), c])), [cartoes]);
+  const fila = useMemo(() => {
+    if (!calculados) return [];
+    const lista = [];
+    for (const l of calculados) {
+      const gravado = porCru.get(l.cru_id);
+      const s = gravado ? situacaoDe(gravado) : "pendente";
+      if (s === "bloqueado" || s === "descartado") continue;
+      if (s === "desbloqueado") {
+        const dia = diaDoInstante(gravado.desbloqueado_em);
+        if (!dia || !(l.ultima_rajada > dia)) continue;
+      }
+      lista.push(gravado ? { ...gravado, ...l, _naFila: true } : { ...l, situacao: "pendente", _naFila: false });
+    }
+    return lista;
+  }, [calculados, porCru]);
+
+  const comparacao = useMemo(() => {
+    if (!calculados) return null;
+    const naRegra = new Set(calculados.map((l) => l.cru_id));
+    return {
+      novos: fila.filter((c) => !c._naFila).length,
+      deFora: cartoes.filter((c) => situacaoDe(c) === "pendente" && !naRegra.has(txt(c.cru_id))).length,
+    };
+  }, [calculados, fila, cartoes]);
+
+  // os dias "atrás" contam até o fim da janela na aba Bloqueio, e até a base na gestão
+  const refDias = gestao ? baseAte : ate;
 
   const contagem = useMemo(() => {
     const c = { pendente: 0 };
@@ -1062,17 +1314,17 @@ export default function FraudeBloqueio({ modo = "fila" }) {
   }, [cartoes]);
 
   const kpis = useMemo(() => {
-    const p = cartoes.filter((c) => situacaoDe(c) === "pendente");
+    const p = gestao ? [] : fila;
     const soma = (l, k) => l.reduce((s, x) => s + num(x[k]), 0);
     return {
       pendentes: p.length,
-      ativos: p.filter((c) => diasAtras(c.ultima_rajada, baseAte) <= DIAS_ATIVO).length,
+      ativos: p.filter((c) => diasAtras(c.ultima_rajada, refDias) <= DIAS_ATIVO).length,
       debitado: soma(p, "valor_debitado"),
       saldo: soma(p, "saldo"),
       // bloqueado que fez rajada DEPOIS do dia do bloqueio: o bloqueio não pegou na bilhetagem
       passandoBloqueado: cartoes.filter((c) => situacaoDe(c) === "bloqueado" && rajadaDepoisDoBloqueio(c)).length,
     };
-  }, [cartoes, baseAte]);
+  }, [cartoes, fila, gestao, refDias]);
 
   // cru_id → a última linha de histórico feita por GENTE (lista já vem da mais nova)
   const ultimoPorPessoa = useMemo(() => {
@@ -1086,8 +1338,7 @@ export default function FraudeBloqueio({ modo = "fila" }) {
 
   const visiveis = useMemo(() => {
     const t = termo.trim().toLowerCase();
-    return cartoes
-      .filter((c) => situacaoDe(c) === aba)
+    return (gestao ? cartoes.filter((c) => situacaoDe(c) === aba) : fila)
       .filter((c) =>
         !t || [c.id_usuario, c.cru_id, c.local_fraude, c.tipo_cartao].some((v) => txt(v).toLowerCase().includes(t)),
       )
@@ -1096,7 +1347,7 @@ export default function FraudeBloqueio({ modo = "fila" }) {
           ? txt(b.ultima_rajada).localeCompare(txt(a.ultima_rajada))
           : num(b[ordem]) - num(a[ordem]),
       );
-  }, [cartoes, aba, termo, ordem]);
+  }, [cartoes, fila, gestao, aba, termo, ordem]);
 
   const colunas = useMemo(() => {
     const base = [
@@ -1117,7 +1368,7 @@ export default function FraudeBloqueio({ modo = "fila" }) {
         classe: "dp-num",
         valor: (c) => num(c.dias_com_rajada),
         render: (c) =>
-          num(c.dias_com_rajada) > DIAS_COM_RAJADA ? (
+          num(c.dias_com_rajada) > (gestao ? REGRA_PADRAO : regra).diasComRajada ? (
             <span className="dp-pill danger">{num(c.dias_com_rajada)} dias</span>
           ) : (
             num(c.dias_com_rajada)
@@ -1167,11 +1418,32 @@ export default function FraudeBloqueio({ modo = "fila" }) {
         render: (c) => (
           <span>
             {paraBR(c.ultima_rajada)}{" "}
-            <span className="dp-faint">({diasAtras(c.ultima_rajada, baseAte)}d)</span>
+            <span className="dp-faint">({diasAtras(c.ultima_rajada, refDias)}d)</span>
           </span>
         ),
       },
     ];
+    if (!gestao) {
+      // de onde o cartão veio: da fila do robô, só da regra da tela, ou de volta depois do desbloqueio
+      base.splice(2, 0, {
+        id: "origem",
+        titulo: "Fila do robô",
+        largura: 120,
+        valor: (c) => (c._naFila === false ? "não" : situacaoDe(c) === "desbloqueado" ? "voltou" : "sim"),
+        render: (c) =>
+          c._naFila === false ? (
+            <span className="dp-pill warn" title="O robô não pôs este cartão na fila: ele só aparece com a regra desta tela">
+              só nesta regra
+            </span>
+          ) : situacaoDe(c) === "desbloqueado" ? (
+            <span className="dp-pill danger" title="Foi desbloqueado e fez rajada depois do desbloqueio">
+              voltou
+            </span>
+          ) : (
+            <span className="dp-faint">sim</span>
+          ),
+      });
+    }
     if (aba === "bloqueado") {
       base.push(
         { id: "bloqueado_em", titulo: "Bloqueado em", largura: 140, valor: (c) => quandoBR(c.bloqueado_em) },
@@ -1219,21 +1491,22 @@ export default function FraudeBloqueio({ modo = "fila" }) {
       base.push({ id: "observacao", titulo: "Observação", largura: 220, valor: (c) => txt(c.observacao) });
     }
     return base;
-  }, [aba, baseAte, ultimoPorPessoa]);
+  }, [aba, gestao, regra, refDias, ultimoPorPessoa]);
 
-  const cartaoAberto = cartoes.find((c) => txt(c.cru_id) === aberto) || null;
+  const cartaoAberto = (gestao ? cartoes : fila).find((c) => txt(c.cru_id) === aberto) || null;
   const marcados = visiveis.filter((c) => selecionados.includes(txt(c.cru_id)));
 
   /* GRAVA: a situação na fila e uma linha de histórico por cartão. O histórico vai depois
      de todos os cartões: se um falhar no meio, o que já mudou fica registrado com a
      mensagem do erro, e a tela relê a fila para mostrar o estado real. */
-  const aplicar = useCallback(async (lista, situacao, campos, motivo, rotulo) => {
+  const aplicar = useCallback(async (lista, situacao, mudancas, motivo, rotulo) => {
     // o "de" do histórico é lido ANTES de gravar — depois disso a linha já diz "para"
-    const antes = new Map(lista.map((c) => [txt(c.cru_id), situacaoDe(c)]));
+    const antes = new Map(lista.map((c) => [txt(c.cru_id), c._naFila === false ? null : situacaoDe(c)]));
     const feitos = [];
     try {
       for (const c of lista) {
-        await atualizarDP360(TAB, { cru_id: `eq.${txt(c.cru_id)}` }, { situacao, ...campos }, rotulo);
+        if (c._naFila === false) await criarLinha(c, situacao, mudancas, rotulo);
+        else await atualizarDP360(TAB, { cru_id: `eq.${txt(c.cru_id)}` }, { situacao, ...mudancas }, rotulo);
         feitos.push(c);
       }
     } finally {
@@ -1261,6 +1534,8 @@ export default function FraudeBloqueio({ modo = "fila" }) {
     async ({ obs, motivo }) => {
       const { tipo, cartoes: lista } = acao;
       const agora = new Date().toISOString(); // instante (timestamptz), não data local
+      // o histórico guarda com que regra a pessoa viu o cartão, quando não é a do robô
+      const naRegra = !gestao && !ehPadrao(regra) ? ` · regra da tela: ${descreverRegra(regra)}` : "";
       if (tipo === "bloquear") {
         await aplicar(
           lista,
@@ -1273,7 +1548,7 @@ export default function FraudeBloqueio({ modo = "fila" }) {
             motivo_desbloqueio: null,
             observacao: obs || null,
           },
-          obs || "bloqueado",
+          (obs || "bloqueado") + naRegra,
           "Bloqueio de cartão (fraude)",
         );
       } else if (tipo === "desbloquear") {
@@ -1290,7 +1565,7 @@ export default function FraudeBloqueio({ modo = "fila" }) {
           lista,
           "descartado",
           { descartado_em: agora, observacao: obs || null },
-          obs || "sem motivo informado",
+          (obs || "sem motivo informado") + naRegra,
           "Cartão descartado (não é fraude)",
         );
       } else if (tipo === "reabrir") {
@@ -1329,7 +1604,7 @@ export default function FraudeBloqueio({ modo = "fila" }) {
       if (tipo !== "anotar") setAberto("");
       setSelecionados([]);
     },
-    [acao, aplicar],
+    [acao, aplicar, gestao, regra],
   );
 
   const copiarDaAba = async () => {
@@ -1369,7 +1644,15 @@ export default function FraudeBloqueio({ modo = "fila" }) {
             </button>
           </>
         ) : null}
-        <button type="button" className="dp-btn" onClick={() => setRecarga((n) => n + 1)} disabled={carregando}>
+        <button
+          type="button"
+          className="dp-btn"
+          onClick={() => {
+            setRecarga((n) => n + 1);
+            if (!gestao) setRecargaJanela((n) => n + 1);
+          }}
+          disabled={carregando || lendoJanela}
+        >
           <RefreshCw size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
           Recarregar
         </button>
@@ -1383,16 +1666,22 @@ export default function FraudeBloqueio({ modo = "fila" }) {
           aba Bloqueio.</b> {baseAte ? `Base até ${paraBR(baseAte)}.` : ""}
         </div>
       ) : (
-      <div className="gd-hint">
-        Fraude = <b>{MIN_PASSAGENS} ou mais passagens dentro de {JANELA_MIN} minutos</b>, em <b>{DIAS_COM_RAJADA} dias ou mais</b>{" "}
-        (seguidos ou não) nos <b>últimos {JANELA_DIAS} dias da base</b> · só passagem que girou a catraca ·{" "}
-        {baseAte ? `base até ${paraBR(baseAte)}` : "base sem data"}
-        {baseParadaHa > 3 ? (
-          <span className="dp-pill warn" style={{ marginLeft: 8 }}>
-            a detecção está {baseParadaHa} dias atrás — a fila só anda quando o robô de fraudes roda
-          </span>
-        ) : null}
-      </div>
+        <CamposDaRegra
+          campos={campos}
+          onCampo={(k, v) => setCampos((atual) => ({ ...atual, [k]: v }))}
+          regra={regra}
+          ate={ate}
+          fimBase={fimDaBase}
+          onAte={setAteEscolhido}
+          onPadrao={() => {
+            setCampos(Object.fromEntries(Object.entries(REGRA_PADRAO).map(([k, v]) => [k, String(v)])));
+            setAteEscolhido("");
+          }}
+          lendo={lendoJanela}
+          comparacao={comparacao}
+          truncada={janelaPronta && janelaLida.truncada}
+          baseParadaHa={baseParadaHa}
+        />
       )}
 
       {gestao ? (
@@ -1422,7 +1711,7 @@ export default function FraudeBloqueio({ modo = "fila" }) {
           </div>
           <div className="gd-bq-kpi al">
             <b>{kpis.ativos}</b>
-            <span>ativos ({DIAS_ATIVO} dias da base)</span>
+            <span>ativos (últimos {DIAS_ATIVO} dias)</span>
           </div>
           <div className="gd-bq-kpi">
             <b>{brl(kpis.debitado)}</b>
@@ -1464,9 +1753,9 @@ export default function FraudeBloqueio({ modo = "fila" }) {
       </div>
       ) : null}
 
-      {erro ? (
+      {erro || (!gestao && erroJanela) ? (
         <div className="dp-resumo">
-          <span className="dp-pill danger">{erro}</span>
+          <span className="dp-pill danger">{erro || erroJanela}</span>
         </div>
       ) : null}
 
@@ -1485,15 +1774,15 @@ export default function FraudeBloqueio({ modo = "fila" }) {
         chave={`guard_bloqueio_${aba}`}
         colunas={colunas}
         linhas={visiveis}
-        carregando={carregando}
-        mensagemCarregando="Carregando a fila de bloqueio…"
+        carregando={carregando || (!gestao && !janelaPronta && !erroJanela)}
+        mensagemCarregando={gestao ? "Carregando os cartões…" : "Lendo as passagens e aplicando a regra…"}
         idLinha={(c) => txt(c.cru_id)}
         aoClicarLinha={(c) => setAberto(txt(c.cru_id))}
         selecionavel={aba === "pendente"}
         aoSelecionar={(ids) => setSelecionados(ids)}
-        classeLinha={(c) => (diasAtras(c.ultima_rajada, baseAte) <= DIAS_ATIVO && aba === "pendente" ? "row-p1" : "")}
+        classeLinha={(c) => (diasAtras(c.ultima_rajada, refDias) <= DIAS_ATIVO && aba === "pendente" ? "row-p1" : "")}
         nomeCsv={`bloqueio_${aba}_${isoDataLocal(new Date())}`}
-        vazio={aba === "pendente" ? "Nada a bloquear. Fila limpa. 👍" : "Nenhum cartão nesta situação."}
+        vazio={aba === "pendente" ? "Nada a bloquear com esta regra. 👍" : "Nenhum cartão nesta situação."}
         pinPadrao={1}
         acoes={
           aba === "pendente" ? (
@@ -1513,7 +1802,9 @@ export default function FraudeBloqueio({ modo = "fila" }) {
       {cartaoAberto ? (
         <CartaoAberto
           cartao={cartaoAberto}
-          baseAte={baseAte}
+          baseAte={gestao ? baseAte : ate}
+          regra={gestao ? REGRA_PADRAO : regra}
+          podeAnotar={cartaoAberto._naFila !== false}
           onFechar={() => setAberto("")}
           onAcao={(tipo, lista) => setAcao({ tipo, cartoes: lista })}
         />

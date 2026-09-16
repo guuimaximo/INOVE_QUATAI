@@ -13,6 +13,7 @@ import {
   salvarRascunhoAuditoria,
 } from "../../utils/pcmRascunhoAuditoria";
 import { EVENTO_FOTO_RESTAURADA } from "../../utils/cameraRestore";
+import { buildAuditoriaAtrasadaList, diffDaysFromToday } from "./pneusLogic";
 import { useSearchParams } from "react-router-dom";
 import {
   FaBarcode,
@@ -187,21 +188,6 @@ function nowDisplay() {
 
 function todayValue() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function parseDateValue(value) {
-  if (!value) return null;
-  const next = new Date(value);
-  return Number.isNaN(next.getTime()) ? null : next;
-}
-
-function diffDaysFromToday(value) {
-  const start = parseDateValue(value);
-  if (!start) return 0;
-  const now = new Date();
-  const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
-  const nowUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.max(0, Math.floor((nowUtc - startUtc) / 86400000));
 }
 
 function buildAlertCycle(days) {
@@ -688,47 +674,6 @@ function getRiscadoStatusCounts(rows) {
   }
 
   return [...counts.entries()].map(([label, value]) => ({ label, value }));
-}
-
-function buildAuditoriaAtrasadaList(prefixos, auditorias) {
-  const ultimaPorPrefixo = new Map();
-
-  for (const row of auditorias || []) {
-    const prefixo = norm(row?.prefixo);
-    if (!prefixo) continue;
-    const atual = parseDateValue(row.created_at);
-    if (!atual) continue;
-
-    const existente = ultimaPorPrefixo.get(prefixo);
-    if (!existente || atual.getTime() > existente.getTime()) {
-      ultimaPorPrefixo.set(prefixo, atual);
-    }
-  }
-
-  return (prefixos || [])
-    .map((item) => {
-      const prefixo = norm(item?.codigo);
-      if (!prefixo) return null;
-      const ultima = ultimaPorPrefixo.get(prefixo) || null;
-      const diasSemAuditoria = ultima ? diffDaysFromToday(ultima.toISOString()) : 9999;
-
-      if (ultima && diasSemAuditoria <= 30) return null;
-
-      return {
-        id: item?.id || prefixo,
-        prefixo,
-        cluster: norm(item?.cluster),
-        ultimaAuditoria: ultima ? ultima.toISOString() : "",
-        diasSemAuditoria: ultima ? diasSemAuditoria : null,
-        semAuditoria: !ultima,
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => {
-      if (a.semAuditoria && !b.semAuditoria) return -1;
-      if (!a.semAuditoria && b.semAuditoria) return 1;
-      return (b.diasSemAuditoria || 0) - (a.diasSemAuditoria || 0);
-    });
 }
 
 function BadgeList({ items, emptyText = "-" }) {
@@ -2724,7 +2669,10 @@ function ConsultaModal({
   );
 }
 
-export default function PCMTrocaPneus() {
+// embutido: vira um grupo de abas da página de Controle de Pneus (web). A aba
+// vem de fora (`aba`) e a troca de aba é avisada por `onAba`; título, barra de
+// abas e a sincronia com a URL ficam com a página-mãe.
+export default function PCMTrocaPneus({ embutido = false, aba: abaExterna, onAba } = {}) {
   const { user } = useContext(AuthContext);
   const isNativeShell = Capacitor.isNativePlatform();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -2733,7 +2681,9 @@ export default function PCMTrocaPneus() {
   const donoDoRascunho = safeText(user?.login || user?.email || user?.id);
   const initialTab = isTabValue(searchParams.get("aba")) ? searchParams.get("aba") : TAB_TROCA;
 
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const [activeTabInterna, setActiveTabInterna] = useState(initialTab);
+  const activeTab = embutido && isTabValue(abaExterna) ? abaExterna : activeTabInterna;
+  const setActiveTab = (tab) => (embutido ? onAba?.(tab) : setActiveTabInterna(tab));
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [transnetSaving, setTransnetSaving] = useState(false);
@@ -2921,6 +2871,7 @@ export default function PCMTrocaPneus() {
   }, []);
 
   useEffect(() => {
+    if (embutido) return;
     const nextTab = searchParams.get("aba");
     if (isTabValue(nextTab) && nextTab !== activeTab) {
       setActiveTab(nextTab);
@@ -2930,7 +2881,7 @@ export default function PCMTrocaPneus() {
     if (!isTabValue(nextTab)) {
       setSearchParams({ aba: activeTab }, { replace: true });
     }
-  }, [activeTab, searchParams, setSearchParams]);
+  }, [activeTab, searchParams, setSearchParams, embutido]);
 
   useEffect(() => {
     if (!isNativeShell) return undefined;
@@ -3388,7 +3339,7 @@ export default function PCMTrocaPneus() {
 
   function handleTabChange(tab) {
     setActiveTab(tab);
-    setSearchParams({ aba: tab });
+    if (!embutido) setSearchParams({ aba: tab });
   }
 
   async function baixarPdfAuditoria() {
@@ -3747,8 +3698,7 @@ export default function PCMTrocaPneus() {
         { prefixoExigido: prefixoNormalizado },
       ),
     );
-    setActiveTab(TAB_AUDITORIA);
-    setSearchParams({ aba: TAB_AUDITORIA });
+    handleTabChange(TAB_AUDITORIA);
     setAuditoriaPendenciasOpen(false);
     setAuditoriaOpen(true);
   }
@@ -4958,11 +4908,11 @@ export default function PCMTrocaPneus() {
 
   return (
     <div
-      className="mx-auto min-h-screen max-w-7xl space-y-6 bg-slate-50 p-4 md:p-6"
+      className={embutido ? "space-y-6" : "mx-auto min-h-screen max-w-7xl space-y-6 bg-slate-50 p-4 md:p-6"}
       style={nativePageStyle}
     >
-      <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 md:flex-row md:items-start md:justify-between">
-        {IS_NATIVE ? null : (
+      <div className={`flex flex-col gap-4 md:flex-row md:items-start ${embutido ? "md:justify-end" : "border-b border-slate-200 pb-4 md:justify-between"}`}>
+        {IS_NATIVE || embutido ? null : (
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-800">
               <FaClipboardList className="text-blue-600" />
@@ -5003,7 +4953,7 @@ export default function PCMTrocaPneus() {
         </div>
       ) : null}
 
-      {!isNativeShell ? (
+      {!isNativeShell && !embutido ? (
       <div className="flex gap-3 overflow-x-auto pb-1">
           <TabButton
             active={activeTab === TAB_TROCA}

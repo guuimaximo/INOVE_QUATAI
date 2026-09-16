@@ -78,9 +78,9 @@ const PCMInicio = lazy(() => import("./pages/pcm/PCMInicio"));
 const PCMDiario = lazy(() => import("./pages/pcm/PCMDiario"));
 const PCMResumo = lazy(() => import("./pages/pcm/PCMResumo"));
 const PCM_PreventivasPlano = lazy(() => import("./pages/pcm/PCM_PreventivasPlano"));
-const PCMTrocaPneus = lazy(() => import("./pages/pcm/PCMTrocaPneus"));
+// Troca e Controle de pneus: uma página só (PCMPneus), aberta pelas duas rotas.
+const PCMPneus = lazy(() => import("./pages/pcm/PCMPneus"));
 const PCMControleFichas = lazy(() => import("./pages/pcm/PCMControleFichas"));
-const PCMControlePneus = lazy(() => import("./pages/pcm/PCMControlePneus"));
 
 const Usuarios = lazy(() => import("./pages/configuracoes/Usuarios"));
 const NiveisAcesso = lazy(() => import("./pages/configuracoes/NiveisAcesso"));
@@ -314,9 +314,9 @@ export default function App() {
               {/* Lançamentos viraram uma aba de Preventivas; o link antigo continua valendo. */}
               <Route path="/pcm-preventivas" element={<Navigate to="/pcm-preventivas-plano?aba=lancamentos" replace />} />
               <Route path="/pcm-preventivas-plano" element={<PCM_PreventivasPlano />} />
-              <Route path="/pcm-troca-pneus" element={<PCMTrocaPneus />} />
+              <Route path="/pcm-troca-pneus" element={<PCMPneus />} />
               <Route path="/pcm-controle-fichas" element={<PCMControleFichas />} />
-              <Route path="/pcm-controle-pneus" element={<PCMControlePneus />} />
+              <Route path="/pcm-controle-pneus" element={<PCMPneus />} />
 
               {/* Checklists */}
               <Route path="/checklists" element={<ChecklistCentral />} />

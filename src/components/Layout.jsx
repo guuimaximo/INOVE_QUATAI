@@ -43,7 +43,8 @@ function getPageTitle(pathname) {
   if (pathname.startsWith("/desempenho")) return "Diesel";
   if (pathname.startsWith("/embarcados")) return "Embarcados";
   if (pathname.startsWith("/pcm-controle-pneus")) return "Controle de pneus";
-  if (pathname.startsWith("/pcm-troca-pneus")) return "Troca de pneus";
+  // No celular a rota abre só a Troca; na web, a página única de pneus.
+  if (pathname.startsWith("/pcm-troca-pneus")) return Capacitor.isNativePlatform() ? "Troca de pneus" : "Controle de pneus";
   if (pathname.startsWith("/pcm")) return "PCM";
   if (pathname.startsWith("/central") || pathname.startsWith("/tratativas")) return "Tratativas";
   if (pathname.startsWith("/sac")) return "SAC";

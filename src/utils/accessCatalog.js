@@ -48,9 +48,9 @@ export const APP_ACCESS_PAGES = [
   { key: "pcm_resumo", label: "PCM Resumo", category: "PCM", path: "/pcm-resumo", patterns: ["/pcm-resumo"] },
   { key: "pcm_diario", label: "PCM Diario", category: "PCM", path: "/pcm-diario/:id", patterns: ["/pcm-diario/:id"] },
   { key: "pcm_preventivas", label: "PCM Preventivas · Lançamentos", category: "PCM", path: "/pcm-preventivas", patterns: ["/pcm-preventivas"] },
-  { key: "pcm_troca_pneus", label: "PCM Troca de Pneus", category: "PCM", path: "/pcm-troca-pneus", patterns: ["/pcm-troca-pneus"] },
+  { key: "pcm_troca_pneus", label: "PCM Pneus · Lançamentos (troca, auditoria, estoque)", category: "PCM", path: "/pcm-troca-pneus", patterns: ["/pcm-troca-pneus"] },
   { key: "pcm_controle_fichas", label: "PCM Controle de Fichas", category: "PCM", path: "/pcm-controle-fichas", patterns: ["/pcm-controle-fichas"] },
-  { key: "pcm_controle_pneus", label: "PCM Controle de Pneus", category: "PCM", path: "/pcm-controle-pneus", patterns: ["/pcm-controle-pneus"] },
+  { key: "pcm_controle_pneus", label: "PCM Pneus · Conferência TransNet", category: "PCM", path: "/pcm-controle-pneus", patterns: ["/pcm-controle-pneus"] },
 
   { key: "checklists_central", label: "Checklists Central", category: "Checklists", path: "/checklists", patterns: ["/checklists"] },
   { key: "checklists_painel_sr", label: "Painel SR", category: "Checklists", path: "/checklists/painel-sr", patterns: ["/checklists/painel-sr"] },

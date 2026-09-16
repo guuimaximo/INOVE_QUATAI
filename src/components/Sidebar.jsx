@@ -212,9 +212,14 @@ export default function Sidebar() {
           { path: PCM_ROUTES.resumo, label: "Resumo", icon: <FaChartPie /> },
           { path: PCM_ROUTES.inicio, label: "PCM do dia", icon: <FaPenSquare /> },
           { path: PCM_ROUTES.preventivas, label: "Preventivas", icon: <FaWrench /> },
-          { path: PCM_ROUTES.trocaPneus, label: "Troca de pneus", icon: <FaTools /> },
+          // Troca e Controle de pneus viraram uma página só (as duas rotas abrem a
+          // mesma tela). Quem só tem a permissão da Troca entra pela rota dela.
+          {
+            path: canSee(PCM_ROUTES.controlePneus) ? PCM_ROUTES.controlePneus : PCM_ROUTES.trocaPneus,
+            label: "Controle de pneus",
+            icon: <FaTools />,
+          },
           { path: PCM_ROUTES.controleFichas, label: "Controle de fichas", icon: <FaClipboardList /> },
-          { path: PCM_ROUTES.controlePneus, label: "Controle de pneus", icon: <FaTools /> },
         ],
       },
 
@@ -330,7 +335,7 @@ export default function Sidebar() {
         { path: "/controle-dados", label: "Controle de Dados", icon: <FaHdd /> },
       ],
     }),
-    []
+    [canSee]
   );
 
   const handleLogout = () => {

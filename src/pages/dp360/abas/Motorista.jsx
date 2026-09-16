@@ -820,15 +820,17 @@ export default function Motorista() {
         titulo: "Escala",
         classe: "dp-num",
         largura: 150,
+        // COM adicional (apresentação e recolhimento): `esc_*`. O `programado_*` é a
+        // escala crua e só entra quando a linha não trouxe a outra (16/09/2026).
         valor: (d) =>
           faixaHoras(
-            fmtHora(d.programado_entrada || d.esc_entrada),
-            fmtHora(d.programado_saida || d.esc_saida),
+            fmtHora(d.esc_entrada || d.programado_entrada),
+            fmtHora(d.esc_saida || d.programado_saida),
           ),
         render: (d) =>
           faixaHoras(
-            fmtHora(d.programado_entrada || d.esc_entrada),
-            fmtHora(d.programado_saida || d.esc_saida),
+            fmtHora(d.esc_entrada || d.programado_entrada),
+            fmtHora(d.esc_saida || d.programado_saida),
           ) || <Vazio />,
       },
       {

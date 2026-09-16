@@ -1603,9 +1603,21 @@ export default function CartaoDoDia({
    *
    * A leitura só acontece quando falta — e degrada calada: sem viagens, a linha continua
    * sem aparecer, como antes. */
-  const semEscalaNoDia =
-    hm2min(g.esc_inicio || linha.esc_entrada) == null &&
-    hm2min(g.esc_fim || linha.esc_saida) == null;
+  /* A ESCALA QUE SE MOSTRA É A COM ADICIONAL (16/09/2026, pedido do dono): apresentação
+   * e recolhimento incluídos — `esc_entrada` = início − adicional, `esc_saida` = fim +
+   * adicional. A da gordura (`esc_inicio`/`esc_fim`) e o `programado_*` do ponto são a
+   * escala CRUA: ANTONIO 30002462 · 14/09 tem 03:20 → 12:30 com adicional e 03:40 → 12:30
+   * crua. A crua só entra quando a linha do dia não trouxe a outra, e fica no título. */
+  const escCruaIni = g.esc_inicio || linha.programado_entrada;
+  const escCruaFim = g.esc_fim || linha.programado_saida;
+  const escalaDiaIni = linha.esc_entrada || escCruaIni;
+  const escalaDiaFim = linha.esc_saida || escCruaFim;
+  const escalaCruaDifere =
+    !!(linha.esc_entrada || linha.esc_saida) &&
+    (fmtHora(escCruaIni) || fmtHora(escCruaFim)) &&
+    (fmtHora(escCruaIni) !== fmtHora(linha.esc_entrada) ||
+      fmtHora(escCruaFim) !== fmtHora(linha.esc_saida));
+  const semEscalaNoDia = hm2min(escalaDiaIni) == null && hm2min(escalaDiaFim) == null;
   const [escalaProg, setEscalaProg] = useState(null);
   useEffect(() => {
     let vivo = true;
@@ -2231,13 +2243,19 @@ export default function CartaoDoDia({
                 <tbody>
                   <LinhaFonte
                     rotulo={escalaProg ? "Escala (das viagens)" : "Escala"}
-                    ini={g.esc_inicio || linha.esc_entrada || escalaProg?.ini}
-                    fim={g.esc_fim || linha.esc_saida || escalaProg?.fim}
+                    ini={escalaDiaIni || escalaProg?.ini}
+                    fim={escalaDiaFim || escalaProg?.fim}
                     cor="#94a3b8"
                     titulo={
                       escalaProg
                         ? "A linha do dia veio SEM escala (esc_entrada/esc_saida vazias). Esta é a escala PROGRAMADA nas viagens: início programado da primeira e fim programado da última. Serve para ler o dia — o alvo continua saindo da operação apurada."
-                        : "Escala publicada — apresentação e saída."
+                        : linha.esc_entrada || linha.esc_saida
+                          ? `Escala publicada COM adicional — apresentação e recolhimento incluídos.${
+                              escalaCruaDifere
+                                ? ` Sem adicional: ${fmtHora(escCruaIni) || "--"} → ${fmtHora(escCruaFim) || "--"}.`
+                                : ""
+                            }`
+                          : "Escala publicada SEM adicional — a linha do dia não trouxe a com adicional."
                     }
                   />
                   {/* A reserva lançada é FONTE: ela alarga a operação real (união

@@ -443,6 +443,13 @@ function contratoDaGordura(r) {
  * quem o caso registra como ponta cobrada — o pedido que não pede nada que a
  * trava existe para impedir.
  */
+/* A ESCALA QUE SE MOSTRA É A COM ADICIONAL (16/09/2026, pedido do dono) — a do
+ * `ponto_diario` (`esc_entrada`/`esc_saida`), igual ao app antigo (app.js:5586). A da
+ * gordura (`esc_inicio`/`esc_fim`) é a crua e só entra quando o dia não trouxe a outra.
+ * As REGRAS (reserva por GPS, encaixe do alvo) continuam lendo a crua. */
+const escalaIni = (r) => txt(r.__linhaPonto?.esc_entrada) || r.esc_inicio;
+const escalaFim = (r) => txt(r.__linhaPonto?.esc_saida) || r.esc_fim;
+
 function mensagemGordura(template, r) {
   const temEntrada = pontaConta(r.nivel_entrada, r.gordura_entrada, "entrada");
   const temSaida = pontaConta(r.nivel_saida, r.gordura_saida, "saida");
@@ -494,7 +501,7 @@ function mensagemGordura(template, r) {
     PEDIDO: pedido,
     // Não estão no texto padrão, mas o editor aceita as duas (Config `VARS`):
     // sem preencher, `normalizaMensagem` as apagaria e a frase ficaria manca.
-    ESCALA: `${fmtHora(r.esc_inicio) || "--"} – ${fmtHora(r.esc_fim) || "--"}`,
+    ESCALA: `${fmtHora(escalaIni(r)) || "--"} – ${fmtHora(escalaFim(r)) || "--"}`,
     BATIDAS: batidasParaTexto(r),
   });
 }
@@ -1534,16 +1541,16 @@ const COLUNAS_P4 = [
     titulo: "Esc. início",
     classe: "dp-mono dp-num dp-faint",
     largura: 110,
-    valor: (r) => fmtHora(r.esc_inicio), // hora crua; sem escala vai para o fim
-    render: (r) => H(r.esc_inicio),
+    valor: (r) => fmtHora(escalaIni(r)), // com adicional; sem escala vai para o fim
+    render: (r) => H(escalaIni(r)),
   },
   {
     id: "esc_fim",
     titulo: "Esc. fim",
     classe: "dp-mono dp-num dp-faint",
     largura: 110,
-    valor: (r) => fmtHora(r.esc_fim),
-    render: (r) => H(r.esc_fim),
+    valor: (r) => fmtHora(escalaFim(r)),
+    render: (r) => H(escalaFim(r)),
   },
   {
     id: "justificativa",

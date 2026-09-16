@@ -27,14 +27,12 @@
 //   · caso recente — bloquear cartão parado não devolve nada.
 //
 // O QUE A REGRA NÃO PEGA (mostrado na tela, como no relatório):
-//   · cartão bloqueado em uso → detecção SEPARADA (aba "Cartões bloqueados");
 //   · fraude em endereços diferentes → o bloco quebra na troca de endereço;
 //   · débito sem GPS → sem ping não há endereço, logo não há bloco.
 //
 // 🔒 SEGURANÇA DESTA TELA
-//   · `numero_cartao` NUNCA aparece inteiro — só `••••1234`. A máscara está no
-//     `valor` da coluna também, e não só no `render`, senão o CSV vazaria o
-//     número completo.
+//   · `numero_cartao` não é lido por esta tela (16/09/2026: a aba de bloqueados
+//     deixou de ler o cadastro da bilhetagem, que era o único lugar que o tinha).
 //   · nenhum `console.log` de dado.
 //   · A ÚNICA GRAVAÇÃO é a TRIAGEM (status, analisado_em, analisado_por,
 //     observacao). O gateway recusa qualquer outra coluna desta tabela: cartão,
@@ -85,7 +83,6 @@ const PADRAO_RECENCIA = 30;
 // truncada em silêncio e sumiriam casos sem ninguém perceber.
 const LINHAS_POR_PAGINA = 1000;
 const TETO_PAGINAS_CASOS = 6;
-const TETO_PAGINAS_BLOQUEADOS = 3;
 const LIMITE_GIROS = 500;
 const LIMITE_HISTORICO = 300;
 
@@ -156,21 +153,23 @@ const COLUNAS_GIRO = [
   "defasagem_telemetria_seg",
 ].join(",");
 
-const COLUNAS_BLOQUEADO = [
+// "CARTÕES BLOQUEADOS" = OS QUE NÓS MARCAMOS (16/09/2026, pedido do dono: "não tem
+// como o cartão passar depois de bloqueado / vamos trazer só os bloqueios que nós
+// marcarmos"). A aba lia o cadastro de restrição da bilhetagem
+// (`fraude_cartao_bloqueado`), que no lago parou em 29/08/2025 e mostrava cartão
+// "restrito" passando na catraca. Agora são duas fontes, as duas do INOVE:
+//   · aba Bloqueio → "Bloquear este cartão" (fraude_bloqueio_cartao, situacao=bloqueado);
+//   · aba Casos    → "Pedir bloqueio" (fraude_cartao_sequencial, status=bloqueio).
+const COLUNAS_MARCA_BLOQUEIO = [
   "cru_id",
   "id_usuario",
-  "numero_cartao",
-  "cru_status",
-  "restrito_desde",
-  "motivo_restricao",
-  "tipo_restricao",
-  "giros_apos_restricao",
-  "dias_com_uso",
-  "valor_apos_restricao",
-  "primeiro_uso_apos",
-  "ultimo_uso_apos",
-  "atualizado_em",
+  "tipo_cartao",
+  "situacao",
+  "bloqueado_em",
+  "bloqueado_por",
+  "observacao",
 ].join(",");
+const COLUNAS_MARCA_CASO = ["cru_id", "id_usuario", "data_ref", "status", "analisado_em", "analisado_por", "observacao"].join(",");
 
 /* ────────────────────────────── utilidades puras ─────────────────────────── */
 
@@ -226,20 +225,30 @@ function moeda(valor) {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+// instante gravado (timestamptz, em UTC) → data/hora de Brasília. `dataHoraBR` fatia
+// texto e serve para horário LOCAL (passagem); marca de gente vem em UTC.
+function instanteBR(ts) {
+  const t = Date.parse(txt(ts));
+  if (!Number.isFinite(t)) return "—";
+  return new Date(t).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+// o DIA (AAAA-MM-DD) de um instante, no fuso de Brasília
+function diaDoInstante(ts) {
+  const t = Date.parse(txt(ts));
+  if (!Number.isFinite(t)) return "";
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(t));
+}
+
 function inteiro(valor) {
   const n = numero(valor);
   return n == null ? "—" : String(Math.round(n));
-}
-
-/**
- * 🔒 O número do cartão NUNCA sai inteiro desta tela.
- * Devolve `••••1234`; cartão curto demais para ter "4 últimos" vira só `••••`.
- */
-function mascararCartao(valor) {
-  const so = txt(valor).replace(/\D/g, "");
-  if (!so) return "—";
-  if (so.length <= 4) return "••••";
-  return `••••${so.slice(-4)}`;
 }
 
 // `giro_efetuado` chega como 1/0, "1"/"0" ou true/false conforme a origem.
@@ -644,82 +653,126 @@ const COLS_GIROS = [
   },
 ];
 
-const COLS_BLOQUEADOS = [
-  { id: "cru_id", titulo: "Cartão (CRU)", largura: 118, classe: "dp-mono" },
+/** Junta as duas marcas por cartão e mede o que veio DEPOIS da marca mais recente. */
+function juntarMarcados(marcasBloqueio, marcasCaso, casosDosMarcados) {
+  const porCartao = new Map();
+  const pega = (cru) => {
+    if (!porCartao.has(cru)) porCartao.set(cru, { cru_id: cru, id_usuario: "", tipo: "", marcas: [] });
+    return porCartao.get(cru);
+  };
+  for (const m of marcasBloqueio) {
+    const g = pega(txt(m.cru_id));
+    g.id_usuario = g.id_usuario || txt(m.id_usuario);
+    g.tipo = g.tipo || txt(m.tipo_cartao);
+    g.marcas.push({ origem: "bloqueio", em: txt(m.bloqueado_em), por: txt(m.bloqueado_por), obs: txt(m.observacao) });
+  }
+  // o pedido da aba Casos marca VÁRIAS ocorrências de uma vez: vale o instante mais novo
+  const pedidos = new Map();
+  for (const c of marcasCaso) {
+    const cru = txt(c.cru_id);
+    const atual = pedidos.get(cru);
+    if (!atual || txt(c.analisado_em) > txt(atual.analisado_em)) pedidos.set(cru, c);
+  }
+  for (const [cru, c] of pedidos) {
+    const g = pega(cru);
+    g.id_usuario = g.id_usuario || txt(c.id_usuario);
+    g.marcas.push({ origem: "casos", em: txt(c.analisado_em), por: txt(c.analisado_por), obs: txt(c.observacao) });
+  }
+
+  const casosPorCartao = new Map();
+  for (const c of casosDosMarcados) {
+    const cru = txt(c.cru_id);
+    if (!casosPorCartao.has(cru)) casosPorCartao.set(cru, []);
+    casosPorCartao.get(cru).push(c);
+  }
+
+  return [...porCartao.values()]
+    .map((g) => {
+      const marcas = g.marcas.sort((a, b) => b.em.localeCompare(a.em));
+      const ultima = marcas[0];
+      const diaMarca = diaDoInstante(ultima.em);
+      const casos = (casosPorCartao.get(g.cru_id) || []).sort((a, b) => txt(b.data_ref).localeCompare(txt(a.data_ref)));
+      const depois = diaMarca ? casos.filter((c) => txt(c.data_ref).slice(0, 10) > diaMarca) : [];
+      const origens = new Set(marcas.map((m) => m.origem));
+      return {
+        cru_id: g.cru_id,
+        id_usuario: g.id_usuario || txt(casos[0]?.id_usuario),
+        tipo: g.tipo,
+        origem: origens.size > 1 ? "as duas" : origens.has("bloqueio") ? "aba Bloqueio" : "aba Casos",
+        marcadoEm: ultima.em,
+        por: [...new Set(marcas.map((m) => m.por).filter(Boolean))].join(", "),
+        detalhe: marcas.map((m) => m.obs).filter(Boolean).join(" · "),
+        casosDepois: depois.length,
+        diasDepois: new Set(depois.map((c) => txt(c.data_ref).slice(0, 10))).size,
+        debitadoDepois: depois.reduce((soma, c) => soma + (numero(c.valor_total_debitado) || 0), 0),
+        ultimoCaso: txt(casos[0]?.data_ref).slice(0, 10),
+        // o pop-up abre no caso mais recente; cartão sem caso lido não abre
+        recente: casos[0] ? { ...casos[0], passagens: passagensDoCaso(casos[0]) } : null,
+      };
+    })
+    .sort((a, b) => b.casosDepois - a.casosDepois || b.marcadoEm.localeCompare(a.marcadoEm));
+}
+
+const COLS_MARCADOS = [
   {
-    id: "numero_cartao",
-    titulo: "Número",
+    id: "id_usuario",
+    titulo: "Usuário",
     largura: 104,
     classe: "dp-mono",
-    // 🔒 A MÁSCARA ESTÁ NO `valor`, não só no `render`: o `valor` é o que a
-    // TabelaDP ordena E EXPORTA no CSV. Mascarar só na exibição vazaria o
-    // número inteiro no arquivo baixado.
-    valor: (l) => mascararCartao(l.numero_cartao),
+    valor: (g) => g.id_usuario,
+    render: (g) => <b>{g.id_usuario || "—"}</b>,
   },
-  { id: "id_usuario", titulo: "Usuário", largura: 104, classe: "dp-mono" },
-  { id: "cru_status", titulo: "Situação", largura: 120 },
-  { id: "tipo_restricao", titulo: "Tipo", largura: 130 },
-  { id: "motivo_restricao", titulo: "Motivo", largura: 220 },
+  { id: "cru_id", titulo: "Cartão (CRU)", largura: 110, classe: "dp-mono", valor: (g) => g.cru_id },
   {
-    id: "restrito_desde",
-    titulo: "Restrito desde",
-    largura: 116,
+    id: "origem",
+    titulo: "Marcado na",
+    largura: 120,
+    valor: (g) => g.origem,
+    render: (g) => <span className={`dp-pill ${g.origem === "aba Casos" ? "mute" : "accent"}`}>{g.origem}</span>,
+  },
+  {
+    id: "marcadoEm",
+    titulo: "Marcado em",
+    largura: 140,
     classe: "dp-mono",
-    valor: (l) => txt(l.restrito_desde),
-    render: (l) => (txt(l.restrito_desde) ? paraBR(l.restrito_desde) : "—"),
+    valor: (g) => g.marcadoEm,
+    render: (g) => instanteBR(g.marcadoEm),
   },
+  { id: "por", titulo: "Por", largura: 150, valor: (g) => g.por || "—" },
   {
-    id: "giros_apos_restricao",
-    titulo: "Giros após",
-    largura: 96,
+    id: "casosDepois",
+    titulo: "Casos depois",
+    largura: 110,
     alinhar: "right",
-    valor: (l) => numero(l.giros_apos_restricao) ?? 0,
-    render: (l) => {
-      const n = numero(l.giros_apos_restricao) ?? 0;
-      return n > 0 ? <span className="dp-pill danger">{n}</span> : <span className="dp-faint">0</span>;
-    },
+    valor: (g) => g.casosDepois,
+    // caso depois do dia da marca = o cartão continuou passando
+    render: (g) =>
+      g.casosDepois > 0 ? (
+        <span className="dp-pill danger" title={`${g.diasDepois} dia(s) com caso depois do dia da marca`}>
+          {g.casosDepois} em {g.diasDepois} dia{g.diasDepois === 1 ? "" : "s"}
+        </span>
+      ) : (
+        <span className="dp-faint">nenhum</span>
+      ),
   },
   {
-    id: "dias_com_uso",
-    titulo: "Dias c/ uso",
-    largura: 96,
+    id: "debitadoDepois",
+    titulo: "Debitado depois",
+    largura: 120,
     alinhar: "right",
     classe: "dp-num",
-    valor: (l) => numero(l.dias_com_uso),
+    valor: (g) => g.debitadoDepois,
+    render: (g) => (g.casosDepois ? moeda(g.debitadoDepois) : <span className="dp-faint">—</span>),
   },
   {
-    id: "valor_apos_restricao",
-    titulo: "Valor após",
-    largura: 108,
-    alinhar: "right",
-    classe: "dp-num",
-    valor: (l) => numero(l.valor_apos_restricao),
-    render: (l) => moeda(l.valor_apos_restricao),
-  },
-  {
-    id: "primeiro_uso_apos",
-    titulo: "1º uso após",
-    largura: 140,
+    id: "ultimoCaso",
+    titulo: "Último caso",
+    largura: 110,
     classe: "dp-mono",
-    valor: (l) => txt(l.primeiro_uso_apos),
-    render: (l) => dataHoraBR(l.primeiro_uso_apos),
+    valor: (g) => g.ultimoCaso,
+    render: (g) => (g.ultimoCaso ? paraBR(g.ultimoCaso) : "—"),
   },
-  {
-    id: "ultimo_uso_apos",
-    titulo: "Último uso após",
-    largura: 140,
-    classe: "dp-mono",
-    valor: (l) => txt(l.ultimo_uso_apos),
-    render: (l) => dataHoraBR(l.ultimo_uso_apos),
-  },
-  {
-    id: "atualizado_em",
-    titulo: "Atualizado",
-    largura: 140,
-    classe: "dp-mono",
-    valor: (l) => txt(l.atualizado_em),
-    render: (l) => dataHoraBR(l.atualizado_em),
-  },
+  { id: "detalhe", titulo: "Detalhe", largura: 300, valor: (g) => g.detalhe || "—" },
 ];
 
 /* ─────────────────────────────────── a tela ──────────────────────────────── */
@@ -829,7 +882,7 @@ export default function GuardFraudes() {
     };
   }, [podeAcessar, recencia, recarga]);
 
-  /* ── cartões bloqueados (só quando a aba é aberta) ── */
+  /* ── cartões bloqueados = os que NÓS marcamos (só quando a aba é aberta) ── */
   useEffect(() => {
     if (!podeAcessar || aba !== "bloqueados") return undefined;
     let vivo = true;
@@ -838,22 +891,36 @@ export default function GuardFraudes() {
 
     (async () => {
       try {
-        // `fraude_cartao_bloqueado` NAO e uma lista de casos: sao 126.897 linhas,
-        // o cadastro inteiro de cartoes com a situacao de restricao. O caso e o
-        // cartao restrito que CONTINUOU girando a catraca — 31 linhas hoje. Sem
-        // este filtro a aba baixava dez mil linhas para mostrar trinta.
-        // `not.eq.0` e comparacao de texto de igualdade, entao e exata aqui
-        // (diferente de gte./lte., ver FILTRO_PISO_PASSAGENS).
-        const linhas = await lerTudoDP360(
-          "fraude_cartao_bloqueado",
-          {
-            colunas: COLUNAS_BLOQUEADO,
-            filtros: { giros_apos_restricao: "not.eq.0" },
-            ordem: "giros_apos_restricao.desc,cru_id",
-          },
-          TETO_PAGINAS_BLOQUEADOS,
-        );
-        if (vivo) setBloqueados(linhas);
+        const [naBloqueio, naCasos] = await Promise.all([
+          lerTudoDP360("fraude_bloqueio_cartao", {
+            colunas: COLUNAS_MARCA_BLOQUEIO,
+            filtros: { situacao: "eq.bloqueado" },
+            ordem: "cru_id.asc",
+          }),
+          lerTudoDP360(
+            "fraude_cartao_sequencial",
+            {
+              colunas: COLUNAS_MARCA_CASO,
+              filtros: { status: `eq.${ST_BLOQUEIO}` },
+              ordem: "cru_id.asc,data_ref.asc",
+            },
+            TETO_PAGINAS_CASOS,
+          ),
+        ]);
+        // os casos DESSES cartões, para medir o que veio depois da marca e abrir o pop-up
+        const cartoes = [...new Set([...naBloqueio, ...naCasos].map((l) => txt(l.cru_id)).filter(Boolean))];
+        const casosDosMarcados = [];
+        for (let i = 0; i < cartoes.length; i += 80) {
+          const lote = cartoes.slice(i, i + 80);
+          casosDosMarcados.push(
+            ...(await lerTudoDP360(
+              "fraude_cartao_sequencial",
+              { colunas: COLUNAS_CASO, filtros: { cru_id: `in.(${lote.join(",")})` }, ordem: "data_ref.desc,id_evento_final" },
+              TETO_PAGINAS_CASOS,
+            )),
+          );
+        }
+        if (vivo) setBloqueados(juntarMarcados(naBloqueio, naCasos, casosDosMarcados));
       } catch (falha) {
         if (vivo) setErroBloq(falha?.message || "Não foi possível ler os cartões bloqueados.");
       } finally {
@@ -865,6 +932,11 @@ export default function GuardFraudes() {
       vivo = false;
     };
   }, [podeAcessar, aba, recarga]);
+
+  // trocar de aba fecha o pop-up (ele abre das abas Casos e Cartões bloqueados)
+  useEffect(() => {
+    setCaso(null);
+  }, [aba]);
 
   /* ── o que o pop-up carrega: passagens e casos DO CARTAO ── */
   // Depende do CARTAO, nao da linha: clicar em outro caso do mesmo cartao nao
@@ -1223,7 +1295,7 @@ export default function GuardFraudes() {
             type="button"
             className={`dp-tab${aba === "bloqueio" ? " is-active" : ""}`}
             onClick={() => setAba("bloqueio")}
-            title="Cartões com rajada (5+ passagens em 10 min) em 3 dias seguidos — o que bloquear hoje"
+            title="Cartões com rajada (5+ passagens em 30 min) em 3 dias ou mais dos últimos 15 — o que bloquear hoje"
           >
             Bloqueio
           </button>
@@ -1251,7 +1323,7 @@ export default function GuardFraudes() {
         </nav>
       </div>
 
-      {/* ═════════════════ BLOQUEIO — a fila dos 3 dias seguidos ═════════════════ */}
+      {/* ═════════ BLOQUEIO — a fila (3+ dias com rajada nos últimos 15) ═════════ */}
       {aba === "bloqueio" && <FraudeBloqueio />}
 
       {/* ══════════════════════════════ CASOS ══════════════════════════════ */}
@@ -1427,11 +1499,15 @@ export default function GuardFraudes() {
             pinPadrao={2}
           />
 
+        </>
+      )}
+
           {/* ── POP-UP DO CARTÃO: usos por dia + mapa + passagens ──────────
               Vive fora da grade de propósito. Enquanto era painel embaixo da
               tabela, abrir um caso empurrava a lista para fora da tela e a
-              pessoa perdia o lugar onde estava. */}
-          {caso && (
+              pessoa perdia o lugar onde estava. Abre das abas Casos e Cartões
+              bloqueados. */}
+          {caso && (aba === "casos" || aba === "bloqueados") && (
             <div
               className="gd-modal"
               role="dialog"
@@ -1660,16 +1736,15 @@ export default function GuardFraudes() {
               </div>
             </div>
           )}
-        </>
-      )}
 
       {/* ═══════════════════════ CARTÕES BLOQUEADOS ════════════════════════ */}
       {aba === "bloqueados" && (
         <>
           <div className="dp-viewbar">
             <div className="dp-vazio" style={{ flex: 1, border: 0, padding: 0 }}>
-              Detecção <b>separada</b>: cartão com restrição ativa que continuou girando a catraca.
-              Não passa pela regra de sequência — por isso não aparece na aba Casos.
+              Só os cartões que <b>nós marcamos</b>: "Bloquear este cartão" na aba Bloqueio e "Pedir
+              bloqueio" na aba Casos. <b>Casos depois</b> = o cartão continuou passando depois do dia
+              da marca — confira se o bloqueio foi feito na bilhetagem.
             </div>
             <button type="button" className="dp-btn" onClick={recarregar}>
               <RefreshCw size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
@@ -1685,24 +1760,23 @@ export default function GuardFraudes() {
 
           {!erroBloq && (
             <div className="dp-resumo">
-              <b className="dp-num">{bloqueados.length}</b> cartão(ões) restrito(s) com uso ·{" "}
-              <span className="dp-faint">
-                🔒 o número do cartão aparece mascarado (<span className="dp-mono">••••1234</span>),
-                inclusive no CSV.
-              </span>
+              <b className="dp-num">{bloqueados.length}</b> cartão(ões) marcado(s) ·{" "}
+              <b className="dp-num">{bloqueados.filter((g) => g.casosDepois > 0).length}</b> com caso
+              depois da marca
             </div>
           )}
 
           <TabelaDP
-            chave="guard_bloqueados"
-            colunas={COLS_BLOQUEADOS}
+            chave="guard_marcados"
+            colunas={COLS_MARCADOS}
             linhas={bloqueados}
             carregando={carregandoBloq}
-            mensagemCarregando="Carregando cartões bloqueados…"
-            idLinha={(l) => txt(l.cru_id)}
-            classeLinha={(l) => ((numero(l.giros_apos_restricao) || 0) > 0 ? "row-p1" : "")}
+            mensagemCarregando="Carregando os cartões marcados…"
+            idLinha={(g) => g.cru_id}
+            classeLinha={(g) => (g.casosDepois > 0 ? "row-p1" : "")}
+            aoClicarLinha={(g) => (g.recente ? setCaso(g.recente) : null)}
             nomeCsv={`inove_guard_bloqueados_${isoDataLocal(new Date())}`}
-            vazio="Nenhum cartão bloqueado com uso registrado. 👍"
+            vazio="Nenhum cartão marcado para bloqueio ainda."
             pinPadrao={2}
           />
         </>
@@ -1746,9 +1820,6 @@ export default function GuardFraudes() {
           <div className="gd-card gd-limites">
             <h4>O que a regra NÃO pega</h4>
             <ul>
-              <li>
-                <b>Cartão bloqueado em uso</b> — detecção separada, na aba "Cartões bloqueados".
-              </li>
               <li>
                 <b>Fraude em endereços diferentes</b> — a troca de endereço quebra o bloco, então a
                 sequência nunca se forma.

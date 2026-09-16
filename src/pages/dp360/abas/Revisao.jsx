@@ -1181,6 +1181,9 @@ const COLUNAS_PONTO_DIARIO = [
   "status_ponto",
   "motivo",
   "motivo_tecnico",
+  // o dia do RH: com atestado médico o Transnet não aceita ponto (`atestadoDoDia`)
+  "te_descricao_dia",
+  "tipo_dia",
   "acao_sugerida",
   "sugestao_fonte",
   "qtd_batidas",

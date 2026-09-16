@@ -333,6 +333,8 @@ function competenciasEntre(dataMin, dataMax) {
 }
 
 const fmtDia = (iso) => (dia10(iso).length >= 10 ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "—");
+// "MARIA" quando o marco é de uma pessoa só; "5 pessoas" quando o dia tem mais
+const quemNoMarco = (m) => (m?.qtd === 1 && m.nome ? m.nome : `${m?.qtd || 0} pessoas`);
 const fmtDiaAno = (iso) => (dia10(iso).length >= 10 ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "—");
 
 // "745" -> "12h25". Aceita minutos fracionados (a base guarda tudo como texto).
@@ -562,6 +564,33 @@ function caixasDoCaso(c, agoraMs) {
   }
   return out;
 }
+
+/* ── ATÉ ONDE CHEGAMOS (dono, 16/09/2026) ─────────────────────────────────────
+ * "Cadê o último dia que foi capturada a gordura — esse último dia é a pessoa que já
+ * enviamos e já corrigimos. Último aviso de gordura enviado — o dia mais próximo que
+ * enviamos e não respondeu. Último dia com aviso de revisão enviado."
+ *
+ * São marcos da BASE INTEIRA, não da competência escolhida: o que se quer saber é até que
+ * dia a esteira já andou. O dia é o do CARTÃO (`date_ref`); o "enviado em" vem junto porque
+ * é ele que diz se o marco está parado. */
+function marcoDoDia(linhas, colQuando) {
+  if (!linhas?.length) return { dia: "" };
+  const dia = dia10(linhas[0].date_ref);
+  const doDia = linhas.filter((c) => dia10(c.date_ref) === dia);
+  const quando = doDia.map((c) => txt(c[colQuando])).filter(Boolean).sort().pop() || "";
+  return {
+    dia,
+    qtd: doDia.length,
+    quando: quando.slice(0, 10),
+    nome: doDia.length === 1 ? txt(doDia[0].nm_funcionario) : "",
+  };
+}
+
+// avisado e sem resposta: nem aceitou, nem recusou, nem foi corrigido ou cancelado
+const avisoSemResposta = (c) =>
+  !["aceito", "rejeitado", "cancelado"].includes(txt(c.aceite).toLowerCase())
+  && !txt(c.conferido_em) && !txt(c.correcao_final_em)
+  && !txt(c.cancelado_em) && !txt(c.aviso_cancelado_em);
 
 function apurarCaptura(casos) {
   const agoraMs = Date.now();
@@ -912,6 +941,8 @@ export default function DP360Resumo({ embutido = false }) {
   // na cara, o "Oportunidade" parece completo quando faltam dias.
   const [ultimoPonto, setUltimoPonto] = useState("");
   const [ultimaGordura, setUltimaGordura] = useState("");
+  // até onde a esteira andou, na base inteira (`marcoDoDia`); `null` = ainda não leu
+  const [marcos, setMarcos] = useState(null);
   // na aba Início, o que é detalhe fica fechado até alguém pedir
   const [verDetalhes, setVerDetalhes] = useState(false);
   const enxuto = embutido;
@@ -1034,6 +1065,31 @@ export default function DP360Resumo({ embutido = false }) {
     })();
     return () => { vivo = false; };
   }, [competencia, recarga]);
+
+  // OS MARCOS DA ESTEIRA — três leituras curtas da `ponto_caso`, ordenadas pelo dia do
+  // cartão, sem recorte de competência. Leitura que falha deixa o marco de fora (`null`),
+  // nunca mostra um dia inventado.
+  useEffect(() => {
+    if (!podeAcessar) return undefined;
+    let vivo = true;
+    (async () => {
+      const ler = (filtros, limite) =>
+        lerDP360("ponto_caso", { filtros, ordem: "date_ref.desc", limite }).catch(() => null);
+      const [corrigidos, avisosGordura, avisosRevisao] = await Promise.all([
+        ler({ origem: "eq.gordura", aviso_enviado_em: "not.is.null", correcao_final_em: "not.is.null" }, 300),
+        ler({ origem: "eq.gordura", aviso_enviado_em: "not.is.null" }, 500),
+        ler({ origem: "eq.revisao", aviso_enviado_em: "not.is.null" }, 50),
+      ]);
+      if (!vivo) return;
+      setMarcos({
+        // CAPTURADA = a mesma régua da placa "Capturados": correção final com captura > 0
+        capturada: corrigidos && marcoDoDia(corrigidos.filter((c) => capturaConfirmada(c)[0] > 0), "correcao_final_em"),
+        avisoGordura: avisosGordura && marcoDoDia(avisosGordura.filter(avisoSemResposta), "aviso_enviado_em"),
+        avisoRevisao: avisosRevisao && marcoDoDia(avisosRevisao, "aviso_enviado_em"),
+      });
+    })();
+    return () => { vivo = false; };
+  }, [podeAcessar, recarga]);
 
   // Os CASOS (esteira, ciclo do aviso, gordura corrigida). Efeito próprio porque é a
   // ÚNICA leitura que sobrevive ao modo "Todas as competências": a `ponto_caso` é
@@ -1361,27 +1417,18 @@ export default function DP360Resumo({ embutido = false }) {
           <RefreshCw size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
           Recarregar
         </button>
-        <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-          {ultimoPonto ? (
-            <span className="dp-pill mute" title="Último dia de ponto importado (ponto_diario).">
-              ponto importado até {fmtDiaAno(ultimoPonto)}
-            </span>
-          ) : null}
-          {ultimaGordura ? (
-            <span
-              className={`dp-pill ${atrasoGordura > 2 ? "warn" : "ok"}`}
-              title={
-                atrasoGordura > 2
-                  ? `A gordura está ${atrasoGordura} dia(s) atrás do ponto: a Oportunidade desses dias ainda não existe.`
-                  : "Último dia com gordura capturada (ponto_gordura)."
-              }
-            >
-              gordura capturada até {fmtDiaAno(ultimaGordura)}
-              {atrasoGordura > 2 ? ` · ${atrasoGordura} dias atrás do ponto` : ""}
-            </span>
-          ) : null}
-        </span>
       </div>
+
+      {/* ------- até onde chegamos: os marcos da base inteira -------------
+          Não dependem da competência escolhida, então aparecem mesmo enquanto ela carrega. */}
+      {!erro && (ultimoPonto || marcos) && (
+        <AteOndeChegamos
+          ultimoPonto={ultimoPonto}
+          ultimaGordura={ultimaGordura}
+          atrasoGordura={atrasoGordura}
+          marcos={marcos}
+        />
+      )}
 
       {/* Em "Todas" a tela diz o que ficou de fora, em vez de mostrar zero. */}
       {!erro && modoTodas && !ocupado && (
@@ -1485,7 +1532,10 @@ export default function DP360Resumo({ embutido = false }) {
                 <Cartao
                   rotulo="Potencial aberto"
                   valor={brl((abertoMin / 60) * valorHora)}
-                  nota={`horas abertas × ${brl(valorHora)} · a captura usa só o líquido confirmado`}
+                  // "esse potencial em aberto é só dessa competência? é só de gordura?" (dono,
+                  // 16/09/2026) — é, os dois: a gordura sem aviso e os casos de gordura em
+                  // fluxo, só com cartão dentro da competência escolhida.
+                  nota={`só gordura, só desta competência · horas abertas × ${brl(valorHora)}`}
                   tom="warn"
                 />
               )}
@@ -1494,7 +1544,7 @@ export default function DP360Resumo({ embutido = false }) {
               {oportunidade && (
                 <>
                   <Cartao rotulo="Horas abertas" valor={hhmm(abertoMin)}
-                    nota="potencial ainda não encerrado (sem aviso + em fluxo)" tom="warn" />
+                    nota="gordura desta competência ainda não encerrada (sem aviso + em fluxo)" tom="warn" />
                   <Cartao rotulo="Ainda sem aviso" valor={faltam.qtd}
                     nota={`${hhmm(faltam.min)} · oportunidade que não entrou no fluxo`} />
                 </>
@@ -2023,6 +2073,54 @@ export default function DP360Resumo({ embutido = false }) {
  * O cabeçalho é o `Secao` que o resto da página já usa (Esteira, Oportunidade…), de
  * propósito: um ritmo só do topo ao fim, em vez de um estilo de título novo no meio.
  */
+/* ATÉ ONDE CHEGAMOS — os marcos da base inteira (`marcoDoDia`). Componente à parte porque
+   não depende da competência escolhida: aparece mesmo enquanto ela carrega. */
+function AteOndeChegamos({ ultimoPonto, ultimaGordura, atrasoGordura, marcos }) {
+  return (
+    <Grupo titulo="Até onde chegamos" ajuda="na base inteira, não só nesta competência">
+      <Cartao
+        rotulo="Ponto importado até"
+        valor={ultimoPonto ? fmtDiaAno(ultimoPonto) : "—"}
+        nota="último dia que chegou do Transnet"
+      />
+      <Cartao
+        rotulo="Gordura importada até"
+        valor={ultimaGordura ? fmtDiaAno(ultimaGordura) : "—"}
+        nota={atrasoGordura > 2
+          ? `${atrasoGordura} dias atrás do ponto — a oportunidade desses dias ainda não existe`
+          : "último dia com gordura medida"}
+        tom={atrasoGordura > 2 ? "warn" : undefined}
+      />
+      <Cartao
+        rotulo="Gordura capturada até"
+        valor={marcos?.capturada?.dia ? fmtDiaAno(marcos.capturada.dia) : "—"}
+        nota={marcos?.capturada?.dia
+          ? `último dia avisado e já corrigido · ${quemNoMarco(marcos.capturada)}`
+            + (marcos.capturada.quando ? ` · corrigido em ${fmtDiaAno(marcos.capturada.quando)}` : "")
+          : marcos ? "nenhum dia avisado e corrigido ainda" : "lendo…"}
+        tom="ok"
+      />
+      <Cartao
+        rotulo="Último aviso de gordura sem resposta"
+        valor={marcos?.avisoGordura?.dia ? fmtDiaAno(marcos.avisoGordura.dia) : "—"}
+        nota={marcos?.avisoGordura?.dia
+          ? `dia mais recente avisado que não respondeu · ${quemNoMarco(marcos.avisoGordura)}`
+            + (marcos.avisoGordura.quando ? ` · enviado em ${fmtDiaAno(marcos.avisoGordura.quando)}` : "")
+          : marcos ? "nenhum aviso de gordura esperando resposta" : "lendo…"}
+        tom="warn"
+      />
+      <Cartao
+        rotulo="Último dia com aviso de revisão"
+        valor={marcos?.avisoRevisao?.dia ? fmtDiaAno(marcos.avisoRevisao.dia) : "—"}
+        nota={marcos?.avisoRevisao?.dia
+          ? `dia mais recente que recebeu aviso de revisão · ${quemNoMarco(marcos.avisoRevisao)}`
+            + (marcos.avisoRevisao.quando ? ` · enviado em ${fmtDiaAno(marcos.avisoRevisao.quando)}` : "")
+          : marcos ? "nenhum aviso de revisão enviado" : "lendo…"}
+      />
+    </Grupo>
+  );
+}
+
 function Grupo({ titulo, ajuda, children }) {
   return (
     <Secao titulo={titulo} tag={ajuda}>

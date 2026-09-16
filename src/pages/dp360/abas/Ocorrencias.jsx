@@ -91,6 +91,15 @@ import {
 // E a correção é o MESMO robô `ponto` da Revisão, da Refeição e das Folgas — um CSV de
 // crachá·data·quatro pontas. Nada de formato novo aqui.
 import { csvDoAjustePonto } from "../regrasAjustePonto";
+// O que faz o Transnet recusar um dia sem dizer por quê (atestado, fim do turno no dia
+// seguinte) e a virada do dia desenrolada — a mesma regra da Revisão e do Histórico.
+import {
+  atestadoDoDia,
+  desenrolaSlots,
+  ehRecusaSemMotivo,
+  fimNoDiaSeguinte,
+  somaUmDia,
+} from "../diaNoTransnet";
 import {
   CONSTANTES,
   batidasDoCartao,
@@ -516,6 +525,9 @@ const COLS_DIARIO =
   // (main.py:7067 monta o seletor de datas com ela; processar_ponto.py:29 filtra as
   // linhas da Revisão pelo mesmo campo). É ela que decide o que entra na fila.
   "tem_ponto," +
+  // O DIA DO RH (04-ATESTADO MEDICO, 07-FERIAS...): o Transnet não aceita ponto em dia de
+  // atestado, e a correção precisa saber disso antes de mandar o robô (`atestadoDoDia`).
+  "te_descricao_dia,tipo_dia," +
   // O ALVO PUBLICADO PELA REVISÃO — é ele que a correção lança, e ele já vem com a
   // ponta batida preservada ("só a ponta errada muda"). `*_ref` é a régua interna da
   // view e serve de reserva; `*_sug` é o último degrau.
@@ -788,7 +800,13 @@ async function carregarOcorrencias(aoAvancar, jaTenho) {
     anota(o.cracha, o.date_ref);
     anota(o.cracha, o.dt_referencia_ponto);
   });
-  casos.forEach((c) => anota(c.cracha, c.date_ref));
+  casos.forEach((c) => {
+    anota(c.cracha, c.date_ref);
+    // O DIA SEGUINTE DE QUEM SAI DEPOIS DA MEIA-NOITE: é nele que o Transnet às vezes grava
+    // o fim do turno, e aí recusa fechar este dia (`fimNoDiaSeguinte`). Quase sempre o dia
+    // seguinte já está em cena por outra pessoa — custa um crachá a mais na mesma leitura.
+    if ((hm2min(c.alvo_saida) ?? 0) >= 1440) anota(c.cracha, somaUmDia(normData(c.date_ref)));
+  });
 
   const { diario, gordura, realManual, lidos } = await lerLakePorPares(pares, aoAvancar, jaTenho);
 
@@ -1548,6 +1566,8 @@ function montarRegistros(base) {
       caso,
       ciclo,
       cartao: cp,
+      // a linha do DIA SEGUINTE, quando foi lida (só para quem vira a meia-noite)
+      diaSeguinte: mapaDiario.get(chave(cracha, somaUmDia(iso))) || null,
       gordura: g,
       // O REAL MANUAL DO DP já era lido aqui para montar a régua (`refDaPonta`), mas morria
       // dentro do cálculo: o pop-up do caso não tinha como dizer se alguém já cravou o
@@ -2293,12 +2313,36 @@ function cartaoDaFila(reg) {
   return { tipo: "semContrato", slots: [], texto: "" };
 }
 
-/** O cartão que a correção vai lançar É O ALVO da tela — o mesmo da coluna e do pop-up. */
+/** O cartão que a correção vai lançar É O ALVO da tela — o mesmo da coluna e do pop-up.
+ *
+ * A VIRADA DO DIA VEM DESENROLADA (LUIZ FERNANDO 30061121 24/08, 16/09/2026). O alvo chega
+ * em hora de relógio — "15:43 · 21:14 · 21:44 · 00:57" — e o `validaCartao` do montador
+ * lia o 00:57 como uma batida ANTES da entrada: "fora de ordem". Na tela o cartão estava
+ * certo, e ninguém entendia a trava. É o mesmo desenrolar da correção do recusado; o CSV
+ * sai com 24:57, e o robô reduz para 00:57 na hora de digitar (`bot_ponto._mod24`). */
 function cartaoDaCorrecao(reg) {
-  const slots = (reg?.alvo?.slots || []).map((v) => txt(v));
+  const slots = desenrolaSlots((reg?.alvo?.slots || []).map((v) => txt(v)));
   const mins = slots.map(hm2min).filter((v) => v != null);
   const problema = validaCartao(mins, reg?.categoria);
   return { slots, mins, problema };
+}
+
+/* O CARTÃO QUE A CORREÇÃO DESTE DIA LANÇA — o do recusado sem aviso é o Real manual
+   (`cartaoDaRecusaCorrigida`); o do resto, o alvo (`cartaoDaCorrecao`). */
+const cartaoQueCorrige = (reg) =>
+  reg?.situacao === "recusado" ? cartaoDaRecusaCorrigida(reg) : cartaoDaCorrecao(reg);
+
+/* O FIM DO TURNO PRESO NO DIA SEGUINTE, medido contra a saída que a correção vai lançar. */
+const fimPresoNoDiaSeguinte = (reg, cartao = cartaoQueCorrige(reg)) =>
+  fimNoDiaSeguinte(cartao?.slots?.[3], reg?.diaSeguinte, somaUmDia(reg?.iso));
+
+/* A RESPOSTA DO ROBÔ COM O PORQUÊ. A recusa genérica do Transnet ("Existem erros...") não
+   ajuda ninguém; quando a base mostra a causa, ela vai junto para o caso e para a trilha. */
+function motivoComCausa(reg, motivo, cartao) {
+  const frase = txt(motivo);
+  if (!ehRecusaSemMotivo(frase)) return frase;
+  const causa = atestadoDoDia(reg?.cartao)?.texto || fimPresoNoDiaSeguinte(reg, cartao)?.texto;
+  return causa ? `o Transnet recusou — causa: ${causa}` : frase;
 }
 
 function motivoSemCorrigirVencido(reg) {
@@ -2312,6 +2356,10 @@ function motivoSemCorrigirVencido(reg) {
       ? "a recusa ainda não foi confirmada no Transnet — ela sai antes, pela Fila de lançamento"
       : "ainda não foi advertido — a advertência vem antes";
   if (txt(reg?.caso?.correcao_final_em)) return "já corrigido";
+  // ATESTADO TRAVA ANTES DO ROBÔ: o Transnet recusa, e o robô gastaria a rodada para ouvir
+  // um "Existem erros" que não diz nada (RICARDO 30060898 31/08).
+  const atestado = atestadoDoDia(reg?.cartao);
+  if (atestado) return atestado.texto;
   const { slots, problema } = cartaoDaCorrecao(reg);
   if (!slots.some(Boolean)) return "não há alvo publicado para lançar";
   if (problema) return problema;
@@ -2334,6 +2382,8 @@ function motivoSemCorrigirRecusa(reg) {
   if (txt(reg.caso?.correcao_final_em) || reg.situacao === "corrigido") return "já corrigido";
   if (reg.situacao !== "recusado")
     return "a recusa ainda não foi executada no Transnet — ela sai antes, pela Fila de lançamento";
+  const atestado = atestadoDoDia(reg.cartao);
+  if (atestado) return atestado.texto;
   const c = cartaoDaRecusaCorrigida(reg);
   if (c.semRealManual)
     return "sem Real manual — monte o cartão no caso (recusar e corrigir) ou crave no Cartão do dia";
@@ -3159,10 +3209,17 @@ function CelulaCorrecao({ reg, motivo }) {
   if (reg.situacao === "corrigido" || txt(reg.caso?.correcao_final_em))
     return <Selo cor="ok">🔧 corrigido</Selo>;
   const ultima = txt(reg.caso?.transnet_resposta);
+  // não trava: o DP pode já ter apagado as batidas no Transnet, e a base só vê isso amanhã
+  const preso = fimPresoNoDiaSeguinte(reg);
   return (
     <div style={PILHA}>
       {ultima ? (
         <span className="oc-cor-falha" title={ultima}>⚠ não subiu: {ultima}</span>
+      ) : null}
+      {preso ? (
+        <span className="oc-cor-falha" title={preso.texto}>
+          ⚠ o {preso.dia} tem batida dentro deste turno ({preso.horas}) — apague lá antes de lançar
+        </span>
       ) : null}
       {motivo ? (
         <span className="dp-faint" style={MINI} title={motivo}>não entra: {motivo}</span>
@@ -4131,8 +4188,35 @@ const valorDaTrilha = (v) => {
   return /^\d{4}-\d{2}-\d{2}T/.test(s) ? fmtDataHora(s) : s;
 };
 
+/* POR QUE NÃO FOI LANÇADO (dono, 16/09/2026: "no histórico quero que apareça o porquê não
+ * foi lançado"). A trilha conta o que foi gravado; ela não conta o que TRAVA o dia agora —
+ * e é isso que o DP precisa para saber o que fazer. As causas, na ordem em que pesam:
+ *   · o que a BASE mostra e o Transnet recusa (atestado, fim do turno no dia seguinte);
+ *   · o que a TELA não deixa lançar (cartão que não fecha, falta advertência...);
+ *   · a última resposta do robô, como ficou gravada no caso. */
+function porQueNaoFoiLancado(reg) {
+  if (!reg || reg.situacao === "corrigido" || txt(reg.caso?.correcao_final_em)) return [];
+  const itens = [];
+  const atestado = atestadoDoDia(reg.cartao);
+  if (atestado)
+    itens.push({ grave: true, titulo: "🩺 Atestado médico no dia", texto: atestado.texto });
+  const preso = fimPresoNoDiaSeguinte(reg);
+  if (preso)
+    itens.push({ grave: true, titulo: `🌙 Batida do ${preso.dia} dentro deste turno`, texto: preso.texto });
+  // a trava da tela só conta quando o dia já está na etapa de correção
+  const recusado = reg.situacao === "recusado";
+  const naCorrecao = recusado || Boolean(txt(reg.caso?.advertencia_enviada_em));
+  const tela = naCorrecao ? (recusado ? motivoSemCorrigirRecusa(reg) : motivoSemCorrigirVencido(reg)) : "";
+  if (tela && tela !== atestado?.texto)
+    itens.push({ grave: false, titulo: "A tela não deixa lançar", texto: tela });
+  const robo = txt(reg.caso?.transnet_resposta);
+  if (robo) itens.push({ grave: false, titulo: "Última resposta do robô", texto: robo });
+  return itens;
+}
+
 function HistoricoDoCaso({ reg, aoFechar }) {
   const [linhas, setLinhas] = useState(null);
+  const porQue = porQueNaoFoiLancado(reg);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
@@ -4163,6 +4247,17 @@ function HistoricoDoCaso({ reg, aoFechar }) {
         </div>
 
         <div className="rv-corpo" style={{ marginTop: 10 }}>
+          {porQue.length ? (
+            <div className="oc-hist-porque" role="note">
+              <div style={{ ...ROTULO_CARD, marginBottom: 4 }}>Por que não foi lançado</div>
+              {porQue.map((p) => (
+                <div key={p.titulo} className={`oc-hist-porque-item${p.grave ? " grave" : ""}`}>
+                  <b>{p.titulo}</b>
+                  <span>{p.texto}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
           {erro ? <div className="oc-mt-n forte" role="alert">⚠ {erro}</div> : null}
           {!erro && linhas === null ? (
             <div className="dp-espera" role="status">
@@ -5710,7 +5805,11 @@ export default function Ocorrencias() {
               });
             // sem log não se sabe o que houve: não se escreve motivo inventado
             else if (txt(item.motivo))
-              falhas.push({ ...chaveCaso, transnet_resposta: txt(item.motivo).slice(0, 200), atualizado_em: agora });
+              falhas.push({
+                ...chaveCaso,
+                transnet_resposta: motivoComCausa(reg, item.motivo, cartaoDe(reg)).slice(0, 400),
+                atualizado_em: agora,
+              });
           }
           try {
             // cada lote com as MESMAS chaves (o PostgREST exige); o nome da ação vai junto

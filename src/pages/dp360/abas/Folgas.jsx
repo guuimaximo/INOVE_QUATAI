@@ -437,6 +437,8 @@ const COLUNAS_AJUSTE = [
   "entrada_sug", "almoco_saida_sug", "almoco_volta_sug", "saida_sug",
   // O contrato da view, que é o que o `sugBloqueio` lê para decidir.
   "requer_alvo_manual", "fonte_alvo", "alvo_confiavel", "almoco_confiavel", "almoco_travado",
+  // o dia do RH: com atestado médico o Transnet não aceita ponto (`atestadoDoDia`)
+  "te_descricao_dia", "tipo_dia",
 ].join(",");
 
 // O dia tem sugestão de alguma ponta? (`temSug` do app.js:6188.)

@@ -550,9 +550,38 @@ const TOM_DO_PASSO = { OK: "ok", CORRIGIR: "warn", PENDENTE: "warn", VERIFICAR: 
    a única coisa na tela que explica isso. Visto no run 34898154006. */
 const RE_ALERTA = /Alert Text:\s*(.+)/i;
 
+/* O ERRO QUE DERRUBA UM DIA DO LOTE, no formato antigo do `bot_ponto` (até 16/09/2026):
+     [bot_ponto]  LOTE  --- 15/27  cracha 30060776  data 27/08/2026 ---
+     [bot_ponto]  LOTE  ERRO no cracha 30060776: UnexpectedAlertPresentException: Alert Text: ...
+   A linha do erro não traz a data, então ela sai do cabeçalho do item. Sem isto o CLAUDEMIR
+   30060776 27/08 ficou gravado como "o robô não chegou neste dia", quando o que houve foi o
+   Transnet travar o preenchimento com "Intervalo entre jornada Maior que 19:00 horas".
+   O robô novo também escreve `ERRO  <crachá> <dia>: <frase>`, que o `RE_LOG_CASO` já lê. */
+const RE_LOTE_ITEM = /\[bot_[a-z_]+\]\s+LOTE\s+---\s+\d+\/\d+\s+cracha\s+(\d{6,8})\s+data\s+(\d{2}\/\d{2}\/\d{4})/;
+const RE_LOTE_ERRO = /\[bot_[a-z_]+\]\s+LOTE\s+ERRO no cracha\s+(\d{6,8}):\s*(.+)/;
+
 export function lerLogDoBot(texto) {
   const mapa = new Map();
+  let item = null;   // o crachá+dia que o lote está processando agora
   for (const bruto of String(texto || "").split(/\r?\n/)) {
+    const cab = RE_LOTE_ITEM.exec(bruto);
+    if (cab) {
+      item = { cracha: cab[1], data: cab[2] };
+      continue;
+    }
+    const erro = RE_LOTE_ERRO.exec(bruto);
+    if (erro && item && cra8(erro[1]) === cra8(item.cracha)) {
+      const d = item.data;
+      const chave = `${cra8(item.cracha)}|${d.slice(6, 10)}-${d.slice(3, 5)}-${d.slice(0, 2)}`;
+      const alerta = RE_ALERTA.exec(erro[2]);
+      const frase = alerta
+        ? `o Transnet travou o preenchimento com o alerta: ${alerta[1].trim()}`
+        : erro[2].replace(/^[A-Za-z]+(Exception|Error):\s*/, "").trim();
+      // a linha nova (`ERRO crachá dia`) vem logo depois e diz o mesmo: não duplica
+      if (!mapa.get(chave)?.motivo)
+        mapa.set(chave, { passo: "ERRO", tom: "warn", frase: frase.slice(0, 200), motivo: true });
+      continue;
+    }
     const m = RE_LOG_CASO.exec(bruto);
     if (!m) continue;
     const [, passo, cracha, data, frase] = m;

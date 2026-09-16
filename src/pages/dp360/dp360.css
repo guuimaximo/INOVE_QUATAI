@@ -79,6 +79,32 @@
   text-overflow: ellipsis;
 }
 /* a direita da barra: a conta do Transnet e o robô, lado a lado */
+/* POR QUE NÃO FOI LANÇADO: a caixa do alto do Histórico. O grave (o que o Transnet recusa)
+   vem em vermelho; o resto, neutro. */
+.dp360 .oc-hist-porque {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--dp-border);
+  border-radius: 10px;
+  background: var(--dp-surface-2);
+}
+.dp360 .oc-hist-porque-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0 6px 10px;
+  border-left: 3px solid var(--dp-border);
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.dp360 .oc-hist-porque-item.grave {
+  border-left-color: var(--dp-danger-line);
+}
+.dp360 .oc-hist-porque-item.grave b {
+  color: var(--dp-danger-ink);
+}
+
 /* O HISTÓRICO DO CASO: uma linha por gravação, com os campos que mudaram embaixo. */
 .dp360 .oc-hist-linha {
   padding: 8px 0;

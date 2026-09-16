@@ -52,6 +52,7 @@ import { cra8, chaveDia, ehPontoInvertido, ehVerdadeiro, fmtHora, sugBloqueio } 
 // Aritmética de relógio é do MOTOR, nunca escrita à mão: `hm2min` aceita "1420"
 // (o que a tela do Cartão de Ponto devolve) e `min2hm` preserva a notação 24+.
 import { hm2min, min2hm } from "./regrasPonto";
+import { atestadoDoDia } from "./diaNoTransnet";
 
 const txt = (v) => String(v ?? "").trim();
 
@@ -177,6 +178,13 @@ export function avaliarAjustePonto(linha, { caso = null, digitado = null, bloque
   //    Cartão rotacionado é defeito de posição das batidas — quem decide o que
   //    fazer é o DP, linha a linha, na Revisão.
   if (ehPontoInvertido(linha)) return fora(MOTIVO_INVERTIDO);
+
+  // 1b) DIA COM ATESTADO MÉDICO NÃO RECEBE PONTO (RICARDO 30060898 31/08, 16/09/2026): o
+  //     Transnet recusa e só responde "Existem erros...", que não diz nada a ninguém. A
+  //     regra é a mesma das Ocorrências (`atestadoDoDia`); quem chama tem de pedir
+  //     `te_descricao_dia` e `tipo_dia` na linha, senão ela não enxerga o atestado.
+  const atestado = atestadoDoDia(linha);
+  if (atestado) return fora(atestado.texto);
 
   // 2) O QUE FOI DIGITADO É HORA? Só existe na origem "digitado": na Revisão os
   //    horários já vêm normalizados da view.

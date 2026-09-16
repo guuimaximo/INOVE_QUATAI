@@ -366,3 +366,280 @@
 }
 .dp360 .gd-dias.gd-dias-linha .gd-dia { width: auto; min-width: 150px; }
 .dp360 .gd-tab-wrap { overflow-x: auto; padding: 0 14px; }
+
+/* ── pop-up do cartão da aba Bloqueio (redesenho de 16/09/2026) ────────────
+ * Em faixas: cabeçalho → números → os 15 dias → rajadas | dia aberto. O box tem
+ * ALTURA FIXA para o mapa e as passagens preencherem o que sobra, e as listas
+ * rolam por dentro. Escopo próprio (gd-bqm-*): o pop-up da aba Casos usa as
+ * classes gd-modal-* e não pode mudar junto.
+ */
+.dp360 .gd-modal.gd-modal-bqm { padding: 14px; }
+.dp360 .gd-modal-box.gd-bqm {
+  width: min(1480px, 100%);
+  height: calc(100vh - 28px);
+  max-height: none;
+}
+.dp360 .gd-bqm-head { align-items: center; padding: 12px 18px; }
+.dp360 .gd-bqm-id { min-width: 0; flex: 1 1 320px; }
+.dp360 .gd-bqm-linha { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dp360 .gd-bqm-rot {
+  font-size: 10.5px;
+  font-weight: 650;
+  color: var(--dp-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.dp360 .gd-bqm .gd-cod { font-size: 24px; line-height: 1.1; }
+.dp360 .gd-bqm-head .sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dp360 .gd-bqm-mini { padding: 3px 10px; font-size: 12px; }
+.dp360 .gd-bqm-head a.dp-btn { text-decoration: none; color: inherit; }
+
+/* os números da prova */
+.dp360 .gd-bqm-resumo {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 18px 0;
+}
+.dp360 .gd-bqm-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-border);
+  border-radius: 12px;
+}
+.dp360 .gd-bqm-kpi span {
+  font-size: 10.5px;
+  font-weight: 650;
+  color: var(--dp-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.dp360 .gd-bqm-kpi b {
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.dp360 .gd-bqm-kpi b small { font-size: 12px; font-weight: 600; color: var(--dp-muted); }
+.dp360 .gd-bqm-kpi em {
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--dp-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dp360 .gd-bqm-kpi.al { background: var(--dp-danger-bg); border-color: var(--dp-danger-line); }
+.dp360 .gd-bqm-kpi.al b { color: var(--dp-danger-ink); }
+.dp360 .gd-bqm-obs {
+  margin: 10px 18px 0;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  background: var(--dp-warn-bg);
+  color: var(--dp-warn-ink);
+  border-radius: 10px;
+}
+
+/* os 15 dias: um quadrado por dia, vermelho quando teve rajada */
+.dp360 .gd-bqm-faixa-box { padding: 12px 18px 0; }
+.dp360 .gd-bqm-faixa-tit {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+}
+.dp360 .gd-bqm-faixa {
+  display: grid;
+  grid-template-columns: repeat(15, minmax(0, 1fr));
+  gap: 5px;
+}
+.dp360 .gd-bqm-d {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  padding: 5px 2px 6px;
+  font: inherit;
+  color: var(--dp-faint);
+  background: var(--dp-surface-2);
+  border: 1px solid var(--dp-border);
+  border-radius: 10px;
+  cursor: default;
+}
+.dp360 .gd-bqm-d .s { font-size: 10px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em; }
+.dp360 .gd-bqm-d .n { font-size: 11px; font-variant-numeric: tabular-nums; }
+.dp360 .gd-bqm-d .p { font-size: 16px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.dp360 .gd-bqm-d.fds { background: transparent; border-style: dashed; }
+.dp360 .gd-bqm-d.tem {
+  cursor: pointer;
+  color: #fff;
+  background: var(--dp-danger-ink);
+  border: 1px solid var(--dp-danger-ink);
+}
+.dp360 .gd-bqm-d.tem .s,
+.dp360 .gd-bqm-d.tem .n { color: rgba(255, 255, 255, 0.85); }
+.dp360 .gd-bqm-d.tem:hover { filter: brightness(1.1); }
+.dp360 .gd-bqm-d.on { outline: 3px solid var(--dp-accent); outline-offset: 2px; }
+
+/* rajadas e histórico | o dia aberto */
+.dp360 .gd-bqm-corpo {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 16px;
+  padding: 14px 18px 16px;
+}
+.dp360 .gd-bqm-lado {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 6px;
+}
+.dp360 .gd-bqm-sec {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--dp-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.dp360 .gd-bqm-grupo { margin-top: 4px; font-size: 11.5px; color: var(--dp-muted); }
+.dp360 .gd-bqm-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.dp360 .gd-bqm-item:hover { background: var(--dp-surface-2); }
+.dp360 .gd-bqm-item.on { background: var(--dp-accent-soft); border-color: var(--dp-accent); }
+.dp360 .gd-bqm-item.fora { opacity: 0.6; border-style: dashed; }
+.dp360 .gd-bqm-item .d { font-size: 12.5px; font-weight: 650; }
+.dp360 .gd-bqm-item .v { font-size: 12px; font-weight: 650; text-align: right; font-variant-numeric: tabular-nums; }
+.dp360 .gd-bqm-item .l {
+  font-size: 11px;
+  color: var(--dp-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dp360 .gd-bqm-item .r { font-size: 11px; color: var(--dp-muted); text-align: right; font-variant-numeric: tabular-nums; }
+
+.dp360 .gd-bqm-hist { display: grid; gap: 8px; font-size: 12px; line-height: 1.45; }
+.dp360 .gd-bqm-hist > div { padding: 2px 0 2px 10px; border-left: 3px solid var(--dp-border); }
+.dp360 .gd-bqm-hist > div.t-ok { border-left-color: var(--dp-ok-ink); }
+.dp360 .gd-bqm-hist > div.t-warn { border-left-color: var(--dp-warn-ink); }
+.dp360 .gd-bqm-hist > div.t-danger { border-left-color: var(--dp-danger-ink); }
+.dp360 .gd-bqm-hist .dp-mono { font-size: 11px; }
+
+.dp360 .gd-bqm-dia { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.dp360 .gd-bqm-dia-tit { display: flex; flex-direction: column; gap: 2px; }
+.dp360 .gd-bqm-dia-tit b { font-size: 15px; }
+.dp360 .gd-bqm-dia-tit .dp-faint {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dp360 .gd-bqm-dia-tit .dp-faint b { font-size: 12px; }
+.dp360 .gd-bqm-dia-grade {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  /* a grade de passagens fica no tamanho dela; o mapa leva o resto */
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+.dp360 .gd-bqm-mapa { min-width: 0; min-height: 0; }
+.dp360 .gd-bqm-mapa .gd-map { height: 100%; padding: 0; display: flex; flex-direction: column; }
+.dp360 .gd-bqm-mapa .gd-map-box,
+.dp360 .gd-bqm-mapa .gd-map-off { flex: 1 1 0; min-height: 240px; height: auto !important; }
+.dp360 .gd-bqm-tab {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  /* a barra vertical entra na conta da largura — sem isto ela come a coluna Saldo */
+  scrollbar-gutter: stable;
+  border: 1px solid var(--dp-border);
+  border-radius: 12px;
+}
+.dp360 .gd-bqm-tab table.dp-tabela { width: auto; font-size: 12.5px; }
+.dp360 .gd-bqm-tab table.dp-tabela td,
+.dp360 .gd-bqm-tab table.dp-tabela th { white-space: nowrap; }
+.dp360 .gd-bqm-tab table.dp-tabela th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--dp-surface-2);
+}
+.dp360 .gd-bqm-tab table.dp-tabela tbody tr.gd-bqm-pior td { font-weight: 650; }
+.dp360 .gd-bqm-tab table.dp-tabela tbody tr.gd-bqm-pior td:first-child { box-shadow: inset 3px 0 0 var(--dp-danger-ink); }
+.dp360 .gd-bqm-leg { padding: 0; margin: 0; line-height: 1.5; }
+.dp360 .gd-bqm-marca {
+  display: inline-block;
+  width: 3px;
+  height: 11px;
+  margin-right: 3px;
+  vertical-align: -1px;
+  background: var(--dp-danger-ink);
+}
+.dp360 .gd-bqm-vazio {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dp-muted);
+  border: 1px dashed var(--dp-border);
+  border-radius: 12px;
+}
+.dp360 .gd-bqm-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--dp-muted); cursor: pointer; }
+
+/* tela média: o dia aberto empilha mapa e passagens e rola por dentro */
+@media (max-width: 1240px) {
+  .dp360 .gd-bqm-resumo { gap: 8px; }
+  .dp360 .gd-bqm-kpi { padding: 8px 10px; }
+  .dp360 .gd-bqm-kpi b { font-size: 17px; }
+  .dp360 .gd-bqm-corpo { grid-template-columns: 260px minmax(0, 1fr); }
+  .dp360 .gd-bqm-dia { overflow-y: auto; padding-right: 4px; }
+  .dp360 .gd-bqm-dia-grade { flex: none; grid-template-columns: minmax(0, 1fr); }
+  .dp360 .gd-bqm-mapa { height: 300px; }
+  .dp360 .gd-bqm-tab { overflow: visible; }
+  .dp360 .gd-bqm-tab table.dp-tabela { width: 100%; }
+  .dp360 .gd-bqm-tab table.dp-tabela th { position: static; }
+}
+/* tela estreita: uma coluna só e o box rola inteiro */
+@media (max-width: 900px) {
+  .dp360 .gd-modal.gd-modal-bqm { padding: 8px; }
+  .dp360 .gd-modal-box.gd-bqm { height: auto; max-height: calc(100vh - 16px); overflow-y: auto; }
+  .dp360 .gd-bqm-resumo { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dp360 .gd-bqm-corpo { flex: none; grid-template-columns: minmax(0, 1fr); }
+  .dp360 .gd-bqm-lado { max-height: 280px; }
+  .dp360 .gd-bqm-dia { overflow: visible; }
+  .dp360 .gd-bqm-faixa { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  .dp360 .gd-bqm-tab { overflow-x: auto; }
+}
+@media (max-width: 520px) {
+  .dp360 .gd-bqm-resumo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dp360 .gd-bqm-faixa { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}

@@ -34,7 +34,7 @@ const pinoNumerado = (rotulo, cor, foco) =>
  * praticamente em cima uns dos outros — por isso o `maxZoom` do enquadramento é
  * alto e o pino traz o número da ORDEM.
  */
-export default function MapaPassagens({ pontos, foco, altura = 300 }) {
+export default function MapaPassagens({ pontos, foco, altura = 300, legenda = true }) {
   const elRef = useRef(null);
   const dadosRef = useRef([]);
   const mapaRef = useRef(null);
@@ -133,11 +133,13 @@ export default function MapaPassagens({ pontos, foco, altura = 300 }) {
 
   return (
     <div className="gd-map">
-      <div className="gd-map-leg">
-        <span>o número do pino é a ordem da passagem no bloco</span>
-        <span>· vermelho = girou a catraca · cinza = leu sem girar</span>
-        <span>· o bloco é sempre o MESMO endereço, então os pinos ficam sobrepostos</span>
-      </div>
+      {legenda ? (
+        <div className="gd-map-leg">
+          <span>o número do pino é a ordem da passagem no bloco</span>
+          <span>· vermelho = girou a catraca · cinza = leu sem girar</span>
+          <span>· o bloco é sempre o MESMO endereço, então os pinos ficam sobrepostos</span>
+        </div>
+      ) : null}
       <div ref={elRef} className="gd-map-box" style={{ height: altura }} />
     </div>
   );

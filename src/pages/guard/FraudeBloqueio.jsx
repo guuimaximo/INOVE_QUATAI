@@ -9,7 +9,8 @@
 // (PROGRAMA_FRAUDES/fraudes/regra.py → fila.py), e a fila chega pronta em
 // `fraude_bloqueio_cartao`, uma linha por CARTÃO:
 //     rajada = 5 ou mais passagens efetivas (girou a catraca) dentro de 10 minutos
-//     fraude = rajada em 3 dias SEGUIDOS
+//     fraude = rajada em 3+ dias, seguidos ou não, nos últimos 15 dias da base
+//              (era "3 dias seguidos" até 16/09/2026)
 // A tela refaz a janela deslizante só para DESENHAR a evidência (quais passagens formam
 // a pior janela de cada dia).
 //
@@ -164,6 +165,7 @@ function rajadasDoCartao(giros) {
       local: txt(passagens[0].local_fraude),
       pico: melhor,
       dur: Math.round(t[faixa[1]] - t[faixa[0]]),
+      valor: passagens.reduce((soma, g) => soma + num(g.valor), 0),
       passagens: passagens.map((g, i) => ({
         ...g,
         _n: i + 1,
@@ -352,6 +354,84 @@ function JanelaAcao({ acao, onFechar, onConfirmar }) {
 
 /* ──────────────────────────── o cartão aberto ───────────────────────────── */
 
+const DIA_SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+const DIA_SEMANA_LONGO = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+// meio-dia local: o dia da semana não escorrega com o fuso
+const semanaDe = (iso) => new Date(`${txt(iso).slice(0, 10)}T12:00:00`).getDay();
+const maiuscula = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Os dias da janela da regra, do mais antigo ao último dia da base (ISO). */
+function diasDaJanela(baseAte, n = JANELA_DIAS) {
+  if (!baseAte) return [];
+  const fim = Date.parse(`${baseAte}T12:00:00`);
+  return Array.from({ length: n }, (_, i) => isoDataLocal(new Date(fim - (n - 1 - i) * 86400000)));
+}
+
+// 243 → "4min03s"; 58 → "58s"
+function duracao(seg) {
+  const s = Math.max(0, Math.round(num(seg)));
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}min${String(s % 60).padStart(2, "0")}s`;
+}
+
+/** O que aconteceu numa linha do histórico, em palavras. `quem = "deteccao"` é o robô;
+ *  `de === para` é anotação (a situação não mudou). */
+function acaoDoHistorico(h) {
+  const de = txt(h.de);
+  const para = txt(h.para);
+  if (txt(h.quem) === "deteccao") {
+    if (para === "pendente") return "entrou na fila";
+    if (para === "saiu_da_janela") return "saiu da lista";
+    return ROTULO_SITUACAO[para] || para;
+  }
+  if (de && de === para) return "anotou";
+  return (
+    {
+      bloqueado: de === "desbloqueado" ? "bloqueou de novo" : "bloqueou",
+      desbloqueado: "desbloqueou",
+      descartado: "marcou como não é fraude",
+      pendente: "voltou para a fila",
+    }[para] || para
+  );
+}
+const TOM_ACAO = { bloqueado: "ok", desbloqueado: "warn", descartado: "mute", pendente: "danger", saiu_da_janela: "mute" };
+const tomDoHistorico = (h) => (txt(h.de) && txt(h.de) === txt(h.para) ? "mute" : TOM_ACAO[txt(h.para)] || "mute");
+// "tela" sobra só se o servidor não achou o nome do login
+const quemFez = (h) => {
+  const q = txt(h.quem);
+  if (q === "deteccao") return "regra automática";
+  if (!q || q === "tela") return "INOVE (sem nome)";
+  return q;
+};
+
+/** Uma rajada na lista da esquerda. */
+function ItemRajada({ b, on, fora, onClick }) {
+  return (
+    <button
+      type="button"
+      className={`gd-bqm-item${on ? " on" : ""}${fora ? " fora" : ""}`}
+      title={fora ? `Fora dos últimos ${JANELA_DIAS} dias — não conta para a regra` : undefined}
+      onClick={onClick}
+    >
+      <span className="d">
+        <span className="dp-faint">{DIA_SEMANA[semanaDe(b.dia)]}</span> {paraBR(b.dia)}
+      </span>
+      <span className="v">
+        {b.pico} em {duracao(b.dur)}
+      </span>
+      <span className="l">{b.local || "—"}</span>
+      <span className="r">{brl(b.valor)}</span>
+    </button>
+  );
+}
+
+/**
+ * O POP-UP DO CARTÃO (redesenhado em 16/09/2026 — "ta muito jogado"). Em faixas, de
+ * cima para baixo: quem é o cartão e o que fazer · os números da prova · os 15 dias da
+ * regra, um quadrado por dia (é a repetição em dias diferentes que denuncia o cartão) ·
+ * embaixo, as rajadas e o histórico à esquerda e o dia aberto (mapa + passagens) à
+ * direita, ocupando o resto da altura.
+ */
 function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
   const [giros, setGiros] = useState(null);
   const [historico, setHistorico] = useState([]);
@@ -380,10 +460,26 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
     return () => {
       vivo = false;
     };
-  }, [cru, cartao.situacao]);
+  }, [cru, cartao.situacao, cartao.observacao]);
 
   const blocos = useMemo(() => rajadasDoCartao(giros || []), [giros]);
-  const aberto = blocos.find((b) => b.id === blocoAberto) || blocos[0] || null;
+  const janela = useMemo(() => diasDaJanela(baseAte), [baseAte]);
+  const inicioJanela = janela[0] || "";
+  const naJanela = (dia) => !!inicioJanela && dia >= inicioJanela && dia <= baseAte;
+  const dentro = blocos.filter((b) => naJanela(b.dia));
+  const antes = blocos.filter((b) => !naJanela(b.dia));
+  // a pior rajada de cada dia: é a que o quadrado do dia abre
+  const piorDoDia = useMemo(() => {
+    const m = new Map();
+    for (const b of blocos) if (!m.has(b.dia) || b.pico > m.get(b.dia).pico) m.set(b.dia, b);
+    return m;
+  }, [blocos]);
+  const aberto = blocos.find((b) => b.id === blocoAberto) || dentro[0] || blocos[0] || null;
+  const abrir = (id) => {
+    setBlocoAberto(id);
+    setFoco(null);
+  };
+
   const pontos = useMemo(
     () =>
       (aberto?.passagens || [])
@@ -404,11 +500,13 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
 
   const s = situacaoDe(cartao);
   const atras = diasAtras(cartao.ultima_rajada, baseAte);
-  const naJanela = (dia) => diasAtras(dia, baseAte) < JANELA_DIAS;
+  const diasComRajada = giros === null ? num(cartao.dias_com_rajada) : new Set(dentro.map((b) => b.dia)).size;
+  const local = txt(cartao.local_fraude);
+  const placasDoDia = aberto ? [...new Set(aberto.passagens.map((g) => txt(g.vei_placa)).filter(Boolean))] : [];
 
   return (
     <div
-      className="gd-modal"
+      className="gd-modal gd-modal-bqm"
       role="dialog"
       aria-modal="true"
       aria-label={`Cartão ${cru}`}
@@ -416,15 +514,16 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
         if (e.target === e.currentTarget) onFechar();
       }}
     >
-      <div className="gd-modal-box">
-        <div className="gd-modal-head">
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <span className="dp-faint" style={{ fontSize: 12 }}>Código</span>
+      <div className="gd-modal-box gd-bqm">
+        {/* ── quem é e o que fazer ── */}
+        <div className="gd-modal-head gd-bqm-head">
+          <div className="gd-bqm-id">
+            <div className="gd-bqm-linha">
+              <span className="gd-bqm-rot">Código</span>
               <span className="gd-cod">{txt(cartao.id_usuario) || "—"}</span>
               <button
                 type="button"
-                className="dp-btn"
+                className="dp-btn gd-bqm-mini"
                 onClick={async () => {
                   if (await copiar(txt(cartao.id_usuario))) {
                     setCopiado(true);
@@ -436,11 +535,17 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
               </button>
               <span className={`dp-pill ${TOM_SITUACAO[s]}`}>{ROTULO_SITUACAO[s]}</span>
             </div>
-            <div className="sub">
+            <div className="sub" title={local || undefined}>
               cartão <span className="dp-mono">{cru}</span> · {txt(cartao.tipo_cartao) || "tipo não informado"}
+              {local ? ` · ${local}` : ""}
             </div>
           </div>
           <div className="gd-det-acoes">
+            {txt(cartao.link_maps) ? (
+              <a className="dp-btn" href={cartao.link_maps} target="_blank" rel="noreferrer">
+                Abrir no Maps ↗
+              </a>
+            ) : null}
             {s === "pendente" && (
               <>
                 <button type="button" className="dp-btn primary" onClick={() => onAcao("bloquear", [cartao])}>
@@ -466,167 +571,312 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
                 Voltar para a fila
               </button>
             )}
-            {s !== "pendente" && (
-              <button type="button" className="dp-btn" onClick={() => onAcao("anotar", [cartao])}>
-                Anotar
-              </button>
-            )}
+            <button type="button" className="dp-btn" onClick={() => onAcao("anotar", [cartao])}>
+              Anotar
+            </button>
             <button type="button" className="dp-btn" onClick={onFechar} aria-label="Fechar">
               ✕
             </button>
           </div>
         </div>
 
-        <div className="gd-modal-corpo">
-          <div className="gd-modal-dias">
-            <div className="gd-secao">A prova</div>
-            <dl className="gd-ficha">
-              <dt>Dias com rajada</dt>
-              <dd>
-                <b>{num(cartao.dias_com_rajada)}</b> nos últimos {JANELA_DIAS} dias da base (
-                {paraBR(cartao.sequencia_de)} a {paraBR(cartao.sequencia_ate)})
-              </dd>
-              <dt>Rajadas</dt>
-              <dd>
-                {num(cartao.rajadas)} rajadas · {num(cartao.passagens)} passagens · maior sequência{" "}
-                {num(cartao.dias_seguidos)} dia{num(cartao.dias_seguidos) === 1 ? "" : "s"} seguido
-                {num(cartao.dias_seguidos) === 1 ? "" : "s"}
-              </dd>
-              <dt>Pior janela</dt>
-              <dd>
-                {num(cartao.maior_pico)} passagens · a mais rápida durou {num(cartao.menor_janela_seg)} s
-              </dd>
-              <dt>Debitado</dt>
-              <dd>
-                {brl(cartao.valor_debitado)} · saldo {brl(cartao.saldo)}
-              </dd>
-              <dt>Última rajada</dt>
-              <dd>
-                {paraBR(cartao.ultima_rajada)} ({atras} dia{atras === 1 ? "" : "s"} antes do fim da base)
-              </dd>
-              <dt>Local</dt>
-              <dd>
-                {txt(cartao.local_fraude) || "—"}{" "}
-                {txt(cartao.link_maps) ? (
-                  <a href={cartao.link_maps} target="_blank" rel="noreferrer">
-                    abrir no Maps
-                  </a>
-                ) : null}
-              </dd>
-              {txt(cartao.observacao) ? (
-                <>
-                  <dt>Observação</dt>
-                  <dd>{cartao.observacao}</dd>
-                </>
-              ) : null}
-            </dl>
+        {/* ── os números da prova ── */}
+        <div className="gd-bqm-resumo">
+          <div className="gd-bqm-kpi al">
+            <span>Dias com rajada</span>
+            <b>
+              {diasComRajada} <small>de {JANELA_DIAS}</small>
+            </b>
+            <em>a regra pede {DIAS_COM_RAJADA}</em>
+          </div>
+          <div className="gd-bqm-kpi">
+            <span>Rajadas</span>
+            <b>{num(cartao.rajadas)}</b>
+            <em>{num(cartao.passagens)} passagens</em>
+          </div>
+          <div className="gd-bqm-kpi">
+            <span>Maior pico</span>
+            <b>
+              {num(cartao.maior_pico)} <small>passagens</small>
+            </b>
+            <em>janela mais curta {duracao(cartao.menor_janela_seg)}</em>
+          </div>
+          <div className="gd-bqm-kpi">
+            <span>Debitado</span>
+            <b>{brl(cartao.valor_debitado)}</b>
+            <em>nas rajadas dos {JANELA_DIAS} dias</em>
+          </div>
+          <div className="gd-bqm-kpi">
+            <span>Saldo</span>
+            <b>{brl(cartao.saldo)}</b>
+            <em>no cartão</em>
+          </div>
+          <div className="gd-bqm-kpi">
+            <span>Última rajada</span>
+            <b>{paraBR(cartao.ultima_rajada).slice(0, 5)}</b>
+            <em>{atras <= 0 ? "no último dia da base" : `${atras} dia${atras === 1 ? "" : "s"} antes do fim da base`}</em>
+          </div>
+        </div>
+        {txt(cartao.observacao) ? (
+          <div className="gd-bqm-obs">
+            <b>Observação:</b> {cartao.observacao}
+          </div>
+        ) : null}
 
-            <div className="gd-secao">Histórico</div>
-            <div className="gd-hist">
+        {/* ── os 15 dias da regra ── */}
+        {janela.length ? (
+          <div className="gd-bqm-faixa-box">
+            <div className="gd-bqm-faixa-tit">
+              <b>Últimos {JANELA_DIAS} dias da base</b>
+              <span className="dp-faint">
+                {paraBR(inicioJanela)} a {paraBR(baseAte)} · o número é o pico de passagens do dia · clique para ver
+              </span>
+            </div>
+            <div className="gd-bqm-faixa">
+              {janela.map((d) => {
+                const b = piorDoDia.get(d);
+                const sem = semanaDe(d);
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    disabled={!b}
+                    className={`gd-bqm-d${b ? " tem" : ""}${aberto?.dia === d ? " on" : ""}${
+                      sem === 0 || sem === 6 ? " fds" : ""
+                    }`}
+                    title={`${DIA_SEMANA_LONGO[sem]}, ${paraBR(d)} · ${
+                      b ? `${b.pico} passagens em ${duracao(b.dur)}` : "sem rajada"
+                    }`}
+                    onClick={() => b && abrir(b.id)}
+                  >
+                    <span className="s">{DIA_SEMANA[sem]}</span>
+                    <span className="n">{diaCurto(d)}</span>
+                    <span className="p">{b ? b.pico : "–"}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {erro ? (
+          <div className="gd-modal-erro">
+            <span className="dp-pill danger">{erro}</span>
+          </div>
+        ) : null}
+
+        {/* ── rajadas e histórico | o dia aberto ── */}
+        <div className="gd-bqm-corpo">
+          <aside className="gd-bqm-lado">
+            <div className="gd-bqm-sec">
+              Rajadas <span className="dp-faint">· {blocos.length}</span>
+            </div>
+            {giros === null && !erro ? <div className="gd-hint">Carregando as passagens…</div> : null}
+            {giros !== null && !blocos.length ? <div className="gd-hint">Sem rajada na base para este cartão.</div> : null}
+            {dentro.length ? <div className="gd-bqm-grupo">Nos últimos {JANELA_DIAS} dias · {dentro.length}</div> : null}
+            {dentro.map((b) => (
+              <ItemRajada key={b.id} b={b} on={aberto?.id === b.id} onClick={() => abrir(b.id)} />
+            ))}
+            {antes.length ? (
+              <div className="gd-bqm-grupo">Antes da janela · {antes.length} — não contam para a regra</div>
+            ) : null}
+            {antes.map((b) => (
+              <ItemRajada key={b.id} b={b} on={aberto?.id === b.id} fora onClick={() => abrir(b.id)} />
+            ))}
+
+            <div className="gd-bqm-sec" style={{ marginTop: 10 }}>
+              Histórico
+            </div>
+            <div className="gd-bqm-hist">
               {historico.length ? (
                 historico.map((h) => (
-                  <div key={h.id}>
-                    <span className="dp-mono">{quandoBR(h.em)}</span> ·{" "}
-                    <b>{ROTULO_SITUACAO[txt(h.para)] || txt(h.para)}</b>
-                    {txt(h.de) ? <span className="dp-faint"> (era {ROTULO_SITUACAO[txt(h.de)] || txt(h.de)})</span> : null}
-                    {" · "}
-                    {txt(h.quem) === "deteccao"
-                      ? txt(h.para) === "pendente"
-                        ? "detectado pela regra"
-                        : "pela regra"
-                      : txt(h.quem) || "—"}
-                    {txt(h.motivo) && (txt(h.quem) !== "deteccao" || txt(h.para) !== "pendente") ? (
-                      <div className="dp-faint">{h.motivo}</div>
-                    ) : null}
+                  <div key={h.id} className={`t-${tomDoHistorico(h)}`}>
+                    <div>
+                      <b>{acaoDoHistorico(h)}</b> <span className="dp-faint">· {quemFez(h)}</span>
+                    </div>
+                    <div className="dp-mono dp-faint">{quandoBR(h.em)}</div>
+                    {txt(h.motivo) && txt(h.quem) !== "deteccao" ? <div>{h.motivo}</div> : null}
                   </div>
                 ))
               ) : (
                 <div className="dp-faint">Sem registro ainda.</div>
               )}
             </div>
-          </div>
+          </aside>
 
-          <div className="gd-modal-mapa">
-            <div className="gd-secao">
-              Rajadas dia a dia{" "}
-              {blocos.length
-                ? `— ${blocos.length}, ${blocos.filter((b) => naJanela(b.dia)).length} nos últimos ${JANELA_DIAS} dias`
-                : ""}
-            </div>
-            {erro ? <div className="gd-modal-erro"><span className="dp-pill danger">{erro}</span></div> : null}
-            {giros === null && !erro ? <div className="gd-hint">Carregando as passagens…</div> : null}
-            {giros !== null && !blocos.length ? (
-              <div className="gd-hint">Sem passagens na base para este cartão.</div>
-            ) : null}
-
-            {blocos.length ? (
+          <section className="gd-bqm-dia">
+            {aberto ? (
               <>
-                <div className="gd-dias gd-dias-linha">
-                  {blocos.map((b) => (
-                    <button
-                      key={b.id}
-                      type="button"
-                      className={`gd-dia${aberto?.id === b.id ? " on" : ""}${naJanela(b.dia) ? "" : " fora"}`}
-                      title={naJanela(b.dia) ? undefined : `Fora dos últimos ${JANELA_DIAS} dias — não conta para a regra`}
-                      onClick={() => {
-                        setBlocoAberto(b.id);
-                        setFoco(null);
-                      }}
-                    >
-                      <span className="d">{paraBR(b.dia)}</span>
-                      <span className="v">{b.pico} em {b.dur}s</span>
-                      <span className="l">{b.local || "—"}</span>
-                    </button>
-                  ))}
+                <div className="gd-bqm-dia-tit">
+                  <div>
+                    <b>
+                      {maiuscula(DIA_SEMANA_LONGO[semanaDe(aberto.dia)])}, {paraBR(aberto.dia)}
+                    </b>{" "}
+                    {naJanela(aberto.dia) ? null : <span className="dp-pill mute">fora dos {JANELA_DIAS} dias</span>}
+                  </div>
+                  <div className="dp-faint">
+                    {aberto.passagens.length} passagens · pior janela <b>{aberto.pico}</b> em {duracao(aberto.dur)} ·{" "}
+                    {brl(aberto.valor)} · {placasDoDia.length ? placasDoDia.join(", ") : "sem veículo"} ·{" "}
+                    {aberto.local || "sem endereço"}
+                  </div>
                 </div>
-
-                {aberto ? (
-                  <>
-                    <MapaPassagens pontos={pontos} foco={foco} altura={280} />
-                    <div className="gd-tab-wrap">
-                      <table className="dp-tabela">
-                        <thead>
-                          <tr>
-                            <th className="dp-num">#</th>
-                            <th>Hora</th>
-                            <th className="dp-num">Intervalo</th>
-                            <th>Veículo</th>
-                            <th className="dp-num">Valor</th>
-                            <th className="dp-num">Saldo</th>
+                <div className="gd-bqm-dia-grade">
+                  <div className="gd-bqm-mapa">
+                    <MapaPassagens pontos={pontos} foco={foco} altura="100%" legenda={false} />
+                  </div>
+                  <div className="gd-bqm-tab">
+                    <table className="dp-tabela">
+                      <thead>
+                        <tr>
+                          <th className="dp-num">#</th>
+                          <th>Hora</th>
+                          <th className="dp-num">Intervalo</th>
+                          <th>Veículo</th>
+                          <th className="dp-num">Valor</th>
+                          <th className="dp-num">Saldo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {aberto.passagens.map((g) => (
+                          <tr
+                            key={g._id}
+                            className={`${g._id === foco ? "gd-foco" : ""}${g._janela ? " gd-bqm-pior" : ""}`}
+                            onMouseEnter={() => setFoco(g._id)}
+                            title={g._janela ? "dentro da pior janela de 10 minutos" : ""}
+                          >
+                            <td className="dp-num">{g._n}</td>
+                            <td className="dp-mono">{horaDe(g.giro_dthora)}</td>
+                            <td className="dp-num">{g._gap == null ? "—" : duracao(g._gap)}</td>
+                            <td className="dp-mono">{txt(g.vei_placa) || "—"}</td>
+                            <td className="dp-num">{brl(g.valor)}</td>
+                            <td className="dp-num">{brl(g.saldo)}</td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {aberto.passagens.map((g) => (
-                            <tr
-                              key={g._id}
-                              className={g._id === foco ? "gd-foco" : ""}
-                              onMouseEnter={() => setFoco(g._id)}
-                              style={g._janela ? { fontWeight: 650 } : undefined}
-                              title={g._janela ? "dentro da pior janela de 10 minutos" : ""}
-                            >
-                              <td className="dp-num">{g._n}</td>
-                              <td className="dp-mono">{horaDe(g.giro_dthora)}</td>
-                              <td className="dp-num">{g._gap == null ? "—" : `${g._gap}s`}</td>
-                              <td className="dp-mono">{txt(g.vei_placa) || "—"}</td>
-                              <td className="dp-num">{brl(g.valor)}</td>
-                              <td className="dp-num">{brl(g.saldo)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="gd-hint">
-                      Em negrito, as passagens da pior janela de 10 minutos daquele dia. Passe o mouse numa linha
-                      para achar o ponto no mapa.
-                    </div>
-                  </>
-                ) : null}
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="gd-hint gd-bqm-leg">
+                  <span className="gd-bqm-marca" /> pior janela de 10 minutos do dia · o número do pino é a ordem da
+                  passagem · o bloco é sempre o mesmo endereço, então os pinos ficam um em cima do outro · passe o mouse
+                  numa linha para achar o ponto
+                </div>
               </>
-            ) : null}
-          </div>
+            ) : (
+              <div className="gd-bqm-vazio">
+                {giros === null && !erro ? "Carregando as passagens…" : "Nenhuma rajada para mostrar."}
+              </div>
+            )}
+          </section>
         </div>
       </div>
     </div>
+  );
+}
+
+/* ──────────────────────────── histórico geral ───────────────────────────── */
+
+/** Quem bloqueou, desbloqueou, descartou ou devolveu cada cartão, e quando — o nome é o
+ *  do login do INOVE, escrito pelo servidor (`dp360-api`, `autorEm`). As entradas e
+ *  saídas automáticas da regra ficam escondidas por padrão. */
+function HistoricoBloqueio({ historico, cartoes, termo, carregando, onAbrir }) {
+  const [comRegra, setComRegra] = useState(false);
+  const existe = useMemo(() => new Set(cartoes.map((c) => txt(c.cru_id))), [cartoes]);
+  const linhas = useMemo(() => {
+    const t = termo.trim().toLowerCase();
+    return historico
+      .filter((h) => comRegra || txt(h.quem) !== "deteccao")
+      .filter(
+        (h) =>
+          !t ||
+          [h.id_usuario, h.cru_id, h.quem, h.motivo, acaoDoHistorico(h)].some((v) => txt(v).toLowerCase().includes(t)),
+      );
+  }, [historico, comRegra, termo]);
+  const pessoas = historico.filter((h) => txt(h.quem) !== "deteccao");
+  const conta = (f) => pessoas.filter(f).length;
+
+  const colunas = useMemo(
+    () => [
+      {
+        id: "em",
+        titulo: "Quando",
+        largura: 150,
+        classe: "dp-mono",
+        valor: (h) => txt(h.em),
+        render: (h) => quandoBR(h.em),
+      },
+      {
+        id: "acao",
+        titulo: "O que foi feito",
+        largura: 190,
+        valor: (h) => acaoDoHistorico(h),
+        render: (h) => <span className={`dp-pill ${tomDoHistorico(h)}`}>{acaoDoHistorico(h)}</span>,
+      },
+      { id: "quem", titulo: "Quem", largura: 190, valor: (h) => quemFez(h) },
+      {
+        id: "id_usuario",
+        titulo: "Código",
+        largura: 100,
+        classe: "dp-mono",
+        valor: (h) => txt(h.id_usuario),
+        render: (h) => <b className="gd-cod-lin">{txt(h.id_usuario) || "—"}</b>,
+      },
+      { id: "cru_id", titulo: "Cartão", largura: 90, classe: "dp-mono", valor: (h) => txt(h.cru_id) },
+      {
+        id: "de",
+        titulo: "Estava",
+        largura: 110,
+        valor: (h) => ROTULO_SITUACAO[txt(h.de)] || txt(h.de),
+        render: (h) => (txt(h.de) ? ROTULO_SITUACAO[txt(h.de)] || txt(h.de) : <span className="dp-faint">—</span>),
+      },
+      { id: "motivo", titulo: "Detalhe", largura: 340, valor: (h) => txt(h.motivo) },
+    ],
+    [],
+  );
+
+  return (
+    <>
+      <div className="gd-bq-kpis">
+        <div className="gd-bq-kpi ok">
+          <b>{conta((h) => txt(h.para) === "bloqueado" && txt(h.de) !== "bloqueado")}</b>
+          <span>bloqueios</span>
+        </div>
+        <div className="gd-bq-kpi">
+          <b>{conta((h) => txt(h.para) === "desbloqueado" && txt(h.de) !== "desbloqueado")}</b>
+          <span>desbloqueios</span>
+        </div>
+        <div className="gd-bq-kpi">
+          <b>{conta((h) => txt(h.para) === "descartado" && txt(h.de) !== "descartado")}</b>
+          <span>não é fraude</span>
+        </div>
+        <div className="gd-bq-kpi">
+          <b>{new Set(pessoas.map((h) => quemFez(h))).size}</b>
+          <span>pessoas que mexeram</span>
+        </div>
+      </div>
+      <div className="dp-viewbar" style={{ paddingTop: 4 }}>
+        <label className="gd-bqm-check">
+          <input type="checkbox" checked={comRegra} onChange={(e) => setComRegra(e.target.checked)} />
+          mostrar também as entradas e saídas automáticas da regra
+        </label>
+      </div>
+      <TabelaDP
+        chave="guard_bloqueio_historico"
+        colunas={colunas}
+        linhas={linhas}
+        carregando={carregando}
+        mensagemCarregando="Carregando o histórico…"
+        idLinha={(h) => String(h.id)}
+        aoClicarLinha={(h) => (existe.has(txt(h.cru_id)) ? onAbrir(txt(h.cru_id)) : null)}
+        nomeCsv={`bloqueio_historico_${isoDataLocal(new Date())}`}
+        vazio={
+          comRegra
+            ? "Nenhum registro."
+            : "Ninguém bloqueou, desbloqueou ou descartou cartão pelo INOVE ainda."
+        }
+        pinPadrao={1}
+      />
+    </>
   );
 }
 
@@ -634,6 +884,7 @@ function CartaoAberto({ cartao, baseAte, onFechar, onAcao }) {
 
 export default function FraudeBloqueio() {
   const [cartoes, setCartoes] = useState([]);
+  const [historico, setHistorico] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [recarga, setRecarga] = useState(0);
@@ -649,9 +900,15 @@ export default function FraudeBloqueio() {
     let vivo = true;
     setCarregando(true);
     setErro("");
-    lerTudoDP360(TAB, { ordem: "cru_id.asc" })
-      .then((linhas) => {
-        if (vivo) setCartoes(linhas || []);
+    Promise.all([
+      lerTudoDP360(TAB, { ordem: "cru_id.asc" }),
+      // o histórico não pode derrubar a fila: sem ele, só a aba Histórico fica vazia
+      lerTudoDP360(HIST, { ordem: "id.desc" }).catch(() => []),
+    ])
+      .then(([linhas, hist]) => {
+        if (!vivo) return;
+        setCartoes(linhas || []);
+        setHistorico(hist || []);
       })
       .catch((e) => {
         if (vivo) setErro(e?.message || "Não consegui ler a fila de bloqueio.");
@@ -692,6 +949,16 @@ export default function FraudeBloqueio() {
       saldo: soma(p, "saldo"),
     };
   }, [cartoes, baseAte]);
+
+  // cru_id → a última linha de histórico feita por GENTE (lista já vem da mais nova)
+  const ultimoPorPessoa = useMemo(() => {
+    const m = new Map();
+    for (const h of historico) {
+      if (txt(h.quem) === "deteccao" || m.has(txt(h.cru_id))) continue;
+      m.set(txt(h.cru_id), h);
+    }
+    return m;
+  }, [historico]);
 
   const visiveis = useMemo(() => {
     const t = termo.trim().toLowerCase();
@@ -795,13 +1062,24 @@ export default function FraudeBloqueio() {
       );
     }
     if (aba === "descartado") {
-      base.push({ id: "descartado_em", titulo: "Descartado em", largura: 140, valor: (c) => quandoBR(c.descartado_em) });
+      base.push(
+        { id: "descartado_em", titulo: "Descartado em", largura: 140, valor: (c) => quandoBR(c.descartado_em) },
+        {
+          id: "descartado_por",
+          titulo: "Por",
+          largura: 150,
+          valor: (c) => {
+            const h = ultimoPorPessoa.get(txt(c.cru_id));
+            return h && txt(h.para) === "descartado" ? quemFez(h) : "";
+          },
+        },
+      );
     }
     if (aba !== "pendente") {
       base.push({ id: "observacao", titulo: "Observação", largura: 220, valor: (c) => txt(c.observacao) });
     }
     return base;
-  }, [aba, baseAte]);
+  }, [aba, baseAte, ultimoPorPessoa]);
 
   const cartaoAberto = cartoes.find((c) => txt(c.cru_id) === aberto) || null;
   const marcados = visiveis.filter((c) => selecionados.includes(txt(c.cru_id)));
@@ -878,7 +1156,24 @@ export default function FraudeBloqueio() {
       } else if (tipo === "reabrir") {
         await aplicar(lista, "pendente", {}, "voltou para a fila", "Cartão voltou para a fila");
       } else if (tipo === "anotar") {
-        await atualizarDP360(TAB, { cru_id: `eq.${txt(lista[0].cru_id)}` }, { observacao: obs || null }, "Anotação no cartão (fraude)");
+        const c = lista[0];
+        await atualizarDP360(TAB, { cru_id: `eq.${txt(c.cru_id)}` }, { observacao: obs || null }, "Anotação no cartão (fraude)");
+        await inserirDP360(
+          HIST,
+          [
+            {
+              cru_id: txt(c.cru_id),
+              id_usuario: txt(c.id_usuario) || null,
+              de: situacaoDe(c),
+              para: situacaoDe(c),
+              quem: "tela", // o servidor troca pelo nome de quem está logado
+              motivo: obs ? `anotação: ${obs}` : "anotação apagada",
+            },
+          ],
+          "Anotação no cartão (fraude)",
+        ).catch(() => {
+          setRecado({ tom: "warn", texto: "A anotação foi gravada, mas o histórico não — avise o administrador." });
+        });
         setRecarga((n) => n + 1);
       }
       setRecado({
@@ -920,16 +1215,20 @@ export default function FraudeBloqueio() {
             aria-label="Buscar cartão"
           />
         </div>
-        <select value={ordem} onChange={(e) => setOrdem(e.target.value)} aria-label="Ordenar por">
-          {ORDENS.map((o) => (
-            <option key={o.k} value={o.k}>
-              {o.rotulo}
-            </option>
-          ))}
-        </select>
-        <button type="button" className="dp-btn" onClick={copiarDaAba}>
-          Copiar códigos da aba
-        </button>
+        {aba !== "historico" ? (
+          <>
+            <select value={ordem} onChange={(e) => setOrdem(e.target.value)} aria-label="Ordenar por">
+              {ORDENS.map((o) => (
+                <option key={o.k} value={o.k}>
+                  {o.rotulo}
+                </option>
+              ))}
+            </select>
+            <button type="button" className="dp-btn" onClick={copiarDaAba}>
+              Copiar códigos da aba
+            </button>
+          </>
+        ) : null}
         <button type="button" className="dp-btn" onClick={() => setRecarga((n) => n + 1)} disabled={carregando}>
           <RefreshCw size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
           Recarregar
@@ -989,6 +1288,17 @@ export default function FraudeBloqueio() {
             {s.rotulo} <span className="n">{contagem[s.k] || 0}</span>
           </button>
         ))}
+        <button
+          type="button"
+          className={`dp-chip-f${aba === "historico" ? " on" : ""}`}
+          onClick={() => {
+            setAba("historico");
+            setSelecionados([]);
+          }}
+          title="Quem bloqueou, desbloqueou ou descartou cada cartão, e quando"
+        >
+          Histórico <span className="n">{historico.filter((h) => txt(h.quem) !== "deteccao").length}</span>
+        </button>
       </div>
 
       {erro ? (
@@ -997,6 +1307,16 @@ export default function FraudeBloqueio() {
         </div>
       ) : null}
 
+      {aba === "historico" ? (
+        <HistoricoBloqueio
+          key={`historico-${recarga}`}
+          historico={historico}
+          cartoes={cartoes}
+          termo={termo}
+          carregando={carregando}
+          onAbrir={setAberto}
+        />
+      ) : (
       <TabelaDP
         key={`${aba}-${recarga}`}
         chave={`guard_bloqueio_${aba}`}
@@ -1025,6 +1345,7 @@ export default function FraudeBloqueio() {
           ) : null
         }
       />
+      )}
 
       {cartaoAberto ? (
         <CartaoAberto

@@ -572,7 +572,16 @@ async function emPool(itens, limite, tarefa) {
   await Promise.all(Array.from({ length: Math.min(limite, fila.length) }, trabalhador));
 }
 
-async function lerLakePorPares(pares, aoAvancar) {
+/* ── O LAKE NÃO MUDA QUANDO VOCÊ DECIDE (15/09/2026) ──────────────────────────
+ * "Isso está demorando muito — uns 10 segundos na tela." A releitura de depois de cada
+ * gravação varria o lake DIA A DIA de novo: duas tabelas × cada dia em cena, até ~140
+ * chamadas em fila de 8. Só que `ponto_diario` e `ponto_gordura` são o retrato do ponto,
+ * atualizado pelo importador uma vez por dia — decidir um caso não mexe neles.
+ * Então a releitura silenciosa REAPROVEITA o que já está na memória e só busca o dia que
+ * ainda não tem (o dia novo que apareceu na janela). O botão "Recarregar" continua lendo
+ * tudo: é ele que existe para quando o importador rodou.
+ * O Real manual continua sendo lido sempre — é UMA requisição, e ele muda pela tela. */
+async function lerLakePorPares(pares, aoAvancar, jaTenho) {
   const porDia = new Map();
   pares.forEach(({ crachas, iso }) => {
     if (!iso || !crachas.size) return;
@@ -587,10 +596,19 @@ async function lerLakePorPares(pares, aoAvancar) {
     return vazio;
   }
 
+  const emCena = new Set([...porDia.keys()]);
+  /* O QUE JÁ FOI LIDO, POR DIA E POR CRACHÁ. Guardar só o dia não bastaria: a captura pode
+     trazer um pedido NOVO de alguém num dia que já está em memória, e o cartão dessa pessoa
+     nunca seria buscado — ela apareceria na lista sem cartão nenhum. */
+  const lidos = jaTenho?.lidos instanceof Map ? jaTenho.lidos : new Map();
   const trabalhos = [];
   porDia.forEach((crachas, iso) => {
     if (diasDeIdade(iso) > IDADE_MAXIMA_LAKE) return;   // fora da janela do lake
-    const lista = [...crachas].join(",");
+    const jaLidos = lidos.get(iso);
+    const faltam = jaLidos ? [...crachas].filter((c) => !jaLidos.has(c)) : [...crachas];
+    if (jaLidos && !faltam.length) return;              // este dia já está inteiro na memória
+    // só quem falta: o dia que ganhou uma pessoa nova custa a leitura dela, não a do dia
+    const lista = (jaLidos ? faltam : [...crachas]).join(",");
     TABELAS_LAKE.forEach((t) => trabalhos.push({ t, iso, lista }));
   });
   const diasEmCena = [...porDia.keys()].filter((iso) => diasDeIdade(iso) <= IDADE_MAXIMA_LAKE);
@@ -633,6 +651,21 @@ async function lerLakePorPares(pares, aoAvancar) {
     }
   });
   out.realManual = await real;
+  // o que já estava em memória volta junto — menos o dia que saiu da janela
+  if (jaTenho) {
+    const dentro = (linhas, colData) =>
+      (linhas || []).filter((l) => emCena.has(normData(l?.[colData]) || txt(l?.[colData]).slice(0, 10)));
+    out.diario = [...dentro(jaTenho.diario, "date_ref"), ...out.diario];
+    out.gordura = [...dentro(jaTenho.gordura, "data_ref"), ...out.gordura];
+  }
+  // o mapa do que está em memória agora (dia → crachás pedidos ao lake)
+  const agora = new Map();
+  porDia.forEach((crachas, iso) => {
+    if (!emCena.has(iso)) return;
+    const antes = lidos.get(iso);
+    agora.set(iso, new Set([...(antes || []), ...crachas]));
+  });
+  out.lidos = agora;
   return out;
 }
 
@@ -689,7 +722,7 @@ function aplicarGravacoes(base, gravacoes) {
   return b;
 }
 
-async function carregarOcorrencias(aoAvancar) {
+async function carregarOcorrencias(aoAvancar, jaTenho) {
   const inicio = isoDiasAtras(JANELA_DIAS);
 
   const [casos, ajustesBrutos, ocorrencias] = await Promise.all([
@@ -732,10 +765,11 @@ async function carregarOcorrencias(aoAvancar) {
   });
   casos.forEach((c) => anota(c.cracha, c.date_ref));
 
-  const { diario, gordura, realManual } = await lerLakePorPares(pares, aoAvancar);
+  const { diario, gordura, realManual, lidos } = await lerLakePorPares(pares, aoAvancar, jaTenho);
 
   return {
     casos, pedidos, ocorrencias, diario, gordura, realManual, descartados,
+    lidos,                                  // dia → crachás cujo lake já está em memória
     lidoEm: agoraISOLocal(),
   };
 }
@@ -4464,6 +4498,8 @@ export default function Ocorrencias() {
   const [perguntar, caixaPergunta] = usePergunta();
   // recarga que NÃO tira a lista da tela (ver `buscar`)
   const [atualizando, setAtualizando] = useState(false);
+  // o que já foi lido, para a releitura silenciosa não varrer o lake de novo
+  const baseRef = useRef(null);
   // o quadro do robô desta aba (o mesmo teste do `PainelExecucao`)
   const loteNaTela = useLoteEmExecucao();
   const quadroDoRoboNaAba = Boolean(loteNaTela) && (!loteNaTela.aba || loteNaTela.aba === aba);
@@ -4508,8 +4544,10 @@ export default function Ocorrencias() {
     else setCarregando(true);
     setProgresso(null);
     try {
+      // SILENCIOSA REAPROVEITA O LAKE (ver `lerLakePorPares`); "Recarregar" lê tudo de novo
       const dados = await carregarOcorrencias(
         silencioso ? undefined : (feitos, total) => setProgresso({ feitos, total }),
+        silencioso ? baseRef.current : null,
       );
       /* A RELEITURA PODE SER MAIS VELHA QUE A ÚLTIMA GRAVAÇÃO: ela leva segundos, e o DP
          pode ter dado outro veredito nesse meio tempo. O que foi gravado DEPOIS de ela
@@ -4541,6 +4579,10 @@ export default function Ocorrencias() {
       });
     return () => { ativo = false; };
   }, []);
+
+  useEffect(() => {
+    baseRef.current = base;
+  }, [base]);
 
   const registros = useMemo(() => montarRegistros(base), [base]);
 

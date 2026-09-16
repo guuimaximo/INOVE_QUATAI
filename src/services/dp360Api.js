@@ -4,7 +4,11 @@
 import { supabase } from "../supabase";
 import { getStoredUser } from "../utils/auth";
 
-const LIMITE_PAGINA = 1000;
+/* A PAGINA E A MAIOR QUE O GATEWAY ACEITA (`LIMITE_MAX`, 5000). Com 1000, a
+   `ponto_ajustes_app` (9.202 linhas na janela de 70 dias) custava DEZ idas ao servidor, uma
+   depois da outra, porque a paginacao e sequencial — ela so para quando uma pagina volta
+   curta. O mesmo dado em duas idas: a espera da tela cai junto. */
+const LIMITE_PAGINA = 5000;
 
 // O supabase-js ENGOLE o corpo da resposta quando o status nao e 2xx: `error.message`
 // vira sempre "Edge Function returned a non-2xx status code", que nao diz nada. O motivo

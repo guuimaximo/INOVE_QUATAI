@@ -118,8 +118,18 @@ export const fmtHora = (v) => {
   const s = String(v ?? "").trim();
   if (!s || s === "--" || s === "-") return "";
   const m = /^(\d{1,2}):(\d{2})/.exec(s);
-  if (!m) return "";
-  return `${m[1].padStart(2, "0")}:${m[2]}`;
+  if (m) return `${m[1].padStart(2, "0")}:${m[2]}`;
+  /* SEM OS DOIS-PONTOS (16/09/2026): "0130" / "130" → "01:30". A escala da gordura
+     (`esc_inicio`/`esc_fim`, as 19 mil preenchidas) e o programado do ponto chegam assim —
+     é o `_hhmm` do main.py. A conta da jornada (`hm2min`) já lia esse formato e esta função
+     não: o Cartão do dia mostrava a escala como "—" com a jornada 9h00 ao lado (SILVIO
+     30021946 · 11/09). As outras duas `fmtHora` do cluster (regrasGordura, Motorista) já
+     liam assim. */
+  if (/^\d{3,4}$/.test(s)) {
+    const d = s.padStart(4, "0");
+    if (Number(d.slice(2)) < 60) return `${d.slice(0, 2)}:${d.slice(2)}`;
+  }
+  return "";
 };
 
 export const fmtMin = (v) => {

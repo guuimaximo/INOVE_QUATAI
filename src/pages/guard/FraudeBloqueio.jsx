@@ -1210,11 +1210,6 @@ async function criarLinha(c, situacao, mudancas, rotulo) {
   }
 }
 
-/** O cartão voltou de um desbloqueio? Devolve o dia (ISO) ou "". Bloquear de novo limpa. */
-function desbloqueadoEm(c) {
-  return situacaoDe(c) === "bloqueado" ? "" : diaDoInstante(c?.desbloqueado_em);
-}
-
 /** A última rajada é de um dia DEPOIS do bloqueio? (o dia do bloqueio não conta: a
  *  bilhetagem pode levar o dia para aplicar). Devolve a data da rajada ou "". */
 function rajadaDepoisDoBloqueio(c) {
@@ -1495,36 +1490,21 @@ export default function FraudeBloqueio({ modo = "fila" }) {
         ),
       },
     ];
-    if (!gestao) {
-      // de onde o cartão veio: da fila do robô ou só da regra da tela — e se voltou de um desbloqueio
+    if (!gestao && !ehPadrao(regra)) {
+      // Só com a regra mudada: marca o cartão que o robô não pôs na fila. A linha não carrega
+      // histórico (dono, 16/09/2026: "tira esse histórico" — o desbloqueado volta livre e
+      // ativo, sem marca); o histórico mora no pop-up do cartão.
       base.splice(2, 0, {
         id: "origem",
-        titulo: "Origem",
-        largura: 190,
-        valor: (c) =>
-          (c._naFila === false ? "só nesta regra" : "fila do robô") +
-          (desbloqueadoEm(c) ? ` · desbloqueado ${paraBR(desbloqueadoEm(c))}` : ""),
-        render: (c) => (
-          <span className="gd-origem">
-            {c._naFila === false ? (
-              <span className="dp-pill warn" title="O robô não pôs este cartão na fila: ele só aparece com a regra desta tela">
-                só nesta regra
-              </span>
-            ) : (
-              <span className="dp-faint">fila do robô</span>
-            )}
-            {desbloqueadoEm(c) ? (
-              <span
-                className="dp-pill danger"
-                title={`Desbloqueado em ${quandoBR(c.desbloqueado_em)}${
-                  txt(c.desbloqueado_por) ? ` por ${txt(c.desbloqueado_por)}` : ""
-                }${txt(c.motivo_desbloqueio) ? ` — ${txt(c.motivo_desbloqueio)}` : ""}`}
-              >
-                desbloqueado {paraBR(desbloqueadoEm(c)).slice(0, 5)}
-              </span>
-            ) : null}
-          </span>
-        ),
+        titulo: "Regra da tela",
+        largura: 120,
+        valor: (c) => (c._naFila === false ? "só nesta regra" : ""),
+        render: (c) =>
+          c._naFila === false ? (
+            <span className="dp-pill warn" title="O robô não pôs este cartão na fila: ele só aparece com a regra desta tela">
+              só nesta regra
+            </span>
+          ) : null,
       });
     }
     if (aba === "bloqueado") {

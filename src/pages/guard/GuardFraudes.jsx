@@ -1552,8 +1552,8 @@ export default function GuardFraudes() {
                 tira o pendente que saiu da janela.
               </li>
               <li>
-                <b>Desbloqueou, o cartão volta para esta aba</b>, marcado "desbloqueado" com o dia; se já
-                não bater a regra, o robô o tira na rodada seguinte.
+                <b>Desbloqueou, o cartão volta para esta aba</b> livre e ativo, sem marca na linha (o
+                histórico fica no cartão); se já não bater a regra, o robô o tira na rodada seguinte.
               </li>
               <li>
                 Cartão que só aparece com a regra da tela entra marcado "só nesta regra"; bloquear ou

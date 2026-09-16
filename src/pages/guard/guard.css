@@ -507,7 +507,6 @@
 .dp360 .gd-bqm-head .sub.gd-bqm-local { margin-top: 6px; }
 .dp360 .gd-hist-geral { width: min(1180px, 100%); }
 .dp360 .gd-hist-geral-corpo { overflow: auto; padding: 4px 0 12px; }
-.dp360 .gd-origem { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .dp360 .gd-bqm-head a.dp-btn { text-decoration: none; color: inherit; }
 
 /* os números da prova */

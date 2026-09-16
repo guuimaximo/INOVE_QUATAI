@@ -21,9 +21,10 @@ import {
 // do DP360. Por isso ela não está (nem deve estar) na allowlist do gateway
 // `dp360-api`: lê-se com o cliente Supabase normal do INOVE, exatamente como o app
 // antigo faz em ferramenta/supabase_client.py:695-715.
-import CartaoDoDia, { aplicarRealManual, lerReservasInove } from "../CartaoDoDia";
+import CartaoDoDia, { aplicarRealManual, lerReservasInove, pontoConferido } from "../CartaoDoDia";
 import { usePergunta } from "../Perguntar";
-import { esperarRunDoRobo, runIncerto, runNaoFez } from "../esperarRobo";
+import { runIncerto } from "../esperarRobo";
+import PainelExecucao, { acompanharLote } from "../loteEmExecucao";
 // AS QUATRO CAMADAS DA GORDURA (o `_gord()` do app antigo) e as conversões que elas
 // exigem moram em `regrasGordura.js` — módulo puro, sem React e sem rede. Estavam
 // escritas aqui dentro e por isso o Resumo não conseguia mostrar oportunidade sem
@@ -918,7 +919,7 @@ function PainelDetalhe({ linha, aoFechar, aoAvisar, aoRecarregar, impedimentoAvi
         <>
           O <b>Real manual</b> fica na base do DP e pode ser desfeito — é ele que destrava o alvo
           desta linha. <b>Enviar ocorrência</b> fala com o trabalhador: abre o comunicado deste dia,
-          com Ensaio e envio de verdade.
+          e o quadro do robô mostra cada um.
         </>
       }
     />
@@ -942,6 +943,9 @@ function PainelDetalhe({ linha, aoFechar, aoAvisar, aoRecarregar, impedimentoAvi
    no Envio via CSV e NÃO confirma — e ENSAIO NÃO ABRE CASO (main.py:2440: enquanto
    abria, o prazo passava a correr por causa de um teste, sem nenhuma mensagem ter
    saído).                                                                          */
+
+// "14/09/2026" -> "2026-09-14" (fatia de texto; passar por Date volta um dia no Brasil)
+const diaIso = (br) => `${String(br).slice(6, 10)}-${String(br).slice(3, 5)}-${String(br).slice(0, 2)}`;
 
 function ListaPessoas({ itens, limite = 12 }) {
   const mostrados = itens.slice(0, limite);
@@ -1025,7 +1029,13 @@ function ModalComunicado({ linhas, casoDe, comPontoAntes, aoFechar, aoConcluir }
     [preparo],
   );
 
-  const disparar = async (confirmar) => {
+  /* UM BOTÃO SÓ (16/09/2026, dono: "aqui pode tirar a parte do ensaio"). E QUEM
+     ACOMPANHA O ENVIO É O QUADRO DO LOTE ("quando enviar faz o mesmo pop-up carregando
+     o de todo mundo falando se enviou ou não"): o modal fecha no disparo e o quadro
+     lista cada pessoa — quem vai receber e quem foi barrado, com o motivo. A marca do
+     aviso (o que faz as 48 h correrem) sai de `aoTerminar`, que roda no módulo do quadro
+     e sobrevive a trocar de aba. */
+  const disparar = async () => {
     const p = montar(agoraUtc());
     if (!p.itens.length) {
       setRecado({ tipo: "erro", texto: "Nenhum comunicado a enviar — veja os barrados abaixo." });
@@ -1056,108 +1066,90 @@ function ModalComunicado({ linhas, casoDe, comPontoAntes, aoFechar, aoConcluir }
       p.itens.length > NOMES_NA_CONFIRMACAO
         ? `\n· … e mais ${p.itens.length - NOMES_NA_CONFIRMACAO}`
         : "";
-    const cabeca = confirmar
-      ? `ENVIAR DE VERDADE ${p.itens.length} comunicado(s) no Transnet, do dia ${p.datas[0]}:`
-      : `ENSAIO (o robô anexa o arquivo e NÃO confirma o envio) — ${p.itens.length} comunicado(s) do dia ${p.datas[0]}:`;
     // O que ACONTECE, dito sem eufemismo. O caso é o que faz o ciclo (48 h →
-    // advertência) existir; onde ele não nasce, a tela diz isso em vez de deixar
-    // subentendido.
-    const efeito = confirmar
-      ? "Cada um recebe a mensagem no Transnet e o caso do dia é aberto/atualizado em ponto_caso " +
-        "(origem gordura, tipo cerco), com o prazo correndo a partir de agora — o alvo já " +
-        "congelado não é reescrito."
-      : "Nada é enviado e NENHUM caso é aberto.";
+    // advertência) existir.
     if (
       !await perguntar(
-        `${cabeca}\n\n${nomes}${resto}\n\n${efeito}\n\n` +
+        `ENVIAR DE VERDADE ${p.itens.length} comunicado(s) no Transnet, do dia ${p.datas[0]}:\n\n` +
+          `${nomes}${resto}\n\n` +
+          "Cada um recebe a mensagem no Transnet e o caso do dia é aberto/atualizado em ponto_caso " +
+          "(origem gordura, tipo cerco), com o prazo correndo a partir de agora — o alvo já " +
+          "congelado não é reescrito.\n\n" +
           "Quem executa é o robô, no GitHub Actions. O disparo fica registrado com o seu nome.",
       )
     )
       return;
 
+    const chaveDoItem = (i) => `${String(i.cracha).replace(/\D/g, "").padStart(8, "0")}|${diaIso(i.data)}`;
+    const casosDoQuadro = [
+      ...p.itens.map((i) => ({ chave: chaveDoItem(i), cracha: i.cracha, nome: i.nome || i.cracha, dataBR: i.data })),
+      ...p.barrados.map((b) => ({
+        chave: `${chaveDoItem(b)}|barrado`,
+        cracha: b.cracha,
+        nome: b.nome || b.cracha,
+        dataBR: b.data,
+        barrado: b.motivo,
+      })),
+    ];
+
     setDisparando(true);
     setRecado(null);
     try {
-      // ORDEM DELIBERADA: dispara PRIMEIRO, grava o caso DEPOIS. O caso é o que faz o
-      // prazo de 48 h correr e a advertência nascer; gravá-lo antes de saber se o robô
-      // saiu deixaria alguém "avisado" por um disparo que o GitHub recusou. O contrário
-      // (mensagem enviada e caso não gravado) é barulho recuperável — e a tela grita.
-      const desde = Date.now();
       const r = await dispararRoboDP360("comunicado", {
         csv: p.csv,
         data: p.datas[0],
         motivo: MOTIVO_AVISO, // aviso. Advertência (103) não sai desta tela.
-        confirmar: confirmar ? "true" : "false",
+        confirmar: "true",
       });
 
-      // O MODELO EDITADO VIRA O PADRÃO, como no original (app.js:5741 `saveTpl` é
-      // chamado no preparo que serve tanto ao "só gerar CSV" quanto ao envio). Quem
-      // ajusta a carta espera encontrá-la ajustada da próxima vez; sem isso o DP
-      // reescreveria a mesma correção todo dia. A chave é a mesma da ferramenta, então
-      // as duas telas continuam vendo o mesmo texto.
-      //
-      // Vai DEPOIS do disparo e o erro é engolido de propósito: falhar em guardar
-      // preferência não pode virar erro de uma mensagem que já saiu.
+      // O MODELO EDITADO VIRA O PADRÃO, como no original (app.js:5741 `saveTpl`). Vai
+      // DEPOIS do disparo e o erro é engolido de propósito: falhar em guardar preferência
+      // não pode virar erro de uma mensagem que já saiu.
       try {
         await upsertDP360("app_config", { chave: CHAVE_MODELO, valor: template });
       } catch {
         /* preferência não gravada — o envio, que é o que importa, já aconteceu */
       }
 
-      // O AVISO SÓ CONTA QUANDO O ROBÔ TERMINA BEM (16/09/2026). O GitHub aceitar o disparo
-      // não é o comunicado ter saído: quatro envios de 09/09 morreram antes de abrir o
-      // Transnet e os 17 já estavam gravados como avisados. Ver `esperarRobo.js`.
-      let incerto = false;
-      if (confirmar && p.casos.length) {
-        const esperando = (onde) =>
-          setRecado({
-            tipo: "ok",
-            texto: `⏳ Envio disparado — ${onde}. Os avisos só são marcados quando o robô terminar; não feche esta janela.`,
-            painel: r?.painel || "",
-          });
-        esperando("aguardando o robô");
-        const fim = await esperarRunDoRobo({ runId: r?.execucao?.run_id, robo: "comunicado", desde }, esperando);
-        if (runNaoFez(fim)) {
-          setRecado({
-            tipo: "erro",
-            texto:
-              `O robô terminou em "${fim}": os comunicados NÃO saíram e ninguém foi marcado como avisado. ` +
-              "Veja o log no painel do robô antes de disparar de novo.",
-            painel: r?.painel || "",
-          });
-          return;
+      // O AVISO SÓ CONTA QUANDO O ROBÔ CONFIRMA O ENVIO (16/09/2026): o GitHub aceitar o
+      // disparo não é o comunicado ter saído. Sem a linha `OK` do robô ninguém é marcado.
+      const marcar = async (fim, conta) => {
+        if (!conta?.enviou && !conta?.semLog) {
+          return "Os comunicados NÃO saíram e ninguém foi marcado como avisado. Veja o log antes de disparar de novo.";
         }
-        incerto = runIncerto(fim);
-      }
-
-      let alerta = "";
-      let reavisados = [];
-      if (confirmar && p.casos.length) {
-        const { casos, reavisos } = marcarReavisos(p.casos, casoDe);
-        reavisados = reavisos;
+        const { casos } = marcarReavisos(p.casos, casoDe);
         try {
           await upsertDP360("ponto_caso", casos);
         } catch (falha) {
-          alerta =
-            ` ATENÇÃO: o comunicado SAIU, mas o registro em ponto_caso falhou (${falha?.message || falha}).` +
-            " O prazo de 48 h não está correndo para este lote — avise quem cuida do ciclo.";
+          return (
+            `O comunicado SAIU, mas o registro em ponto_caso falhou (${falha?.message || falha}). ` +
+            "O prazo de 48 h não está correndo para este lote — avise quem cuida do ciclo."
+          );
         }
-      }
-      setRecado({
-        tipo: alerta ? "erro" : "ok",
-        texto:
-          `${confirmar ? "Envio" : "Ensaio"} disparado — ${p.itens.length} comunicado(s) do dia ${p.datas[0]}.` +
-          (reavisados.length
-            ? ` ${reavisados.length} já tinham sido avisados antes (o alvo original ficou).`
-            : "") +
-          alerta +
-          (incerto
-            ? " Não deu para ver o fim do robô a tempo: os avisos foram marcados assim mesmo — confira o run no painel."
-            : ""),
+        try {
+          await aoConcluir?.();
+        } catch {
+          // a aba pode ter sido fechada; a marca já está gravada
+        }
+        if (!conta?.semLog) return "";
+        return runIncerto(fim)
+          ? "Não deu para ver o fim do robô a tempo: os avisos foram marcados assim mesmo — confira o run."
+          : "Não li a confirmação do robô: os avisos foram marcados pelo run verde — confira o log.";
+      };
+
+      acompanharLote({
+        casos: casosDoQuadro,
+        runId: r?.execucao?.run_id,
         painel: r?.painel || "",
+        robo: "comunicado",
+        tipo: "comunicado",
+        aba: "gordura",
+        titulo: `📣 Enviando ${p.itens.length} comunicado(s) · ${p.datas[0]}`,
+        aoTerminar: marcar,
       });
-      if (confirmar && aoConcluir) await aoConcluir();
+      aoFechar();
     } catch (falha) {
+      // o disparo falhou antes de virar lote: o modal continua aberto e diz por quê
       setRecado({ tipo: "erro", texto: falha?.message || "Não foi possível disparar o robô." });
     } finally {
       setDisparando(false);
@@ -1277,19 +1269,10 @@ function ModalComunicado({ linhas, casoDe, comPontoAntes, aoFechar, aoConcluir }
             <button
               type="button"
               className="dp-btn"
-              disabled={disparando || !preparo?.itens?.length}
-              onClick={() => disparar(false)}
-              title="O robô anexa o arquivo no Envio via CSV e NÃO confirma — serve para conferir o lote. Nenhum caso é aberto."
-            >
-              🤖 Ensaio
-            </button>
-            <button
-              type="button"
-              className="dp-btn"
               style={{ color: "var(--dp-danger-ink)" }}
               disabled={disparando || !preparo?.itens?.length}
-              onClick={() => disparar(true)}
-              title="Publica o comunicado na ficha de cada colaborador, no Transnet."
+              onClick={() => disparar()}
+              title="Publica o comunicado na ficha de cada colaborador, no Transnet. O quadro do robô mostra cada um."
             >
               ⚠ Enviar de verdade
             </button>
@@ -1312,6 +1295,76 @@ function ModalComunicado({ linhas, casoDe, comPontoAntes, aoFechar, aoConcluir }
 
    NADA AQUI DECIDE NADA: só lê a `ponto_caso` que a linha já carrega em `__caso`.
    Nenhum número da gordura passa por esta função.                              */
+
+/* ═══════════════ A SITUAÇÃO DO DIA NA REVISÃO (16/09/2026) ═══════════════
+   Pedido do dono: "tem que ter uma coluna SITUAÇÃO - REVISÃO, para saber o que já foi
+   feito por lá, se tá ok". Lê o MESMO que a coluna Status da Revisão, sem decidir nada:
+     · o ajuste que a Revisão mandou ao robô (`ponto_importacoes`, passo 2) — o mais novo;
+     · o "✓ conferido" do DP (`ponto_caso.tipo = ponto_ok`, `pontoConferido`);
+     · o `status_ponto` da `ponto_diario` (OK, REVISAR, FALTA_SAIDA…);
+   e, ao lado, se a REVISÃO já avisou o colaborador (`ponto_caso.origem = revisao`). O
+   aviso da própria Gordura continua na coluna "Status atual". */
+function instanteCurto(ts) {
+  const t = Date.parse(txt(ts));
+  if (!Number.isFinite(t)) return "";
+  return new Date(t).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function situacaoNaRevisao(pd, caso, lancado) {
+  if (!pd) {
+    return { texto: "sem linha", tom: "mute", titulo: "Este dia não chegou à Revisão (sem linha na ponto_diario)." };
+  }
+  const status = txt(pd.status_ponto);
+  let principal;
+  if (lancado) {
+    const s = txt(lancado.status).toLowerCase();
+    const quando = instanteCurto(lancado.importado_em);
+    if (s === "lancado")
+      principal = { texto: "AJUSTADO", tom: "ok", titulo: `A Revisão lançou o ajuste no Transnet (${quando}). Era ${status || "—"}.` };
+    else if (s === "fechado")
+      principal = { texto: "ponto fechado", tom: "danger", titulo: `O ajuste da Revisão não entrou: o Transnet não grava mais este dia (${quando}).` };
+    else if (s.startsWith("falhou"))
+      principal = {
+        texto: "ajuste não subiu",
+        tom: "danger",
+        titulo: `${txt(lancado.status).replace(/^falhou:?\s*/i, "") || "o Transnet recusou"} (${quando}).`,
+      };
+    else
+      principal = {
+        texto: "ajuste enviado",
+        tom: "warn",
+        titulo: `O ajuste foi mandado ao robô em ${quando}, sem resultado gravado — confira na Revisão.`,
+      };
+  } else if (pontoConferido(caso)) {
+    principal = { texto: "✓ conferido", tom: "ok", titulo: `O DP conferiu este dia na Revisão. Status: ${status || "—"}.` };
+  } else if (status.toUpperCase() === "OK") {
+    principal = { texto: "OK", tom: "ok", titulo: "A Revisão considera o ponto deste dia OK." };
+  } else {
+    principal = { texto: status || "—", tom: "warn", titulo: "Ainda aberto na Revisão — nada foi lançado nem conferido." };
+  }
+  const avisouEm = caso && txt(caso.origem) === "revisao" ? txt(caso.aviso_enviado_em) : "";
+  return { ...principal, aviso: avisouEm ? `avisado ${instanteCurto(avisouEm).slice(0, 5)}` : "" };
+}
+
+function CelulaSituacaoRevisao({ s }) {
+  if (!s) return <span className="dp-faint">—</span>;
+  return (
+    <span title={s.titulo}>
+      <span className={`dp-pill ${s.tom}`}>{s.texto}</span>
+      {s.aviso ? (
+        <span className="dp-pill mute" style={{ marginLeft: 4 }} title="A Revisão já mandou comunicado para este dia">
+          {s.aviso}
+        </span>
+      ) : null}
+    </span>
+  );
+}
 
 // PORTE.md §4 / main.py `PRAZO_HORAS` — o mesmo 48 da aba Ocorrências.
 const PRAZO_AVISO_H = 48;
@@ -1478,6 +1531,14 @@ const COLUNAS_P4 = [
     render: (r) => <CelulaStatusCiclo caso={r.__caso} />,
   },
   {
+    // o que a REVISÃO já fez com este dia (ver `situacaoNaRevisao`)
+    id: "situacao_revisao",
+    titulo: "Situação — Revisão",
+    largura: 190,
+    valor: (r) => [r.__revisao?.texto, r.__revisao?.aviso].filter(Boolean).join(" · "),
+    render: (r) => <CelulaSituacaoRevisao s={r.__revisao} />,
+  },
+  {
     id: "data_ref",
     titulo: "Data",
     classe: "dp-num dp-muted",
@@ -1616,7 +1677,7 @@ export default function Gordura() {
     // Gordura é a base; as demais tabelas só enriquecem. Se uma delas falhar, a
     // lista continua de pé (sem cartão/alvo) em vez de a aba inteira cair.
     const vazio = () => [];
-    const [gordura, diario, linha99, realManual, casos, reservas] = await Promise.all([
+    const [gordura, diario, linha99, realManual, casos, reservas, lancados] = await Promise.all([
       lerTudoDP360("ponto_gordura", { filtros: { data_ref: `eq.${dia}` }, ordem: "cracha.asc" }),
       lerTudoDP360("ponto_diario", { filtros: { date_ref: `eq.${dia}` } }).catch(vazio),
       lerTudoDP360("ponto_linha99", { filtros: { data_ref: `eq.${dia}` } }).catch(vazio),
@@ -1624,6 +1685,11 @@ export default function Gordura() {
       lerTudoDP360("ponto_caso", { filtros: { date_ref: `eq.${dia}` } }).catch(vazio),
       // Outra base (o Supabase do próprio INOVE) e outro cliente — já degrada sozinha.
       lerReservasInove(dia),
+      // o ajuste que a Revisão mandou ao robô (passo 2), o mais novo primeiro
+      lerTudoDP360("ponto_importacoes", {
+        filtros: { date_ref: `eq.${dia}`, passo: "eq.2" },
+        ordem: "importado_em.desc",
+      }).catch(vazio),
     ]);
 
     const indexar = (arr, colDia) => {
@@ -1634,6 +1700,11 @@ export default function Gordura() {
     const pdMapa = indexar(diario, "date_ref");
     const rmMapa = indexar(realManual, "date_ref");
     const casoMapa = indexar(casos, "date_ref");
+    const lancMapa = new Map();
+    for (const x of lancados) {
+      const k = chaveDe(x.cracha, x.date_ref);
+      if (!lancMapa.has(k)) lancMapa.set(k, x);
+    }
     const com99 = new Set(linha99.map((x) => chaveDe(x.cracha, x.data_ref)));
 
     return gordura.map((bruta) => {
@@ -1686,6 +1757,11 @@ export default function Gordura() {
         // (para saber que isto é um REaviso e não reescrever o alvo congelado) e a
         // presença da coluna `ponto_antes`, que não existe em toda instalação.
         __caso: casoMapa.has(chave) ? caso : null,
+        __revisao: situacaoNaRevisao(
+          pdMapa.has(chave) ? pd : null,
+          casoMapa.has(chave) ? caso : null,
+          lancMapa.get(chave) || null,
+        ),
         __busca: semAcento(`${txt(g.nm_funcionario)} ${txt(g.cracha)} ${cracha8(g.cracha)}`),
         // O RETRATO DO CARTÃO ANTES DO AVISO. `ponto_gordura` não guarda batida; quem
         // tem é a `ponto_diario`. Sem estes dois campos o caso nasceria com `usuario`
@@ -1971,7 +2047,7 @@ export default function Gordura() {
             onClick={() => setEnvio(alvoLote)}
             title={
               alvoLote.length
-                ? "Abre o comunicado do lote: prévia, quem recebe, quem fica de fora e os dois botões (Ensaio · Enviar de verdade)."
+                ? "Abre o comunicado do lote: prévia, quem recebe, quem fica de fora e o botão Enviar de verdade."
                 : "Marque (✔) os colaboradores que vão receber o comunicado."
             }
           >
@@ -1998,6 +2074,9 @@ export default function Gordura() {
       erro={erro}
     >
       {corpo}
+
+      {/* o quadro do robô: o envio de comunicado é acompanhado aqui, um por um */}
+      <PainelExecucao aba="gordura" />
 
       {verNiveis && <ModalNiveis aoFechar={() => setVerNiveis(false)} />}
       {detalhe && (

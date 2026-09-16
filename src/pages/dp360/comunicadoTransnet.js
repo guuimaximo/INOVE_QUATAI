@@ -45,7 +45,7 @@
 //     com barreira de FORMATO do dia: sem a assinatura do coletor (1 a 3 marcações num
 //     intervalo <= 2 min) o pedido não sai. Ele nasce SEM alvo e SEM ponta de propósito —
 //     não há cartão a cobrar, e um alvo aqui viraria lançamento na correção.
-import { pontaConta } from "./regrasGordura";
+import { NIVEIS_SEM_REGUA, TOL_ENTRADA, TOL_SAIDA, num as numGordura, pontaConta } from "./regrasGordura";
 import {
   batidasDoCartao,
   hm2min,
@@ -339,6 +339,35 @@ export function frasePedidoDoAlvo(contrato) {
  *  a frase ficou com o número redondo porque é a que o DP já lê há meses. */
 const PORTA_TEXTO = CONSTANTES.TOL_ENTRADA_MIN;
 
+/* POR QUE A GORDURA NÃO TEM PONTA A COBRAR — dito pelo motivo de verdade (16/09/2026).
+   O RENATO 30060935 06/09 tinha 41 min na saída e a tela dizia "nenhuma ponta acima da
+   porta de 10 min": o número estava acima, o que faltava era RÉGUA — o nível da saída era
+   NAO_CALCULAR (SST e Validador divergem mais de 20 min), e `pontaConta` não cobra ponta
+   sem régua. O DP leu a frase, olhou os 41 min e não entendeu. Agora cada ponta acima da
+   porta diz por que não entra; só quando nenhuma passa da porta a frase antiga vale. */
+const NIVEL_SEM_REGUA_TEXTO = {
+  NAO_CALCULAR: "n/calc — o SST e o Validador divergem mais de 20 min",
+  SEM_DADO: "sem dado da operação",
+  ANOMALIA_TEMPORAL: "anomalia de horário na operação",
+  PONTO_INCOMPLETO: "ponto incompleto",
+  "": "sem nível calculado",
+};
+function motivoSemPonta(linha) {
+  const partes = [];
+  for (const [lado, nivel, gordura, porta] of [
+    ["entrada", linha.nivel_entrada, linha.gordura_entrada, TOL_ENTRADA],
+    ["saída", linha.nivel_saida, linha.gordura_saida, TOL_SAIDA],
+  ]) {
+    const v = numGordura(gordura);
+    const n = String(nivel ?? "").trim().toUpperCase();
+    if (v == null || Math.abs(v) <= porta || !NIVEIS_SEM_REGUA.has(n)) continue;
+    partes.push(`${lado} com ${Math.round(Math.abs(v))} min, mas sem régua confiável (${NIVEL_SEM_REGUA_TEXTO[n] || n})`);
+  }
+  return partes.length
+    ? `${partes.join("; ")} — a ferramenta não cobra ponta sem régua`
+    : `nenhuma ponta acima da porta de ${PORTA_TEXTO} min`;
+}
+
 /**
  * Monta o envio inteiro a partir das linhas marcadas na tela.
  *
@@ -397,7 +426,7 @@ export function prepararComunicado({
     // sobre ponta ("complete o cartão"), e barrar aqui mataria os avisos mais legítimos
     // que existem, os de quem não bateu ponto.
     if (tipo === TIPO.GORDURA && !ponta) {
-      barra(`nenhuma ponta acima da porta de ${PORTA_TEXTO} min`);
+      barra(motivoSemPonta(linha));
       continue;
     }
 

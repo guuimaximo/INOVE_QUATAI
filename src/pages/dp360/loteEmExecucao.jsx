@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { evidenciasDoRun, lerDP360, logRoboDP360, statusRoboDP360 } from "../../services/dp360Api";
+import { runNaoFez } from "./esperarRobo";
 
 /**
  * O LOTE EM EXECUÇÃO — acima das abas, porque o robô não é de uma tela só.
@@ -267,6 +268,25 @@ export async function acompanharLote({
     return fim;
   }
 
+  /* O COMUNICADO TAMBÉM NÃO DEPENDE DO QUADRO (16/09/2026). Quem marca o aviso no nosso
+     banco (o que faz as 48 h correrem) é a TELA, com o que o log diz — e isso tem de
+     acontecer mesmo que outro lote tenha tomado o quadro. */
+  if (tipoDoLote === "comunicado") {
+    const texto = ensaio ? "" : await lerTextoComPaciencia(runDoLote);
+    const conta = desfechosDoComunicado(casos, texto, fim);
+    if (aindaEMeu()) {
+      mexer({ fim, terminouEm: Date.now(), onde: "" });
+      mexer({ porCaso: conta.porCaso, feitos: conta.feitos, faltaram: conta.faltaram });
+    }
+    try {
+      const aviso = await aoTerminar?.(fim, conta);
+      if (aviso && aindaEMeu()) mexer({ aviso });
+    } catch {
+      // a tela que disparou pode já ter sido desmontada; isso não é problema daqui
+    }
+    return fim;
+  }
+
   if (!aindaEMeu()) return fim;
   mexer({ fim, terminouEm: Date.now(), onde: "" });
 
@@ -309,6 +329,65 @@ export async function acompanharLote({
 /* O LOG DE UM RUN QUE ACABOU DE FECHAR pode demorar alguns segundos para ser servido. Na
    correção ele é a ÚNICA prova por dia, então vale insistir um pouco antes de desistir. */
 const VAZIO_LOG = new Map();
+async function lerTextoComPaciencia(runId) {
+  if (!runId) return "";
+  for (let tentativa = 0; tentativa < 4; tentativa++) {
+    if (tentativa) await new Promise((r) => setTimeout(r, 6000));
+    try {
+      const texto = await logRoboDP360(runId);
+      if (texto) return String(texto);
+    } catch {
+      // função sem a ação ou log ainda não publicado: tenta de novo
+    }
+  }
+  return "";
+}
+
+/**
+ * O QUE O ROBÔ `comunicado` FEZ COM CADA PESSOA.
+ *
+ * Ele sobe UM arquivo com todo mundo pelo "Envio via CSV" do Transnet
+ * (bot_comunicado.py): não existe resultado por pessoa. O log diz uma coisa só —
+ * `OK  CSV enviado pelo 'Envio via CSV'` ou `ERRO  <motivo>` — e ela vale para o lote
+ * inteiro. Quem foi barrado ANTES do envio (`c.barrado`) aparece com o motivo, porque o
+ * dono quer ver "todo mundo, falando se enviou ou não".
+ */
+const RE_COMUNICADO_OK = /\[bot_[a-z_]+\]\s+OK\s+CSV enviado/i;
+const RE_COMUNICADO_ERRO = /\[bot_[a-z_]+\]\s+ERRO\s+(.+)/i;
+export function desfechosDoComunicado(casos, texto, fim) {
+  const log = String(texto || "");
+  const ok = RE_COMUNICADO_OK.test(log);
+  const erro = RE_COMUNICADO_ERRO.exec(log);
+  const motivoErro = erro ? erro[1].replace(/^[A-Za-z]+(Exception|Error):\s*/, "").trim().slice(0, 200) : "";
+  const porCaso = new Map();
+  const feitos = [];
+  for (const c of casos || []) {
+    let item;
+    if (c.barrado) item = { estado: "barrado", texto: `não enviado — ${c.barrado}` };
+    else if (ok) item = { estado: "comunicado" };
+    else if (motivoErro) item = { estado: "naoEnviado", texto: `não enviado — ${motivoErro}` };
+    else if (runNaoFez(fim)) item = { estado: "naoEnviado", texto: `não enviado — o robô terminou em "${fim}"` };
+    else
+      item = {
+        estado: "semLog",
+        texto:
+          fim === "success"
+            ? "o robô terminou, mas não li a confirmação do envio — confira o log"
+            : "não deu para ver o fim do robô — confira o log",
+      };
+    porCaso.set(c.chave, item);
+    if (item.estado === "comunicado") feitos.push(c);
+  }
+  return {
+    porCaso,
+    feitos,
+    faltaram: (casos || []).filter((c) => !c.barrado && !feitos.includes(c)),
+    // o envio saiu? Sem a confirmação e sem erro (run verde sem log, ou fim que não deu
+    // para ver) a tela marca com aviso de incerteza — como antes deste quadro.
+    enviou: ok,
+    semLog: !ok && !motivoErro && !runNaoFez(fim),
+  };
+}
 async function lerLogComPaciencia(runId) {
   if (!runId) return null;
   for (let tentativa = 0; tentativa < 4; tentativa++) {
@@ -415,6 +494,10 @@ const DESFECHO_CASO = {
   // correção pelo robô `ponto` (o desfecho sai do log, ver `desfechosDaCorrecao`)
   corrigido: { icone: "✅", tom: "ok", texto: "corrigido — o robô releu o cartão e bate" },
   semLog: { icone: "⚠", tom: "warn", texto: "o robô terminou, mas não li o resultado deste dia — confira antes de dar por corrigido" },
+  // comunicado (o arquivo inteiro sobe de uma vez, ver `desfechosDoComunicado`)
+  comunicado: { icone: "✅", tom: "ok", texto: "enviado — o Transnet recebeu o comunicado" },
+  naoEnviado: { icone: "⚠", tom: "warn", texto: "não enviado" },
+  barrado: { icone: "⛔", tom: "mute", texto: "não enviado" },
 };
 
 /* A ETAPA DO CARTÃO NO ROBÔ `ponto`, enquanto ele roda — a palavra final é do log. */
@@ -435,8 +518,10 @@ const TIPOS = {
   generico: { rodando: "⚙ Robô rodando", feito: "enviado(s)" },
   // robô `ponto` corrigindo dia recusado: só conta o dia que ele releu e bateu
   corrigir: { rodando: "🔧 Corrigindo o ponto no Transnet", feito: "corrigido(s) e conferido(s)" },
+  // robô `comunicado`: um arquivo com todo mundo; quem foi barrado aparece com o motivo
+  comunicado: { rodando: "📣 Enviando os comunicados no Transnet", feito: "comunicado(s) enviado(s)" },
 };
-const FEITO = new Set(["conferido", "cancelado", "enviado", "corrigido"]);
+const FEITO = new Set(["conferido", "cancelado", "enviado", "corrigido", "comunicado"]);
 
 function desfechoDoCaso(caso, tipo = "executar") {
   if (tipo === "cancelar") {
@@ -675,9 +760,12 @@ export default function PainelExecucao({ aba = "" }) {
   const seg = Math.max(0, Math.round(((fim ? execucao.terminouEm : agora) - desde) / 1000));
   const relogio = `${String(Math.floor(seg / 60)).padStart(2, "0")}:${String(seg % 60).padStart(2, "0")}`;
   const feitos = casos.filter((c) => FEITO.has(porCaso?.get(c.chave)?.estado)).length;
+  // quem foi barrado antes do envio não é pendência do robô: fica de fora da conta
+  const barrados = casos.filter((c) => c.barrado).length;
+  const total = casos.length - barrados;
   // encerrou de verdade só quando o banco respondeu (ou quando não deu para conferir)
   const encerrou = Boolean(fim) && (Boolean(porCaso) || Boolean(erro));
-  const tudoCerto = encerrou && !erro && (ensaio || feitos === casos.length);
+  const tudoCerto = encerrou && !erro && !execucao.aviso && (ensaio || feitos === total);
   const tom = !encerrou ? "rodando" : tudoCerto ? "ok" : "pendente";
 
   /* POP-UP NO MEIO DA ABA (dono, 15/09/2026: "a aba vai ficar com um pop-up no meio dela
@@ -702,7 +790,8 @@ export default function PainelExecucao({ aba = "" }) {
           <div className="oc-exec-titulo">
             {!encerrou ? (
               <>
-                {casos.length} crachá+dia <span className="dp-num">· {relogio}</span>
+                {execucao.tipo === "comunicado" ? `${total} comunicado(s)` : `${casos.length} crachá+dia`}{" "}
+                <span className="dp-num">· {relogio}</span>
               </>
             ) : erro ? (
               "não consegui conferir o resultado"
@@ -710,7 +799,8 @@ export default function PainelExecucao({ aba = "" }) {
               "nada foi gravado — nem no Transnet, nem aqui"
             ) : (
               <>
-                {feitos} de {casos.length} {tipo.feito}
+                {feitos} de {total} {tipo.feito}
+                {barrados ? <span className="dp-muted"> · {barrados} não recebe(m)</span> : null}
               </>
             )}
           </div>
@@ -737,6 +827,12 @@ export default function PainelExecucao({ aba = "" }) {
         ) : null}
       </header>
 
+      {execucao.aviso ? (
+        <div className="dp-pill danger" style={{ margin: "0 0 8px", whiteSpace: "normal" }}>
+          {execucao.aviso}
+        </div>
+      ) : null}
+
       <div className="oc-exec-lista">
         {casos.map((c) => {
           /* O BANCO MANDA quando existe; até lá, a palavra do robô; e antes de ele falar
@@ -745,7 +841,9 @@ export default function PainelExecucao({ aba = "" }) {
              responde POR QUÊ. */
           const fechado = porCaso?.get(c.chave);
           const vivo = aoVivo.get(c.chave);
-          const d = fechado
+          const d = c.barrado
+            ? { ...DESFECHO_CASO.barrado, texto: `não enviado — ${c.barrado}` }
+            : fechado
             ? fechado.texto
               ? { ...(DESFECHO_CASO[fechado.estado] || DESFECHO_CASO.pendente), texto: fechado.texto }
               : fechado.estado === "pendente" && vivo

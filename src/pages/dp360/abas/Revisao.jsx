@@ -70,7 +70,7 @@ import {
 
 import { supabase } from "../../../supabase";
 import { usePergunta } from "../Perguntar";
-import { esperarRunDoRobo, runIncerto, runNaoFez } from "../esperarRobo";
+import { runIncerto } from "../esperarRobo";
 /* =============================================================================
    Revisão (Passo 2) — porte da tela do DP360 (Sistemas/PONTO: app/ui/app.js
    `viewP2`/`COLS_REV`/`p2RowClass`/`fmtCol`/`pontoDetalhe`).
@@ -283,12 +283,14 @@ function Motivo({ linha }) {
    As regras (formato do CSV, quem é barrado, que caso abre) NÃO moram aqui: são de
    `../comunicadoTransnet`, porque a Gordura manda o MESMO arquivo pelo MESMO robô.
    Este componente é a TELA: mostra a prévia, mostra quem recebe, mostra QUEM FICOU DE
-   FORA e por quê, e oferece os dois botões.
+   FORA e por quê, e oferece o botão de enviar.
 
-   DOIS BOTÕES, NUNCA UM CHECKBOX. "Confirmar" marcado por engano vira comunicado real
-   na ficha de alguém e, 48 h depois, advertência. Ensaio: o robô anexa o arquivo no
-   Envio via CSV e NÃO confirma — e ENSAIO NÃO ABRE CASO (main.py:2440: enquanto abria,
-   o prazo passava a correr por causa de um teste, sem nenhuma mensagem ter saído).   */
+   UM BOTÃO SÓ, NUNCA UM CHECKBOX (o Ensaio saiu em 16/09/2026, pedido do dono). O
+   acompanhamento é o quadro do robô: o modal fecha no disparo e o quadro lista cada
+   pessoa, inclusive quem foi barrado, dizendo se enviou ou não.   */
+
+// "14/09/2026" -> "2026-09-14" (fatia de texto; passar por Date volta um dia no Brasil)
+const diaIso = (br) => `${String(br).slice(6, 10)}-${String(br).slice(3, 5)}-${String(br).slice(0, 2)}`;
 
 function ListaPessoas({ itens, limite = 12 }) {
   const mostrados = itens.slice(0, limite);
@@ -398,7 +400,7 @@ function ModalComunicado({
     [preparo],
   );
 
-  const disparar = async (confirmar) => {
+  const disparar = async () => {
     const p = montar(agoraUtc());
     if (!p.itens.length) {
       setRecado({ tipo: "erro", texto: "Nenhum comunicado a enviar — veja os barrados abaixo." });
@@ -423,93 +425,86 @@ function ModalComunicado({
       .map((i) => `· ${i.nome || i.cracha} (${i.cracha})`)
       .join("\n");
     const resto = p.itens.length > NOMES_NA_CONFIRMACAO ? `\n· … e mais ${p.itens.length - NOMES_NA_CONFIRMACAO}` : "";
-    const cabeca = confirmar
-      ? `ENVIAR DE VERDADE ${p.itens.length} comunicado(s) no Transnet, do dia ${p.datas[0]}:`
-      : `ENSAIO (o robô anexa o arquivo e NÃO confirma o envio) — ${p.itens.length} comunicado(s) do dia ${p.datas[0]}:`;
     // O que ACONTECE, dito sem eufemismo. O caso é o que faz o ciclo (48 h → advertência)
     // existir; onde ele não é aberto, a tela diz isso em vez de deixar subentendido.
-    const efeito = !confirmar
-      ? `Nada é enviado e NENHUM caso é aberto.`
-      : rota === TIPO.FORA
+    const efeito =
+      rota === TIPO.FORA
         ? `Cada um recebe a mensagem no Transnet. NENHUM caso é aberto: bater ponto fora é ` +
           `justificativa, não ajuste — e um caso aqui sobrescreveria o do dia.`
         : `Cada um recebe a mensagem no Transnet e o caso do dia é aberto/atualizado em ` +
           `ponto_caso, com o prazo correndo a partir de agora (o alvo já congelado não é reescrito).`;
     if (
       !await perguntar(
-        `${cabeca}\n\n${nomes}${resto}\n\n${efeito}\n\n` +
+        `ENVIAR DE VERDADE ${p.itens.length} comunicado(s) no Transnet, do dia ${p.datas[0]}:\n\n` +
+          `${nomes}${resto}\n\n${efeito}\n\n` +
           `Quem executa é o robô, no GitHub Actions. O disparo fica registrado com o seu nome.`,
       )
     )
       return;
 
+    const chaveDoItem = (i) => `${String(i.cracha).replace(/\D/g, "").padStart(8, "0")}|${diaIso(i.data)}`;
+    const casosDoQuadro = [
+      ...p.itens.map((i) => ({ chave: chaveDoItem(i), cracha: i.cracha, nome: i.nome || i.cracha, dataBR: i.data })),
+      ...p.barrados.map((b) => ({
+        chave: `${chaveDoItem(b)}|barrado`,
+        cracha: b.cracha,
+        nome: b.nome || b.cracha,
+        dataBR: b.data,
+        barrado: b.motivo,
+      })),
+    ];
+
     setDisparando(true);
     setRecado(null);
     try {
-      // ORDEM DELIBERADA: dispara PRIMEIRO, grava o caso DEPOIS. O caso é o que faz o
-      // prazo de 48 h correr e a advertência nascer; gravá-lo antes de saber se o robô
-      // saiu deixaria alguém "avisado" por um disparo que o GitHub recusou. O contrário
-      // (mensagem enviada e caso não gravado) é barulho recuperável — e a tela grita.
-      const desde = Date.now();
+      // ORDEM DELIBERADA: dispara PRIMEIRO, grava o caso DEPOIS — e só quando o robô
+      // confirma o envio (ver `marcar`). O caso é o que faz o prazo de 48 h correr.
       const r = await dispararRoboDP360("comunicado", {
         csv: p.csv,
         data: p.datas[0],
         motivo: MOTIVO_AVISO, // aviso. Advertência (103) não sai desta tela.
-        confirmar: confirmar ? "true" : "false",
+        confirmar: "true",
       });
 
-      // O AVISO SÓ CONTA QUANDO O ROBÔ TERMINA BEM (16/09/2026). O GitHub aceitar o disparo
-      // não é o comunicado ter saído: quatro envios de 09/09 morreram antes de abrir o
-      // Transnet e os 17 já estavam gravados como avisados. Ver `esperarRobo.js`.
-      let incerto = false;
-      if (confirmar && p.casos.length) {
-        const esperando = (onde) =>
-          setRecado({
-            tipo: "ok",
-            texto: `⏳ Envio disparado — ${onde}. Os avisos só são marcados quando o robô terminar; não feche esta janela.`,
-            painel: r?.painel || "",
-          });
-        esperando("aguardando o robô");
-        const fim = await esperarRunDoRobo({ runId: r?.execucao?.run_id, robo: "comunicado", desde }, esperando);
-        if (runNaoFez(fim)) {
-          setRecado({
-            tipo: "erro",
-            texto:
-              `O robô terminou em "${fim}": os comunicados NÃO saíram e ninguém foi marcado como avisado. ` +
-              "Veja o log no painel do robô antes de disparar de novo.",
-            painel: r?.painel || "",
-          });
-          return;
+      const marcar = async (fim, conta) => {
+        if (!conta?.enviou && !conta?.semLog) {
+          return "Os comunicados NÃO saíram e ninguém foi marcado como avisado. Veja o log antes de disparar de novo.";
         }
-        incerto = runIncerto(fim);
-      }
-
-      let alerta = "";
-      let reavisados = [];
-      if (confirmar && p.casos.length) {
-        const { casos, reavisos } = marcarReavisos(p.casos, casoDe, { congelar: congelarReaviso });
-        reavisados = reavisos;
+        if (p.casos.length) {
+          const { casos } = marcarReavisos(p.casos, casoDe, { congelar: congelarReaviso });
+          try {
+            await upsertDP360("ponto_caso", casos);
+          } catch (falha) {
+            return (
+              `O comunicado SAIU, mas o registro em ponto_caso falhou (${falha?.message || falha}). ` +
+              "O prazo de 48 h não está correndo para este lote — avise quem cuida do ciclo."
+            );
+          }
+        }
         try {
-          await upsertDP360("ponto_caso", casos);
-        } catch (falha) {
-          alerta =
-            ` ATENÇÃO: o comunicado SAIU, mas o registro em ponto_caso falhou (${falha.message || falha}).` +
-            ` O prazo de 48 h não está correndo para este lote — avise quem cuida do ciclo.`;
+          await aoConcluir?.();
+        } catch {
+          // a aba pode ter sido fechada; a marca já está gravada
         }
-      }
-      setRecado({
-        tipo: alerta ? "erro" : "ok",
-        texto:
-          `${confirmar ? "Envio" : "Ensaio"} disparado — ${p.itens.length} comunicado(s) do dia ${p.datas[0]}.` +
-          (reavisados.length ? ` ${reavisados.length} já tinham sido avisados antes (o alvo original ficou).` : "") +
-          alerta +
-          (incerto
-            ? " Não deu para ver o fim do robô a tempo: os avisos foram marcados assim mesmo — confira o run no painel."
-            : ""),
+        if (!conta?.semLog) return "";
+        return runIncerto(fim)
+          ? "Não deu para ver o fim do robô a tempo: os avisos foram marcados assim mesmo — confira o run."
+          : "Não li a confirmação do robô: os avisos foram marcados pelo run verde — confira o log.";
+      };
+
+      acompanharLote({
+        casos: casosDoQuadro,
+        runId: r?.execucao?.run_id,
         painel: r?.painel || "",
+        robo: "comunicado",
+        tipo: "comunicado",
+        aba: "revisao",
+        titulo: `📣 Enviando ${p.itens.length} comunicado(s) · ${p.datas[0]}`,
+        aoTerminar: marcar,
       });
-      if (confirmar && aoConcluir) await aoConcluir();
+      aoFechar();
     } catch (falha) {
+      // o disparo falhou antes de virar lote: o modal continua aberto e diz por quê
       setRecado({ tipo: "erro", texto: falha?.message || "Não foi possível disparar o robô." });
     } finally {
       setDisparando(false);
@@ -636,19 +631,10 @@ function ModalComunicado({
             <button
               type="button"
               className="dp-btn"
-              disabled={disparando || !preparo?.itens?.length}
-              onClick={() => disparar(false)}
-              title="O robô anexa o arquivo no Envio via CSV e NÃO confirma — serve para conferir o lote. Nenhum caso é aberto."
-            >
-              🤖 Ensaio
-            </button>
-            <button
-              type="button"
-              className="dp-btn"
               style={{ color: "var(--dp-danger-ink)" }}
               disabled={disparando || !preparo?.itens?.length}
-              onClick={() => disparar(true)}
-              title="Publica o comunicado na ficha de cada colaborador, no Transnet."
+              onClick={() => disparar()}
+              title="Publica o comunicado na ficha de cada colaborador, no Transnet. O quadro do robô mostra cada um."
             >
               ⚠ Enviar de verdade
             </button>

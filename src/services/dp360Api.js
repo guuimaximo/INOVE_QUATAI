@@ -133,14 +133,19 @@ async function gravar(tabela, op, payload) {
   return chamar({ action: "write", tabela, op, ...payload });
 }
 
+/* O `motivo` É O NOME DA AÇÃO, como a tela a chama ("Marcação gravada", "Decisão
+   desfeita", "Real cravado"). Ele não muda o que é gravado no ponto: vai para a TRILHA
+   (`dp360_auditoria`), e é o que faz o histórico ser lido por gente em vez de uma lista de
+   upserts. Quem não manda nada continua funcionando igual. */
+
 /** UPSERT (merge por chave definida no servidor). */
-export function upsertDP360(tabela, linhas) {
-  return gravar(tabela, "upsert", { linhas: Array.isArray(linhas) ? linhas : [linhas] });
+export function upsertDP360(tabela, linhas, motivo) {
+  return gravar(tabela, "upsert", { linhas: Array.isArray(linhas) ? linhas : [linhas], motivo });
 }
 
 /** INSERT append-only (histórico/log). */
-export function inserirDP360(tabela, linhas) {
-  return gravar(tabela, "insert", { linhas: Array.isArray(linhas) ? linhas : [linhas] });
+export function inserirDP360(tabela, linhas, motivo) {
+  return gravar(tabela, "insert", { linhas: Array.isArray(linhas) ? linhas : [linhas], motivo });
 }
 
 /**
@@ -150,8 +155,8 @@ export function inserirDP360(tabela, linhas) {
  * (fraude) linha nova e ocorrencia, que so o bot insere. O servidor recusa
  * update sem filtro e recusa coluna fora da lista liberada para a tabela.
  */
-export function atualizarDP360(tabela, filtros, campos) {
-  return gravar(tabela, "update", { filtros, campos });
+export function atualizarDP360(tabela, filtros, campos, motivo) {
+  return gravar(tabela, "update", { filtros, campos, motivo });
 }
 
 /**
@@ -313,6 +318,18 @@ export async function statusRoboDP360(horas = 6) {
 }
 
 /** DELETE — o servidor recusa sem filtro, de propósito. */
-export function apagarDP360(tabela, filtros) {
-  return gravar(tabela, "delete", { filtros });
+export function apagarDP360(tabela, filtros, motivo) {
+  return gravar(tabela, "delete", { filtros, motivo });
+}
+
+/**
+ * A TRILHA DE UM CRACHÁ+DIA — quem mexeu, quando, e de quê para quê.
+ *
+ * A tabela mora no INOVE e só Administrador a lê direto (ela guarda crachá e nome). Quem
+ * serve aqui é o gateway, que já sabe quem está pedindo e o que essa pessoa pode ver na
+ * DP360 — e devolve só o daquele dia.
+ */
+export async function lerTrilhaDP360(cracha, dateRef, limite = 60) {
+  const dados = await chamar({ action: "trilha", cracha, date_ref: dateRef, limite });
+  return dados.linhas || [];
 }

@@ -33,6 +33,7 @@ import TabelaDP from "../TabelaDP";
 import {
   dispararRoboDP360,
   lerDP360,
+  lerTrilhaDP360,
   logRoboDP360,
   lerTudoDP360,
   statusRoboDP360,
@@ -685,11 +686,17 @@ async function lerLakePorPares(pares, aoAvancar, jaTenho) {
  * tarefa falhar a anotação inteira é descartada. */
 let gravacoesEmCurso = null;
 
+/* O RÓTULO DA AÇÃO VIAJA COM A GRAVAÇÃO (15/09/2026). Quem grava é sempre esta função, e
+   quem sabe o NOME do que está sendo feito é o `executarGravacao` ("Marcação gravada",
+   "Decisão desfeita", "Recusado e cartão cravado"). O rótulo não muda nada no ponto: ele vai
+   para a trilha, e é o que faz o histórico do caso ser lido por gente. */
+let motivoDaGravacao = "";
+
 function gravarNoBanco(tabela, linhas) {
   if (gravacoesEmCurso) {
     gravacoesEmCurso.push({ tabela, linhas: Array.isArray(linhas) ? linhas : [linhas] });
   }
-  return upsertDP360(tabela, linhas);
+  return upsertDP360(tabela, linhas, motivoDaGravacao || undefined);
 }
 
 function aplicarGravacoes(base, gravacoes) {
@@ -4060,6 +4067,136 @@ function RelatorioCaso({ reg, montado }) {
   );
 }
 
+/* ══ O HISTÓRICO DO CASO — quem mexeu, quando, e de quê para quê ══════════════
+ *
+ * A trilha (`dp360_auditoria`) ganhou uma linha por caso em CADA gravação que sai destas
+ * telas: o veredito, o desfazer, o cartão cravado, a recusa em lote, o resultado que o robô
+ * trouxe. Antes disso o banco guardava só o estado final — "aceito em 15/09" — e não dizia
+ * por quem; e o Desfazer apagava a decisão anterior sem deixar rastro.
+ *
+ * O NOME DOS CAMPOS É O DA TELA. Ninguém precisa saber que `aceite` é o veredito ou que
+ * `conferido_em` é o carimbo do robô: quem lê isto está perguntando o que aconteceu com o
+ * dia de uma pessoa. Campo sem tradução aparece como está — é melhor que esconder. */
+const CAMPO_NA_TRILHA = {
+  aceite: "veredito do dia",
+  ajuste: "o ajuste estava",
+  ajuste_ids: "ocorrências decididas",
+  aceito_em: "decidido em",
+  conferido_em: "executado no Transnet",
+  aviso_conferido_em: "aviso conferido",
+  correcao_status: "situação da correção",
+  correcao_final_em: "corrigido em",
+  advertencia_enviada_em: "advertência enviada",
+  conf_veredito: "conferência do robô",
+  transnet_resposta: "resposta do Transnet",
+  cancelado_em: "cancelado em",
+  aviso_cancelado_em: "aviso cancelado em",
+  usuario: "nota",
+  tipo: "tipo do caso",
+  ponto_antes: "cartão antes",
+  ponto_depois: "contrato (cartão combinado)",
+  entrada: "entrada",
+  alm_saida: "saída almoço",
+  alm_volta: "volta almoço",
+  saida: "saída",
+  definido_por: "cravado por",
+  status: "situação",
+  atualizado_em: "",          // carimbo de máquina: não vira linha na tela
+  definido_em: "",
+  importado_em: "",
+};
+
+const valorDaTrilha = (v) => {
+  const s = txt(v);
+  if (!s || s === "null") return "vazio";
+  // carimbo de instante vira hora de gente; o resto vai como está
+  return /^\d{4}-\d{2}-\d{2}T/.test(s) ? fmtDataHora(s) : s;
+};
+
+function HistoricoDoCaso({ reg, aoFechar }) {
+  const [linhas, setLinhas] = useState(null);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    let vivo = true;
+    lerTrilhaDP360(reg.cracha, reg.iso)
+      .then((ls) => { if (vivo) setLinhas(ls); })
+      .catch((e) => { if (vivo) setErro(e?.message || "não deu para ler o histórico"); });
+    return () => { vivo = false; };
+  }, [reg.cracha, reg.iso]);
+
+  return (
+    <div className="rv-overlay" role="dialog" aria-modal="true" aria-label="Histórico do caso"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) aoFechar(); }}>
+      <div className="dp-card rv-box" style={{ maxWidth: 760 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+          <div>
+            <div style={{ ...ROTULO_CARD, color: "var(--dp-accent)" }}>🕘 Histórico</div>
+            <h3 style={{ margin: "4px 0 2px", fontSize: 15, fontWeight: 700 }}>
+              {reg.nome} <span className="dp-muted dp-num">· {reg.cracha} · {reg.dataBR}</span>
+            </h3>
+            <div className="dp-faint" style={MINI}>
+              tudo o que foi gravado neste crachá+dia pelas telas da DP360 — quem, quando e o que mudou
+            </div>
+          </div>
+          <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar histórico">
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="rv-corpo" style={{ marginTop: 10 }}>
+          {erro ? <div className="oc-mt-n forte" role="alert">⚠ {erro}</div> : null}
+          {!erro && linhas === null ? (
+            <div className="dp-espera" role="status">
+              <span className="dp-espera-circulo" aria-hidden="true" />
+              <span className="dp-espera-txt">Lendo o histórico…</span>
+            </div>
+          ) : null}
+          {!erro && linhas?.length === 0 ? (
+            <p className="dp-muted" style={{ fontSize: 12.5 }}>
+              Nada gravado neste dia desde que a trilha começou a registrar. O que foi feito
+              antes disso não tem registro de autor — o banco guardava só o estado final.
+            </p>
+          ) : null}
+          {(linhas || []).map((l) => {
+            const d = l.detalhe || {};
+            const mudou = Object.entries(d.mudou || {}).filter(([campo]) => CAMPO_NA_TRILHA[campo] !== "");
+            return (
+              <div key={l.id} className="oc-hist-linha">
+                <div style={FILA}>
+                  <span className="dp-mono dp-num">{fmtDataHora(l.criado_em)}</span>
+                  <b>{txt(d.motivo) || txt(l.acao).replace("dado_", "")}</b>
+                  <span className="dp-faint" style={MINI}>
+                    {txt(l.autor_nome) || "sem autor registrado"}
+                    {d.lote ? ` · num lote de ${d.lote}` : ""}
+                    {d.novo ? " · caso criado" : ""}
+                  </span>
+                </div>
+                {mudou.length ? (
+                  <div className="oc-hist-campos">
+                    {mudou.map(([campo, v]) => (
+                      <div key={campo}>
+                        <span className="dp-faint">{CAMPO_NA_TRILHA[campo] || campo}: </span>
+                        <span className="dp-mono">{valorDaTrilha(v?.de)}</span>
+                        <span className="dp-faint"> → </span>
+                        <span className="dp-mono"><b>{valorDaTrilha(v?.para)}</b></span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="oc-hist-campos dp-faint">
+                    {txt(d.tabela)}{d.resumo ? " · lote grande: registrado em resumo" : " · nada mudou de valor"}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ───────────────────────────── o caso aberto (modal) ─────────────────────── */
 
 /**
@@ -4122,6 +4259,7 @@ function Detalhe({
   // o pop-up troca de caso, senão o dia seguinte abriria com o horário do anterior no campo
   const [manual, setManual] = useState(MANUAL_VAZIO);
   const [completar, setCompletar] = useState({});
+  const [verHistorico, setVerHistorico] = useState(false);
   useEffect(() => {
     setManual(MANUAL_VAZIO);
     setCompletar({});
@@ -4199,6 +4337,7 @@ function Detalhe({
       aria-label={`Caso de ${reg.nome} em ${reg.dataBR}`}
       onMouseDown={(e) => { if (e.target === e.currentTarget) aoFechar(); }}
     >
+      {verHistorico ? <HistoricoDoCaso reg={reg} aoFechar={() => setVerHistorico(false)} /> : null}
       <div className="dp-card rv-box oc-det-modal" style={{ borderColor: "var(--dp-accent)" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
           <div>
@@ -4224,6 +4363,12 @@ function Detalhe({
               onClick={() => aoAbrirCartao(reg)}
             >
               {abrindoCartao ? "abrindo…" : "🗂 Cartão do dia"}
+            </BotaoAcao>
+            <BotaoAcao
+              titulo="Quem mexeu neste crachá+dia, quando e o que mudou — a trilha das gravações desta tela."
+              onClick={() => setVerHistorico(true)}
+            >
+              🕘 Histórico
             </BotaoAcao>
             <BotaoAcao
               titulo="Imprime o histórico deste caso: o ponto, o alvo, o que ele pediu e a trilha. Sai do MESMO cartão que está na tela."
@@ -4699,6 +4844,8 @@ export default function Ocorrencias() {
       setRecado("");
       const gravacoes = [];
       gravacoesEmCurso = gravacoes;
+      // o nome desta ação acompanha tudo o que ela gravar (ver `gravarNoBanco`)
+      motivoDaGravacao = txt(rotulo).replace(/\s*\([^)]*\)\s*$/, "");
       let deuCerto = false;
       try {
         const aviso = await tarefa();
@@ -4719,6 +4866,7 @@ export default function Ocorrencias() {
         // o erro REAL do gateway (o dp360Api já desembrulha o motivo do 4xx)
         setRecado(`Falhou: ${e?.message || e}`);
       } finally {
+        motivoDaGravacao = "";
         setGravando(false);
       }
       // a releitura confere com o banco POR TRÁS — a tela já está livre para o próximo caso
@@ -5547,10 +5695,13 @@ export default function Ocorrencias() {
               falhas.push({ ...chaveCaso, transnet_resposta: txt(item.motivo).slice(0, 200), atualizado_em: agora });
           }
           try {
-            // cada lote com as MESMAS chaves (o PostgREST exige)
+            // cada lote com as MESMAS chaves (o PostgREST exige); o nome da ação vai junto
+            // para a trilha, porque quem gravou aqui foi o resultado do robô, não um clique
+            motivoDaGravacao = "Correção do robô ponto — resultado do log";
             if (corrigidos.length) await gravarNoBanco("ponto_caso", corrigidos);
             if (fechados.length) await gravarNoBanco("ponto_caso", fechados);
             if (falhas.length) await gravarNoBanco("ponto_caso", falhas);
+            motivoDaGravacao = "";
           } catch (e) {
             setRecado(`O robô terminou, mas não gravei o desfecho no nosso banco: ${e?.message || e}`);
           }

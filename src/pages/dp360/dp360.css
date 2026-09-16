@@ -79,6 +79,18 @@
   text-overflow: ellipsis;
 }
 /* a direita da barra: a conta do Transnet e o robô, lado a lado */
+/* O HISTÓRICO DO CASO: uma linha por gravação, com os campos que mudaram embaixo. */
+.dp360 .oc-hist-linha {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--dp-border);
+}
+.dp360 .oc-hist-linha:last-child { border-bottom: 0; }
+.dp360 .oc-hist-campos {
+  margin-top: 3px;
+  padding-left: 12px;
+  font-size: 11.5px;
+  line-height: 1.7;
+}
 /* o título da tabela de fontes, embaixo do Resumo embutido na aba Início */
 .dp360 .dp-fontes-t {
   margin: 18px 0 6px;

@@ -13,6 +13,10 @@
 //      ferias, cartao de credito e GPS de outros modulos. So as tabelas de PONTO
 //      listadas em TABELAS passam por aqui — nada mais, nem leitura.
 //   3. DELETE exige filtro. Sem isso um bug/abuso zeraria a tabela.
+//   4. TRILHA DE TODA GRAVACAO. Cada escrita que sai das telas vira linha em
+//      `dp360_auditoria` (projeto do INOVE, append-only): quem, quando, em que
+//      cracha+dia, que campos, e o valor ANTES e DEPOIS. A trilha e escrita aqui, e
+//      nao em cada tela, porque tela nova esquece de anotar — o gateway nao tem como.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -141,6 +145,72 @@ const ACESSO_DAS_TABELAS: Record<string, string[] | "admin"> = {
 };
 
 const LIMITE_MAX = 5000;
+
+/* ══ A TRILHA DE QUEM MEXEU (15/09/2026) ═══════════════════════════════════════
+ * Ate aqui a trilha so guardava o DISPARO DE ROBO. O resto do que o DP faz — o
+ * veredito, o desfazer, o cartao cravado, a recusa em lote, o fechar a mao — deixava
+ * no banco apenas o ESTADO FINAL, sem autor: "aceito em 15/09", e ninguem sabia por
+ * quem. Pior no desfazer, que apaga a decisao anterior sem deixar rastro nenhum.
+ *
+ * UMA LINHA POR CASO, e nao uma por clique: e assim que a pergunta de verdade se
+ * responde ("o que ja aconteceu NESTE cracha+dia?"), e o `alvo` (indexado) vira a
+ * chave dessa busca. Um lote de 158 casos escreve 158 linhas — trilha e barata, e
+ * resumo de lote nao responde por ninguem.
+ *
+ * O `antes` sai de UMA leitura por chamada, so das colunas que vao mudar. Sem ele a
+ * trilha diz "gravou aceite=rejeitado" e nao diz o que havia antes — que e metade do
+ * valor de uma auditoria. */
+const TRILHA_MAX_LINHAS = 200;
+
+function chaveDoAlvo(linha: Record<string, unknown>, chaves: string[]) {
+  const cra = String(linha?.cracha ?? "").replace(/\D/g, "");
+  const dia = String(linha?.date_ref ?? linha?.data_ref ?? "").slice(0, 10);
+  if (cra && dia) return `${cra.padStart(8, "0")}|${dia}`;
+  if (linha?.id_ocorrencia) return `oc:${String(linha.id_ocorrencia)}`;
+  return chaves.map((c) => String(linha?.[c] ?? "")).filter(Boolean).join("|");
+}
+
+/** As linhas que JA existem, pelas colunas-chave da tabela (superset e filtro em memoria). */
+async function lerAntes(
+  base: string,
+  hDp: Record<string, string>,
+  tabela: string,
+  chaves: string[],
+  linhas: Record<string, unknown>[],
+  colunas: string[],
+) {
+  if (!chaves.length || !linhas.length || linhas.length > TRILHA_MAX_LINHAS) return new Map();
+  const partes: string[] = [];
+  for (const chave of chaves) {
+    const valores = [...new Set(linhas.map((l) => String(l?.[chave] ?? "")).filter(Boolean))];
+    if (!valores.length) return new Map();
+    partes.push(`${chave}=in.(${valores.map((v) => encodeURIComponent(`"${v}"`)).join(",")})`);
+  }
+  const select = [...new Set([...chaves, ...colunas])].join(",");
+  try {
+    const r = await fetch(
+      `${base}/rest/v1/${tabela}?select=${encodeURIComponent(select)}&${partes.join("&")}&limit=${TRILHA_MAX_LINHAS * 4}`,
+      { headers: hDp },
+    );
+    if (!r.ok) return new Map();
+    const atuais = (await r.json()) as Record<string, unknown>[];
+    const mapa = new Map<string, Record<string, unknown>>();
+    for (const a of atuais) mapa.set(chaves.map((c) => String(a?.[c] ?? "")).join("|"), a);
+    return mapa;
+  } catch {
+    return new Map(); // a trilha e melhor sem o "antes" do que a gravacao falhar por causa dela
+  }
+}
+
+/** Escreve a trilha. NUNCA derruba a gravacao: o registro e obrigacao nossa, nao do DP. */
+async function gravarTrilha(inoveAdmin: any, linhas: Record<string, unknown>[]) {
+  if (!linhas.length) return;
+  try {
+    await inoveAdmin.from("dp360_auditoria").insert(linhas);
+  } catch {
+    // sem trilha o trabalho nao para; o erro nao tem a quem ser dito aqui
+  }
+}
 
 // Cache das listas de datas. Descobrir os dias distintos custa varrer milhares de
 // linhas (o PostgREST nao faz DISTINCT) — medido ~8 s na ponto_gordura.
@@ -853,6 +923,27 @@ serve(async (req: Request) => {
     return json({ ok: true, tabela, coluna, datas, total: datas.length, cache: false });
   }
 
+  /* ── trilha: o que já aconteceu NESTE crachá+dia ─────────────────────────
+     A tabela mora no INOVE e só Administrador a lê direto (a policy do RLS existe porque
+     ela guarda crachá e nome). Aqui ela é servida pelo gateway, que já sabe quem é a
+     pessoa e o que ela pode ver na DP360 — e só devolve o que for daquele crachá+dia. */
+  if (acao === "trilha") {
+    const cra = String(corpo.cracha ?? "").replace(/\D/g, "");
+    const dia = String(corpo.date_ref ?? "").slice(0, 10);
+    if (!cra) return json({ ok: false, error: "crachá é obrigatório" }, 400);
+    if (!PAGINAS_DO_PONTO.some(pode)) return semAcessoTabela("trilha");
+    const alvos = [...new Set([cra, cra.padStart(8, "0"), cra.replace(/^0+/, "")])]
+      .flatMap((c) => (dia ? [`${c}|${dia}`] : [c]));
+    const { data, error: erroTrilha } = await inoveAdmin
+      .from("dp360_auditoria")
+      .select("id,acao,alvo,detalhe,autor_nome,criado_em")
+      .in("alvo", alvos)
+      .order("criado_em", { ascending: false })
+      .limit(Math.min(Number(corpo.limite ?? 60) || 60, 200));
+    if (erroTrilha) return json({ ok: false, error: mensagemSegura(erroTrilha) }, 502);
+    return json({ ok: true, linhas: data ?? [] });
+  }
+
   /* ── read: consulta uma tabela da allowlist ─────────────────────────────── */
   if (acao === "read") {
     const tabela = String(corpo.tabela ?? "");
@@ -896,6 +987,9 @@ serve(async (req: Request) => {
   if (acao === "write") {
     const tabela = String(corpo.tabela ?? "");
     const op = String(corpo.op ?? "");
+    // o RÓTULO da ação, como a tela a chama ("Marcação gravada", "Decisão desfeita"…): é o
+    // que faz a trilha ser lida por gente, em vez de um upsert sem nome
+    const motivo = String(corpo.motivo ?? "").slice(0, 120) || null;
     const cfg = TABELAS[tabela];
     if (!cfg?.escrever?.includes(op as "upsert" | "insert" | "delete" | "update")) {
       return json({ ok: false, error: "operação não liberada para esta tabela" }, 403);
@@ -930,6 +1024,13 @@ serve(async (req: Request) => {
           body: JSON.stringify(campos),
         });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        await gravarTrilha(inoveAdmin, [{
+          acao: "dado_update",
+          alvo: tabela,
+          detalhe: { tabela, op, motivo, campos, filtros: corpo.filtros ?? null },
+          autor_id: authData.user.id,
+          autor_nome: perfil?.nome ?? null,
+        }]);
         return json({ ok: true, tabela, op, campos: chaves });
       } catch (error) {
         return json({ ok: false, error: mensagemSegura(error) }, 502);
@@ -947,6 +1048,14 @@ serve(async (req: Request) => {
           headers: hDp,
         });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        await gravarTrilha(inoveAdmin, [{
+          acao: "dado_delete",
+          alvo: String((corpo.filtros as Record<string, unknown> | undefined)?.cracha ?? tabela)
+            .replace(/^eq\./, ""),
+          detalhe: { tabela, op, motivo, filtros: corpo.filtros ?? null },
+          autor_id: authData.user.id,
+          autor_nome: perfil?.nome ?? null,
+        }]);
         return json({ ok: true, tabela, op });
       } catch (error) {
         return json({ ok: false, error: mensagemSegura(error) }, 502);
@@ -959,6 +1068,13 @@ serve(async (req: Request) => {
     if (linhas.some((l) => typeof l !== "object" || l === null || Array.isArray(l))) {
       return json({ ok: false, error: "linhas devem ser objetos" }, 400);
     }
+
+    // O QUE JA ESTAVA LA, para a trilha poder dizer "de X para Y"
+    const chavesTabela = String(cfg.conflito ?? "").split(",").map((c) => c.trim()).filter(Boolean);
+    const colunasMexidas = [...new Set(linhas.flatMap((l) => Object.keys(l as Record<string, unknown>)))];
+    const antes = op === "upsert"
+      ? await lerAntes(base, hDp, tabela, chavesTabela, linhas as Record<string, unknown>[], colunasMexidas)
+      : new Map();
 
     const merge = op === "upsert";
     const url = merge && cfg.conflito
@@ -975,6 +1091,46 @@ serve(async (req: Request) => {
         body: JSON.stringify(linhas),
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      /* UMA LINHA DE TRILHA POR CASO. Acima de `TRILHA_MAX_LINHAS` vira uma linha so, de
+         resumo: a trilha existe para responder por pessoa, e um lote gigante e outra coisa
+         (o disparo dele ja tem registro proprio). */
+      const doLote = (linhas as Record<string, unknown>[]).slice(0, TRILHA_MAX_LINHAS);
+      const trilhas = doLote.map((l) => {
+        const k = chavesTabela.map((c) => String(l?.[c] ?? "")).join("|");
+        const anterior = antes.get(k);
+        const mudou: Record<string, { de: unknown; para: unknown }> = {};
+        for (const [campo, valor] of Object.entries(l)) {
+          if (chavesTabela.includes(campo)) continue;
+          const de = anterior ? anterior[campo] ?? null : null;
+          if (anterior && JSON.stringify(de) === JSON.stringify(valor ?? null)) continue;
+          mudou[campo] = { de, para: valor ?? null };
+        }
+        return {
+          acao: `dado_${op}`,
+          alvo: chaveDoAlvo(l, chavesTabela),
+          detalhe: {
+            tabela,
+            op,
+            motivo,
+            novo: !anterior,
+            mudou,
+            // o lote inteiro a que esta linha pertence, para ler "isto veio de um lote de N"
+            lote: linhas.length > 1 ? linhas.length : undefined,
+          },
+          autor_id: authData.user.id,
+          autor_nome: perfil?.nome ?? null,
+        };
+      });
+      if (linhas.length > TRILHA_MAX_LINHAS) {
+        trilhas.push({
+          acao: `dado_${op}`,
+          alvo: tabela,
+          detalhe: { tabela, op, motivo, resumo: true, lote: linhas.length, registradas: TRILHA_MAX_LINHAS },
+          autor_id: authData.user.id,
+          autor_nome: perfil?.nome ?? null,
+        } as (typeof trilhas)[number]);
+      }
+      await gravarTrilha(inoveAdmin, trilhas);
       return json({ ok: true, tabela, op, gravadas: linhas.length });
     } catch (error) {
       return json({ ok: false, error: mensagemSegura(error) }, 502);

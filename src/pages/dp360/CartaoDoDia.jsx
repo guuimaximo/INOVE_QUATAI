@@ -997,7 +997,11 @@ export function BotaoPontoConferido({ linha, caso, aoRecarregar }) {
       ...(ligar ? { origem: "revisao", tipo: "ponto_ok" } : { tipo: "" }),
     };
     try {
-      await upsertDP360("ponto_caso", payload);
+      await upsertDP360(
+        "ponto_caso",
+        payload,
+        ligar ? "Revisão conferida pelo DP" : "Marca de revisão conferida desfeita",
+      );
       setRecado({
         tipo: "ok",
         texto: ligar ? "Dia marcado como conferido." : "Marca desfeita — o dia volta para a Revisão.",
@@ -1844,7 +1848,11 @@ export default function CartaoDoDia({
     try {
       if (!preenchidos.length) {
         // "Tudo vazio limpa" — o mesmo caminho do `deletar_real_manual` do Python.
-        await apagarDP360("ponto_real_manual", { cracha: `eq.${cra8(cracha)}`, date_ref: `eq.${dia}` });
+        await apagarDP360(
+          "ponto_real_manual",
+          { cracha: `eq.${cra8(cracha)}`, date_ref: `eq.${dia}` },
+          "Real manual apagado",
+        );
         setRecadoRm({ tipo: "ok", texto: "Real manual apagado — o dia volta para a sugestão." });
       } else {
         const payload = {
@@ -1859,7 +1867,7 @@ export default function CartaoDoDia({
           payload.alm_saida = limpos.alm_saida || null;
           payload.alm_volta = limpos.alm_volta || null;
         }
-        await upsertDP360("ponto_real_manual", payload);
+        await upsertDP360("ponto_real_manual", payload, "Real manual cravado no Cartão do dia");
         setRecadoRm({ tipo: "ok", texto: "Real cravado." });
       }
       setForm(null);

@@ -298,4 +298,93 @@ export function montarGarantia(cars, hoje = new Date()) {
   return out;
 }
 
+// ---------- FEITO: a OS do carro abriu na MESMA SEMANA do item ----------
+// Duas fontes, basta uma:
+//  1. ultimo_plano (Transnet): data de abertura da OS no plano ancora da
+//     categoria. A revisao fica com a OS aberta por dias, e a tabela
+//     preventivas so e lancada depois que ela fecha.
+//  2. tabela preventivas (lancamento manual): guarda o historico que o
+//     ultimo_plano perde quando o mesmo plano abre OS de novo.
+// A revisao abre a 2305 junto, por isso a inspecao olha so a 2305.
+export const PLANO_ANCORA = {
+  "Revisão": ["2306"],
+  "Inspeção": ["2305"],
+  "Garantia": ["2646", "2645"],
+};
+// Data local (BRT), nunca UTC — ver skill inove-playbook.
+const isoLocal = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+export const isoMaisDias = (iso, n) => {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return isoLocal(d);
+};
+const soDigitos = (s) => String(s || "").replace(/\D/g, "");
+
+// itens: linhas de preventivas_programacao (cada uma com a sua `semana`).
+export function marcarFeitos(itens, cars, realizadas) {
+  return itens.map((it) => {
+    const ini = String(it.semana || "");
+    const fim = ini ? isoMaisDias(ini, 6) : "";
+    const naSemana = (iso) => !!iso && !!ini && iso >= ini && iso <= fim;
+    // prefixo programado = "046-" + nr_ordem (mesma chave do Gerencial)
+    const car = cars.get(String(it.prefixo || "").replace(/^046-/, ""));
+    const peloSistema = !!car && (PLANO_ANCORA[it.categoria] || []).some((id) =>
+      naSemana(String(car.byplan[id]?.dt_abertura_os || "").slice(0, 10))
+    );
+    if (peloSistema) return { ...it, feito: true };
+    const dig = soDigitos(it.prefixo);
+    const feito = realizadas.some((r) => {
+      const rp = soDigitos(r.prefixo);
+      if (!rp) return false;
+      const mesmoCarro = rp === dig || rp.endsWith(dig) || dig.endsWith(rp);
+      return mesmoCarro && naSemana(String(r.data_realizacao || ""));
+    });
+    return { ...it, feito };
+  });
+}
+
+// ---------- RESUMO: o que esta vencido, o que vence logo, e por item ----------
+// Convencao do dado: v >= 0 ja vencido (v km/dias alem); v < 0 faltam -v.
+const HORIZONTE_PROXIMOS_DIAS = 7;
+export function montarPendencias(linhas) {
+  const vencidos = [];
+  const proximos = [];
+  const porItem = new Map();
+  for (const l of linhas) {
+    const itens = [];
+    l.cols.forEach((c, j) => {
+      const col = GERENCIAL_COLS[j];
+      if (col.tipo === "calc" || !c.venc) return;
+      const item = { nome: col.t, excesso: Math.round(c.v), un: col.tipo === "dias" ? "d" : "km", principal: j <= 1 };
+      itens.push(item);
+      if (!porItem.has(col.t)) porItem.set(col.t, []);
+      porItem.get(col.t).push({ veic: l.veic, excesso: item.excesso, un: item.un });
+    });
+    const [insp, rev] = l.cols;
+    if (itens.length) {
+      // Revisão vencida > Inspeção vencida > só satélite vencido
+      const nivel = rev.venc ? 0 : insp.venc ? 1 : 2;
+      const chave = nivel === 0 ? rev.v : nivel === 1 ? insp.v : Math.max(...itens.map((i) => i.excesso));
+      itens.sort((a, b) => Number(b.principal) - Number(a.principal) || b.excesso - a.excesso);
+      vencidos.push({ veic: l.veic, nivel, chave, itens });
+      continue;
+    }
+    // Vence logo: revisão (ou, se ela está longe, a inspeção) em até 7 dias pelo km/dia.
+    if (!l.kmdia || l.kmdia <= 0) continue;
+    for (const [c, nome] of [[rev, "Revisão"], [insp, "Inspeção"]]) {
+      if (c.v == null || c.v >= 0) continue;
+      const faltam = Math.round(-c.v);
+      const dias = Math.ceil(faltam / l.kmdia);
+      if (dias <= HORIZONTE_PROXIMOS_DIAS) {
+        proximos.push({ veic: l.veic, nome, faltam, dias });
+        break;
+      }
+    }
+  }
+  vencidos.sort((a, b) => a.nivel - b.nivel || b.chave - a.chave);
+  proximos.sort((a, b) => a.dias - b.dias || a.faltam - b.faltam);
+  for (const lista of porItem.values()) lista.sort((a, b) => b.excesso - a.excesso);
+  return { vencidos, proximos, porItem, horizonteDias: HORIZONTE_PROXIMOS_DIAS };
+}
+
 export { fmtBR };

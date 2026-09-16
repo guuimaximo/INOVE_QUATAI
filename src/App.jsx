@@ -77,7 +77,6 @@ const GuardFraudes = lazy(() => import("./pages/guard/GuardFraudes"));
 const PCMInicio = lazy(() => import("./pages/pcm/PCMInicio"));
 const PCMDiario = lazy(() => import("./pages/pcm/PCMDiario"));
 const PCMResumo = lazy(() => import("./pages/pcm/PCMResumo"));
-const PCM_Preventivas = lazy(() => import("./pages/pcm/PCM_Preventivas"));
 const PCM_PreventivasPlano = lazy(() => import("./pages/pcm/PCM_PreventivasPlano"));
 const PCMTrocaPneus = lazy(() => import("./pages/pcm/PCMTrocaPneus"));
 const PCMControleFichas = lazy(() => import("./pages/pcm/PCMControleFichas"));
@@ -311,7 +310,8 @@ export default function App() {
               <Route path="/pcm-inicio" element={<PCMInicio />} />
               <Route path="/pcm-resumo" element={<PCMResumo />} />
               <Route path="/pcm-diario/:id" element={<PCMDiario />} />
-              <Route path="/pcm-preventivas" element={<PCM_Preventivas />} />
+              {/* Lançamentos viraram uma aba de Preventivas; o link antigo continua valendo. */}
+              <Route path="/pcm-preventivas" element={<Navigate to="/pcm-preventivas-plano?aba=lancamentos" replace />} />
               <Route path="/pcm-preventivas-plano" element={<PCM_PreventivasPlano />} />
               <Route path="/pcm-troca-pneus" element={<PCMTrocaPneus />} />
               <Route path="/pcm-controle-fichas" element={<PCMControleFichas />} />

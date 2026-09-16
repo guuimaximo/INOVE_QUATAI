@@ -1,4 +1,5 @@
-// src/pages/PCM_Preventivas.jsx
+// Lançamentos de preventivas (tabela public.preventivas). Vive como aba "Lançamentos"
+// dentro de Preventivas (PCM_PreventivasPlano); a rota antiga /pcm-preventivas redireciona.
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../../supabase";
 import {
@@ -18,6 +19,12 @@ import {
   FaEdit,
 } from "react-icons/fa";
 import CampoMotorista from "../../components/CampoMotorista";
+
+// Data local (BRT), nunca UTC — ver skill inove-playbook.
+function hojeLocal() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
 
 const FORM_INICIAL = {
   prefixo: "",
@@ -50,7 +57,7 @@ function parseColaborador(valor) {
   };
 }
 
-export default function PCM_Preventivas() {
+export default function PCM_Preventivas({ embutido = false, onSalvo } = {}) {
   const [modalOpen, setModalOpen] = useState(false);
   const [modoModal, setModoModal] = useState("novo"); // novo | editar
   const [registroSelecionado, setRegistroSelecionado] = useState(null);
@@ -108,7 +115,7 @@ export default function PCM_Preventivas() {
   function resetForm() {
     setForm({
       ...FORM_INICIAL,
-      data_realizacao: new Date().toISOString().split("T")[0],
+      data_realizacao: hojeLocal(),
     });
     setRegistroSelecionado(null);
     setModoModal("novo");
@@ -129,7 +136,7 @@ export default function PCM_Preventivas() {
       numero_os: item.numero_os || "",
       km_veiculo: item.km_veiculo || "",
       data_realizacao:
-        item.data_realizacao || new Date().toISOString().split("T")[0],
+        item.data_realizacao || hojeLocal(),
       tipo: item.tipo || "Preventiva - 10.000",
       mecanico: parseColaborador(item.mecanico),
       eletricista: parseColaborador(item.eletricista),
@@ -260,6 +267,7 @@ export default function PCM_Preventivas() {
 
       fecharModal();
       carregarDados();
+      onSalvo?.();
     } catch (err) {
       console.error(err);
       alert("Erro ao salvar: " + err.message);
@@ -269,10 +277,24 @@ export default function PCM_Preventivas() {
   }
 
   return (
-    <div className="w-full max-w-[98vw] 2xl:max-w-[1800px] mx-auto p-4 md:p-6 space-y-6">
+    <div className={embutido ? "space-y-4" : "w-full max-w-[98vw] 2xl:max-w-[1800px] mx-auto p-4 md:p-6 space-y-6"}>
+      {embutido ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-gray-500 dark:text-gray-400 max-w-2xl">
+            Registro das OS de preventiva e inspeção com a equipe que fez. Quem fecha a OS lança aqui — e o
+            lançamento também marca o carro como feito na programação da semana.
+          </p>
+          <button
+            onClick={abrirNovo}
+            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold py-2 px-4 rounded-lg shadow-sm transition active:scale-95"
+          >
+            <FaPlus /> Nova preventiva
+          </button>
+        </div>
+      ) : (
       <div className="bg-white rounded-2xl border shadow-sm p-5 md:p-6 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-black border border-blue-200 mb-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-black border border-emerald-200 mb-2">
             <FaWrench /> Gestão de Frota
           </div>
 
@@ -287,21 +309,22 @@ export default function PCM_Preventivas() {
 
         <button
           onClick={abrirNovo}
-          className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-xl shadow-md transition-all active:scale-95"
+          className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-5 rounded-xl shadow-md transition-all active:scale-95"
         >
           <FaPlus /> Nova Preventiva
         </button>
       </div>
+      )}
 
-      <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-        <div className="p-4 border-b bg-slate-50 flex items-center gap-2">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border dark:border-gray-700 overflow-hidden">
+        <div className="p-4 border-b dark:border-gray-700 bg-slate-50 dark:bg-gray-900/40 flex items-center gap-2">
           <FaFilter className="text-slate-400" />
-          <h2 className="font-bold text-slate-700">Filtros</h2>
+          <h2 className="font-bold text-slate-700 dark:text-gray-200">Filtros</h2>
         </div>
 
         <div className="p-4 md:p-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           <div>
-            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
+            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-gray-200 mb-1.5">
               <FaCalendarAlt className="text-slate-400" /> Data
             </label>
 
@@ -311,12 +334,12 @@ export default function PCM_Preventivas() {
               onChange={(e) =>
                 setFiltros((prev) => ({ ...prev, data: e.target.value }))
               }
-              className="w-full border border-slate-300 rounded-xl p-3 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-slate-700 font-semibold"
+              className="w-full border border-slate-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 rounded-xl p-3 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-semibold"
             />
           </div>
 
           <div>
-            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
+            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-gray-200 mb-1.5">
               <FaBus className="text-slate-400" /> Prefixo
             </label>
 
@@ -327,12 +350,12 @@ export default function PCM_Preventivas() {
               onChange={(e) =>
                 setFiltros((prev) => ({ ...prev, prefixo: e.target.value }))
               }
-              className="w-full border border-slate-300 rounded-xl p-3 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-slate-700 font-semibold"
+              className="w-full border border-slate-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 rounded-xl p-3 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-semibold"
             />
           </div>
 
           <div>
-            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
+            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-gray-200 mb-1.5">
               <FaSearch className="text-slate-400" /> OS
             </label>
 
@@ -343,12 +366,12 @@ export default function PCM_Preventivas() {
               onChange={(e) =>
                 setFiltros((prev) => ({ ...prev, os: e.target.value }))
               }
-              className="w-full border border-slate-300 rounded-xl p-3 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-slate-700 font-semibold"
+              className="w-full border border-slate-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 rounded-xl p-3 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-semibold"
             />
           </div>
 
           <div>
-            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
+            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-gray-200 mb-1.5">
               <FaClipboardList className="text-slate-400" /> Status
             </label>
 
@@ -357,7 +380,7 @@ export default function PCM_Preventivas() {
               onChange={(e) =>
                 setFiltros((prev) => ({ ...prev, status: e.target.value }))
               }
-              className="w-full border border-slate-300 rounded-xl p-3 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-slate-700 font-semibold"
+              className="w-full border border-slate-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 rounded-xl p-3 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-semibold"
             >
               <option value="">Todos</option>
               <option value="COMPLETO">Completo</option>
@@ -376,22 +399,22 @@ export default function PCM_Preventivas() {
                 status: "",
               })
             }
-            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors"
+            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-slate-700 dark:text-gray-100 font-bold transition-colors"
           >
             Limpar filtros
           </button>
 
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 font-bold text-sm">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-sm">
             {listaFiltrada.length} registro(s)
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-        <div className="p-4 border-b bg-slate-50 flex items-center justify-between gap-2">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border dark:border-gray-700 overflow-hidden">
+        <div className="p-4 border-b dark:border-gray-700 bg-slate-50 dark:bg-gray-900/40 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <FaClipboardList className="text-slate-400" />
-            <h2 className="font-bold text-slate-700">Histórico de Lançamentos</h2>
+            <h2 className="font-bold text-slate-700 dark:text-gray-200">Histórico de Lançamentos</h2>
           </div>
 
           <p className="text-xs text-slate-500 font-semibold">
@@ -401,7 +424,7 @@ export default function PCM_Preventivas() {
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1700px] text-sm text-left">
-            <thead className="bg-white text-slate-500 uppercase font-bold text-[11px] tracking-wider border-b">
+            <thead className="bg-white dark:bg-gray-800 text-slate-500 dark:text-gray-400 uppercase font-bold text-[11px] tracking-wider border-b dark:border-gray-700">
               <tr>
                 <th className="px-6 py-4">OS</th>
                 <th className="px-6 py-4">Prefixo</th>
@@ -417,7 +440,7 @@ export default function PCM_Preventivas() {
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-gray-700">
               {listaFiltrada.map((item) => {
                 const status = getStatusPreventiva(item);
 
@@ -425,25 +448,25 @@ export default function PCM_Preventivas() {
                   <tr
                     key={item.id}
                     onClick={() => abrirEdicao(item)}
-                    className="hover:bg-blue-50/60 transition-colors cursor-pointer"
+                    className="hover:bg-emerald-50/60 dark:hover:bg-emerald-900/20 transition-colors cursor-pointer"
                   >
-                    <td className="px-6 py-4 font-black text-slate-700">
+                    <td className="px-6 py-4 font-black text-slate-700 dark:text-gray-100">
                       #{item.numero_os}
                     </td>
 
                     <td className="px-6 py-4">
-                      <span className="inline-flex items-center gap-1.5 font-black text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg border">
+                      <span className="inline-flex items-center gap-1.5 font-black text-slate-800 dark:text-gray-100 bg-slate-100 dark:bg-gray-700 dark:border-gray-600 px-2.5 py-1 rounded-lg border">
                         <FaBus className="text-slate-400 text-xs" /> {item.prefixo}
                       </span>
                     </td>
 
-                    <td className="px-6 py-4 font-bold text-slate-600">
+                    <td className="px-6 py-4 font-bold text-slate-600 dark:text-gray-300">
                       {item.km_veiculo
                         ? Number(item.km_veiculo).toLocaleString("pt-BR")
                         : "-"}
                     </td>
 
-                    <td className="px-6 py-4 font-medium text-slate-600">
+                    <td className="px-6 py-4 font-medium text-slate-600 dark:text-gray-300">
                       {item.data_realizacao
                         ? item.data_realizacao.split("-").reverse().join("/")
                         : "-"}
@@ -478,13 +501,13 @@ export default function PCM_Preventivas() {
                       </span>
                     </td>
 
-                    <td className="px-6 py-4 text-slate-600">{item.mecanico || "-"}</td>
-                    <td className="px-6 py-4 text-slate-600">{item.eletricista || "-"}</td>
-                    <td className="px-6 py-4 text-slate-600">{item.funilaria || "-"}</td>
-                    <td className="px-6 py-4 text-slate-600">{item.borracharia || "-"}</td>
+                    <td className="px-6 py-4 text-slate-600 dark:text-gray-300">{item.mecanico || "-"}</td>
+                    <td className="px-6 py-4 text-slate-600 dark:text-gray-300">{item.eletricista || "-"}</td>
+                    <td className="px-6 py-4 text-slate-600 dark:text-gray-300">{item.funilaria || "-"}</td>
+                    <td className="px-6 py-4 text-slate-600 dark:text-gray-300">{item.borracharia || "-"}</td>
 
                     <td className="px-6 py-4">
-                      <span className="inline-flex items-center gap-1.5 text-blue-700 font-black text-xs bg-blue-50 border border-blue-200 px-3 py-1 rounded-lg">
+                      <span className="inline-flex items-center gap-1.5 text-slate-600 dark:text-gray-300 font-black text-xs bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 px-3 py-1 rounded-lg">
                         <FaEdit size={10} /> Editar
                       </span>
                     </td>
@@ -497,7 +520,7 @@ export default function PCM_Preventivas() {
                   <td colSpan="11" className="px-6 py-16">
                     <div className="flex flex-col items-center justify-center text-slate-400">
                       <FaInbox size={48} className="mb-4 text-slate-300" />
-                      <p className="text-lg font-bold text-slate-600">
+                      <p className="text-lg font-bold text-slate-600 dark:text-gray-300">
                         Nenhum registro encontrado
                       </p>
                       <p className="text-sm mt-1">
@@ -514,21 +537,21 @@ export default function PCM_Preventivas() {
 
       {modalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[95vh] animate-in zoom-in-95 duration-200">
-            <div className="px-6 py-5 border-b flex items-center justify-between bg-white relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-50 to-transparent opacity-50"></div>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[95vh] animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-5 border-b dark:border-gray-700 flex items-center justify-between bg-white dark:bg-gray-900 relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-50 dark:from-emerald-900/30 to-transparent opacity-50"></div>
 
               <div className="relative flex items-center gap-3">
                 <div
                   className={`text-white p-2 rounded-lg ${
-                    modoModal === "editar" ? "bg-amber-500" : "bg-blue-600"
+                    modoModal === "editar" ? "bg-amber-500" : "bg-emerald-600"
                   }`}
                 >
                   {modoModal === "editar" ? <FaEdit /> : <FaWrench />}
                 </div>
 
                 <div>
-                  <h2 className="text-xl font-black text-slate-800">
+                  <h2 className="text-xl font-black text-slate-800 dark:text-gray-100">
                     {modoModal === "editar"
                       ? `Editar Lançamento #${registroSelecionado?.numero_os || ""}`
                       : "Lançar Manutenção"}
@@ -550,15 +573,15 @@ export default function PCM_Preventivas() {
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/50">
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 border-b pb-2">
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/50 dark:bg-gray-950/40">
+              <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-slate-200 dark:border-gray-700 shadow-sm">
+                <h3 className="text-sm font-black text-slate-800 dark:text-gray-100 uppercase tracking-wider mb-4 border-b dark:border-gray-700 pb-2">
                   Dados da Ordem
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
+                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-gray-200 mb-1.5">
                       <FaBus className="text-slate-400" /> Prefixo{" "}
                       <span className="text-rose-500">*</span>
                     </label>
@@ -568,7 +591,7 @@ export default function PCM_Preventivas() {
                       onChange={(e) =>
                         setForm({ ...form, prefixo: e.target.value })
                       }
-                      className="w-full border border-slate-300 rounded-xl p-3 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-slate-700 font-semibold"
+                      className="w-full border border-slate-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 rounded-xl p-3 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-semibold"
                     >
                       <option value="">Selecione...</option>
 
@@ -581,7 +604,7 @@ export default function PCM_Preventivas() {
                   </div>
 
                   <div>
-                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
+                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-gray-200 mb-1.5">
                       <FaClipboardList className="text-slate-400" /> Número da OS{" "}
                       <span className="text-rose-500">*</span>
                     </label>
@@ -592,13 +615,13 @@ export default function PCM_Preventivas() {
                       onChange={(e) =>
                         setForm({ ...form, numero_os: e.target.value })
                       }
-                      className="w-full border border-slate-300 rounded-xl p-3 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-slate-700 font-semibold"
+                      className="w-full border border-slate-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 rounded-xl p-3 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-semibold"
                       placeholder="Ex: 12345"
                     />
                   </div>
 
                   <div>
-                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
+                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-gray-200 mb-1.5">
                       <FaRoad className="text-slate-400" /> KM do Veículo{" "}
                       <span className="text-rose-500">*</span>
                     </label>
@@ -609,13 +632,13 @@ export default function PCM_Preventivas() {
                       onChange={(e) =>
                         setForm({ ...form, km_veiculo: e.target.value })
                       }
-                      className="w-full border border-slate-300 rounded-xl p-3 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-slate-700 font-semibold"
+                      className="w-full border border-slate-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 rounded-xl p-3 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-semibold"
                       placeholder="Ex: 150000"
                     />
                   </div>
 
                   <div>
-                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
+                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-gray-200 mb-1.5">
                       <FaCalendarAlt className="text-slate-400" /> Data{" "}
                       <span className="text-rose-500">*</span>
                     </label>
@@ -626,12 +649,12 @@ export default function PCM_Preventivas() {
                       onChange={(e) =>
                         setForm({ ...form, data_realizacao: e.target.value })
                       }
-                      className="w-full border border-slate-300 rounded-xl p-3 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-slate-700 font-semibold"
+                      className="w-full border border-slate-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 rounded-xl p-3 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-slate-700 font-semibold"
                     />
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
+                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-gray-200 mb-1.5">
                       <FaWrench className="text-slate-400" /> Tipo{" "}
                       <span className="text-rose-500">*</span>
                     </label>
@@ -656,14 +679,14 @@ export default function PCM_Preventivas() {
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 border-b pb-2">
+              <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-slate-200 dark:border-gray-700 shadow-sm">
+                <h3 className="text-sm font-black text-slate-800 dark:text-gray-100 uppercase tracking-wider mb-4 border-b dark:border-gray-700 pb-2">
                   Equipe Técnica
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
                   <div>
-                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
+                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-gray-200 mb-1.5">
                       <FaUserTie className="text-slate-400" /> Mecânico{" "}
                       <span className="text-rose-500">*</span>
                     </label>
@@ -675,7 +698,7 @@ export default function PCM_Preventivas() {
                   </div>
 
                   <div>
-                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
+                    <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-gray-200 mb-1.5">
                       <FaUserTie className="text-slate-400" /> Eletricista{" "}
                       <span className="text-rose-500">*</span>
                     </label>
@@ -689,7 +712,7 @@ export default function PCM_Preventivas() {
                   {form.tipo === "Preventiva - 10.000" && (
                     <>
                       <div>
-                        <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
+                        <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-gray-200 mb-1.5">
                           <FaUserTie className="text-slate-400" /> Funilaria
                         </label>
 
@@ -702,7 +725,7 @@ export default function PCM_Preventivas() {
                       </div>
 
                       <div>
-                        <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1.5">
+                        <label className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-gray-200 mb-1.5">
                           <FaUserTie className="text-slate-400" /> Borracharia
                         </label>
 
@@ -719,10 +742,10 @@ export default function PCM_Preventivas() {
               </div>
             </div>
 
-            <div className="px-6 py-5 border-t bg-white flex justify-end gap-3">
+            <div className="px-6 py-5 border-t dark:border-gray-700 bg-white dark:bg-gray-900 flex justify-end gap-3">
               <button
                 onClick={fecharModal}
-                className="px-6 py-2.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                className="px-6 py-2.5 rounded-xl font-bold text-slate-600 dark:text-gray-200 bg-slate-100 dark:bg-gray-700 hover:bg-slate-200 dark:hover:bg-gray-600 transition-colors"
               >
                 Cancelar
               </button>
@@ -733,7 +756,7 @@ export default function PCM_Preventivas() {
                 className={`px-6 py-2.5 rounded-xl font-bold text-white shadow-md transition-all active:scale-95 flex items-center gap-2 disabled:opacity-70 disabled:active:scale-100 ${
                   modoModal === "editar"
                     ? "bg-amber-500 hover:bg-amber-600"
-                    : "bg-blue-600 hover:bg-blue-700"
+                    : "bg-emerald-600 hover:bg-emerald-700"
                 }`}
               >
                 {loading ? (

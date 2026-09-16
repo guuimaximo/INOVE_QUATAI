@@ -3,35 +3,54 @@
 // A Programacao da Semana agora e MANUAL: o usuario "programa" carros a partir do Gerencial;
 // os itens ficam na tabela public.preventivas_programacao (projeto INOVE, via supabase).
 // "Feito" e automatico: OS aberta na semana no ultimo_plano ou lancada na tabela public.preventivas.
-import { useState, useEffect, useMemo, useCallback } from "react";
+// A aba Lancamentos e a antiga tela /pcm-preventivas (registro das OS), que agora vive aqui.
+import { useState, useEffect, useMemo, useCallback, useContext, lazy, Suspense } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   FaSync, FaSearch, FaTable, FaCalendarWeek, FaExclamationTriangle, FaWrench, FaShieldAlt,
-  FaMoon, FaSun, FaPlus, FaTrash, FaChartBar, FaTimes, FaFilePdf,
+  FaMoon, FaSun, FaPlus, FaTrash, FaChartBar, FaTimes, FaFilePdf, FaClipboardList,
 } from "react-icons/fa";
 import { puxarUltimoPlano } from "../../supabaseDados";
 import { supabase } from "../../supabase";
 import { useTheme } from "../../context/ThemeContext";
+import { AuthContext } from "../../context/AuthContext";
+import { useAccessGovernance } from "../../context/AccessContext";
+import { canUserAccessPageKey } from "../../utils/access";
 import {
-  montarCarros, montarGerencial, montarGarantia, ultimaAtualizacao,
+  montarCarros, montarGerencial, montarGarantia, ultimaAtualizacao, marcarFeitos, montarPendencias,
   GERENCIAL_COLS, WINDOW_KM, fmtBR,
 } from "./preventivasLogic";
+import PreventivasResumo from "./PreventivasResumo";
+
+const Lancamentos = lazy(() => import("./PCM_Preventivas"));
 
 // Tacógrafo (plano por prazo): entra junto na revisão se faltam <= 15 dias.
 const JANELA_DIAS_TCO = 15;
 
 const CATEGORIAS = ["Revisão", "Inspeção", "Garantia"];
-// Plano do ultimo_plano cuja OS aberta prova que a categoria foi feita
-// (a revisão abre a 2305 junto, por isso a inspeção olha só a 2305).
-const PLANO_ANCORA = {
-  "Revisão": ["2306"],
-  "Inspeção": ["2305"],
-  "Garantia": ["2646", "2645"],
-};
-const CAT_COR = {
-  "Revisão": "emerald",
-  "Inspeção": "indigo",
-  "Garantia": "amber",
-};
+// Quantas semanas o gráfico "Últimas semanas" do Resumo mostra (contando a atual).
+const SEMANAS_HISTORICO = 6;
+
+const ABAS = [
+  ["resumo", "Resumo", FaChartBar],
+  ["gerencial", "Gerencial", FaTable],
+  ["programacao", "Programação da Semana", FaCalendarWeek],
+  ["garantia", "Garantia", FaShieldAlt],
+  ["lancamentos", "Lançamentos", FaClipboardList],
+];
+
+// Lê todas as linhas de uma consulta: o PostgREST corta em 1000 por resposta.
+async function lerTudo(montar) {
+  const passo = 1000;
+  const todas = [];
+  for (let de = 0; ; de += passo) {
+    const { data, error } = await montar().range(de, de + passo - 1);
+    if (error) throw error;
+    todas.push(...(data || []));
+    if (!data || data.length < passo) break;
+  }
+  return todas;
+}
 
 // Data local (BRT), nunca UTC — ver skill inove-playbook.
 function toISODateLocal(d) {
@@ -55,7 +74,6 @@ function semanaSegunda() {
   d.setDate(d.getDate() - dow);
   return toISODateLocal(d);
 }
-const soDigitos = (s) => String(s || "").replace(/\D/g, "");
 
 function Badge({ dias }) {
   if (dias == null) return <span className="text-gray-400">—</span>;
@@ -72,7 +90,26 @@ export default function PCM_PreventivasPlano() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
-  const [aba, setAba] = useState("gerencial");
+  // A aba fica na URL (?aba=...): recarregar mantém a aba, e a rota antiga
+  // /pcm-preventivas cai direto em Lançamentos.
+  const [params, setParams] = useSearchParams();
+  const { user } = useContext(AuthContext);
+  const { profileMap } = useAccessGovernance();
+  // Lançar OS continua exigindo a permissão da antiga tela (pcm_preventivas).
+  const podeLancar = canUserAccessPageKey(user, "pcm_preventivas", profileMap);
+  const abas = ABAS.filter(([k]) => k !== "lancamentos" || podeLancar);
+  const abaUrl = params.get("aba");
+  const aba = abas.some(([k]) => k === abaUrl) ? abaUrl : "resumo";
+  const setAba = (k) =>
+    setParams(
+      (p) => {
+        const n = new URLSearchParams(p);
+        if (k === "resumo") n.delete("aba");
+        else n.set("aba", k);
+        return n;
+      },
+      { replace: true }
+    );
   const [busca, setBusca] = useState("");
 
   // Programacao manual (tabela preventivas_programacao) + realizadas (tabela preventivas).
@@ -88,12 +125,16 @@ export default function PCM_PreventivasPlano() {
   const [realizadas, setRealizadas] = useState([]);
   const [modal, setModal] = useState(null); // { prefixo }
   const [salvando, setSalvando] = useState(false);
+  // Histórico do Resumo: programação das últimas semanas (e das futuras, que
+  // viram a "agenda" de cada carro) + o que foi lançado no período.
+  const [historico, setHistorico] = useState({ itens: [], realizadas: [] });
 
-  const ehSemanaAtual = semana === semanaSegunda();
-  const labelSemana = useMemo(() => {
-    const d = diasUteis(semana);
-    return `${d[0].dm} – ${d[d.length - 1].dm}`;
-  }, [semana]);
+  const semanaAtual = semanaSegunda();
+  const inicioHistorico = useMemo(() => {
+    const d = new Date(semanaAtual + "T00:00:00");
+    d.setDate(d.getDate() - 7 * (SEMANAS_HISTORICO - 1));
+    return toISODateLocal(d);
+  }, [semanaAtual]);
 
   // Plano (Gerencial/Garantia) — NÃO depende da semana; carrega uma vez (consulta
   // grande do Athena). Não recarrega ao trocar de semana, pra folhear rápido.
@@ -117,11 +158,12 @@ export default function PCM_PreventivasPlano() {
           .select("*")
           .eq("semana", semana)
           .order("data_planejada", { ascending: true }),
-        // realizadas p/ casar o "feito": desde ~3 dias antes da semana vista.
+        // realizadas p/ casar o "feito": só as lançadas dentro da semana vista.
         supabase
           .from("preventivas")
           .select("prefixo,tipo,data_realizacao")
-          .gte("data_realizacao", toISODateLocal(new Date(new Date(semana + "T00:00:00").getTime() - 3 * 86400000))),
+          .gte("data_realizacao", semana)
+          .lte("data_realizacao", toISODateLocal(new Date(new Date(semana + "T00:00:00").getTime() + 6 * 86400000))),
       ]);
       if (!prog.error) setProgItems(prog.data || []);
       if (!real.error) setRealizadas(real.data || []);
@@ -130,43 +172,82 @@ export default function PCM_PreventivasPlano() {
     }
   }, [semana]);
 
+  const carregarHistorico = useCallback(async () => {
+    try {
+      const [itens, realizadasHist] = await Promise.all([
+        lerTudo(() =>
+          supabase
+            .from("preventivas_programacao")
+            .select("id,prefixo,categoria,data_planejada,turno,semana")
+            .gte("semana", inicioHistorico)
+            .order("id", { ascending: true })
+        ),
+        lerTudo(() =>
+          supabase
+            .from("preventivas")
+            .select("id,prefixo,data_realizacao")
+            .gte("data_realizacao", inicioHistorico)
+            .order("id", { ascending: true })
+        ),
+      ]);
+      setHistorico({ itens, realizadas: realizadasHist });
+    } catch (e) {
+      console.error("Falha ao carregar o histórico:", e);
+    }
+  }, [inicioHistorico]);
+
+  // Depois de mexer na programação ou lançar uma OS: semana vista + histórico.
+  const recarregarProgramacao = useCallback(() => {
+    carregarSemana();
+    carregarHistorico();
+  }, [carregarSemana, carregarHistorico]);
+
   useEffect(() => { carregarPlano(); }, [carregarPlano]);
   useEffect(() => { carregarSemana(); }, [carregarSemana]);
+  useEffect(() => { carregarHistorico(); }, [carregarHistorico]);
 
   const cars = useMemo(() => (rows.length ? montarCarros(rows) : new Map()), [rows]);
   const gerencial = useMemo(() => (cars.size ? montarGerencial(cars) : null), [cars]);
   const garantia = useMemo(() => (cars.size ? montarGarantia(montarCarros(rows)) : null), [cars, rows]);
   const atualizado = useMemo(() => (rows.length ? ultimaAtualizacao(rows) : null), [rows]);
+  const pendencias = useMemo(() => (gerencial ? montarPendencias(gerencial.linhas) : null), [gerencial]);
 
-  // "Feito" automatico: a OS do carro foi ABERTA na MESMA SEMANA do plano
-  // (segunda a domingo). Duas fontes, basta uma:
-  //  1. ultimo_plano (Transnet): data de abertura da OS no plano ancora da
-  //     categoria. E o que o sistema ja sabe — a revisao fica com a OS aberta
-  //     por dias, e a tabela preventivas so e lancada depois que ela fecha.
-  //  2. tabela preventivas (lancamento manual): guarda o historico que o
-  //     ultimo_plano perde quando o mesmo plano abre OS de novo.
-  const progComStatus = useMemo(() => {
-    const semIni = semana;
-    const semFim = toISODateLocal(new Date(new Date(semana + "T00:00:00").getTime() + 6 * 86400000));
-    const naSemana = (iso) => !!iso && iso >= semIni && iso <= semFim;
-    return progItems.map((it) => {
-      // prefixo programado = "046-" + nr_ordem (mesma chave do Gerencial)
-      const car = cars.get(String(it.prefixo || "").replace(/^046-/, ""));
-      const peloSistema = !!car && (PLANO_ANCORA[it.categoria] || []).some((id) =>
-        naSemana(String(car.byplan[id]?.dt_abertura_os || "").slice(0, 10))
-      );
-      if (peloSistema) return { ...it, feito: true };
-      const dig = soDigitos(it.prefixo);
-      const feito = realizadas.some((r) => {
-        const rp = soDigitos(r.prefixo);
-        if (!rp) return false;
-        const mesmoCarro = rp === dig || rp.endsWith(dig) || dig.endsWith(rp);
-        if (!mesmoCarro) return false;
-        return naSemana(String(r.data_realizacao || ""));
-      });
-      return { ...it, feito };
-    });
-  }, [progItems, realizadas, semana, cars]);
+  // "Feito" automático (regra em marcarFeitos): OS aberta na semana do item,
+  // pelo ultimo_plano ou pelo lançamento manual.
+  const progComStatus = useMemo(() => marcarFeitos(progItems, cars, realizadas), [progItems, cars, realizadas]);
+  const historicoMarcado = useMemo(
+    () => marcarFeitos(historico.itens, cars, historico.realizadas),
+    [historico, cars]
+  );
+
+  // Barras do Resumo: uma por semana, da mais antiga até a atual (vazias contam).
+  const semanasHistorico = useMemo(() => {
+    const out = [];
+    for (let i = 0; i < SEMANAS_HISTORICO; i++) {
+      const d = new Date(inicioHistorico + "T00:00:00");
+      d.setDate(d.getDate() + 7 * i);
+      out.push({ semana: toISODateLocal(d), total: 0, feitas: 0 });
+    }
+    const porSemana = new Map(out.map((s) => [s.semana, s]));
+    for (const it of historicoMarcado) {
+      const s = porSemana.get(String(it.semana));
+      if (!s) continue;
+      s.total += 1;
+      if (it.feito) s.feitas += 1;
+    }
+    return out;
+  }, [historicoMarcado, inicioHistorico]);
+
+  // Agenda de cada carro: o que ainda falta fazer desta semana em diante.
+  const agendaPorCarro = useMemo(() => {
+    const m = {};
+    for (const it of historicoMarcado) {
+      if (it.feito || String(it.semana) < semanaAtual) continue;
+      (m[it.prefixo] ||= []).push(it);
+    }
+    for (const k in m) m[k].sort((a, b) => String(a.data_planejada || "").localeCompare(String(b.data_planejada || "")));
+    return m;
+  }, [historicoMarcado, semanaAtual]);
 
   // Programado por carro (chave = prefixo/veic, igual ao l.veic do Gerencial),
   // para mostrar a data programada como etiqueta e pintar a linha no Gerencial.
@@ -238,6 +319,7 @@ export default function PCM_PreventivasPlano() {
         .from("preventivas_programacao").select("*").eq("semana", semanaItem)
         .order("data_planejada", { ascending: true });
       setProgItems(data || []);
+      carregarHistorico();
     } catch (e) {
       alert("Erro ao salvar: " + (e.message || e));
     } finally {
@@ -250,6 +332,7 @@ export default function PCM_PreventivasPlano() {
     const { error } = await supabase.from("preventivas_programacao").delete().eq("id", id);
     if (error) { alert("Erro ao remover: " + error.message); return; }
     setProgItems((p) => p.filter((x) => x.id !== id));
+    carregarHistorico();
   }
 
   // Arrastar: solta o carro num dia/turno → muda data_planejada e turno.
@@ -264,7 +347,8 @@ export default function PCM_PreventivasPlano() {
       .from("preventivas_programacao")
       .update({ data_planejada: novaData, turno: novoTurno, semana: novaSemana, atualizado_em: new Date().toISOString() })
       .eq("id", id);
-    if (error) { alert("Erro ao mover: " + error.message); carregarSemana(); }
+    if (error) { alert("Erro ao mover: " + error.message); carregarSemana(); return; }
+    carregarHistorico();
   }
 
   async function baixarPDF() {
@@ -312,6 +396,11 @@ export default function PCM_PreventivasPlano() {
     atrasoDias <= 3 ? { cls: "bg-amber-100 text-amber-700", txt: `${atrasoDias} dias atrás` } :
     { cls: "bg-red-100 text-red-700", txt: `${atrasoDias} dias atrás` };
 
+  const navSemana = (
+    <SemanaNav semana={semana} semanaAtual={semanaAtual} onAnterior={() => shiftSemana(-1)} onProxima={() => shiftSemana(1)} onHoje={() => setSemana(semanaAtual)} />
+  );
+  const precisaPlano = aba !== "lancamentos";
+
   return (
     <div className="w-full max-w-[98vw] 2xl:max-w-[1800px] mx-auto p-4 md:p-6 space-y-5">
       {/* Cabecalho */}
@@ -338,7 +427,7 @@ export default function PCM_PreventivasPlano() {
             {dark ? <FaSun /> : <FaMoon />}
           </button>
           <button
-            onClick={() => { carregarPlano(); carregarSemana(); }}
+            onClick={() => { carregarPlano(); recarregarProgramacao(); }}
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-100 text-sm font-medium transition"
           >
             <FaSync className={loading ? "animate-spin" : ""} /> Atualizar
@@ -348,12 +437,7 @@ export default function PCM_PreventivasPlano() {
 
       {/* Abas */}
       <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700">
-        {[
-          ["gerencial", "Gerencial", FaTable],
-          ["programacao", "Programação da Semana", FaCalendarWeek],
-          ["resumo", "Resumo", FaChartBar],
-          ["garantia", "Garantia", FaShieldAlt],
-        ].map(([k, label, Icon]) => (
+        {abas.map(([k, label, Icon]) => (
           <button
             key={k}
             onClick={() => setAba(k)}
@@ -368,12 +452,12 @@ export default function PCM_PreventivasPlano() {
         ))}
       </div>
 
-      {erro && (
+      {erro && precisaPlano && (
         <div className="flex items-center gap-2 p-4 rounded-xl bg-red-50 text-red-700 text-sm">
           <FaExclamationTriangle /> Erro ao carregar: {erro}
         </div>
       )}
-      {loading && (
+      {loading && precisaPlano && (
         <div className="grid place-items-center py-20 text-gray-400">
           <FaSync className="animate-spin text-3xl mb-3" />
           <p className="text-sm">Carregando planos…</p>
@@ -394,34 +478,7 @@ export default function PCM_PreventivasPlano() {
       {!loading && !erro && aba === "programacao" && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => shiftSemana(-1)}
-                title="Semana anterior"
-                className="w-9 h-9 grid place-items-center rounded-lg border border-gray-200 dark:border-gray-700 text-lg font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
-              >
-                ‹
-              </button>
-              <div className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm font-bold text-gray-700 dark:text-gray-200 text-center min-w-[140px]">
-                {labelSemana}
-                {ehSemanaAtual && <span className="ml-1.5 text-[10px] font-semibold text-emerald-600">• atual</span>}
-              </div>
-              <button
-                onClick={() => shiftSemana(1)}
-                title="Próxima semana"
-                className="w-9 h-9 grid place-items-center rounded-lg border border-gray-200 dark:border-gray-700 text-lg font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
-              >
-                ›
-              </button>
-              {!ehSemanaAtual && (
-                <button
-                  onClick={() => setSemana(semanaSegunda())}
-                  className="ml-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 px-2 py-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
-                >
-                  Hoje
-                </button>
-              )}
-            </div>
+            {navSemana}
             <button
               onClick={baixarPDF}
               className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition"
@@ -442,8 +499,36 @@ export default function PCM_PreventivasPlano() {
         </div>
       )}
 
-      {!loading && !erro && aba === "resumo" && gerencial && (
-        <Resumo aderencia={gerencial.aderencia} itens={progComStatus} />
+      {!loading && !erro && aba === "resumo" && gerencial && pendencias && (
+        <PreventivasResumo
+          gerencial={gerencial}
+          pendencias={pendencias}
+          garantia={garantia}
+          itensSemana={progComStatus}
+          semana={semana}
+          semanaAtual={semanaAtual}
+          historico={semanasHistorico}
+          agenda={agendaPorCarro}
+          hojeISO={toISODateLocal(hoje)}
+          sistemaISO={atualizado ? toISODateLocal(atualizado) : null}
+          navSemana={navSemana}
+          onSemana={setSemana}
+          onProgramar={(prefixo) => setModal({ prefixo })}
+          onEditar={(it) => setModal(it)}
+          onIrPara={setAba}
+        />
+      )}
+
+      {aba === "lancamentos" && podeLancar && (
+        <Suspense
+          fallback={
+            <div className="grid place-items-center py-20 text-gray-400">
+              <FaSync className="animate-spin text-3xl" />
+            </div>
+          }
+        >
+          <Lancamentos embutido onSalvo={recarregarProgramacao} />
+        </Suspense>
       )}
 
       {!loading && !erro && aba === "garantia" && garantia && <Garantia itens={garantia} />}
@@ -1034,64 +1119,33 @@ function Programacao({ itens, onRemover, onMover, onEditar, semana, duePorCarro 
   );
 }
 
-/* ===================== RESUMO ===================== */
-function Resumo({ aderencia, itens }) {
-  const porCat = useMemo(() => {
-    const m = {};
-    for (const c of CATEGORIAS) m[c] = { total: 0, feito: 0 };
-    for (const it of itens) {
-      const b = m[it.categoria] || (m[it.categoria] = { total: 0, feito: 0 });
-      b.total += 1;
-      if (it.feito) b.feito += 1;
-    }
-    return m;
-  }, [itens]);
-
+/* ===================== NAVEGAÇÃO DE SEMANA (Resumo e Programação) ===================== */
+function SemanaNav({ semana, semanaAtual, onAnterior, onProxima, onHoje }) {
+  const d = diasUteis(semana);
+  const atual = semana === semanaAtual;
+  const btn =
+    "w-8 h-8 grid place-items-center rounded-lg border border-gray-200 dark:border-gray-700 text-lg font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition";
   return (
-    <div className="space-y-6">
-      <section>
-        <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">Programação da semana — planejado × feito</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {CATEGORIAS.map((c) => {
-            const b = porCat[c] || { total: 0, feito: 0 };
-            const pct = b.total ? (b.feito / b.total) * 100 : null;
-            const cor = CAT_COR[c];
-            return (
-              <div key={c} className="rounded-2xl border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
-                <div className={`text-xs font-bold uppercase ${cor === "emerald" ? "text-emerald-700" : cor === "indigo" ? "text-indigo-700" : "text-amber-800"}`}>{c === "Revisão" ? "Revisões" : c}</div>
-                <div className="mt-1 text-2xl font-black text-gray-800 dark:text-gray-100">{pct == null ? "—" : `${pct.toFixed(0)}%`}</div>
-                <div className="text-xs text-gray-500">{b.feito}/{b.total} feitas</div>
-                <div className="mt-2 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-                  <div className="h-full rounded-full bg-emerald-600" style={{ width: `${pct ?? 0}%` }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      <section>
-        <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">Aderência por item (do plano)</h3>
-        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
-          {aderencia.map((a) => {
-            const pct = a.adr == null ? null : a.adr * 100;
-            return (
-              <div key={a.nome} className="px-4 py-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] text-gray-700 dark:text-gray-300">{a.nome}</span>
-                  <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{pct == null ? "—" : `${pct.toFixed(1)}%`}</span>
-                </div>
-                <div className="flex items-center gap-2 mt-1.5">
-                  <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-                    <div className="h-full rounded-full bg-emerald-600" style={{ width: `${pct ?? 0}%` }} />
-                  </div>
-                  <span className={`text-[11px] tabular-nums ${a.atrasadas ? "text-red-600 font-semibold" : "text-gray-400"}`}>{a.atrasadas}/{a.total}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+    <div className="flex items-center gap-1.5">
+      <button type="button" onClick={onAnterior} title="Semana anterior" aria-label="Semana anterior" className={btn}>
+        ‹
+      </button>
+      <div className="px-3 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm font-bold text-gray-700 dark:text-gray-200 text-center min-w-[132px]">
+        {d[0].dm} – {d[d.length - 1].dm}
+        {atual && <span className="ml-1.5 text-[10px] font-semibold text-emerald-600">• atual</span>}
+      </div>
+      <button type="button" onClick={onProxima} title="Próxima semana" aria-label="Próxima semana" className={btn}>
+        ›
+      </button>
+      {!atual && (
+        <button
+          type="button"
+          onClick={onHoje}
+          className="ml-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 px-2 py-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+        >
+          Hoje
+        </button>
+      )}
     </div>
   );
 }

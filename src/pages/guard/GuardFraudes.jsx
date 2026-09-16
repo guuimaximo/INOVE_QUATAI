@@ -1548,8 +1548,12 @@ export default function GuardFraudes() {
                 lista é recalculada na hora das passagens; "Voltar ao padrão" devolve a regra acima.
               </li>
               <li>
-                O <b>robô de fraudes</b> (06:30) continua usando o padrão: ele põe na fila quem entra,
-                tira o pendente que saiu da janela e devolve o desbloqueado que voltou a fazer rajada.
+                O <b>robô de fraudes</b> (06:30) continua usando o padrão: ele põe na fila quem entra e
+                tira o pendente que saiu da janela.
+              </li>
+              <li>
+                <b>Desbloqueou, o cartão volta para esta aba</b>, marcado "desbloqueado" com o dia; se já
+                não bater a regra, o robô o tira na rodada seguinte.
               </li>
               <li>
                 Cartão que só aparece com a regra da tela entra marcado "só nesta regra"; bloquear ou
@@ -1561,12 +1565,16 @@ export default function GuardFraudes() {
           <div className="gd-card">
             <h4>Cartões bloqueados</h4>
             <ul>
-              <li>Só o que nós decidimos pelo INOVE: bloqueados, desbloqueados e "não é fraude".</li>
+              <li>Só os cartões que nós bloqueamos pelo INOVE.</li>
+              <li>Desbloquear devolve o cartão para a aba Bloqueio — ele não fica guardado aqui.</li>
               <li>
                 "Rajada depois?" avisa o bloqueado que ainda passou depois do dia do bloqueio — sinal de
                 que a bilhetagem não aplicou.
               </li>
-              <li>O Histórico mostra quem bloqueou, desbloqueou ou descartou cada cartão, e quando.</li>
+              <li>
+                O Histórico mostra quem bloqueou, desbloqueou ou marcou "não é fraude", e quando; clicar
+                na linha abre o cartão (o "não é fraude" volta para a fila por ali).
+              </li>
             </ul>
           </div>
 

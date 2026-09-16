@@ -17,18 +17,20 @@
 // rajadas"). Os quatro números viram campos, e a aba RECALCULA a lista das passagens
 // (`regraBloqueio.js`, o porte de regra.py — com o padrão, dá o mesmo resultado do robô).
 // A fila do robô continua valendo para quem entra e sai sozinho; a tela só usa a situação
-// gravada dela (bloqueado, "não é fraude", desbloqueado) para tirar da lista quem já foi
+// gravada dela (bloqueado, "não é fraude") para tirar da lista quem já foi
 // decidido. Cartão que só aparece com a regra da tela não tem linha: ao bloquear ou
 // descartar, a tela CRIA a linha já com a decisão (o gateway não deixa criar pendente).
 //
-// O CICLO DO CARTÃO são quatro situações — pendente (a bloquear), bloqueado,
-// desbloqueado e descartado. Cada mudança grava a situação na fila E uma linha em
+// O CICLO DO CARTÃO: pendente (a bloquear) → bloqueado ou descartado ("não é fraude").
+// Desbloquear devolve para pendente (16/09/2026); `desbloqueado` só existe em linha antiga.
+// Cada mudança grava a situação na fila E uma linha em
 // `fraude_bloqueio_historico` (de → para, quem, motivo): é o que responde "quando
 // bloqueamos este cartão?", que a base da bilhetagem não sabe dizer.
 //
 // O BLOQUEIO DE VERDADE É FEITO NO SISTEMA DA BILHETAGEM. Esta tela registra a decisão,
-// guarda a prova e entrega o CÓDIGO pronto para copiar — e o código é o `id_usuario`,
-// não o `cru_id` (confirmado pelo nome nas levas de fevereiro e julho).
+// guarda a prova e entrega o NÚMERO DO USUÁRIO pronto para copiar — o `id_usuario` (o
+// "código" das planilhas), não o `cru_id`, que a tela chama de número do cartão
+// (confirmado pelo nome nas levas de fevereiro e julho).
 //
 // 🔒 Quem grava é o gateway `dp360-api` (só Administrador), e só as colunas de fluxo.
 //    O nome de quem bloqueou é o do login do INOVE, escrito pelo servidor.
@@ -82,11 +84,12 @@ const DIAS_ATIVO = 10;
 // A aba Bloqueio mostra SÓ o que precisa bloquear; o resto do ciclo mora na aba "Cartões
 // bloqueados" (dono, 16/09/2026: "ali eu quero na cara da pessoa o que precisa bloquear, e
 // acabou / os bloqueados têm que ficar em outra aba").
-const SITUACOES_GESTAO = [
-  { k: "bloqueado", rotulo: "Bloqueados" },
-  { k: "desbloqueado", rotulo: "Desbloqueados" },
-  { k: "descartado", rotulo: "Não é fraude" },
-];
+// A aba "Cartões bloqueados" mostra SÓ os bloqueados (dono, 16/09/2026: "é apenas bloqueados
+// nessa tela"). DESBLOQUEAR DEVOLVE O CARTÃO PARA A ABA BLOQUEIO ("se eu desbloquear ele volta
+// de novo para a primeira tela e não pode ficar em desbloqueados"): a situação volta a
+// `pendente` e a liberação fica em desbloqueado_em/por/motivo e no histórico. A situação
+// `desbloqueado` só existe em linha antiga, e a tela a trata como "a bloquear". O "não é
+// fraude" sai das duas listas e continua no Histórico, de onde o cartão abre e pode voltar.
 const ROTULO_SITUACAO = {
   pendente: "a bloquear",
   bloqueado: "bloqueado",
@@ -184,7 +187,7 @@ function CaixaCodigos({ cartoes, titulo }) {
     <div>
       <div className="gd-rot">{titulo}</div>
       <div className="gd-copia">
-        <span className="gd-cod">{cartoes.length === 1 ? txt(cartoes[0].id_usuario) : `${cartoes.length} códigos`}</span>
+        <span className="gd-cod">{cartoes.length === 1 ? txt(cartoes[0].id_usuario) : `${cartoes.length} números`}</span>
         <button
           type="button"
           className="dp-btn"
@@ -203,7 +206,7 @@ function CaixaCodigos({ cartoes, titulo }) {
           {cartoes.map((c) => (
             <div key={c.cru_id}>
               <b className="dp-mono">{txt(c.id_usuario)}</b>{" "}
-              <span className="dp-faint">— cartão {txt(c.cru_id)}</span>
+              <span className="dp-faint">— nº do cartão {txt(c.cru_id)}</span>
             </div>
           ))}
         </div>
@@ -262,22 +265,25 @@ function JanelaAcao({ acao, onFechar, onConfirmar }) {
         <b style={{ fontSize: 15 }}>{titulo}</b>
         <div className="dp-muted" style={{ fontSize: 12.5, margin: "4px 0 10px", lineHeight: 1.5 }}>
           {tipo === "bloquear" &&
-            "Registra o bloqueio aqui e o cartão sai da fila. O bloqueio em si é feito no sistema da bilhetagem — use o código abaixo."}
+            "Registra o bloqueio aqui e o cartão sai da fila. O bloqueio em si é feito no sistema da bilhetagem — use o número do usuário abaixo."}
           {tipo === "desbloquear" && (
             <>
-              Registra a liberação aqui. <b>O desbloqueio também precisa ser feito no sistema da bilhetagem</b> — use
-              o código abaixo.
+              Registra a liberação aqui e <b>o cartão volta para a aba Bloqueio</b>. O desbloqueio também precisa
+              ser feito no sistema da bilhetagem — use o número do usuário abaixo.
             </>
           )}
           {tipo === "descartar" && "O cartão sai da fila sem pedido de bloqueio. Fica registrado quem descartou e por quê."}
           {tipo === "reabrir" && "O cartão volta para \"A bloquear\"."}
-          {tipo === "anotar" && `Cartão ${txt(cartoes[0]?.cru_id)} · código ${txt(cartoes[0]?.id_usuario)}`}
+          {tipo === "anotar" && `Nº do cartão ${txt(cartoes[0]?.cru_id)} · nº do usuário ${txt(cartoes[0]?.id_usuario)}`}
         </div>
 
         {tipo === "bloquear" && (
-          <CaixaCodigos cartoes={cartoes} titulo={um ? "Código para bloquear" : "Códigos para bloquear"} />
+          <CaixaCodigos
+            cartoes={cartoes}
+            titulo={um ? "Número do usuário para bloquear" : "Números dos usuários para bloquear"}
+          />
         )}
-        {tipo === "desbloquear" && <CaixaCodigos cartoes={cartoes} titulo="Código para desbloquear" />}
+        {tipo === "desbloquear" && <CaixaCodigos cartoes={cartoes} titulo="Número do usuário para desbloquear" />}
 
         {tipo === "desbloquear" && (
           <>
@@ -382,17 +388,22 @@ function acaoDoHistorico(h) {
     return ROTULO_SITUACAO[para] || para;
   }
   if (de && de === para) return "anotou";
+  // desbloqueio: até 16/09/2026 ia para "desbloqueado"; agora o cartão volta para a fila
+  if (para === "desbloqueado" || (para === "pendente" && de === "bloqueado")) return "desbloqueou";
   return (
     {
       bloqueado: de === "desbloqueado" ? "bloqueou de novo" : "bloqueou",
-      desbloqueado: "desbloqueou",
       descartado: "marcou como não é fraude",
       pendente: "voltou para a fila",
     }[para] || para
   );
 }
 const TOM_ACAO = { bloqueado: "ok", desbloqueado: "warn", descartado: "mute", pendente: "danger", saiu_da_janela: "mute" };
-const tomDoHistorico = (h) => (txt(h.de) && txt(h.de) === txt(h.para) ? "mute" : TOM_ACAO[txt(h.para)] || "mute");
+function tomDoHistorico(h) {
+  if (txt(h.de) && txt(h.de) === txt(h.para)) return "mute";
+  if (acaoDoHistorico(h) === "desbloqueou") return "warn";
+  return TOM_ACAO[txt(h.para)] || "mute";
+}
 // "tela" sobra só se o servidor não achou o nome do login
 const quemFez = (h) => {
   const q = txt(h.quem);
@@ -447,7 +458,7 @@ function HistoricoDoCartao({ cartao, historico, carregando, onFechar }) {
           <div>
             <b style={{ fontSize: 16 }}>Histórico do cartão</b>
             <div className="dp-faint" style={{ fontSize: 12.5, marginTop: 2 }}>
-              código <b className="dp-mono">{txt(cartao.id_usuario) || "—"}</b> · cartão{" "}
+              nº do usuário <b className="dp-mono">{txt(cartao.id_usuario) || "—"}</b> · nº do cartão{" "}
               <span className="dp-mono">{txt(cartao.cru_id)}</span> · {pessoas} ação(ões) de pessoas ·{" "}
               {historico.length - pessoas} da regra automática
             </div>
@@ -478,6 +489,34 @@ function HistoricoDoCartao({ cartao, historico, carregando, onFechar }) {
           <div className="dp-faint">Sem registro ainda.</div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Um dado do cartão no topo do pop-up (dono, 16/09/2026: "os dados do cartão precisam ter
+ *  no topo também — número do cartão, número do usuário, tipo de cartão"). */
+function FichaDoCartao({ rotulo, valor, copiavel = false, classe = "", dica }) {
+  const [copiado, setCopiado] = useState(false);
+  return (
+    <div className={`gd-bqm-ficha ${classe}`} title={dica}>
+      <span className="gd-bqm-rot">{rotulo}</span>
+      <span className="v">
+        <b>{valor || "—"}</b>
+        {copiavel && valor ? (
+          <button
+            type="button"
+            className="dp-btn gd-bqm-mini"
+            onClick={async () => {
+              if (await copiar(valor)) {
+                setCopiado(true);
+                setTimeout(() => setCopiado(false), 1500);
+              }
+            }}
+          >
+            {copiado ? "copiado ✓" : "copiar"}
+          </button>
+        ) : null}
+      </span>
     </div>
   );
 }
@@ -518,7 +557,6 @@ function CartaoAberto({ cartao, baseAte, regra = REGRA_PADRAO, podeAnotar = true
   const [erro, setErro] = useState("");
   const [blocoAberto, setBlocoAberto] = useState("");
   const [foco, setFoco] = useState(null);
-  const [copiado, setCopiado] = useState(false);
   const cru = txt(cartao.cru_id);
 
   useEffect(() => {
@@ -600,26 +638,20 @@ function CartaoAberto({ cartao, baseAte, regra = REGRA_PADRAO, podeAnotar = true
         {/* ── quem é e o que fazer ── */}
         <div className="gd-modal-head gd-bqm-head">
           <div className="gd-bqm-id">
-            <div className="gd-bqm-linha">
-              <span className="gd-bqm-rot">Código</span>
-              <span className="gd-cod">{txt(cartao.id_usuario) || "—"}</span>
-              <button
-                type="button"
-                className="dp-btn gd-bqm-mini"
-                onClick={async () => {
-                  if (await copiar(txt(cartao.id_usuario))) {
-                    setCopiado(true);
-                    setTimeout(() => setCopiado(false), 1500);
-                  }
-                }}
-              >
-                {copiado ? "copiado ✓" : "copiar"}
-              </button>
+            <div className="gd-bqm-fichas">
+              <FichaDoCartao rotulo="Número do cartão" valor={cru} copiavel classe="num" />
+              <FichaDoCartao
+                rotulo="Número do usuário"
+                valor={txt(cartao.id_usuario)}
+                copiavel
+                classe="num destaque"
+                dica="É o número que se usa para bloquear e desbloquear no sistema da bilhetagem"
+              />
+              <FichaDoCartao rotulo="Tipo de cartão" valor={txt(cartao.tipo_cartao) || "não informado"} classe="texto" />
               <span className={`dp-pill ${TOM_SITUACAO[s]}`}>{ROTULO_SITUACAO[s]}</span>
             </div>
-            <div className="sub" title={local || undefined}>
-              cartão <span className="dp-mono">{cru}</span> · {txt(cartao.tipo_cartao) || "tipo não informado"}
-              {local ? ` · ${local}` : ""}
+            <div className="sub gd-bqm-local" title={local || undefined}>
+              {local || "sem endereço"}
             </div>
             <div className="sub gd-bqm-ultima">
               {historico === null ? (
@@ -920,13 +952,13 @@ function HistoricoBloqueio({ historico, cartoes, termo, carregando, onAbrir }) {
       { id: "quem", titulo: "Quem", largura: 190, valor: (h) => quemFez(h) },
       {
         id: "id_usuario",
-        titulo: "Código",
-        largura: 100,
+        titulo: "Nº do usuário",
+        largura: 110,
         classe: "dp-mono",
         valor: (h) => txt(h.id_usuario),
         render: (h) => <b className="gd-cod-lin">{txt(h.id_usuario) || "—"}</b>,
       },
-      { id: "cru_id", titulo: "Cartão", largura: 90, classe: "dp-mono", valor: (h) => txt(h.cru_id) },
+      { id: "cru_id", titulo: "Nº do cartão", largura: 100, classe: "dp-mono", valor: (h) => txt(h.cru_id) },
       {
         id: "de",
         titulo: "Estava",
@@ -943,15 +975,15 @@ function HistoricoBloqueio({ historico, cartoes, termo, carregando, onAbrir }) {
     <>
       <div className="gd-bq-kpis">
         <div className="gd-bq-kpi ok">
-          <b>{conta((h) => txt(h.para) === "bloqueado" && txt(h.de) !== "bloqueado")}</b>
+          <b>{conta((h) => acaoDoHistorico(h).startsWith("bloqueou"))}</b>
           <span>bloqueios</span>
         </div>
         <div className="gd-bq-kpi">
-          <b>{conta((h) => txt(h.para) === "desbloqueado" && txt(h.de) !== "desbloqueado")}</b>
+          <b>{conta((h) => acaoDoHistorico(h) === "desbloqueou")}</b>
           <span>desbloqueios</span>
         </div>
         <div className="gd-bq-kpi">
-          <b>{conta((h) => txt(h.para) === "descartado" && txt(h.de) !== "descartado")}</b>
+          <b>{conta((h) => acaoDoHistorico(h) === "marcou como não é fraude")}</b>
           <span>não é fraude</span>
         </div>
         <div className="gd-bq-kpi">
@@ -1127,6 +1159,11 @@ async function criarLinha(c, situacao, mudancas, rotulo) {
   }
 }
 
+/** O cartão voltou de um desbloqueio? Devolve o dia (ISO) ou "". Bloquear de novo limpa. */
+function desbloqueadoEm(c) {
+  return situacaoDe(c) === "bloqueado" ? "" : diaDoInstante(c?.desbloqueado_em);
+}
+
 /** A última rajada é de um dia DEPOIS do bloqueio? (o dia do bloqueio não conta: a
  *  bilhetagem pode levar o dia para aplicar). Devolve a data da rajada ou "". */
 function rajadaDepoisDoBloqueio(c) {
@@ -1137,8 +1174,7 @@ function rajadaDepoisDoBloqueio(c) {
 
 /**
  * `modo="fila"` (aba Bloqueio): só os cartões A BLOQUEAR, pela regra dos campos.
- * `modo="gestao"` (aba Cartões bloqueados): bloqueados, desbloqueados, "não é fraude" e o
- * histórico. Desbloqueado que volta a fazer rajada volta sozinho para a fila — quem faz isso
+ * `modo="gestao"` (aba Cartões bloqueados): só os bloqueados, e o histórico. Desbloqueado que volta a fazer rajada volta sozinho para a fila — quem faz isso
  * é o robô (PROGRAMA_FRAUDES/fraudes/fila.py).
  */
 export default function FraudeBloqueio({ modo = "fila" }) {
@@ -1269,10 +1305,9 @@ export default function FraudeBloqueio({ modo = "fila" }) {
     [janelaPronta, janelaLida, regra, ate],
   );
 
-  /* A LISTA A BLOQUEAR = quem a regra pegou, menos quem já tem decisão gravada. Bloqueado e
-     "não é fraude" saem; desbloqueado só fica se fez rajada DEPOIS do dia do desbloqueio (o
-     mesmo critério com que o robô o devolve para a fila). Cartão sem linha é marcado
-     `_naFila: false`: a decisão sobre ele CRIA a linha. */
+  /* A LISTA A BLOQUEAR = quem a regra pegou, menos quem já tem decisão gravada: bloqueado e
+     "não é fraude" saem. Desbloqueado fica (desbloquear devolve para esta aba). Cartão sem
+     linha é marcado `_naFila: false`: a decisão sobre ele CRIA a linha. */
   const porCru = useMemo(() => new Map(cartoes.map((c) => [txt(c.cru_id), c])), [cartoes]);
   const fila = useMemo(() => {
     if (!calculados) return [];
@@ -1281,10 +1316,6 @@ export default function FraudeBloqueio({ modo = "fila" }) {
       const gravado = porCru.get(l.cru_id);
       const s = gravado ? situacaoDe(gravado) : "pendente";
       if (s === "bloqueado" || s === "descartado") continue;
-      if (s === "desbloqueado") {
-        const dia = diaDoInstante(gravado.desbloqueado_em);
-        if (!dia || !(l.ultima_rajada > dia)) continue;
-      }
       lista.push(gravado ? { ...gravado, ...l, _naFila: true } : { ...l, situacao: "pendente", _naFila: false });
     }
     return lista;
@@ -1303,10 +1334,7 @@ export default function FraudeBloqueio({ modo = "fila" }) {
   const refDias = gestao ? baseAte : ate;
 
   const contagem = useMemo(() => {
-    const c = { pendente: 0 };
-    SITUACOES_GESTAO.forEach((s) => {
-      c[s.k] = 0;
-    });
+    const c = {};
     cartoes.forEach((x) => {
       c[situacaoDe(x)] = (c[situacaoDe(x)] || 0) + 1;
     });
@@ -1326,16 +1354,6 @@ export default function FraudeBloqueio({ modo = "fila" }) {
     };
   }, [cartoes, fila, gestao, refDias]);
 
-  // cru_id → a última linha de histórico feita por GENTE (lista já vem da mais nova)
-  const ultimoPorPessoa = useMemo(() => {
-    const m = new Map();
-    for (const h of historico) {
-      if (txt(h.quem) === "deteccao" || m.has(txt(h.cru_id))) continue;
-      m.set(txt(h.cru_id), h);
-    }
-    return m;
-  }, [historico]);
-
   const visiveis = useMemo(() => {
     const t = termo.trim().toLowerCase();
     return (gestao ? cartoes.filter((c) => situacaoDe(c) === aba) : fila)
@@ -1353,14 +1371,14 @@ export default function FraudeBloqueio({ modo = "fila" }) {
     const base = [
       {
         id: "id_usuario",
-        titulo: "Código",
-        largura: 100,
+        titulo: "Nº do usuário",
+        largura: 110,
         classe: "dp-mono",
         valor: (c) => txt(c.id_usuario),
         render: (c) => <b className="gd-cod-lin">{txt(c.id_usuario)}</b>,
       },
-      { id: "cru_id", titulo: "Cartão", largura: 90, classe: "dp-mono", valor: (c) => txt(c.cru_id) },
-      { id: "tipo_cartao", titulo: "Tipo", largura: 150, valor: (c) => txt(c.tipo_cartao) },
+      { id: "cru_id", titulo: "Nº do cartão", largura: 100, classe: "dp-mono", valor: (c) => txt(c.cru_id) },
+      { id: "tipo_cartao", titulo: "Tipo de cartão", largura: 160, valor: (c) => txt(c.tipo_cartao) },
       {
         id: "dias_com_rajada",
         titulo: "Dias c/ rajada",
@@ -1424,24 +1442,35 @@ export default function FraudeBloqueio({ modo = "fila" }) {
       },
     ];
     if (!gestao) {
-      // de onde o cartão veio: da fila do robô, só da regra da tela, ou de volta depois do desbloqueio
+      // de onde o cartão veio: da fila do robô ou só da regra da tela — e se voltou de um desbloqueio
       base.splice(2, 0, {
         id: "origem",
-        titulo: "Fila do robô",
-        largura: 120,
-        valor: (c) => (c._naFila === false ? "não" : situacaoDe(c) === "desbloqueado" ? "voltou" : "sim"),
-        render: (c) =>
-          c._naFila === false ? (
-            <span className="dp-pill warn" title="O robô não pôs este cartão na fila: ele só aparece com a regra desta tela">
-              só nesta regra
-            </span>
-          ) : situacaoDe(c) === "desbloqueado" ? (
-            <span className="dp-pill danger" title="Foi desbloqueado e fez rajada depois do desbloqueio">
-              voltou
-            </span>
-          ) : (
-            <span className="dp-faint">sim</span>
-          ),
+        titulo: "Origem",
+        largura: 190,
+        valor: (c) =>
+          (c._naFila === false ? "só nesta regra" : "fila do robô") +
+          (desbloqueadoEm(c) ? ` · desbloqueado ${paraBR(desbloqueadoEm(c))}` : ""),
+        render: (c) => (
+          <span className="gd-origem">
+            {c._naFila === false ? (
+              <span className="dp-pill warn" title="O robô não pôs este cartão na fila: ele só aparece com a regra desta tela">
+                só nesta regra
+              </span>
+            ) : (
+              <span className="dp-faint">fila do robô</span>
+            )}
+            {desbloqueadoEm(c) ? (
+              <span
+                className="dp-pill danger"
+                title={`Desbloqueado em ${quandoBR(c.desbloqueado_em)}${
+                  txt(c.desbloqueado_por) ? ` por ${txt(c.desbloqueado_por)}` : ""
+                }${txt(c.motivo_desbloqueio) ? ` — ${txt(c.motivo_desbloqueio)}` : ""}`}
+              >
+                desbloqueado {paraBR(desbloqueadoEm(c)).slice(0, 5)}
+              </span>
+            ) : null}
+          </span>
+        ),
       });
     }
     if (aba === "bloqueado") {
@@ -1466,32 +1495,11 @@ export default function FraudeBloqueio({ modo = "fila" }) {
         },
       );
     }
-    if (aba === "desbloqueado") {
-      base.push(
-        { id: "desbloqueado_em", titulo: "Desbloqueado em", largura: 140, valor: (c) => quandoBR(c.desbloqueado_em) },
-        { id: "desbloqueado_por", titulo: "Por", largura: 150, valor: (c) => txt(c.desbloqueado_por) },
-        { id: "motivo_desbloqueio", titulo: "Motivo", largura: 240, valor: (c) => txt(c.motivo_desbloqueio) },
-      );
-    }
-    if (aba === "descartado") {
-      base.push(
-        { id: "descartado_em", titulo: "Descartado em", largura: 140, valor: (c) => quandoBR(c.descartado_em) },
-        {
-          id: "descartado_por",
-          titulo: "Por",
-          largura: 150,
-          valor: (c) => {
-            const h = ultimoPorPessoa.get(txt(c.cru_id));
-            return h && txt(h.para) === "descartado" ? quemFez(h) : "";
-          },
-        },
-      );
-    }
     if (aba !== "pendente") {
       base.push({ id: "observacao", titulo: "Observação", largura: 220, valor: (c) => txt(c.observacao) });
     }
     return base;
-  }, [aba, gestao, regra, refDias, ultimoPorPessoa]);
+  }, [aba, gestao, regra, refDias]);
 
   const cartaoAberto = (gestao ? cartoes : fila).find((c) => txt(c.cru_id) === aberto) || null;
   const marcados = visiveis.filter((c) => selecionados.includes(txt(c.cru_id)));
@@ -1552,10 +1560,11 @@ export default function FraudeBloqueio({ modo = "fila" }) {
           "Bloqueio de cartão (fraude)",
         );
       } else if (tipo === "desbloquear") {
+        // desbloqueou, VOLTA PARA A ABA BLOQUEIO; a liberação fica registrada nas colunas e no histórico
         const texto = motivo + (obs ? ` — ${obs}` : "");
         await aplicar(
           lista,
-          "desbloqueado",
+          "pendente",
           { desbloqueado_em: agora, desbloqueado_por: "tela", motivo_desbloqueio: texto },
           texto,
           "Desbloqueio de cartão (fraude)",
@@ -1596,7 +1605,9 @@ export default function FraudeBloqueio({ modo = "fila" }) {
         texto:
           tipo === "anotar"
             ? "Anotação salva."
-            : `${lista.length} cartão(ões) → ${ROTULO_SITUACAO[
+            : tipo === "desbloquear"
+              ? `${lista.length} cartão(ões) desbloqueado(s) — de volta na aba Bloqueio.`
+              : `${lista.length} cartão(ões) → ${ROTULO_SITUACAO[
                 { bloquear: "bloqueado", desbloquear: "desbloqueado", descartar: "descartado", reabrir: "pendente" }[tipo]
               ]}.`,
       });
@@ -1612,7 +1623,7 @@ export default function FraudeBloqueio({ modo = "fila" }) {
     const ok = await copiar(visiveis.map((c) => txt(c.id_usuario)).join("\n"));
     setRecado(
       ok
-        ? { tom: "ok", texto: `${visiveis.length} código(s) copiado(s).` }
+        ? { tom: "ok", texto: `${visiveis.length} número(s) de usuário copiado(s).` }
         : { tom: "danger", texto: "O navegador não deixou copiar." },
     );
   };
@@ -1626,7 +1637,7 @@ export default function FraudeBloqueio({ modo = "fila" }) {
             type="search"
             value={termo}
             onChange={(e) => setTermo(e.target.value)}
-            placeholder="código, cartão ou local…"
+            placeholder="nº do usuário, nº do cartão ou local…"
             aria-label="Buscar cartão"
           />
         </div>
@@ -1640,7 +1651,7 @@ export default function FraudeBloqueio({ modo = "fila" }) {
               ))}
             </select>
             <button type="button" className="dp-btn" onClick={copiarDaAba}>
-              Copiar códigos da aba
+              Copiar nº dos usuários
             </button>
           </>
         ) : null}
@@ -1661,9 +1672,9 @@ export default function FraudeBloqueio({ modo = "fila" }) {
 
       {gestao ? (
         <div className="gd-hint">
-          Os cartões que <b>já saíram da fila</b>: bloqueados, desbloqueados e marcados como "não é fraude",
-          e o histórico de quem fez cada coisa. <b>Desbloqueado que volta a fazer rajada volta sozinho para a
-          aba Bloqueio.</b> {baseAte ? `Base até ${paraBR(baseAte)}.` : ""}
+          Só os cartões <b>bloqueados</b> pelo INOVE. <b>Desbloqueou, o cartão volta para a aba Bloqueio.</b> Quem
+          bloqueou, desbloqueou ou marcou "não é fraude", e quando, fica no <b>Histórico</b> — clique numa linha para
+          abrir o cartão. {baseAte ? `Base até ${paraBR(baseAte)}.` : ""}
         </div>
       ) : (
         <CamposDaRegra
@@ -1694,14 +1705,6 @@ export default function FraudeBloqueio({ modo = "fila" }) {
             <b>{kpis.passandoBloqueado}</b>
             <span>bloqueados com rajada depois</span>
           </div>
-          <div className="gd-bq-kpi">
-            <b>{contagem.desbloqueado || 0}</b>
-            <span>desbloqueados</span>
-          </div>
-          <div className="gd-bq-kpi">
-            <b>{contagem.descartado || 0}</b>
-            <span>não é fraude</span>
-          </div>
         </div>
       ) : (
         <div className="gd-bq-kpis">
@@ -1726,19 +1729,16 @@ export default function FraudeBloqueio({ modo = "fila" }) {
 
       {gestao ? (
       <div className="dp-viewbar" style={{ paddingTop: 4 }}>
-        {SITUACOES_GESTAO.map((s) => (
-          <button
-            key={s.k}
-            type="button"
-            className={`dp-chip-f${aba === s.k ? " on" : ""}`}
-            onClick={() => {
-              setAba(s.k);
-              setSelecionados([]);
-            }}
-          >
-            {s.rotulo} <span className="n">{contagem[s.k] || 0}</span>
-          </button>
-        ))}
+        <button
+          type="button"
+          className={`dp-chip-f${aba === "bloqueado" ? " on" : ""}`}
+          onClick={() => {
+            setAba("bloqueado");
+            setSelecionados([]);
+          }}
+        >
+          Bloqueados <span className="n">{contagem.bloqueado || 0}</span>
+        </button>
         <button
           type="button"
           className={`dp-chip-f${aba === "historico" ? " on" : ""}`}

@@ -30,8 +30,10 @@ import PainelExecucao, { acompanharLote } from "../loteEmExecucao";
 // escritas aqui dentro e por isso o Resumo não conseguia mostrar oportunidade sem
 // reimplementá-las (e devolver outro número). A régua é a MESMA nas duas telas.
 import {
+  NIVEL_REAL_MANUAL,
   PRECEDENCIA,
   aplicarCamadasGordura,
+  camadaRealManual,
   chaveDe,
   cracha8,
   dia10,
@@ -128,6 +130,8 @@ const NIVEL_LBL = {
   OPERACAO_FORA_PONTO: "fora do ponto",
   NAO_CALCULAR: "n/calc",
   ANOMALIA_TEMPORAL: "anomalia",
+  // ponta sem régua que ganhou a régua do Real cravado pelo DP (`camadaRealManual`)
+  [NIVEL_REAL_MANUAL]: "real do DP",
 };
 // Variantes de `.dp-gmark` (dp360.css) — as MESMAS cores de nível da ferramenta
 // (app/ui/styles.css `.gmark.g-p1..g-neu`), não a paleta do INOVE.
@@ -141,6 +145,7 @@ const NIVEL_GCLS = {
   OPERACAO_FORA_PONTO: "g-fora",
   NAO_CALCULAR: "g-neu",
   ANOMALIA_TEMPORAL: "g-neu",
+  [NIVEL_REAL_MANUAL]: "g-p2",
 };
 // Tolerância / sem dado / ponto incompleto não são gordura: a célula fica "—".
 const NIVEIS_MUDOS = new Set(["", "TOLERANCIA_OPERACIONAL", "SEM_DADO", "PONTO_INCOMPLETO"]);
@@ -155,10 +160,14 @@ const LINHA_CLS = {
   P4: "row-p4",
   RESERVA: "row-res",
   OPERACAO_FORA_PONTO: "row-fora",
+  [NIVEL_REAL_MANUAL]: "row-p2",
 };
+// a precedência da TELA: a da regra e, por último, a régua do Real cravado (que não é
+// P nenhum e não entra em soma)
+const PRECEDENCIA_TELA = [...PRECEDENCIA, NIVEL_REAL_MANUAL];
 function classeLinha(r) {
   const ks = [nivKey(r.nivel_entrada), nivKey(r.nivel_saida)];
-  const pior = PRECEDENCIA.find((n) => ks.includes(n));
+  const pior = PRECEDENCIA_TELA.find((n) => ks.includes(n));
   return pior ? LINHA_CLS[pior] : "";
 }
 const CHIPS = [
@@ -169,6 +178,7 @@ const CHIPS = [
   ["P4", "P4"],
   ["RESERVA", "Reserva"],
   ["OPERACAO_FORA_PONTO", "Fora"],
+  [NIVEL_REAL_MANUAL, "Real do DP"],
 ];
 
 /* --------------------------- cartão de ponto e alvo ------------------------ */
@@ -1718,7 +1728,11 @@ export default function Gordura() {
       // A ordem importa e por isso vive dentro de `aplicarCamadasGordura`: a reserva
       // por GPS só age quando NÃO há lançamento do gestor (`tem_reserva_inove`), e o
       // alvo é sempre a última palavra sobre a gordura.
-      const g = aplicarCamadasGordura(bruta, { com99, reservas, pontoDiario: pd });
+      // + a camada do Real cravado: dá régua à ponta que não tinha (ver `camadaRealManual`)
+      const g = camadaRealManual(
+        aplicarCamadasGordura(bruta, { com99, reservas, pontoDiario: pd }),
+        rmMapa.has(chave) ? rm : null,
+      );
 
       const cartao = cartoesGordura(g, pd, rm, caso);
       const nivies = [txt(g.nivel_entrada).toUpperCase(), txt(g.nivel_saida).toUpperCase()];
@@ -1834,10 +1848,19 @@ export default function Gordura() {
   );
 
   const contagem = useMemo(() => {
-    const c = { TODOS: base.length, P1: 0, P2: 0, P3: 0, P4: 0, RESERVA: 0, OPERACAO_FORA_PONTO: 0 };
+    const c = {
+      TODOS: base.length,
+      P1: 0,
+      P2: 0,
+      P3: 0,
+      P4: 0,
+      RESERVA: 0,
+      OPERACAO_FORA_PONTO: 0,
+      [NIVEL_REAL_MANUAL]: 0,
+    };
     base.forEach((o) => {
       const ks = [nivKey(o.nivel_entrada), nivKey(o.nivel_saida)];
-      PRECEDENCIA.forEach((k) => {
+      PRECEDENCIA_TELA.forEach((k) => {
         if (ks.includes(k)) c[k] += 1;
       });
     });

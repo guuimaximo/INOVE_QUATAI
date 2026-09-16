@@ -402,6 +402,56 @@ export function camadaAlvo(g, pd) {
 }
 
 /**
+ * CAMADA 5 (16/09/2026, decisão do dono: "liberar com o real cravado") — O REAL
+ * CRAVADO PELO DP DÁ RÉGUA À PONTA QUE NÃO TINHA.
+ *
+ * A ponta sem régua (`NIVEIS_SEM_REGUA`: SST e Validador divergindo, sem dado,
+ * anomalia) não recebe aviso — `pontaConta` recusa, por maior que seja o número. O
+ * cartão do dia manda o DP "cravar o Real na mão" justamente nesses dias, mas o Real
+ * manual só mudava o ALVO da carta, nunca o nível: o dia continuava barrado (RENATO
+ * 30060935 06/09, saída 41 min em n/calc).
+ *
+ * Agora, na ponta SEM RÉGUA que tem o Real manual daquele lado:
+ *   · a gordura vira PONTO × REAL MANUAL — o Real manual já é o alvo que a carta pede
+ *     (`cartoesGordura` o põe na frente de tudo), então o número e o pedido batem;
+ *   · o nível vira `REAL_MANUAL` (régua do DP), que `pontaConta` aceita — ou
+ *     TOLERANCIA_OPERACIONAL / OPERACAO_FORA_PONTO, pela mesma régua da camada 4;
+ *   · a operação da frase ("identificam encerramento às …") passa a ser o Real manual.
+ * Ponta COM régua não muda: o Real manual continua só no alvo, como antes. E o nível
+ * novo não está em `NIVEIS_P`: nada disto entra na soma P1 nem no Resumo.
+ *
+ * @param g   linha já com as quatro camadas
+ * @param rm  linha da `ponto_real_manual` do mesmo crachá|dia (ou null)
+ */
+export const NIVEL_REAL_MANUAL = "REAL_MANUAL";
+
+export function camadaRealManual(g, rm) {
+  if (!rm) return g;
+  const out = { ...g };
+  const pe = hm2m(g.tn_entrada);
+  const ps = hm2m(g.tn_saida);
+  const re = hm2m(rm.entrada);
+  const rs = hm2m(rm.saida);
+  if (NIVEIS_SEM_REGUA.has(txt(g.nivel_entrada).toUpperCase()) && pe != null && re != null) {
+    const ge = Math.round((variante(re, pe) - pe) * 10) / 10;
+    out.gordura_entrada = String(ge);
+    out.nivel_entrada =
+      Math.abs(ge) <= TOL_ENTRADA ? "TOLERANCIA_OPERACIONAL" : ge < 0 ? "OPERACAO_FORA_PONTO" : NIVEL_REAL_MANUAL;
+    out.real_inicio = m2hm(re);
+    out.regua_entrada_dp = true;
+  }
+  if (NIVEIS_SEM_REGUA.has(txt(g.nivel_saida).toUpperCase()) && ps != null && rs != null) {
+    const gs = Math.round((ps - variante(rs, ps)) * 10) / 10;
+    out.gordura_saida = String(gs);
+    out.nivel_saida =
+      Math.abs(gs) <= TOL_SAIDA ? "TOLERANCIA_OPERACIONAL" : gs < 0 ? "OPERACAO_FORA_PONTO" : NIVEL_REAL_MANUAL;
+    out.real_fim = m2hm(rs);
+    out.regua_saida_dp = true;
+  }
+  return out;
+}
+
+/**
  * AS QUATRO CAMADAS, NA ORDEM DO `_gord()` (main.py:4699-4704).
  * É o único ponto de entrada que as telas deveriam usar: a ordem é regra, não
  * detalhe de implementação (a reserva por GPS só age quando NÃO há lançamento do

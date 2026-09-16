@@ -384,6 +384,174 @@ const COLS_CASOS = [
   },
 ];
 
+/* ─────────────────────────── visão POR CARTÃO ───────────────────────────
+ * Pedido do dono (16/09/2026): "nessa tela você não consegue consolidar os
+ * cartões?". A grade por caso repete o mesmo cartão em várias linhas (uma por
+ * bloco); a visão por cartão junta os casos QUE PASSARAM NOS FILTROS numa linha
+ * só. Clicar abre o mesmo pop-up, no caso mais recente do cartão.
+ *
+ * Status do cartão: "bloqueio pedido" vence ("sem fraude" só se todos forem), e o
+ * que veio DEPOIS do último pedido aparece junto — em 16/09, 50 dos 82 cartões
+ * pedidos em 19/08 continuaram passando. */
+function statusDoGrupo(casosDoCartao) {
+  const st = new Set(casosDoCartao.map((l) => txt(l.status).toLowerCase() || ST_NOVO));
+  if (st.has(ST_BLOQUEIO)) return ST_BLOQUEIO;
+  if (st.size === 1 && st.has(ST_SEM_FRAUDE)) return ST_SEM_FRAUDE;
+  return st.has(ST_SEM_FRAUDE) ? "misto" : ST_NOVO;
+}
+
+function agruparPorCartao(linhas) {
+  const grupos = new Map();
+  for (const l of linhas) {
+    const k = txt(l.cru_id);
+    if (!k) continue;
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(l);
+  }
+  const saida = [];
+  for (const [cru, casos] of grupos) {
+    const dias = [...new Set(casos.map((l) => txt(l.data_ref).slice(0, 10)).filter(Boolean))].sort();
+    const locais = new Map();
+    for (const l of casos) {
+      const loc = txt(l.local_fraude);
+      if (loc) locais.set(loc, (locais.get(loc) || 0) + 1);
+    }
+    const locaisOrdem = [...locais.entries()].sort((a, b) => b[1] - a[1]);
+    const recente = casos.reduce((a, b) => (txt(b.data_ref) > txt(a.data_ref) ? b : a));
+    const status = statusDoGrupo(casos);
+    const pedidos = casos.filter((l) => txt(l.status).toLowerCase() === ST_BLOQUEIO);
+    const ultimoPedido = pedidos.reduce((m, l) => (txt(l.data_ref) > m ? txt(l.data_ref) : m), "");
+    saida.push({
+      cru_id: cru,
+      id_usuario: txt(recente.id_usuario),
+      casos: casos.length,
+      diasComCaso: dias.length,
+      primeiro: dias[0] || "",
+      ultimo: dias[dias.length - 1] || "",
+      maiorBloco: Math.max(...casos.map((l) => l.passagens || 0)),
+      passagens: casos.reduce((soma, l) => soma + (l.passagens || 0), 0),
+      veiculos: new Set(casos.map((l) => txt(l.vei_placa)).filter(Boolean)).size,
+      local: locaisOrdem[0]?.[0] || "",
+      outrosLocais: Math.max(0, locaisOrdem.length - 1),
+      debitado: casos.reduce((soma, l) => soma + (numero(l.valor_total_debitado) || 0), 0),
+      saldo: numero(recente.saldo),
+      status,
+      depoisDoPedido: ultimoPedido
+        ? casos.filter((l) => txt(l.status).toLowerCase() !== ST_BLOQUEIO && txt(l.data_ref) > ultimoPedido).length
+        : 0,
+      recente,
+    });
+  }
+  // repetição primeiro: é ela que separa fraude de catraca travada
+  return saida.sort(
+    (a, b) => b.diasComCaso - a.diasComCaso || b.maiorBloco - a.maiorBloco || b.debitado - a.debitado,
+  );
+}
+
+const ROTULO_STATUS_GRUPO = {
+  [ST_BLOQUEIO]: "bloqueio pedido",
+  [ST_SEM_FRAUDE]: "sem fraude",
+  misto: "triagem parcial",
+  [ST_NOVO]: "sem triagem",
+};
+const TOM_STATUS_GRUPO = { [ST_BLOQUEIO]: "danger", [ST_SEM_FRAUDE]: "ok", misto: "warn", [ST_NOVO]: "mute" };
+
+const COLS_CARTOES = [
+  {
+    id: "id_usuario",
+    titulo: "Usuário",
+    largura: 104,
+    classe: "dp-mono",
+    valor: (g) => g.id_usuario,
+    render: (g) => <b>{g.id_usuario || "—"}</b>,
+  },
+  { id: "cru_id", titulo: "Cartão (CRU)", largura: 110, classe: "dp-mono", valor: (g) => g.cru_id },
+  {
+    id: "diasComCaso",
+    titulo: "Dias c/ caso",
+    largura: 104,
+    alinhar: "right",
+    valor: (g) => g.diasComCaso,
+    render: (g) =>
+      g.diasComCaso > 1 ? (
+        <span className="dp-pill danger">{g.diasComCaso} dias</span>
+      ) : (
+        <span className="dp-faint">1 dia</span>
+      ),
+  },
+  { id: "casos", titulo: "Casos", largura: 70, alinhar: "right", classe: "dp-num", valor: (g) => g.casos },
+  {
+    id: "periodo",
+    titulo: "Primeiro → último",
+    largura: 170,
+    classe: "dp-mono",
+    valor: (g) => g.ultimo,
+    render: (g) => (
+      <span>
+        {paraBR(g.primeiro).slice(0, 5)} → {paraBR(g.ultimo)}
+      </span>
+    ),
+  },
+  {
+    id: "maiorBloco",
+    titulo: "Maior bloco",
+    largura: 100,
+    alinhar: "right",
+    valor: (g) => g.maiorBloco,
+    render: (g) => <span className={`dp-pill ${pilulaPassagens(g.maiorBloco)}`}>{g.maiorBloco}</span>,
+  },
+  { id: "passagens", titulo: "Passagens", largura: 90, alinhar: "right", classe: "dp-num", valor: (g) => g.passagens },
+  { id: "veiculos", titulo: "Veíc.", largura: 64, alinhar: "right", classe: "dp-num", valor: (g) => g.veiculos },
+  {
+    id: "local",
+    titulo: "Local mais frequente",
+    largura: 280,
+    valor: (g) => g.local,
+    render: (g) => (
+      <span title={g.local}>
+        {g.local || "—"}
+        {g.outrosLocais > 0 ? <span className="dp-faint"> +{g.outrosLocais}</span> : null}
+      </span>
+    ),
+  },
+  {
+    id: "debitado",
+    titulo: "Debitado",
+    largura: 104,
+    alinhar: "right",
+    classe: "dp-num",
+    valor: (g) => g.debitado,
+    render: (g) => moeda(g.debitado),
+  },
+  {
+    id: "saldo",
+    titulo: "Saldo",
+    largura: 100,
+    alinhar: "right",
+    classe: "dp-num",
+    valor: (g) => g.saldo,
+    render: (g) => moeda(g.saldo),
+  },
+  {
+    id: "status",
+    titulo: "Status",
+    largura: 190,
+    valor: (g) => ROTULO_STATUS_GRUPO[g.status] || g.status,
+    render: (g) => (
+      <span>
+        <span className={`dp-pill ${TOM_STATUS_GRUPO[g.status] || "mute"}`}>
+          {ROTULO_STATUS_GRUPO[g.status] || g.status}
+        </span>
+        {g.depoisDoPedido > 0 ? (
+          <span className="dp-pill danger" style={{ marginLeft: 4 }} title="Casos depois do último pedido de bloqueio">
+            +{g.depoisDoPedido} depois
+          </span>
+        ) : null}
+      </span>
+    ),
+  },
+];
+
 const COLS_GIROS = [
   {
     id: "ordem",
@@ -582,6 +750,8 @@ export default function GuardFraudes() {
   const [semPedidos, setSemPedidos] = useState(false);
   const [soRepetidos, setSoRepetidos] = useState(false);
   const [termo, setTermo] = useState("");
+  // uma linha por cartão (padrão) ou uma por caso
+  const [porCartao, setPorCartao] = useState(true);
 
   // caso aberto → passagens → passagem em foco no mapa
   // Pop-up do CARTAO. `caso` e a linha clicada (serve de ancora e de dia
@@ -822,14 +992,16 @@ export default function GuardFraudes() {
   // detalhe: o CSV da TabelaDP exporta as linhas que estao em cena. Um teto que
   // a pessoa nao pudesse levantar faria o CSV sair capado sem avisar, numa tela
   // de auditoria. Com o botao, o numero na tela e o numero no arquivo.
+  const cartoesAgrupados = useMemo(() => agruparPorCartao(filtrados), [filtrados]);
+  const linhasDaVisao = porCartao ? cartoesAgrupados : filtrados;
   const visiveis = useMemo(
     () =>
-      semTeto || filtrados.length <= MAX_LINHAS_GRADE
-        ? filtrados
-        : filtrados.slice(0, MAX_LINHAS_GRADE),
-    [filtrados, semTeto],
+      semTeto || linhasDaVisao.length <= MAX_LINHAS_GRADE
+        ? linhasDaVisao
+        : linhasDaVisao.slice(0, MAX_LINHAS_GRADE),
+    [linhasDaVisao, semTeto],
   );
-  const ocultos = filtrados.length - visiveis.length;
+  const ocultos = linhasDaVisao.length - visiveis.length;
 
   // Contadores dos chips: quantos casos sobram em cada opção, mantendo o resto.
   const contaPassagens = useMemo(() => {
@@ -1086,6 +1258,26 @@ export default function GuardFraudes() {
       {aba === "casos" && (
         <>
           <div className="dp-viewbar">
+            <div className="gd-fgroup">
+              <span className="gd-flabel">Ver</span>
+              <button
+                type="button"
+                className={`dp-chip-f${porCartao ? " on" : ""}`}
+                onClick={() => setPorCartao(true)}
+                title="Uma linha por cartão, juntando os casos que passaram nos filtros"
+              >
+                por cartão<span className="n">{cartoesAgrupados.length}</span>
+              </button>
+              <button
+                type="button"
+                className={`dp-chip-f${!porCartao ? " on" : ""}`}
+                onClick={() => setPorCartao(false)}
+                title="Uma linha por caso (bloco de passagens)"
+              >
+                por caso<span className="n">{filtrados.length}</span>
+              </button>
+            </div>
+
             <div className="dp-busca">
               <Search size={14} />
               <input
@@ -1189,7 +1381,7 @@ export default function GuardFraudes() {
                     onClick={() => setSemTeto(true)}
                     title="Desenhar todas as linhas (e levar todas para o CSV)"
                   >
-                    desenhando {MAX_LINHAS_GRADE} de {filtrados.length} — mostrar todas
+                    desenhando {MAX_LINHAS_GRADE} de {linhasDaVisao.length} — mostrar todas
                   </button>
                 </>
               )}
@@ -1214,15 +1406,19 @@ export default function GuardFraudes() {
           </div>
 
           <TabelaDP
-            chave="guard_casos"
-            colunas={COLS_CASOS}
+            key={porCartao ? "cartao" : "caso"}
+            chave={porCartao ? "guard_casos_cartao" : "guard_casos"}
+            colunas={porCartao ? COLS_CARTOES : COLS_CASOS}
             linhas={visiveis}
             carregando={carregando}
             mensagemCarregando="Carregando casos do INOVE Guard…"
-            idLinha={(l) => txt(l.id_evento_final)}
-            classeLinha={(l) => (l.passagens >= 10 ? "row-p1" : l.passagens >= 8 ? "row-p2" : "")}
-            aoClicarLinha={(l) => setCaso(l)}
-            nomeCsv={`inove_guard_fraudes_${isoDataLocal(new Date())}`}
+            idLinha={(l) => (porCartao ? l.cru_id : txt(l.id_evento_final))}
+            classeLinha={(l) => {
+              const n = porCartao ? l.maiorBloco : l.passagens;
+              return n >= 10 ? "row-p1" : n >= 8 ? "row-p2" : "";
+            }}
+            aoClicarLinha={(l) => setCaso(porCartao ? l.recente : l)}
+            nomeCsv={`inove_guard_fraudes_${porCartao ? "cartoes" : "casos"}_${isoDataLocal(new Date())}`}
             vazio={
               casos.length
                 ? "Nenhum caso com estes filtros — afrouxe as passagens ou a janela."

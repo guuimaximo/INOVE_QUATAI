@@ -175,7 +175,7 @@ export default function Sidebar() {
           { path: "/dp360", label: "DP360" },
           { path: "/dp360-abandonos", label: "Abandonos" },
           { path: "/dp360-banco-horas", label: "Banco de Horas" },
-          { path: "/dp360-resumo", label: "Resumo" },
+          // o Resumo mora na aba Início da DP360 (16/09/2026); o link antigo redireciona
           { path: "/dp360-evidencias", label: "Evidências do robô" },
         ],
       },

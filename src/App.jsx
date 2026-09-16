@@ -246,7 +246,8 @@ export default function App() {
                   que sao o mesmo cluster (mesma categoria, mesmo gate de admin). */}
               <Route path="/dp360-abandonos" element={<DP360Abandonos />} />
               <Route path="/dp360-banco-horas" element={<DP360BancoHoras />} />
-              <Route path="/dp360-resumo" element={<DP360Resumo />} />
+              {/* O Resumo vive na aba Início da DP360 (16/09/2026): o link antigo cai lá. */}
+              <Route path="/dp360-resumo" element={<Navigate to="/dp360" replace />} />
               <Route path="/dp360-evidencias" element={<DP360Evidencias />} />
               <Route path="/dp360/:aba" element={<DP360Cluster />} />
               <Route path="/controle-especial" element={<Navigate to="/controle-especial/central" replace />} />

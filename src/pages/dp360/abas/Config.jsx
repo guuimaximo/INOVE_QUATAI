@@ -3,6 +3,7 @@ import AbaShell from "./AbaShell";
 import { lerDP360, upsertDP360 } from "../../../services/dp360Api";
 
 import { usePergunta } from "../Perguntar";
+import { CHAVE_VALOR_HORA, horaParaCampo, lerValorHora, valorHoraNum, valorHoraParaGravar } from "../valorHora";
 /* ═══════════════════════════════════════════════════════════════════════════
    Config — os textos que a ferramenta manda para o colaborador.
 
@@ -109,7 +110,8 @@ const EXEMPLO = {
 };
 
 const chaveTemplate = (tipo) => `template_${tipo}`;
-const CHAVES = [...TIPOS.map(([tipo]) => chaveTemplate(tipo)), CHAVE_MOTIVO];
+// o valor da hora entrou aqui em 16/09/2026, quando a página própria do Resumo saiu do menu
+const CHAVES = [...TIPOS.map(([tipo]) => chaveTemplate(tipo)), CHAVE_MOTIVO, CHAVE_VALOR_HORA];
 
 /* `valor` é jsonb: a ferramenta grava string, mas nada impede que alguém tenha
    gravado outra coisa. Mostra o que der, sem estourar a tela. */
@@ -285,6 +287,12 @@ export default function Config() {
 
   const invalidas = variaveisInvalidas(tipo, texto);
 
+  // o valor da hora: no banco vem "24.3700"; na caixa, "24,37"
+  const horaGravada = horaParaCampo(salvo[CHAVE_VALOR_HORA]);
+  const horaTxt = rascunho[CHAVE_VALOR_HORA] != null ? rascunho[CHAVE_VALOR_HORA] : horaGravada;
+  const horaSuja = horaTxt !== horaGravada;
+  const brl = (v) => valorHoraNum(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
   const editar = (qual, valor) => {
     setRascunho((atual) => ({ ...atual, [qual]: valor }));
     setAviso(null);
@@ -389,6 +397,24 @@ export default function Config() {
     salvarChave(CHAVE_MOTIVO, limpo);
   };
 
+  /* O VALOR DA HORA — mesma regra e mesma confirmação que moravam no Resumo (main.py
+     `set_valor_hora`). A chave é compartilhada com a ferramenta antiga. */
+  const salvarValorHora = async () => {
+    const lido = lerValorHora(horaTxt);
+    if (lido.erro) {
+      setAviso({ chave: CHAVE_VALOR_HORA, tom: "danger", texto: lido.erro });
+      return;
+    }
+    const pergunta = lido.valor > 0
+      ? `Gravar a hora do motorista como ${brl(lido.valor)}?\n\n`
+        + "Vale para o Resumo da DP360 e também para a ferramenta antiga, que lê a mesma chave "
+        + `(app_config.${CHAVE_VALOR_HORA}).`
+      : "Gravar ZERO na hora do motorista?\n\nOs cartões de dinheiro do Resumo e o "
+        + "\"Valor gerencial\" da ferramenta antiga deixam de aparecer.";
+    if (!await perguntar(pergunta)) return;
+    salvarChave(CHAVE_VALOR_HORA, valorHoraParaGravar(lido.valor));
+  };
+
   const avisoDe = (qual) =>
     aviso && aviso.chave === qual ? (
       <span className={`dp-pill ${aviso.tom}`}>{aviso.texto}</span>
@@ -429,6 +455,47 @@ export default function Config() {
       }
     >
       <div style={{ display: "grid", gap: 14, margin: "8px 20px 20px", maxWidth: 980 }}>
+        {/* ── o valor da hora do motorista: chave própria, salvamento próprio ── */}
+        <div className="dp-card">
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+            <strong style={{ fontSize: 14 }}>Valor da hora do motorista</strong>
+            <span className="dp-pill mute dp-mono">{CHAVE_VALOR_HORA}</span>
+            {quando[CHAVE_VALOR_HORA] ? (
+              <span className="dp-faint" style={{ fontSize: 12 }}>
+                alterado em {fmtQuando(quando[CHAVE_VALOR_HORA])}
+              </span>
+            ) : null}
+          </div>
+          <div className="dp-faint" style={{ fontSize: 12, marginTop: 6 }}>
+            Converte hora em dinheiro nos cartões &quot;Valor gerencial&quot; e &quot;Potencial
+            aberto&quot; do Resumo (aba Início). É número de dissídio: muda por acordo. Em branco
+            ou zero, esses cartões não aparecem. A ferramenta antiga lê a mesma chave.
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+            <span className="dp-muted" style={{ fontSize: 13 }}>R$</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={horaTxt}
+              onChange={(evento) => editar(CHAVE_VALOR_HORA, evento.target.value)}
+              placeholder="ex.: 24,37"
+              className="dp-mono"
+              style={{ ...ESTILO_CAMPO, width: 120 }}
+              aria-label="Valor da hora do motorista"
+            />
+            <button
+              type="button"
+              className="dp-btn primary"
+              onClick={salvarValorHora}
+              disabled={!horaSuja || gravando === CHAVE_VALOR_HORA}
+            >
+              {gravando === CHAVE_VALOR_HORA ? "Salvando…" : "Salvar valor"}
+            </button>
+            {horaSuja ? <span className="dp-pill warn">alteração não salva</span> : null}
+            {avisoDe(CHAVE_VALOR_HORA)}
+          </div>
+        </div>
+
         {/* ── editor da mensagem ── */}
         <div className="dp-card">
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>

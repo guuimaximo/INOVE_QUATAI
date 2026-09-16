@@ -21,6 +21,7 @@ import { supabase } from "../../supabase";
 import "./dp360.css";
 
 import { usePergunta } from "./Perguntar";
+import { CHAVE_VALOR_HORA, horaParaCampo, lerValorHora, valorHoraParaGravar } from "./valorHora";
 /* =============================================================================
    RESUMO (DP360) — fusão de DUAS telas da ferramenta original (Sistemas/PONTO):
 
@@ -346,22 +347,9 @@ const fmtJornada = (min) => (min == null ? "—" : hhmm(min));
 const brl = (v) => (num(v)).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const pct = (parte, total) => (total ? Math.round((parte / total) * 100) : 0);
 
-/* O VALOR DA HORA, do jeito que o Python lê e grava (main.py `set_valor_hora`, :3814).
- * Mesmo saneamento do original — tira "R$", tira o ponto de MILHAR e troca a vírgula
- * decimal —, mesma faixa (0 a 10.000, fora disso "Valor fora do razoável.") e mesmo
- * formato na gravação (quatro casas). O formato importa: quem lê essa chave do outro
- * lado é a ferramenta desktop, com `float(...)` em cima do que estiver lá.
- * Campo vazio vale 0, como no Python (`float(... or 0)`) — é assim que se APAGA o
- * valor e se desligam os cartões de dinheiro de novo. */
-function lerValorHora(bruto) {
-  const limpo = String(bruto ?? "").replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
-  const v = parseFloat(limpo || "0");
-  if (!Number.isFinite(v) || v < 0 || v > 10000) return { erro: "Valor fora do razoável." };
-  return { valor: v };
-}
-
-// app.js `dvh`: 38.5 -> "38,5" na caixinha (o usuário digita em pt-BR).
-const horaParaCampo = (v) => (num(v) > 0 ? String(num(v)).replace(".", ",") : "");
+/* O VALOR DA HORA: saneamento, faixa e formato moram em `valorHora.js` — a mesma regra
+ * do campo da aba Config, que é onde ele se grava desde que a página própria do Resumo
+ * saiu do menu (16/09/2026). */
 
 /* A CADEIA DE ARREDONDAMENTO DO PAINEL DE HORAS, preservada de propósito:
    `get_dashboard_horas` devolve as horas de oportunidade com UMA casa
@@ -1004,7 +992,7 @@ export default function DP360Resumo({ embutido = false }) {
         try {
           const cfg = await lerDP360("app_config", {
             colunas: "chave,valor",
-            filtros: { chave: "eq.valor_hora_motorista" },
+            filtros: { chave: `eq.${CHAVE_VALOR_HORA}` },
             limite: 1,
           });
           if (vivo) {
@@ -1264,8 +1252,8 @@ export default function DP360Resumo({ embutido = false }) {
     try {
       // Quatro casas, como o `f"{v:.4f}"` do Python: quem lê do outro lado é a
       // ferramenta desktop, com float() em cima do que estiver gravado aqui.
-      const gravado = lido.valor.toFixed(4);
-      await upsertDP360("app_config", { chave: "valor_hora_motorista", valor: gravado });
+      const gravado = valorHoraParaGravar(lido.valor);
+      await upsertDP360("app_config", { chave: CHAVE_VALOR_HORA, valor: gravado });
       setValorHora(lido.valor);
       setHoraSalva(horaParaCampo(lido.valor));
       setHoraTxt(horaParaCampo(lido.valor));
@@ -1505,6 +1493,13 @@ export default function DP360Resumo({ embutido = false }) {
               titulo="O que já voltou"
               ajuda="fechado e confirmado no Transnet — é o resultado do mês, não promessa"
             >
+              {enxuto && !(valorHora > 0) && (
+                <Cartao
+                  rotulo="Valor gerencial"
+                  valor="—"
+                  nota="sem valor da hora — defina na aba Config da DP360"
+                />
+              )}
               {valorHora > 0 && (
                 <Cartao
                   rotulo="Valor gerencial"

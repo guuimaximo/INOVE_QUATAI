@@ -84,14 +84,16 @@ const DIAS_ATIVO = 10;
 // A aba Bloqueio mostra SÓ o que precisa bloquear; o resto do ciclo mora na aba "Cartões
 // bloqueados" (dono, 16/09/2026: "ali eu quero na cara da pessoa o que precisa bloquear, e
 // acabou / os bloqueados têm que ficar em outra aba").
-// A aba "Cartões bloqueados" mostra SÓ os bloqueados (dono, 16/09/2026: "é apenas bloqueados
-// nessa tela"). DESBLOQUEAR DEVOLVE O CARTÃO PARA A ABA BLOQUEIO ("se eu desbloquear ele volta
+// A aba "Cartões bloqueados" mostra SÓ os bloqueados, sem sub-abas (dono, 16/09/2026: "é
+// apenas bloqueados nessa tela / não precisa dividir em aba / cartão com rajada é livre e
+// ativo; bloqueei, ele foi para desbloquear; desbloqueamos, ele volta a ser livre e ativo").
+// O histórico geral abre num pop-up pelo botão da barra. DESBLOQUEAR DEVOLVE O CARTÃO PARA A ABA BLOQUEIO ("se eu desbloquear ele volta
 // de novo para a primeira tela e não pode ficar em desbloqueados"): a situação volta a
 // `pendente` e a liberação fica em desbloqueado_em/por/motivo e no histórico. A situação
 // `desbloqueado` só existe em linha antiga, e a tela a trata como "a bloquear". O "não é
 // fraude" sai das duas listas e continua no Histórico, de onde o cartão abre e pode voltar.
 const ROTULO_SITUACAO = {
-  pendente: "a bloquear",
+  pendente: "livre e ativo",
   bloqueado: "bloqueado",
   desbloqueado: "desbloqueado",
   descartado: "não é fraude",
@@ -912,11 +914,50 @@ function CartaoAberto({ cartao, baseAte, regra = REGRA_PADRAO, podeAnotar = true
 
 /* ──────────────────────────── histórico geral ───────────────────────────── */
 
+/** O pop-up do histórico geral (a aba "Cartões bloqueados" não tem mais sub-abas). */
+function JanelaHistorico({ total, onFechar, children }) {
+  useEffect(() => {
+    const tecla = (e) => {
+      if (e.key === "Escape") onFechar();
+    };
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, [onFechar]);
+  return (
+    <div
+      className="gd-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Histórico dos cartões"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onFechar();
+      }}
+    >
+      <div className="gd-modal-box gd-hist-geral">
+        <div className="gd-modal-head">
+          <div>
+            <b>Histórico dos cartões</b>
+            <div className="sub">
+              {total} ação(ões) de pessoas · quem bloqueou, desbloqueou ou marcou "não é fraude", e quando · clique
+              numa linha para abrir o cartão
+            </div>
+          </div>
+          <button type="button" className="dp-btn" onClick={onFechar} aria-label="Fechar">
+            ✕
+          </button>
+        </div>
+        <div className="gd-hist-geral-corpo">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 /** Quem bloqueou, desbloqueou, descartou ou devolveu cada cartão, e quando — o nome é o
  *  do login do INOVE, escrito pelo servidor (`dp360-api`, `autorEm`). As entradas e
  *  saídas automáticas da regra ficam escondidas por padrão. */
-function HistoricoBloqueio({ historico, cartoes, termo, carregando, onAbrir }) {
+function HistoricoBloqueio({ historico, cartoes, carregando, onAbrir }) {
   const [comRegra, setComRegra] = useState(false);
+  const [termo, setTermo] = useState("");
   const existe = useMemo(() => new Set(cartoes.map((c) => txt(c.cru_id))), [cartoes]);
   const linhas = useMemo(() => {
     const t = termo.trim().toLowerCase();
@@ -992,6 +1033,16 @@ function HistoricoBloqueio({ historico, cartoes, termo, carregando, onAbrir }) {
         </div>
       </div>
       <div className="dp-viewbar" style={{ paddingTop: 4 }}>
+        <div className="dp-busca">
+          <Search size={14} />
+          <input
+            type="search"
+            value={termo}
+            onChange={(e) => setTermo(e.target.value)}
+            placeholder="nº do usuário, nº do cartão, pessoa…"
+            aria-label="Buscar no histórico"
+          />
+        </div>
         <label className="gd-bqm-check">
           <input type="checkbox" checked={comRegra} onChange={(e) => setComRegra(e.target.checked)} />
           mostrar também as entradas e saídas automáticas da regra
@@ -1184,7 +1235,10 @@ export default function FraudeBloqueio({ modo = "fila" }) {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [recarga, setRecarga] = useState(0);
-  const [aba, setAba] = useState(gestao ? "bloqueado" : "pendente");
+  // cada modo é uma lista só: a bloquear (Bloqueio) ou bloqueados (Cartões bloqueados)
+  const aba = gestao ? "bloqueado" : "pendente";
+  const [verHistorico, setVerHistorico] = useState(false);
+  const fecharHistorico = useCallback(() => setVerHistorico(false), []);
   const [termo, setTermo] = useState("");
   const [ordem, setOrdem] = useState("dias_com_rajada");
   const [selecionados, setSelecionados] = useState([]);
@@ -1641,19 +1695,25 @@ export default function FraudeBloqueio({ modo = "fila" }) {
             aria-label="Buscar cartão"
           />
         </div>
-        {aba !== "historico" ? (
-          <>
-            <select value={ordem} onChange={(e) => setOrdem(e.target.value)} aria-label="Ordenar por">
-              {ORDENS.map((o) => (
-                <option key={o.k} value={o.k}>
-                  {o.rotulo}
-                </option>
-              ))}
-            </select>
-            <button type="button" className="dp-btn" onClick={copiarDaAba}>
-              Copiar nº dos usuários
-            </button>
-          </>
+        <select value={ordem} onChange={(e) => setOrdem(e.target.value)} aria-label="Ordenar por">
+          {ORDENS.map((o) => (
+            <option key={o.k} value={o.k}>
+              {o.rotulo}
+            </option>
+          ))}
+        </select>
+        <button type="button" className="dp-btn" onClick={copiarDaAba}>
+          Copiar nº dos usuários
+        </button>
+        {gestao ? (
+          <button
+            type="button"
+            className="dp-btn gd-bqm-btn-hist"
+            onClick={() => setVerHistorico(true)}
+            title="Quem bloqueou, desbloqueou ou marcou não é fraude, e quando"
+          >
+            Histórico <span className="n">{historico.filter((h) => txt(h.quem) !== "deteccao").length}</span>
+          </button>
         ) : null}
         <button
           type="button"
@@ -1672,9 +1732,9 @@ export default function FraudeBloqueio({ modo = "fila" }) {
 
       {gestao ? (
         <div className="gd-hint">
-          Só os cartões <b>bloqueados</b> pelo INOVE. <b>Desbloqueou, o cartão volta para a aba Bloqueio.</b> Quem
-          bloqueou, desbloqueou ou marcou "não é fraude", e quando, fica no <b>Histórico</b> — clique numa linha para
-          abrir o cartão. {baseAte ? `Base até ${paraBR(baseAte)}.` : ""}
+          Só os cartões <b>bloqueados</b> pelo INOVE. <b>Desbloqueou, o cartão volta a ser livre e ativo</b> e
+          aparece de novo na aba Bloqueio. Quem bloqueou, desbloqueou ou marcou "não é fraude", e quando, está no
+          botão <b>Histórico</b>. {baseAte ? `Base até ${paraBR(baseAte)}.` : ""}
         </div>
       ) : (
         <CamposDaRegra
@@ -1727,48 +1787,12 @@ export default function FraudeBloqueio({ modo = "fila" }) {
         </div>
       )}
 
-      {gestao ? (
-      <div className="dp-viewbar" style={{ paddingTop: 4 }}>
-        <button
-          type="button"
-          className={`dp-chip-f${aba === "bloqueado" ? " on" : ""}`}
-          onClick={() => {
-            setAba("bloqueado");
-            setSelecionados([]);
-          }}
-        >
-          Bloqueados <span className="n">{contagem.bloqueado || 0}</span>
-        </button>
-        <button
-          type="button"
-          className={`dp-chip-f${aba === "historico" ? " on" : ""}`}
-          onClick={() => {
-            setAba("historico");
-            setSelecionados([]);
-          }}
-          title="Quem bloqueou, desbloqueou ou descartou cada cartão, e quando"
-        >
-          Histórico <span className="n">{historico.filter((h) => txt(h.quem) !== "deteccao").length}</span>
-        </button>
-      </div>
-      ) : null}
-
       {erro || (!gestao && erroJanela) ? (
         <div className="dp-resumo">
           <span className="dp-pill danger">{erro || erroJanela}</span>
         </div>
       ) : null}
 
-      {aba === "historico" ? (
-        <HistoricoBloqueio
-          key={`historico-${recarga}`}
-          historico={historico}
-          cartoes={cartoes}
-          termo={termo}
-          carregando={carregando}
-          onAbrir={setAberto}
-        />
-      ) : (
       <TabelaDP
         key={`${aba}-${recarga}`}
         chave={`guard_bloqueio_${aba}`}
@@ -1797,7 +1821,24 @@ export default function FraudeBloqueio({ modo = "fila" }) {
           ) : null
         }
       />
-      )}
+
+      {verHistorico ? (
+        <JanelaHistorico
+          total={historico.filter((h) => txt(h.quem) !== "deteccao").length}
+          onFechar={fecharHistorico}
+        >
+          <HistoricoBloqueio
+            key={`historico-${recarga}`}
+            historico={historico}
+            cartoes={cartoes}
+            carregando={carregando}
+            onAbrir={(cru) => {
+              setVerHistorico(false);
+              setAberto(cru);
+            }}
+          />
+        </JanelaHistorico>
+      ) : null}
 
       {cartaoAberto ? (
         <CartaoAberto

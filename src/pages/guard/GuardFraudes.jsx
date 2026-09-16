@@ -1566,14 +1566,17 @@ export default function GuardFraudes() {
             <h4>Cartões bloqueados</h4>
             <ul>
               <li>Só os cartões que nós bloqueamos pelo INOVE.</li>
-              <li>Desbloquear devolve o cartão para a aba Bloqueio — ele não fica guardado aqui.</li>
+              <li>
+                Com rajada, o cartão está <b>livre e ativo</b> e aparece para bloquear; bloqueado, fica aqui;
+                desbloqueado, volta a ser livre e ativo na aba Bloqueio — não fica guardado aqui.
+              </li>
               <li>
                 "Rajada depois?" avisa o bloqueado que ainda passou depois do dia do bloqueio — sinal de
                 que a bilhetagem não aplicou.
               </li>
               <li>
-                O Histórico mostra quem bloqueou, desbloqueou ou marcou "não é fraude", e quando; clicar
-                na linha abre o cartão (o "não é fraude" volta para a fila por ali).
+                O botão Histórico mostra quem bloqueou, desbloqueou ou marcou "não é fraude", e quando;
+                clicar na linha abre o cartão (o "não é fraude" volta para a fila por ali).
               </li>
             </ul>
           </div>

@@ -1476,7 +1476,25 @@ serve(async (req: Request) => {
           ),
           url: String(x?.html_url ?? ""),
         }));
-      return json({ ok: true, runs, repo: `${dono}/${repo}` });
+      /* QUEM DISPAROU (dono, 16/09/2026: "aqui eu quero o nome de quem disparou também").
+         O `ator` do GitHub é sempre a conta dona do token — todo run sai como o mesmo
+         login. Quem clicou está no registro do disparo (`dp360_robo_execucao`), casado
+         com o run pelo id. Run sem registro não saiu do INOVE (ferramenta do PC ou o
+         próprio GitHub): fica com `quem` vazio e a tela diz isso. Falhar aqui não derruba
+         a lista — o nome é complemento, a fila é o que importa. */
+      const ids = runs.map((x) => Number(x.id)).filter((n) => Number.isFinite(n) && n > 0);
+      const quemPorRun = new Map<number, string>();
+      if (ids.length) {
+        const { data: disparos } = await inoveAdmin
+          .from(TAB_EXECUCAO)
+          .select("run_id, autor_nome")
+          .in("run_id", ids);
+        for (const d of (disparos ?? []) as Record<string, unknown>[]) {
+          quemPorRun.set(Number(d.run_id), String(d.autor_nome ?? ""));
+        }
+      }
+      const comQuem = runs.map((x) => ({ ...x, quem: quemPorRun.get(Number(x.id)) ?? "" }));
+      return json({ ok: true, runs: comQuem, repo: `${dono}/${repo}` });
     } catch (error) {
       return json({ ok: false, error: mensagemSegura(error) }, 502);
     }

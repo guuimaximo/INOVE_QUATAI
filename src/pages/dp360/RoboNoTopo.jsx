@@ -26,6 +26,24 @@ function hora(iso) {
   return Number.isFinite(t) ? QUANDO.format(new Date(t)) : "—";
 }
 
+/* QUEM DISPAROU (dono, 16/09/2026). O `ator` do GitHub é sempre a mesma conta, dona do
+   token; o nome de quem clicou vem do registro do disparo no INOVE (`quem`). Na linha vai
+   primeiro e último nome — o completo fica no balão. Sem registro, o run não saiu daqui. */
+function quemDisparou(run) {
+  // gateway antigo, que ainda não devolve `quem`: fica a conta do GitHub, como era
+  if (run.quem === undefined) return { texto: run.ator || "—", titulo: "" };
+  const completo = String(run.quem || "").trim();
+  if (completo) {
+    const partes = completo.split(/\s+/);
+    const curto = partes.length > 2 ? `${partes[0]} ${partes[partes.length - 1]}` : completo;
+    return { texto: curto, titulo: `Disparado no INOVE por ${completo}` };
+  }
+  return {
+    texto: "fora do INOVE",
+    titulo: `Não saiu do INOVE (ferramenta do PC ou direto no GitHub)${run.ator ? ` · conta ${run.ator}` : ""}`,
+  };
+}
+
 function desfecho(run) {
   const st = String(run.status || "");
   if (st === "queued") return { texto: "na fila", tom: "fila" };
@@ -98,15 +116,15 @@ export default function RoboNoTopo() {
           )}
           {runs.map((r) => {
             const d = desfecho(r);
+            const q = quemDisparou(r);
             return (
               <div key={r.id ?? `${r.nome}${r.comecou_em}`} className="dp-robo-linha">
                 <span className={`dp-robo-tag ${d.tom}`}>{d.texto}</span>
                 <span className="dp-robo-nome" title={r.nome}>
                   {r.nome || "—"}
                 </span>
-                <span className="dp-faint" style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
-                  {hora(r.comecou_em)}
-                  {r.ator ? ` · ${r.ator}` : ""}
+                <span className="dp-faint" style={{ fontSize: 11.5, whiteSpace: "nowrap" }} title={q.titulo}>
+                  {hora(r.comecou_em)} · {q.texto}
                 </span>
                 {r.url && (
                   <a href={r.url} target="_blank" rel="noreferrer" className="dp-robo-link">

@@ -3,7 +3,7 @@ import { AlertTriangle, ChevronRight, RefreshCw, Search, X } from "lucide-react"
 import { AuthContext } from "../../context/AuthContext";
 import { useAccessGovernance } from "../../context/AccessContext";
 import { canUserAccessPath } from "../../utils/access";
-import { lerDP360, upsertDP360 } from "../../services/dp360Api";
+import { lerDP360, lerTudoDP360, upsertDP360 } from "../../services/dp360Api";
 // As QUATRO CAMADAS da gordura (main.py `_gord`) e a trava do aviso (`_ponta_conta`).
 // Mesma régua que a aba Gordura roda — é o que faz o número desta tela ser o mesmo.
 import {
@@ -820,15 +820,15 @@ function apurarOportunidade(gorduras, casos) {
 // `aoTruncar` avisa quando o teto de páginas foi atingido com a última página CHEIA —
 // ou seja, quando provavelmente ficou linha para trás. Sem esse aviso, o teto vira uma
 // leitura parcial silenciosa, que é o mesmo defeito do painel que mostra zero.
-async function lerPaginado(tabela, opcoes, maxPaginas = 12, passo = 5000, aoTruncar) {
-  const todas = [];
-  for (let pagina = 0; pagina < maxPaginas; pagina += 1) {
-    // eslint-disable-next-line no-await-in-loop
-    const bloco = await lerDP360(tabela, { ...opcoes, limite: passo, offset: pagina * passo });
-    todas.push(...bloco);
-    if (bloco.length < passo) return todas;
-  }
-  if (todas.length === maxPaginas * passo && typeof aoTruncar === "function") aoTruncar(todas.length);
+/* A PÁGINA É A DO SERVIDOR: 1000. Esta leitura pedia 5000 e o PostgREST da base devolve no
+   máximo 1000 — ela recebia 1000 < 5000, achava que tinha acabado e parava. Era por isso que
+   "Dias com cartão" ficava travado em 1000 em qualquer competência (dono, 16/09/2026).
+   Agora é a leitura em lotes paralelos do serviço, com o mesmo teto de segurança de antes
+   (60 mil linhas) e o mesmo aviso quando ele é atingido. */
+async function lerPaginado(tabela, opcoes, maxLinhas = 60000, aoTruncar) {
+  const maxPaginas = Math.ceil(maxLinhas / 1000);
+  const todas = await lerTudoDP360(tabela, opcoes, maxPaginas);
+  if (todas.length >= maxPaginas * 1000 && typeof aoTruncar === "function") aoTruncar(todas.length);
   return todas;
 }
 
@@ -1042,8 +1042,7 @@ export default function DP360Resumo({ embutido = false }) {
             // Ordem estável: sem ela o offset devolve linha repetida e some com outra.
             ordem: "date_ref,cracha",
           },
-          20,
-          5000,
+          100000,
           (qtd) => { truncou = qtd; },
         );
         if (!vivo) return;

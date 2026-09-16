@@ -4,11 +4,16 @@
 import { supabase } from "../supabase";
 import { getStoredUser } from "../utils/auth";
 
-/* A PAGINA E A MAIOR QUE O GATEWAY ACEITA (`LIMITE_MAX`, 5000). Com 1000, a
-   `ponto_ajustes_app` (9.202 linhas na janela de 70 dias) custava DEZ idas ao servidor, uma
-   depois da outra, porque a paginacao e sequencial — ela so para quando uma pagina volta
-   curta. O mesmo dado em duas idas: a espera da tela cai junto. */
-const LIMITE_PAGINA = 5000;
+/* A PAGINA E DE 1000 PORQUE O SERVIDOR CORTA EM 1000 — e isso NAO se negocia daqui.
+   O gateway aceita pedir ate 5000 (`LIMITE_MAX`), mas o PostgREST da base do ponto tem
+   `max-rows` 1000: pedindo 5000, volta 1000 (medido em 16/09/2026: `content-range 0-999`).
+   Em 15/09 eu subi a pagina para 5000 achando que ganharia velocidade, e o efeito foi o
+   contrario do pretendido: a leitura recebia 1000 < 5000, entendia "acabou" e PARAVA — as
+   Ocorrencias passaram a ler so as primeiras 1000 linhas de cada tabela (a de pedidos tem
+   9.202 na janela). A pagina tem de ser o tamanho que o servidor devolve de verdade.
+   A velocidade vem de outro lugar: as paginas saem EM PARALELO (`PAGINAS_JUNTAS`). */
+const LIMITE_PAGINA = 1000;
+const PAGINAS_JUNTAS = 3;
 
 // O supabase-js ENGOLE o corpo da resposta quando o status nao e 2xx: `error.message`
 // vira sempre "Edge Function returned a non-2xx status code", que nao diz nada. O motivo
@@ -121,10 +126,20 @@ export function limparCacheDatasDP360() {
 export async function lerTudoDP360(tabela, opcoes = {}, maxPaginas = 40) {
   const passo = Math.min(opcoes.limite || LIMITE_PAGINA, LIMITE_PAGINA);
   const todas = [];
-  for (let pagina = 0; pagina < maxPaginas; pagina += 1) {
-    const bloco = await lerDP360(tabela, { ...opcoes, limite: passo, offset: pagina * passo });
-    todas.push(...bloco);
-    if (bloco.length < passo) break;
+  /* EM LOTES PARALELOS, e a ordem das páginas é preservada: o lote é montado, as três
+     leituras saem juntas, e as linhas entram na ordem do offset. Para na PRIMEIRA página
+     curta — as seguintes do mesmo lote, se houver, vêm vazias (offset além do fim).
+     Exige `ordem` estável, como a leitura sequencial já exigia. */
+  for (let pagina = 0; pagina < maxPaginas; pagina += PAGINAS_JUNTAS) {
+    const paginas = [];
+    for (let p = pagina; p < Math.min(pagina + PAGINAS_JUNTAS, maxPaginas); p += 1) paginas.push(p);
+    const blocos = await Promise.all(
+      paginas.map((p) => lerDP360(tabela, { ...opcoes, limite: passo, offset: p * passo })),
+    );
+    for (const bloco of blocos) {
+      todas.push(...bloco);
+      if (bloco.length < passo) return todas;
+    }
   }
   return todas;
 }

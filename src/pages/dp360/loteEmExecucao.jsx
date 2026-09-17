@@ -45,9 +45,9 @@ const ORDEM_ETAPA = { preenchido: 1, apos_inserir: 2, relido: 3, erro: 4 };
    chamava isso de FIM: "Robô encerrou — 14 de 51 conferido(s), 37 com pendência" enquanto o
    run continuava lançando no Transnet (Gabrielle, run 35268232189, 17/09 17:00). Quem lia
    aquilo ia recusar de novo o que o robô estava fazendo naquele instante.
-   45 min cobre o lote grande com folga; passando disso a tela DESISTE DE OLHAR e diz isso
-   com todas as letras — o robô segue trabalhando do mesmo jeito. */
-const LIMITE_MIN = 45;
+   60 min (dono, 17/09) cobre o lote grande com folga; passando disso a tela DESISTE DE OLHAR
+   e diz isso com todas as letras — o robô segue trabalhando do mesmo jeito. */
+const LIMITE_MIN = 60;
 /* O ritmo afrouxa depois do primeiro minuto: 5 s é para a primeira resposta ("na fila"),
    e manter 5 s por 45 min seriam 540 idas ao GitHub por lote acompanhado. */
 const RITMO_RUN_CALMO_MS = 15000;

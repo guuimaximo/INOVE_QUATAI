@@ -2726,7 +2726,7 @@ export default function CartaoDoDia({
             {rodapeInfo || (
               <>
                 Real manual fica na base do DP e pode ser desfeito. <b>Enviar ocorrência</b> fala com o
-                trabalhador: abre o comunicado deste dia, com Ensaio e envio de verdade.
+                trabalhador: abre o comunicado deste dia, com a prévia e o envio.
               </>
             )}
           </p>
@@ -2747,7 +2747,7 @@ export default function CartaoDoDia({
                   type="button"
                   className="dp-btn"
                   onClick={() => aoAvisar(linha)}
-                  title="Abre o comunicado deste dia: prévia do texto, quem recebe e os dois botões (Ensaio · Enviar de verdade)."
+                  title="Abre o comunicado deste dia: prévia do texto, quem recebe e o botão de enviar."
                 >
                   📣 Enviar ocorrência
                 </button>

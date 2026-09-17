@@ -2773,7 +2773,7 @@ export default function Revisao() {
             ) : (
               <>
                 Real manual e ponto conferido ficam na base do DP. <b>Enviar ocorrência</b> fala com o
-                trabalhador: abre o comunicado deste dia, com Ensaio e envio de verdade.
+                trabalhador: abre o comunicado deste dia, com a prévia e o envio.
               </>
             )
           }

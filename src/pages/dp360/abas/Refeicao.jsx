@@ -1273,15 +1273,7 @@ function PainelImportacao({ data, linhas, aoFechar }) {
                   ) : null}
                 </div>
                 <div className="rf-caminho-acoes">
-                  <button
-                    type="button"
-                    className="dp-btn"
-                    disabled={disparando || !lote.dentro.length}
-                    onClick={() => lancar(false)}
-                    title="O robô preenche a tela do Transnet e NÃO clica em Inserir — serve para conferir o lote"
-                  >
-                    🤖 Ensaio
-                  </button>
+                  {/* sem Ensaio (dono, 16/09/2026: "essas telas têm ensaio / tira o ensaio") */}
                   <button
                     type="button"
                     className="dp-btn"
@@ -1864,7 +1856,7 @@ export default function Refeicao() {
               onClick={() => setImportando(true)}
               title={
                 candidatos || candidatosAbaixo
-                  ? "Abre os dois caminhos do dia escolhido: o robô do ponto (ensaio ou lançamento) e o arquivo .txt de batidas"
+                  ? "Abre os dois caminhos do dia escolhido: o robô do ponto e o arquivo .txt de batidas"
                   : "Nada pede importação nesse dia"
               }
               style={{ marginLeft: "auto" }}

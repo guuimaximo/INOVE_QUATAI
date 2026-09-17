@@ -1167,15 +1167,7 @@ function EditorPontoSugerido({ pessoa, cartao, caso, aoLancar }) {
         {campo("alm_saida", "s. almoço", travado)}
         {campo("alm_volta", "v. almoço", travado)}
         {campo("saida", "saída", false)}
-        <button
-          type="button"
-          className="dp-btn"
-          disabled={!podeLancar}
-          onClick={() => lancar(false)}
-          title="O robô preenche a tela do Cartão de Ponto e NÃO clica em Inserir — serve para conferir. Nada é gravado."
-        >
-          🤖 Ensaio
-        </button>
+        {/* sem Ensaio (dono, 16/09/2026: "tira o ensaio") */}
         <button
           type="button"
           className="dp-btn"
@@ -1469,15 +1461,6 @@ function PainelDetalhe({
           )}
           {fila.length > 0 && (
             <div className="dp-det-bot-acoes">
-              <button
-                type="button"
-                className="dp-btn"
-                disabled={disparando}
-                onClick={() => lancar(false)}
-                title="O robô navega até o botão e NÃO clica — serve para conferir o lote"
-              >
-                🤖 Ensaio
-              </button>
               <button
                 type="button"
                 className="dp-btn"
@@ -2353,15 +2336,6 @@ export default function Folgas() {
           )}
         </div>
         <div className="fg-lote-acoes">
-          <button
-            type="button"
-            className="dp-btn"
-            disabled={!fila.length || disparandoLote}
-            onClick={() => lancarLote(false)}
-            title="O robô navega até o botão e NÃO clica — serve para conferir o lote inteiro"
-          >
-            🤖 Ensaio do lote
-          </button>
           <button
             type="button"
             className="dp-btn"

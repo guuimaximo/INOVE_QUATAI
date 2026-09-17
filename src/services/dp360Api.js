@@ -235,6 +235,7 @@ export function salvarCredencialTransnet(usuario, senha) {
   try {
     const dono = donoAtual();
     if (!dono) return; // sem pessoa logada não há de quem ser a credencial
+    window.sessionStorage.removeItem(CHAVE_VALIDACAO); // credencial nova, teste novo
     window.sessionStorage.setItem(
       CHAVE_CREDENCIAL,
       JSON.stringify({ usuario: String(usuario || "").trim(), senha: String(senha || ""), dono }),
@@ -247,9 +248,41 @@ export function salvarCredencialTransnet(usuario, senha) {
 export function apagarCredencialTransnet() {
   try {
     window.sessionStorage.removeItem(CHAVE_CREDENCIAL);
+    window.sessionStorage.removeItem(CHAVE_VALIDACAO);
   } catch {
     /* nada a fazer */
   }
+}
+
+/* O TESTE DO LOGIN (dono, 17/09/2026: "quando colocar o usuário e senha no Transnet, quero um
+ * bot de validação de login"). O resultado mora na MESMA sessão da credencial e só vale para
+ * o login que foi testado: trocou de conta, o teste antigo não serve. */
+const CHAVE_VALIDACAO = "dp360:transnet:validacao";
+
+export function lerValidacaoTransnet() {
+  try {
+    const v = JSON.parse(window.sessionStorage.getItem(CHAVE_VALIDACAO) || "null");
+    const cred = lerCredencialTransnet();
+    if (!v || !cred || v.usuario !== cred.usuario) return null;
+    return v;
+  } catch {
+    return null;
+  }
+}
+
+export function gravarValidacaoTransnet(v) {
+  try {
+    if (v) window.sessionStorage.setItem(CHAVE_VALIDACAO, JSON.stringify(v));
+    else window.sessionStorage.removeItem(CHAVE_VALIDACAO);
+  } catch {
+    /* sem sessionStorage: o teste vale só enquanto a tela estiver aberta */
+  }
+}
+
+/** Dispara o robô `login` (bot_login.py): ele só entra no Transnet e confere se entrou. O
+ *  gateway grava a credencial num par PRÓPRIO de secrets — o dos lotes não é tocado. */
+export function testarLoginTransnet() {
+  return dispararRoboDP360("login", {});
 }
 
 /**

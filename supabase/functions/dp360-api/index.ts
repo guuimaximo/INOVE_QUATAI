@@ -343,6 +343,9 @@ const TAB_EVIDENCIA = "dp360_robo_evidencia";
    o arquivamento também precisam saber quais arquivos existem).
    null = texto livre (o CSV / o JSON dos casos); array = valores aceitos. */
 const ROBOS: Record<string, { arquivo: string; inputs: Record<string, string[] | null> }> = {
+  // TESTE DO LOGIN (17/09/2026): só entra no Transnet e confere se entrou — não escreve
+  // nada lá. O `usuario` quem preenche é o gateway, com o login que veio na credencial.
+  login: { arquivo: "login.yml", inputs: { usuario: null } },
   ocorrencias: { arquivo: "ocorrencias.yml", inputs: { csv: null, confirmar: ["true", "false"] } },
   ponto: { arquivo: "ponto.yml", inputs: { csv: null, data: null, confirmar: ["true", "false"] } },
   comunicado: {
@@ -401,6 +404,9 @@ async function gravarCredencialTransnet(
   token: string,
   usuario: string,
   senha: string,
+  // O TESTE DE LOGIN GRAVA EM OUTRO PAR (TRANSNET_TESTE_*): validar a conta de alguém nunca
+  // pode trocar a conta de um lote que está na fila esperando o `bots-transnet` liberar.
+  nomes: [string, string] = ["TRANSNET_USER", "TRANSNET_PASSWORD"],
 ): Promise<{ ok: boolean; error?: string }> {
   const cab = cabecalhoGitHub(token);
   const rChave = await fetch(
@@ -423,7 +429,7 @@ async function gravarCredencialTransnet(
       sodium.base64_variants.ORIGINAL,
     );
 
-  for (const [nome, valor] of [["TRANSNET_USER", usuario], ["TRANSNET_PASSWORD", senha]]) {
+  for (const [nome, valor] of [[nomes[0], usuario], [nomes[1], senha]]) {
     const r = await fetch(
       `https://api.github.com/repos/${dono}/${repo}/actions/secrets/${nome}`,
       {
@@ -1263,6 +1269,7 @@ serve(async (req: Request) => {
     const nome = String(corpo.robo ?? "");
     const cfgRobo = ROBOS[nome];
     if (!cfgRobo) return json({ ok: false, error: "robô não permitido" }, 403);
+    const ehTesteLogin = nome === "login";
 
     const token = tokenGitHub();
     if (!token) {
@@ -1286,7 +1293,7 @@ serve(async (req: Request) => {
         {
           ok: false,
           error:
-            "conecte a sua conta do Transnet na aba Início do DP360 — o robô entra no Transnet com o SEU login, e é no seu nome que ele aparece lá",
+            "conecte a sua conta do Transnet no topo do DP360 (🔑 Conectar o Transnet) — o robô entra no Transnet com o SEU login, e é no seu nome que ele aparece lá",
         },
         400,
       );
@@ -1315,12 +1322,17 @@ serve(async (req: Request) => {
     if (tamanho > 60000) {
       return json({ ok: false, error: "lote grande demais para uma execução — divida em partes" }, 400);
     }
-    // ENSAIO por omissao.
-    inputs.confirmar = inputs.confirmar === "true" ? "true" : "false";
+    if (ehTesteLogin) {
+      // o teste só vale para o login que veio na credencial — nunca um escolhido pela tela
+      inputs.usuario = transnetUser;
+    } else {
+      // ENSAIO por omissao.
+      inputs.confirmar = inputs.confirmar === "true" ? "true" : "false";
+    }
 
     const linhasCsv = inputs.csv ? inputs.csv.trim().split(/\r?\n/).length - 1 : null;
     const trilha = {
-      acao: "robo_disparo",
+      acao: ehTesteLogin ? "robo_teste_login" : "robo_disparo",
       alvo: nome,
       detalhe: {
         workflow: cfgRobo.arquivo,
@@ -1355,7 +1367,10 @@ serve(async (req: Request) => {
     // A CREDENCIAL VAI ANTES DO DISPATCH, e depois da trilha: se gravar o secret falhar,
     // nada foi disparado e a trilha ja diz que alguem tentou. Ordem inversa deixaria um
     // run entrando no Transnet com a credencial da pessoa ANTERIOR.
-    const gravou = await gravarCredencialTransnet(dono, repo, token, transnetUser, transnetSenha);
+    const gravou = await gravarCredencialTransnet(
+      dono, repo, token, transnetUser, transnetSenha,
+      ehTesteLogin ? ["TRANSNET_TESTE_USER", "TRANSNET_TESTE_PASSWORD"] : undefined,
+    );
     if (!gravou.ok) {
       return json(
         { ok: false, error: `não foi possível preparar o login do Transnet: ${gravou.error}` },

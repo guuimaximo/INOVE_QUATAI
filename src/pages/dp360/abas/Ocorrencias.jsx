@@ -3534,8 +3534,8 @@ function ResumoDoCartao({ v }) {
  *     ocorrências e crava o cartão no `ponto_real_manual`. Hoje o DP faz o mesmo em dois
  *     passos — crava no Cartão do dia (botão no topo do pop-up) e recusa no veredito;
  *   · `ForaDoRobo` ("fechar à mão", main.py:8289): encerra o caso que o robô não conseguiu.
- *     O caminho seguro existe na fila ("Conferir marcados e fechar no nosso banco"), que só
- *     carimba quando o cartão ao vivo bate; o que não existe mais é fechar SEM conferir.
+ *     O caminho da fila é o "▶ Executar marcados", que só carimba quando o cartão ao vivo
+ *     bate (o "Conferir e fechar" só leitura saiu em 16/09/2026); fechar SEM conferir não existe.
  * Enquanto não houver essa decisão, elas ficam aqui — com os motivos e as anedotas que
  * carregam. Apagar antes seria decidir no lugar dele.
  */
@@ -5521,6 +5521,8 @@ export default function Ocorrencias() {
   /* ── CONFERÊNCIA: lê o cartão ao vivo, NÃO mexe no Transnet ────────────────
    * Dois escopos, um handler: as linhas MARCADAS na ✔ e o CASO ABERTO. O `confirmar` não
    * liga escrita no Transnet — liga a escrita no NOSSO banco. */
+  // SEM BOTÃO desde 16/09/2026 (o dono deixou só o Executar na Fila de lançamento).
+  // eslint-disable-next-line no-unused-vars
   const aoConferirRobo = useCallback(
     async (regs, valendo, noCasoAberto = false) => {
       const lista = (regs || []).filter(Boolean);
@@ -6399,8 +6401,8 @@ export default function Ocorrencias() {
     </div>
   ) : grade.loteConferir ? (
     <div style={{ ...FILA, gap: 8 }}>
-      <span className="dp-muted dp-num" style={MINI} title={AVISO_CONFERIR}>
-        {selIds.length ? `${selIds.length} marcada(s) na ✔` : "marque linhas para conferir no Transnet (só leitura)"}
+      <span className="dp-muted dp-num" style={MINI}>
+        {selIds.length ? `${selIds.length} marcada(s) na ✔` : "marque as linhas que o robô deve executar"}
       </span>
       {/* O QUE ESTAVA FALTANDO: mandar o robô executar o que já foi decidido. Sem ele a aba
           só sabia CONFERIR — e conferir não executa nada. */}
@@ -6412,17 +6414,9 @@ export default function Ocorrencias() {
       >
         ▶ Executar marcados ({selIds.length})
       </BotaoAcao>
-      {/* SEM ENSAIO (decisão do dono, 09/09/2026). Este botão já é só leitura no Transnet —
-          o ensaio dele só mudava se o carimbo cai no NOSSO banco, e para isso existe a
-          confirmação, que diz exatamente o que vai ser gravado. */}
-      <BotaoAcao
-        tom="ok"
-        titulo="Lê o cartão ao vivo e, no que bater com o combinado, carimba conferido_em no NOSSO banco. O Transnet continua intocado."
-        disabled={!selIds.length || gravando || disparando}
-        onClick={() => aoConferirRobo(marcados, true)}
-      >
-        🔒 Conferir marcados e fechar no nosso banco
-      </BotaoAcao>
+      {/* SÓ O EXECUTAR (dono, 16/09/2026: "tira o conferir e deixa só o executar"). O
+          Executar já confere e dá baixa no que o Transnet resolveu; o "Conferir e fechar"
+          (só leitura) saiu da tela. `aoConferirRobo` fica guardado, sem botão. */}
     </div>
   ) : grade.loteCorrigirRecusa ? (
     <div style={{ ...FILA, gap: 8 }}>

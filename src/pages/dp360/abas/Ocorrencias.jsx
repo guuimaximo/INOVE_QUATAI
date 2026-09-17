@@ -438,7 +438,15 @@ function situacaoDoCaso(veredito, caso, temAviso) {
    * SÓ NA PORTA DO PEDIDO. Na porta do aviso o cancelamento já tem aba própria
    * ("Cancelamento", que filtra pelo próprio `aceite`) e ali não se mexe. */
   if (!temAviso && txt(c.aceite).toLowerCase() === "cancelado") return "recusado_lote";
-  if (txt(c.correcao_final_em)) return "corrigido";
+  /* CORRIGIDO É DESFECHO — MAS DECISÃO NÃO EXECUTADA VEM ANTES (17/09/2026). O dia corrigido
+   * em um ciclo e reaberto por um pedido novo tem as duas marcas ao mesmo tempo:
+   * `correcao_final_em` do ciclo que fechou e um veredito fresco esperando o robô. Devolver
+   * "corrigido" aqui escondia o caso da Fila de lançamento — e o robô só recebe as chaves que
+   * a fila manda, então a recusa nunca sairia (PAULO MARCOS 30060767 03/09). Enquanto
+   * `conferido_em` estiver vazio com decisão gravada, a pendência manda; assim que o robô
+   * carimba, o desfecho volta a ser "corrigido". */
+  const esperandoRobo = ["aceito", "rejeitado"].includes(txt(c.aceite)) && !txt(c.conferido_em);
+  if (txt(c.correcao_final_em) && !esperandoRobo) return "corrigido";
   if (txt(c.aceite) === "rejeitado") {
     const dispensada = txt(c.correcao_status) === "dispensada";
     if (temAviso && !dispensada) return txt(c.conferido_em) ? "advertido" : "recusa_exec_pendente";
@@ -1857,6 +1865,22 @@ async function gravaContrato(reg, ids, antes, depois) {
  * por aqui: passa pelo veredito do caso (`gravarMarcacao`), que grava as marcas e o lado do
  * dia de uma vez.
  */
+/* CICLO REABERTO: O CARIMBO VELHO TEM DE SAIR DO BANCO (17/09/2026) ───────────────────
+ * `ponto_caso` guarda UMA linha por pessoa+dia. Quando um aviso novo chega depois da
+ * execução, a tela já ignora os campos do ciclo anterior (`casoDoCiclo`), mas o BANCO
+ * continua com o `conferido_em` antigo — e o robô monta a fila dele com
+ * `aceite ∈ (aceito, rejeitado) E conferido_em vazio` (bot_ajustes_app.py:1338). Medido no
+ * PAULO MARCOS 30060767 03/09: veredito gravado, caso na fila da tela, robô respondendo
+ * "nenhuma decisão pendente" e as três ocorrências PENDENTES no Transnet para sempre. Pior:
+ * enquanto o `conferido_em` velho estiver lá, `ehReaberto` continua verdadeiro e zera NA
+ * LEITURA o veredito recém-gravado — o caso voltava sozinho para "A decidir".
+ *
+ * Zerar na gravação é o que a ferramenta já faz na leitura (main.py:9276), agora escrito. O
+ * carimbo é do ciclo que fechou; a execução velha segue registrada no Transnet
+ * (`ponto_ajustes_app.situacao_ajuste` = EFETUADO/RECUSADO). Só o `conferido_em` sai:
+ * `advertencia_enviada_em` e `correcao_final_em` são atos formais e ficam como histórico. */
+const doCicloNovo = (reaberto, linha) => (reaberto ? { ...linha, conferido_em: null } : linha);
+
 async function gravarAceite(reg) {
   const agora = agoraISOLocal();
   const ids = idsDoDia(reg);
@@ -1867,14 +1891,14 @@ async function gravarAceite(reg) {
     reg.antesTexto,
     reg.bloqueio || !cartaoFecha ? "" : textoBatidas(reg.depois),
   );
-  await gravarNoBanco("ponto_caso", {
+  await gravarNoBanco("ponto_caso", doCicloNovo(reg.reaberto, {
     ...chaveDoCaso(reg),
     aceite: "aceito",
     ajuste: "certo",
     aceito_em: agora,
     ajuste_ids: ids.join(","),
     atualizado_em: agora,
-  });
+  }));
   return aviso;
 }
 
@@ -1889,14 +1913,14 @@ async function gravarRecusa(reg, modo) {
   const agora = agoraISOLocal();
   const ids = idsDoDia(reg);
   const aviso = await gravaContrato(reg, ids, reg.antesTexto, "");
-  await gravarNoBanco("ponto_caso", {
+  await gravarNoBanco("ponto_caso", doCicloNovo(reg.reaberto, {
     ...chaveDoCaso(reg),
     aceite: "rejeitado",
     ajuste: "errado",
     ajuste_ids: ids.join(","),
     correcao_status: modo === "rejeitar" ? "dispensada" : "",
     atualizado_em: agora,
-  });
+  }));
   return aviso;
 }
 
@@ -1925,19 +1949,32 @@ async function gravarRecusa(reg, modo) {
  * correção que o DP registrou no caso (RICHARD 30061188 07/08) — e é a ausência dela que
  * manda a recusa COM aviso para advertência e correção. O lado do dia segue a regra do
  * `decidir_ajustes`: havendo recusa, a recusa manda. */
-async function gravarMarcacao(reg, aceitar, rejeitar, cartaoDoMontador) {
+async function gravarMarcacao(
+  reg,
+  aceitar,
+  rejeitar,
+  cartaoDoMontador,
+  { posterior = false, reaberto = false } = {},
+) {
   const ace = (aceitar || []).map(txt).filter(Boolean);
   const rej = (rejeitar || []).map(txt).filter(Boolean);
   if (!ace.length && !rej.length) throw new Error("Nenhuma marcação.");
   const agora = agoraISOLocal();
-  await gravarNoBanco("ponto_caso", {
+  const linha = {
     ...chaveDoCaso(reg),
     aceite: rej.length ? "rejeitado" : "aceito",
     ajuste: rej.length ? "errado" : "certo",
     ajuste_ids: [...ace.map((i) => `A:${i}`), ...rej.map((i) => `R:${i}`)].join(","),
     aceito_em: agora,
     atualizado_em: agora,
-  });
+  };
+  /* A ÚNICA EXCEÇÃO AO "NÃO TOCA EM correcao_status" (17/09/2026): o PEDIDO POSTERIOR, que é
+     recusa e só (main.py:2223 `recusar_posterior`). O dia já foi julgado e corrigido; a recusa
+     existe para a ocorrência não ficar pendente na grade do Transnet, onde qualquer um pode
+     efetuá-la e desfazer a correção. Sem o `dispensada`, o caso voltaria para a fila de
+     advertência e puniria duas vezes o mesmo fato. */
+  if (posterior && !ace.length) linha.correcao_status = "dispensada";
+  await gravarNoBanco("ponto_caso", doCicloNovo(reaberto, linha));
   // Sem aceite não há cartão a prometer: recusa não congela `depois`.
   const depois = ace.length ? txt(cartaoDoMontador) : "";
   return gravaContrato(reg, [...ace, ...rej], reg.antesTexto, depois);
@@ -2106,7 +2143,7 @@ async function gravarComoAlteracao(reg, ids, pontos) {
     throw new Error("O almoço deste motorista foi travado pela regra da Revisão.");
 
   const agora = agoraISOLocal();
-  await gravarNoBanco("ponto_caso", {
+  await gravarNoBanco("ponto_caso", doCicloNovo(reg.reaberto, {
     ...chaveDoCaso(reg),
     aceite: "rejeitado",
     ajuste: "errado",
@@ -2114,7 +2151,7 @@ async function gravarComoAlteracao(reg, ids, pontos) {
     aceito_em: agora,
     correcao_status: "pendente",
     atualizado_em: agora,
-  });
+  }));
   const aviso = await gravaContrato(reg, rej, reg.antesTexto, textoBatidas(pontos));
   try {
     await gravarNoBanco("ponto_real_manual", {
@@ -2162,7 +2199,7 @@ async function gravarRecusaECorrecao(reg, ids, campos, contrato) {
     definido_em: agoraUtc(),
   });
   const agora = agoraISOLocal();
-  await gravarNoBanco("ponto_caso", {
+  await gravarNoBanco("ponto_caso", doCicloNovo(reg.reaberto, {
     ...chaveDoCaso(reg),
     aceite: "rejeitado",
     ajuste: "errado",
@@ -2170,7 +2207,7 @@ async function gravarRecusaECorrecao(reg, ids, campos, contrato) {
     aceito_em: agora,
     correcao_status: "pendente",
     atualizado_em: agora,
-  });
+  }));
   return gravaContrato(reg, rej, reg.antesTexto, contrato);
 }
 
@@ -2234,8 +2271,14 @@ async function conferirDiasSemBatida(regs) {
 
 /* ───────── as travas que protegem o trabalhador (não são conveniência de tela) ───────── */
 
-// Este dia não comporta decisão NENHUMA — nem em lote, nem no caso aberto.
-function motivoSemDecisao(reg) {
+/* Este dia não comporta decisão NENHUMA — nem em lote, nem no caso aberto.
+ * `soRecusa` = o que está sendo gravado é SÓ recusa (nenhum aceite). O pedido posterior é o
+ * único caso em que isso muda a resposta: o dia já corrigido não aceita mais nada, mas a
+ * RECUSA continua valendo (main.py:2222 `recusar_posterior`) — é ela que fecha a ocorrência
+ * no Transnet sem mexer no ponto já lançado. Até 17/09/2026 a trava barrava também a recusa,
+ * e a tela dizia o contrário do que fazia: "só se recusa" com o botão desligado (PAULO
+ * MARCOS 30060767, 03/09). */
+function motivoSemDecisao(reg, { soRecusa = false } = {}) {
   if (reg.decJa) return "já decidido";
   if (resolvidoNoTransnet(reg)) return "o Transnet já resolveu";
   // NÃO EXISTE DECISÃO SOBRE O NADA. Dia sem pedido nenhum não se aceita nem se recusa:
@@ -2248,7 +2291,7 @@ function motivoSemDecisao(reg) {
   // PEDIDO POSTERIOR: ele abriu o pedido DEPOIS de o dia já ter sido julgado, advertido e
   // corrigido. Aceitar aqui DESFAZ a correção já lançada, e re-advertir seria punir duas
   // vezes o mesmo fato. A única saída é recusar (main.py:2222 `recusar_posterior`).
-  if (txt(reg.caso?.correcao_final_em) || reg.situacaoAviso === "posterior")
+  if ((txt(reg.caso?.correcao_final_em) || reg.situacaoAviso === "posterior") && !soRecusa)
     return "o dia já foi corrigido — pedido posterior só se recusa, nunca se aceita";
   return "";
 }
@@ -2653,8 +2696,11 @@ function rotuloDaExecucao(reg) {
 // app.js:2492 — o que vem A SEGUIR, dito com todas as letras.
 function proximoPassoDoCaso(reg) {
   const c = reg.caso || {};
-  const exec = Boolean(txt(c.conferido_em) || txt(c.correcao_final_em));
   const aceite = txt(c.aceite);
+  // Dia corrigido e reaberto: enquanto o robô não carimbar, o ciclo NÃO está encerrado
+  // — o passo que falta é ele executar a decisão nova (ver `situacaoDoCaso`).
+  const esperandoRobo = ["aceito", "rejeitado"].includes(aceite) && !txt(c.conferido_em);
+  const exec = !esperandoRobo && Boolean(txt(c.conferido_em) || txt(c.correcao_final_em));
   const dispensada = txt(c.correcao_status) === "dispensada";
   if (exec) {
     return reg.temAviso && aceite === "rejeitado" && !dispensada && !txt(c.advertencia_enviada_em)
@@ -4411,11 +4457,12 @@ function Detalhe({
   // a trava de gravar é a de MARCAR (as quatro de `motivoSemDecisao`), nunca a do dia
   // inteiro: o dia MISTO e o dia com a simulação bloqueada são exatamente os que só se
   // resolvem por ocorrência.
-  const travaMarcar = motivoSemDecisao(reg);
   const idsMarcados = (letra) =>
     (reg.acoes || []).flatMap((it, i) => (marcaDaOcorrencia(reg, marcas, i) === letra ? it.ids : []));
   const aceitarIds = idsMarcados("A");
   const rejeitarIds = idsMarcados("R");
+  // veredito só de recusa passa no dia já corrigido; com qualquer aceite, não
+  const travaMarcar = motivoSemDecisao(reg, { soRecusa: !aceitarIds.length && rejeitarIds.length > 0 });
   const semResposta = v.contagem.sem;
   /* RECUSAR E CORRIGIR ASSIM: tudo recusado e o cartão mexido à mão. Mexer no cartão e
    * recusar tudo só faz sentido se o cartão for para algum lugar — e o lugar é o Real
@@ -4684,7 +4731,9 @@ function Detalhe({
                 }
                 onClick={() => aoMarcar(reg, aceitarIds, rejeitarIds, v.contrato)}
               >
-                Gravar veredito ({v.contagem.A} aceitar / {v.contagem.R} recusar)
+                {/* CONTA OCORRÊNCIA, não linha: pedido repetido aparece junto ("×2"), e o que
+                    vai gravado são os ids (PAULO MARCOS 03/09: 2 linhas, 3 ocorrências). */}
+                Gravar veredito ({aceitarIds.length} aceitar / {rejeitarIds.length} recusar)
               </BotaoAcao>
             )}
             <span style={MINI}>
@@ -5014,7 +5063,7 @@ export default function Ocorrencias() {
 
   const aoRejeitar = useCallback(
     async (reg, modo) => {
-      const trava = motivoSemDecisao(reg);
+      const trava = motivoSemDecisao(reg, { soRecusa: true });
       if (trava) { setRecado(`Não dá para recusar: ${trava}.`); return; }
       // TRAVA DA ADVERTÊNCIA INDEVIDA: sem aviso registrado, a recusa é sempre 'dispensada'.
       if (modo === "completo" && !reg.temAviso) {
@@ -5063,17 +5112,24 @@ export default function Ocorrencias() {
 
   const aoMarcar = useCallback(
     async (reg, aceitarIds, rejeitarIds, cartaoDoMontador) => {
-      const trava = motivoSemDecisao(reg);
+      const trava = motivoSemDecisao(reg, { soRecusa: !aceitarIds?.length });
       if (trava) { setRecado(`Não dá para marcar: ${trava}.`); return; }
       if (!aceitarIds.length && !rejeitarIds.length) { setRecado("Nenhuma marcação."); return; }
       // O CARTÃO VAI NA CONFIRMAÇÃO porque é ELE que fica congelado como contrato — é o que
       // o DP acabou de ver no card do montador, e é contra ele que o robô confere.
       const contrato = txt(cartaoDoMontador);
+      // PEDIDO POSTERIOR: o dia já foi corrigido e só resta recusar (ver `gravarMarcacao`)
+      const posterior = Boolean(txt(reg.caso?.correcao_final_em) || reg.situacaoAviso === "posterior");
       if (!await perguntar(
         `MARCAR POR OCORRÊNCIA o dia ${reg.dataBR} de ${reg.nome}.\n\n` +
           `Aceitar: ${aceitarIds.join(", ") || "—"}\nRejeitar: ${rejeitarIds.join(", ") || "—"}\n\n` +
           `Cartão congelado como contrato (o do card do montador): ${reg.antesTexto || "—"} → ` +
           `${contrato || "— (nada congelado: sem aceite, ou a projeção não fecha em 2/4)"}\n\n` +
+          (posterior && !aceitarIds.length
+            ? "PEDIDO POSTERIOR: este dia JÁ FOI CORRIGIDO. A recusa serve para a ocorrência não ficar " +
+              "pendente na grade do Transnet; o ponto lançado NÃO muda e o dia não volta para a fila de " +
+              "advertência (correcao_status = dispensada). "
+            : "") +
           `Grava ajuste_ids com A:/R: e o dia como ${rejeitarIds.length ? "RECUSADO" : "ACEITO"} ` +
           `(havendo recusa, a recusa manda). correcao_status NÃO é tocado — a porta da correção fica aberta.
 
@@ -5082,7 +5138,7 @@ export default function Ocorrencias() {
           `o robô é disparado de lá, com a ✔ e o botão "Executar marcados".`,
       )) return;
       const gravou = await executarGravacao(`Marcação gravada (${reg.nome} · ${reg.dataBR})`, () =>
-        gravarMarcacao(reg, aceitarIds, rejeitarIds, contrato),
+        gravarMarcacao(reg, aceitarIds, rejeitarIds, contrato, { posterior, reaberto: reg.reaberto }),
       );
       /* VEREDITO DADO, POP-UP FECHADO (dono, 15/09/2026: "depois de dar o veredito tem que
          sair"). O pop-up é só veredito: gravado, não há mais nada a fazer nele, e deixá-lo

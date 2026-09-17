@@ -39,7 +39,22 @@ const RE_FOTO_CASO = /^conferido_(\d{8})_(\d{4}-\d{2}-\d{2})\.png$/i;
 const RE_FOTO_PONTO = /_(preenchido|apos_inserir|relido)_(\d{7,8})_(\d{2})-(\d{2})-(\d{4})\.png$/i;
 const RE_FOTO_ERRO = /_erro_(\d{7,8})\.png$/i;
 const ORDEM_ETAPA = { preenchido: 1, apos_inserir: 2, relido: 3, erro: 4 };
-const LIMITE_MIN = 14;
+/* QUANTO TEMPO A TELA ACOMPANHA (17/09/2026) — 14 min era MENOS que o robô leva.
+   Medido nos runs do dia: lote pequeno fecha em 5-8 min, mas o de 51 crachá+dia passou de
+   18 e o `Cartão de Ponto` levou 13. Aos 14 a espera estourava, e o pior é que a tela
+   chamava isso de FIM: "Robô encerrou — 14 de 51 conferido(s), 37 com pendência" enquanto o
+   run continuava lançando no Transnet (Gabrielle, run 35268232189, 17/09 17:00). Quem lia
+   aquilo ia recusar de novo o que o robô estava fazendo naquele instante.
+   45 min cobre o lote grande com folga; passando disso a tela DESISTE DE OLHAR e diz isso
+   com todas as letras — o robô segue trabalhando do mesmo jeito. */
+const LIMITE_MIN = 45;
+/* O ritmo afrouxa depois do primeiro minuto: 5 s é para a primeira resposta ("na fila"),
+   e manter 5 s por 45 min seriam 540 idas ao GitHub por lote acompanhado. */
+const RITMO_RUN_CALMO_MS = 15000;
+const APRESSADO_MS = 60000;
+
+/** O run não acabou: a TELA é que parou de olhar. Nada aqui é desfecho. */
+export const soParouDeOlhar = (fim) => ["tempo_esgotado", "abandonado"].includes(txt(fim));
 const RE_ERRO = /ERRO|FALH/i;
 const RE_RESULTADO = /_resultado\.csv$/i;
 
@@ -77,11 +92,15 @@ export function fecharPainelDoLote() {
    disparo logo depois do dispatch e o run pode não ter nascido ainda, e aí o plano B é o
    que uma pessoa faria — olhar o run daquele robô que começou depois do meu clique. */
 async function esperarORun({ runId, robo, desde }) {
-  const limite = Date.now() + LIMITE_MIN * 60000;
+  const comecou = Date.now();
+  const limite = comecou + LIMITE_MIN * 60000;
   let primeira = true;
   while (Date.now() < limite) {
     // a primeira leitura é IMEDIATA: esperar 15 s para dizer "na fila" era o pop-up parado
-    if (!primeira) await new Promise((r) => setTimeout(r, RITMO_RUN_MS));
+    if (!primeira)
+      await new Promise((r) =>
+        setTimeout(r, Date.now() - comecou < APRESSADO_MS ? RITMO_RUN_MS : RITMO_RUN_CALMO_MS),
+      );
     primeira = false;
     if (!estado) return "abandonado"; // ninguém mais acompanhando
     let runs = [];
@@ -435,6 +454,12 @@ export function desfechosDaCorrecao(casos, log, fim) {
         motivo: `gravou, mas o cartão relido não ficou igual (${fala.frase})`,
       };
     else if (fala) item = { estado: "pendente", texto: `não corrigiu — ${fala.frase}`, motivo: fala.frase };
+    /* A TELA DESISTIU DE OLHAR, O ROBÔ NÃO PAROU (17/09/2026). Sem `motivo` o `aoTerminar`
+       não grava nada: escrever "o robô terminou antes de corrigir" num dia que ele pode
+       estar corrigindo AGORA é registrar falha que não aconteceu — e essa frase fica no
+       `transnet_resposta` do caso, onde o DP a lê depois como se fosse do Transnet. */
+    else if (soParouDeOlhar(fim))
+      item = { estado: "semLog", texto: "o robô ainda estava rodando — confira depois" };
     else if (!log)
       item =
         fim === "success"
@@ -808,7 +833,9 @@ export default function PainelExecucao({ aba = "" }) {
             {erro
               ? erro
               : encerrou
-                ? `o robô terminou${fim === "success" ? "" : ` (${fim})`} em ${relogio}`
+                ? soParouDeOlhar(fim)
+                  ? `passou de ${LIMITE_MIN} min e o robô AINDA ESTÁ RODANDO — parei de acompanhar em ${relogio}; o que está abaixo é o que já chegou ao banco`
+                  : `o robô terminou${fim === "success" ? "" : ` (${fim})`} em ${relogio}`
                 : fim
                   ? "o robô terminou — conferindo cada caso no banco…"
                   : `${onde || "mandando o robô"}${

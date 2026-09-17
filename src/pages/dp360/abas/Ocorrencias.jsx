@@ -71,7 +71,12 @@ import {
 } from "../vereditoCartao";
 import { usePergunta } from "../Perguntar";
 import { ESPERA_MAX_MIN, esperarRunDoRobo, runNaoFez } from "../esperarRobo";
-import PainelExecucao, { acompanharLote, lotePifou, useLoteEmExecucao } from "../loteEmExecucao";
+import PainelExecucao, {
+  acompanharLote,
+  lotePifou,
+  soParouDeOlhar,
+  useLoteEmExecucao,
+} from "../loteEmExecucao";
 import CartaoDoDia, {
   agoraUtc,
   aplicarRealManual,
@@ -5588,11 +5593,19 @@ export default function Ocorrencias() {
               return;
             }
             const sobrou = conta.faltaram.length;
+            /* "ENCERROU" SÓ QUANDO ENCERROU (17/09/2026). Passado o limite, a TELA desiste de
+               olhar — o robô continua lançando. Dizer "encerrou, 37 com pendência" no meio do
+               trabalho dele é convidar o DP a recusar de novo o que está sendo feito naquele
+               instante (Gabrielle, 17/09: o run seguia e a tela já dava por encerrado). */
             setRecado(
-              (sobrou ? "⚠ " : "✅ ") +
-                `Robô encerrou — ${conta.feitos.length} de ${conta.feitos.length + sobrou} conferido(s)` +
-                (sobrou ? `, ${sobrou} com pendência` : "") +
-                ". Detalhe no quadro abaixo.",
+              soParouDeOlhar(fim)
+                ? `⏳ O robô AINDA ESTÁ RODANDO — parei de acompanhar depois do limite. ` +
+                    `${conta.feitos.length} de ${conta.feitos.length + sobrou} já conferido(s) até agora; ` +
+                    "os outros podem estar sendo lançados agora. Recarregue daqui a pouco antes de mexer neles."
+                : (sobrou ? "⚠ " : "✅ ") +
+                    `Robô encerrou — ${conta.feitos.length} de ${conta.feitos.length + sobrou} conferido(s)` +
+                    (sobrou ? `, ${sobrou} com pendência` : "") +
+                    ". Detalhe no quadro abaixo.",
             );
           },
         });
@@ -5781,11 +5794,14 @@ export default function Ocorrencias() {
             if (!conta || noCasoAberto) return;
             const sobrou = conta.faltaram.length;
             setRecado(
-              valendo
-                ? (sobrou ? "⚠ " : "✅ ") +
-                    `Recusa encerrou — ${conta.feitos.length} de ${lista.length} fechado(s)` +
-                    (sobrou ? `, ${sobrou} continua(m) em A decidir` : "") + " — veja em Cancelados."
-                : "✅ Ensaio da recusa encerrou — nada foi gravado.",
+              !valendo
+                ? "✅ Ensaio da recusa encerrou — nada foi gravado."
+                : soParouDeOlhar(fim)
+                  ? `⏳ O robô AINDA ESTÁ RODANDO — parei de acompanhar depois do limite. ` +
+                      `${conta.feitos.length} de ${lista.length} fechado(s) até agora.`
+                  : (sobrou ? "⚠ " : "✅ ") +
+                      `Recusa encerrou — ${conta.feitos.length} de ${lista.length} fechado(s)` +
+                      (sobrou ? `, ${sobrou} continua(m) em A decidir` : "") + " — veja em Cancelados."
             );
           },
         });

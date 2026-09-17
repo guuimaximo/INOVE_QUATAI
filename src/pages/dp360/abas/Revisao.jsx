@@ -40,6 +40,7 @@ import {
   lerDP360,
   lerTudoDP360,
   upsertDP360,
+  upsertDP360Insistente,
 } from "../../../services/dp360Api";
 import { useVigiaDoRobo } from "../roboVigia";
 import { RAIO_LOCAL, RAIO_VEIC } from "../regrasGps";
@@ -474,7 +475,7 @@ function ModalComunicado({
         if (p.casos.length) {
           const { casos } = marcarReavisos(p.casos, casoDe, { congelar: congelarReaviso });
           try {
-            await upsertDP360("ponto_caso", casos);
+            await upsertDP360Insistente("ponto_caso", casos, "Comunicado enviado");
           } catch (falha) {
             return (
               `O comunicado SAIU, mas o registro em ponto_caso falhou (${falha?.message || falha}). ` +

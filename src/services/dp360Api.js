@@ -158,6 +158,26 @@ export function upsertDP360(tabela, linhas, motivo) {
   return gravar(tabela, "upsert", { linhas: Array.isArray(linhas) ? linhas : [linhas], motivo });
 }
 
+/**
+ * UPSERT QUE INSISTE (17/09/2026 — dono: "não pode dar esse problema do 400"). Usado onde a
+ * gravação vem DEPOIS de algo que já aconteceu fora daqui (o comunicado saiu): falhar ali
+ * deixa o dia sem o caso e o prazo de 48 h parado. Upsert é idempotente — regravar a mesma
+ * linha não muda nada —, então tentar de novo é seguro. O gateway já grava em partes e
+ * nomeia só o que não entrou; aqui entram as falhas de passagem (rede, função fria).
+ */
+export async function upsertDP360Insistente(tabela, linhas, motivo, tentativas = 3) {
+  let ultima;
+  for (let i = 0; i < tentativas; i += 1) {
+    try {
+      return await upsertDP360(tabela, linhas, motivo);
+    } catch (falha) {
+      ultima = falha;
+      if (i < tentativas - 1) await new Promise((ok) => setTimeout(ok, 1500 * (i + 1)));
+    }
+  }
+  throw ultima;
+}
+
 /** INSERT append-only (histórico/log). */
 export function inserirDP360(tabela, linhas, motivo) {
   return gravar(tabela, "insert", { linhas: Array.isArray(linhas) ? linhas : [linhas], motivo });

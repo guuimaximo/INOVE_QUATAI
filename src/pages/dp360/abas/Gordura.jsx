@@ -8,6 +8,7 @@ import {
   lerDatasDP360,
   lerTudoDP360,
   upsertDP360,
+  upsertDP360Insistente,
 } from "../../../services/dp360Api";
 // O CARTÃO DO DIA É O MESMO DA REVISÃO (pedido do dono, 06/09: "na verdade é o mesmo
 // pop-up de análise do da Revisão"). Com ele a Gordura ganhou o que não tinha: o bloco
@@ -1129,7 +1130,7 @@ function ModalComunicado({ linhas, casoDe, comPontoAntes, aoFechar, aoConcluir }
         }
         const { casos } = marcarReavisos(p.casos, casoDe);
         try {
-          await upsertDP360("ponto_caso", casos);
+          await upsertDP360Insistente("ponto_caso", casos, "Comunicado enviado");
         } catch (falha) {
           return (
             `O comunicado SAIU, mas o registro em ponto_caso falhou (${falha?.message || falha}). ` +

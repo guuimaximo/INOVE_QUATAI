@@ -197,6 +197,85 @@ function carimbarAutor(cfg: Acesso, linhas: Record<string, unknown>[], nome: str
   }
 }
 
+/**
+ * GRAVAR UM LOTE SEM PERDER O LOTE (17/09/2026 — dono: "não pode dar esse problema do 400").
+ *
+ * O lote de comunicado de 14/09 saiu para 16 pessoas e NENHUM caso foi gravado: um HTTP 400
+ * derrubou o pacote inteiro. Aqui o lote só falha no que de fato não entra, e diz qual foi:
+ *
+ *   1. MESMA CHAVE DUAS VEZES (upsert): as linhas viram uma só, a última vencendo. O banco
+ *      recusa um upsert que toca a mesma linha duas vezes no mesmo comando.
+ *   2. FORMATOS DIFERENTES: o PostgREST devolve 400 (PGRST102, "All object keys must match")
+ *      quando os objetos do array não têm as MESMAS chaves — e o reaviso tira de propósito as
+ *      colunas congeladas (`marcarReavisos`). `columns=` não serve: a coluna ausente viraria
+ *      NULL e apagaria o alvo congelado. Então cada formato vai no seu POST.
+ *   3. UM GRUPO RECUSADO: ele é regravado linha a linha. Uma linha ruim não leva as outras.
+ *
+ * Devolve o que entrou e o que não entrou, com o motivo que o banco deu.
+ */
+async function gravarPorFormato(
+  url: string,
+  cabecalhos: Record<string, string>,
+  linhasCruas: Record<string, unknown>[],
+  merge: boolean,
+  chaves: string[],
+  enviar: typeof fetch = fetch,
+): Promise<{ gravadas: Record<string, unknown>[]; falhas: { linha: Record<string, unknown>; motivo: string }[] }> {
+  let linhas = linhasCruas;
+  if (merge && chaves.length) {
+    const porChave = new Map<string, Record<string, unknown>>();
+    for (const l of linhasCruas) {
+      const k = chaves.map((c) => String(l?.[c] ?? "")).join("|");
+      porChave.set(k, { ...(porChave.get(k) ?? {}), ...l });
+    }
+    linhas = [...porChave.values()];
+  }
+  const grupos = new Map<string, Record<string, unknown>[]>();
+  for (const l of linhas) {
+    const assinatura = Object.keys(l).sort().join(",");
+    if (!grupos.has(assinatura)) grupos.set(assinatura, []);
+    grupos.get(assinatura)!.push(l);
+  }
+  const post = async (corpo: Record<string, unknown>[]): Promise<string> => {
+    try {
+      const r = await enviar(url, {
+        method: "POST",
+        headers: {
+          ...cabecalhos,
+          "Content-Type": "application/json",
+          Prefer: merge ? "resolution=merge-duplicates,return=minimal" : "return=minimal",
+        },
+        body: JSON.stringify(corpo),
+      });
+      if (r.ok) return "";
+      // o motivo do banco vai junto: é ele que diz O QUE foi recusado
+      const texto = (await r.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 160);
+      return `HTTP ${r.status}${texto ? ` — ${texto}` : ""}`;
+    } catch (erro) {
+      return `sem resposta do banco (${String((erro as Error)?.message ?? erro).slice(0, 80)})`;
+    }
+  };
+  const gravadas: Record<string, unknown>[] = [];
+  const falhas: { linha: Record<string, unknown>; motivo: string }[] = [];
+  for (const grupo of grupos.values()) {
+    const motivo = await post(grupo);
+    if (!motivo) {
+      gravadas.push(...grupo);
+      continue;
+    }
+    if (grupo.length === 1) {
+      falhas.push({ linha: grupo[0], motivo });
+      continue;
+    }
+    for (const l of grupo) {
+      const m = await post([l]);
+      if (m) falhas.push({ linha: l, motivo: m });
+      else gravadas.push(l);
+    }
+  }
+  return { gravadas, falhas };
+}
+
 /* QUEM LE CADA TABELA, ALEM DO ADMINISTRADOR (15/09/2026). A liberacao da DP360 e por
    pessoa e por pagina; a trava de verdade tem de estar AQUI, porque a da tela so esconde.
    Tabela que nao esta nesta lista e do PONTO e vale qualquer pagina de ponto da DP360. */
@@ -1178,43 +1257,20 @@ serve(async (req: Request) => {
       ? `${base}/rest/v1/${tabela}?on_conflict=${encodeURIComponent(cfg.conflito)}`
       : `${base}/rest/v1/${tabela}`;
     try {
-      /* UM LOTE COM CHAVES DIFERENTES VAI EM GRUPOS (17/09/2026). O PostgREST recusa com 400
-         (PGRST102, "All object keys must match") o array cujos objetos não têm as MESMAS
-         chaves — e o reaviso tira de propósito as colunas congeladas (`marcarReavisos`), então
-         um lote com um reaviso e quinze avisos novos morria inteiro: 16 comunicados saíram e
-         nenhum caso foi gravado (lote de 14/09). Mandar `columns=` não serve: a coluna
-         ausente viraria NULL e apagaria o alvo congelado. Então cada formato vai no seu POST. */
-      const grupos = new Map<string, Record<string, unknown>[]>();
-      for (const l of linhas as Record<string, unknown>[]) {
-        const assinatura = Object.keys(l).sort().join(",");
-        if (!grupos.has(assinatura)) grupos.set(assinatura, []);
-        grupos.get(assinatura)!.push(l);
-      }
-      let gravadas = 0;
-      for (const grupo of grupos.values()) {
-        const r = await fetch(url, {
-          method: "POST",
-          headers: {
-            ...hDp,
-            "Content-Type": "application/json",
-            Prefer: merge ? "resolution=merge-duplicates,return=minimal" : "return=minimal",
-          },
-          body: JSON.stringify(grupo),
-        });
-        if (!r.ok) {
-          // o motivo do banco vai junto (é o que diz O QUE recusou); sem ele sobrava "HTTP 400"
-          const motivoBanco = (await r.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 160);
-          throw new Error(
-            `HTTP ${r.status}${motivoBanco ? ` — ${motivoBanco}` : ""}` +
-              (gravadas ? ` (${gravadas} de ${linhas.length} já tinham sido gravadas)` : ""),
-          );
-        }
-        gravadas += grupo.length;
+      const { gravadas: entraram, falhas } = await gravarPorFormato(
+        url,
+        hDp,
+        linhas as Record<string, unknown>[],
+        merge,
+        merge ? chavesTabela : [],
+      );
+      if (!entraram.length && falhas.length) {
+        throw new Error(`nada foi gravado — ${falhas[0].motivo}`);
       }
       /* UMA LINHA DE TRILHA POR CASO. Acima de `TRILHA_MAX_LINHAS` vira uma linha so, de
          resumo: a trilha existe para responder por pessoa, e um lote gigante e outra coisa
          (o disparo dele ja tem registro proprio). */
-      const doLote = (linhas as Record<string, unknown>[]).slice(0, TRILHA_MAX_LINHAS);
+      const doLote = entraram.slice(0, TRILHA_MAX_LINHAS);
       const trilhas = doLote.map((l) => {
         const k = chavesTabela.map((c) => String(l?.[c] ?? "")).join("|");
         const anterior = antes.get(k);
@@ -1241,17 +1297,32 @@ serve(async (req: Request) => {
           autor_nome: perfil?.nome ?? null,
         };
       });
-      if (linhas.length > TRILHA_MAX_LINHAS) {
+      if (entraram.length > TRILHA_MAX_LINHAS) {
         trilhas.push({
           acao: `dado_${op}`,
           alvo: tabela,
-          detalhe: { tabela, op, motivo, resumo: true, lote: linhas.length, registradas: TRILHA_MAX_LINHAS },
+          detalhe: { tabela, op, motivo, resumo: true, lote: entraram.length, registradas: TRILHA_MAX_LINHAS },
           autor_id: authData.user.id,
           autor_nome: perfil?.nome ?? null,
         } as (typeof trilhas)[number]);
       }
       await gravarTrilha(inoveAdmin, trilhas);
-      return json({ ok: true, tabela, op, gravadas: linhas.length });
+      if (falhas.length) {
+        // GRAVOU EM PARTE: o que entrou está no banco e na trilha; o que não entrou é nomeado
+        const nomes = falhas
+          .slice(0, 6)
+          .map((f) => `${chaveDoAlvo(f.linha, chavesTabela) || "linha"}: ${f.motivo}`)
+          .join(" · ");
+        return json({
+          ok: false,
+          error: `${falhas.length} de ${entraram.length + falhas.length} não foram gravadas (${nomes}${
+            falhas.length > 6 ? " …" : ""
+          }) — as outras ${entraram.length} foram`,
+          gravadas: entraram.length,
+          falhas: falhas.map((f) => ({ chave: chaveDoAlvo(f.linha, chavesTabela), motivo: f.motivo })),
+        }, 502);
+      }
+      return json({ ok: true, tabela, op, gravadas: entraram.length });
     } catch (error) {
       return json({ ok: false, error: mensagemSegura(error) }, 502);
     }

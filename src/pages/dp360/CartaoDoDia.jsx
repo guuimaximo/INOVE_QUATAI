@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Lock, X } from "lucide-react";
 import MapaBatidas from "./MapaBatidas";
-import { apagarDP360, dispararRoboDP360, lerDP360, upsertDP360 } from "../../services/dp360Api";
+import { apagarDP360, dispararRoboDP360, lerDP360, upsertDP360, upsertDP360Insistente } from "../../services/dp360Api";
 import { supabase } from "../../supabase";
 import { getStoredUser } from "../../utils/auth";
 import { RAIO_LOCAL, RAIO_VEIC, reguaLocal, resumoGps } from "./regrasGps";
@@ -1308,7 +1308,7 @@ function ModalPedirExclusao({ linha, caso, aoFechar, aoConcluir }) {
         const { casos, reavisos } = marcarReavisos(p.casos, () => caso || null);
         reavisados = reavisos;
         try {
-          await upsertDP360("ponto_caso", casos);
+          await upsertDP360Insistente("ponto_caso", casos, "Comunicado enviado");
         } catch (falha) {
           alerta =
             ` ATENÇÃO: o comunicado SAIU, mas o registro em ponto_caso falhou (${falha.message || falha}).` +

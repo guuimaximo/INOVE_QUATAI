@@ -3755,10 +3755,7 @@ function LancarDiaSemPonto({ regs, candidatos = 0, ocupado, aoLancar, titulo, no
               <option key={k} value={k}>{l} ({k})</option>
             ))}
           </select>
-          <BotaoAcao disabled={ocupado} titulo="O robô navega e NÃO confirma."
-            onClick={() => aoLancar(elegiveis, tipo, false, noCasoAberto)}>
-            🤖 Ensaio
-          </BotaoAcao>
+          {/* sem Ensaio (dono, 16/09/2026: "tira o ensaio dos 3") */}
           <BotaoAcao tom="erro" disabled={ocupado} titulo="Lança de verdade na ficha do colaborador, no Transnet."
             onClick={() => aoLancar(elegiveis, tipo, true, noCasoAberto)}>
             ⚠ Lançar {elegiveis.length} dia(s) de verdade

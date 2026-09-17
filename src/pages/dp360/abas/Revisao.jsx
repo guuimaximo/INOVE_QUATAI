@@ -972,15 +972,7 @@ function PainelLancarAjuste({ data, lote, aoFechar, aoConcluir }) {
             )}
           </div>
           <div className="dp-det-bot-acoes">
-            <button
-              type="button"
-              className="dp-btn"
-              disabled={disparando || !lote.dentro.length}
-              onClick={() => lancar(false)}
-              title="O robô preenche a tela do Cartão de Ponto e NÃO clica em Inserir — serve para conferir o lote. Nada é gravado."
-            >
-              🤖 Ensaio
-            </button>
+            {/* sem Ensaio (dono, 16/09/2026: "tira o ensaio dos 3") */}
             <button
               type="button"
               className="dp-btn"

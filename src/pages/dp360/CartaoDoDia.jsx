@@ -1435,15 +1435,7 @@ function ModalPedirExclusao({ linha, caso, aoFechar, aoConcluir }) {
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="dp-btn"
-              disabled={!template || disparando || !preparo?.itens?.length}
-              onClick={() => disparar(false)}
-              title="O robô anexa o arquivo no Transnet e NÃO confirma o envio. Nenhum caso é aberto."
-            >
-              Ensaio
-            </button>
+            {/* sem Ensaio (dono, 16/09/2026: "tira o ensaio dos 3") */}
             <button
               type="button"
               className="dp-btn primary"
@@ -2234,7 +2226,7 @@ export default function CartaoDoDia({
                 type="button"
                 className="dp-btn primary"
                 onClick={() => setPedirExclusao(true)}
-                title="Abre o comunicado deste dia com o modelo template_pedir_exclusao: prévia do texto e os dois botões (Ensaio · Enviar de verdade)."
+                title="Abre o comunicado deste dia com o modelo template_pedir_exclusao: prévia do texto e o botão de enviar."
               >
                 🗑 Pedir exclusão desta batida
               </button>

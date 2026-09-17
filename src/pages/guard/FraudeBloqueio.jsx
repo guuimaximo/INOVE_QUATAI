@@ -32,7 +32,8 @@
 // "código" das planilhas), não o `cru_id`, que a tela chama de número do cartão
 // (confirmado pelo nome nas levas de fevereiro e julho).
 //
-// 🔒 Quem grava é o gateway `dp360-api` (só Administrador), e só as colunas de fluxo.
+// 🔒 Quem grava é o gateway `dp360-api` (quem tem a página de Fraudes liberada), e só as
+//    colunas de fluxo.
 //    O nome de quem bloqueou é o do login do INOVE, escrito pelo servidor.
 // ============================================================================
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

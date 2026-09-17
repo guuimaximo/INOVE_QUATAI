@@ -1643,7 +1643,7 @@ export default function GuardFraudes() {
               </li>
               <li>
                 Leitura só pelo gateway <span className="dp-mono">dp360-api</span>, que exige sessão
-                do INOVE e perfil Administrador.
+                do INOVE e a página de Fraudes liberada no seu usuário (Administrador sempre tem).
               </li>
             </ul>
           </div>

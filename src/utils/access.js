@@ -158,13 +158,18 @@ export function canUserAccessPageKey(user, pageKey, accessProfileMap = {}) {
     return new Set(normalizePageKeyArray(user?.paginas_liberadas)).has(key);
   }
 
-  // INOVE Guard (guard_fraudes...): mesma regra, e pelo mesmo motivo. A tela de
-  // fraudes le pelo gateway dp360-api, que so responde a Administrador — sem esta
-  // trava o Gestor veria o item no menu e levaria 403 ao clicar. O `monitoramento`
-  // fica de fora de proposito: e chave antiga, com regra propria, e mudar o gate
-  // dele aqui tiraria acesso de quem ja usa.
+  // INOVE Guard (guard_fraudes...): A MESMA REGRA DO CLUSTER DP360 (17/09/2026, dono: "a
+  // parte de fraude nao liberou para elaine"). Até aqui só passava Administrador, porque o
+  // gateway `dp360-api` também só respondia a ele: a liberação individual era ignorada nos
+  // dois lados e a Elaine (Gestor, com `guard_fraudes` liberada) não via a tela. Agora a
+  // liberação por pessoa vale aqui e lá — e "Bloquear" continua ganhando dela. O nível
+  // sozinho não abre: o perfil do Gestor traz quase tudo, e isto é fraude de cartão.
+  // O `monitoramento` fica de fora de proposito: e chave antiga, com regra propria, e mudar
+  // o gate dele aqui tiraria acesso de quem ja usa.
   if (key.startsWith("guard_")) {
-    return nivelNorm === "administrador" || nivelNorm === "admin";
+    if (nivelNorm === "administrador" || nivelNorm === "admin") return true;
+    if (new Set(normalizePageKeyArray(user?.paginas_bloqueadas)).has(key)) return false;
+    return new Set(normalizePageKeyArray(user?.paginas_liberadas)).has(key);
   }
 
   // Administrador sempre vê tudo — não depende de profileMap nem DB.

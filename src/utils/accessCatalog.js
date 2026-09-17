@@ -277,10 +277,10 @@ export const DEFAULT_LEVEL_PROFILES = [
     nome: "Gestor",
     descricao: "Gestao operacional ampliada.",
     ativo: true,
-    // O cluster INOVE Guard inteiro fica fora do Gestor, como o Monitoramento ja
-    // estava: a tela de Fraudes le a base pelo gateway `dp360-api`, que so
-    // responde a Administrador — deixar o item no menu do Gestor daria um menu
-    // com uma tela que sempre devolve 403.
+    // O cluster INOVE Guard fica fora do perfil do Gestor, como o Monitoramento: fraude de
+    // cartão não entra por nível, entra por pessoa. Quem precisa dela é liberado no próprio
+    // usuário (Configurações → Usuários → Liberar), e desde 17/09/2026 essa liberação vale
+    // também no gateway `dp360-api`.
     paginas: APP_ACCESS_PAGES.map((page) => page.key).filter((key) => key !== "config_niveis" && key !== "monitoramento" && key !== "guard_fraudes"),
     farol_liberado: true,
   },

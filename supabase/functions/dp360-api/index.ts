@@ -280,15 +280,23 @@ async function gravarPorFormato(
    pessoa e por pagina; a trava de verdade tem de estar AQUI, porque a da tela so esconde.
    Tabela que nao esta nesta lista e do PONTO e vale qualquer pagina de ponto da DP360. */
 const PAGINAS_DO_PONTO = ["dp360", "dp360_abandonos", "dp360_resumo", "dp360_evidencias"];
+/* INOVE GUARD: A PAGINA PASSA A VALER, NAO SO O NIVEL (17/09/2026, dono: "a parte de fraude
+   nao liberou para elaine"). Ate aqui as tabelas de fraude exigiam Administrador, entao a
+   pagina liberada no usuario abria a tela e o gateway recusava tudo — 403 numa tela que o
+   menu oferecia. Agora quem tem `guard_fraudes` liberada le e trata a fraude. O que NAO
+   mudou: `fraude_cartao_bloqueado` continua so para Administrador, porque e a unica com
+   `numero_cartao` inteiro. */
+const PAGINAS_DO_GUARD = ["guard_fraudes"];
 const ACESSO_DAS_TABELAS: Record<string, string[] | "admin"> = {
   // FOLHA: hora extra e valor em R$ — so quem tem o Banco de Horas liberado
   banco_horas: ["dp360_banco_horas"],
-  // INOVE Guard: continua exclusivo de Administrador (a pagina guard_* tambem e)
+  // INOVE Guard: quem tem a pagina de Fraudes liberada. A do cadastro da bilhetagem NAO
+  // entra: e a unica que guarda `numero_cartao` inteiro, e nenhuma tela a le mais.
   fraude_cartao_bloqueado: "admin",
-  fraude_cartao_giros: "admin",
-  fraude_cartao_sequencial: "admin",
-  fraude_bloqueio_cartao: "admin",
-  fraude_bloqueio_historico: "admin",
+  fraude_cartao_giros: PAGINAS_DO_GUARD,
+  fraude_cartao_sequencial: PAGINAS_DO_GUARD,
+  fraude_bloqueio_cartao: PAGINAS_DO_GUARD,
+  fraude_bloqueio_historico: PAGINAS_DO_GUARD,
 };
 
 const LIMITE_MAX = 5000;
@@ -985,10 +993,11 @@ serve(async (req: Request) => {
     if (regra === "admin") return ehAdmin;
     return (regra ?? PAGINAS_DO_PONTO).some(pode);
   };
-  const temDp360 = ehAdmin || [...PAGINAS_DO_PONTO, "dp360_banco_horas"].some(pode);
-  if (perfilError || !perfil || !ativo || !aprovado || !temDp360) {
+  // a porta: qualquer pagina servida por este gateway (ponto, banco de horas ou Guard)
+  const temAcesso = ehAdmin || [...PAGINAS_DO_PONTO, "dp360_banco_horas", ...PAGINAS_DO_GUARD].some(pode);
+  if (perfilError || !perfil || !ativo || !aprovado || !temAcesso) {
     return json(
-      { ok: false, error: "sem acesso à DP360 — peça ao Administrador para liberar a página no seu usuário" },
+      { ok: false, error: "sem acesso — peça ao Administrador para liberar a página no seu usuário" },
       403,
     );
   }

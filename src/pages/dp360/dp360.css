@@ -129,6 +129,7 @@
 .dp360 .dp-topo-dir { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .dp360 .dp-conta-btn.is-ok { border-color: var(--dp-ok-line, var(--dp-border)); background: var(--dp-ok-bg); color: var(--dp-ok-ink); }
 .dp360 .dp-conta-btn.is-sem { border-color: var(--dp-warn-ink); background: var(--dp-warn-bg); color: var(--dp-warn-ink); }
+.dp360 .dp-conta-btn.is-testando { border-color: var(--dp-accent); background: var(--dp-accent-soft); color: var(--dp-accent); }
 .dp360 .dp-robo-gaveta.dp-conta-gaveta { width: 340px; }
 .dp360 .dp-conta-form { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .dp360 .dp-conta-form .dp-btn { align-self: flex-start; }

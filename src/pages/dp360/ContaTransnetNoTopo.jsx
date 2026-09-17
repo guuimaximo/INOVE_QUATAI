@@ -225,12 +225,15 @@ export default function ContaTransnetNoTopo() {
 
   const estado = salva ? validacao?.estado || "" : "";
   const selo = { ok: " ✓", testando: " …", erro: " ?" }[estado] || "";
+  // VERDE SÓ DEPOIS DO TESTE (dono, 17/09/2026: "não pode ficar o verdinho, só depois que
+  // testa"). Testando é azul; sem teste, com erro ou sem credencial, amarelo.
+  const corDoBotao = !salva ? "is-sem" : estado === "ok" ? "is-ok" : estado === "testando" ? "is-testando" : "is-sem";
 
   return (
     <div className="dp-robo" ref={caixa}>
       <button
         type="button"
-        className={`dp-robo-btn dp-conta-btn ${salva ? "is-ok" : "is-sem"}`}
+        className={`dp-robo-btn dp-conta-btn ${corDoBotao}`}
         onClick={() => setAberto((v) => !v)}
         title={
           salva
@@ -248,28 +251,28 @@ export default function ContaTransnetNoTopo() {
       {aberto && (
         <div className="dp-robo-gaveta dp-conta-gaveta" role="dialog" aria-label="Sua conta do Transnet">
           <div className="dp-robo-tit">Sua conta do Transnet</div>
-          {salva ? (
-            <span className="dp-pill ok">conectada · {salva.usuario}</span>
-          ) : (
+          {/* UMA pílula de situação, e ela só fica verde com o login aceito pelo Transnet */}
+          {!salva ? (
             <span className="dp-pill warn">sem credencial — os robôs não saem</span>
+          ) : estado === "ok" ? (
+            <div className="dp-pill ok" style={{ whiteSpace: "normal" }}>
+              ✓ {salva.usuario} · o Transnet aceitou o login
+              {validacao?.em ? ` · ${horaCurta(validacao.em)}` : ""}
+            </div>
+          ) : estado === "testando" ? (
+            <div className="dp-pill accent" style={{ whiteSpace: "normal" }}>
+              🔄 testando o login de {salva.usuario} no Transnet — {validacao?.fase || "aguarde"} (leva cerca de 1
+              min)
+            </div>
+          ) : estado === "erro" ? (
+            <div className="dp-pill warn" style={{ whiteSpace: "normal" }}>
+              {salva.usuario} · não deu para testar o login: {validacao?.motivo || "sem detalhe"}
+            </div>
+          ) : (
+            <div className="dp-pill warn" style={{ whiteSpace: "normal" }}>
+              {salva.usuario} · login ainda não testado
+            </div>
           )}
-
-          {/* o resultado do teste do login */}
-          {salva && estado === "testando" ? (
-            <div className="dp-pill accent" style={{ marginTop: 8, whiteSpace: "normal" }}>
-              🔄 testando o login no Transnet — {validacao?.fase || "aguarde"} (leva cerca de 1 min)
-            </div>
-          ) : null}
-          {salva && estado === "ok" ? (
-            <div className="dp-pill ok" style={{ marginTop: 8, whiteSpace: "normal" }}>
-              ✓ login testado: o Transnet aceitou{validacao?.em ? ` · ${horaCurta(validacao.em)}` : ""}
-            </div>
-          ) : null}
-          {salva && estado === "erro" ? (
-            <div className="dp-pill warn" style={{ marginTop: 8, whiteSpace: "normal" }}>
-              não deu para testar o login: {validacao?.motivo || "sem detalhe"}
-            </div>
-          ) : null}
           {!salva && recusado ? (
             <div className="dp-pill danger" style={{ marginTop: 8, whiteSpace: "normal" }} role="alert">
               ✗ o Transnet recusou o login {recusado.usuario}

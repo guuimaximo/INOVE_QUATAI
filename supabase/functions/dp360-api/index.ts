@@ -1178,16 +1178,39 @@ serve(async (req: Request) => {
       ? `${base}/rest/v1/${tabela}?on_conflict=${encodeURIComponent(cfg.conflito)}`
       : `${base}/rest/v1/${tabela}`;
     try {
-      const r = await fetch(url, {
-        method: "POST",
-        headers: {
-          ...hDp,
-          "Content-Type": "application/json",
-          Prefer: merge ? "resolution=merge-duplicates,return=minimal" : "return=minimal",
-        },
-        body: JSON.stringify(linhas),
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      /* UM LOTE COM CHAVES DIFERENTES VAI EM GRUPOS (17/09/2026). O PostgREST recusa com 400
+         (PGRST102, "All object keys must match") o array cujos objetos não têm as MESMAS
+         chaves — e o reaviso tira de propósito as colunas congeladas (`marcarReavisos`), então
+         um lote com um reaviso e quinze avisos novos morria inteiro: 16 comunicados saíram e
+         nenhum caso foi gravado (lote de 14/09). Mandar `columns=` não serve: a coluna
+         ausente viraria NULL e apagaria o alvo congelado. Então cada formato vai no seu POST. */
+      const grupos = new Map<string, Record<string, unknown>[]>();
+      for (const l of linhas as Record<string, unknown>[]) {
+        const assinatura = Object.keys(l).sort().join(",");
+        if (!grupos.has(assinatura)) grupos.set(assinatura, []);
+        grupos.get(assinatura)!.push(l);
+      }
+      let gravadas = 0;
+      for (const grupo of grupos.values()) {
+        const r = await fetch(url, {
+          method: "POST",
+          headers: {
+            ...hDp,
+            "Content-Type": "application/json",
+            Prefer: merge ? "resolution=merge-duplicates,return=minimal" : "return=minimal",
+          },
+          body: JSON.stringify(grupo),
+        });
+        if (!r.ok) {
+          // o motivo do banco vai junto (é o que diz O QUE recusou); sem ele sobrava "HTTP 400"
+          const motivoBanco = (await r.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 160);
+          throw new Error(
+            `HTTP ${r.status}${motivoBanco ? ` — ${motivoBanco}` : ""}` +
+              (gravadas ? ` (${gravadas} de ${linhas.length} já tinham sido gravadas)` : ""),
+          );
+        }
+        gravadas += grupo.length;
+      }
       /* UMA LINHA DE TRILHA POR CASO. Acima de `TRILHA_MAX_LINHAS` vira uma linha so, de
          resumo: a trilha existe para responder por pessoa, e um lote gigante e outra coisa
          (o disparo dele ja tem registro proprio). */

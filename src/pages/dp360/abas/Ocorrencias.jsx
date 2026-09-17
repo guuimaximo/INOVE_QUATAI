@@ -1440,6 +1440,17 @@ function montarRegistros(base) {
       const s = txt(o.situacao_ajuste).toUpperCase();
       if (s && (peso[s] || 0) > (peso[desfecho] || 0)) desfecho = s;
     });
+    /* QUANTOS PEDIDOS AINDA ESTÃO ABERTOS NA GRADE (17/09/2026). O `desfecho` é RESUMO do dia
+       e a precedência dele (recusado > pendente) existe para PINTAR a linha — usá-la como
+       trava diz "o Transnet já resolveu" num dia que tem pedido novo esperando. VALDIQSON
+       3202683 01/09: 761049 e 762452 RECUSADO em 02 e 04/09, 771712 e 771713 PENDENTE desde
+       15/09 — o dia inteiro virava RECUSADO e o "Gravar veredito" nascia apagado. Resolvido
+       é só o que o Transnet fechou; o resto continua sendo trabalho de alguém. */
+    const fechadosNoTransnet = grupo
+      .filter((o) => ["EFETUADO", "RECUSADO"].includes(txt(o.situacao_ajuste).toUpperCase()))
+      .map((o) => txt(o.id_ocorrencia))
+      .filter(Boolean);
+    const abertos = grupo.length - fechadosNoTransnet.length;
 
     const situacao = situacaoDoCaso(veredito, ciclo, temAviso);
     const rot = rotuloCaso(caso.origem, caso.tipo);
@@ -1633,6 +1644,8 @@ function montarRegistros(base) {
       alvoPar: acoes.alvoPar,
       resumoAcoes: resumo,
       desfecho,
+      abertosNoTransnet: abertos,
+      fechadosNoTransnet,
       situacao,
       situacaoAviso,
       temAviso,
@@ -1701,8 +1714,13 @@ function montarRegistros(base) {
  */
 const daPorta = (porta) => (r) => (porta === "pedido" ? !r.temAviso : r.temAviso);
 
-// app.js:2069 — o Transnet já efetuou/recusou: não existe mais decisão humana.
-const resolvidoNoTransnet = (r) => ["EFETUADO", "RECUSADO"].includes(r.desfecho);
+/* app.js:2069 — o Transnet já efetuou/recusou: não existe mais decisão humana.
+ * MAS O DIA SÓ ESTÁ RESOLVIDO QUANDO NÃO SOBRA PEDIDO ABERTO (17/09/2026). Olhar só o
+ * `desfecho` (resumo, com precedência recusado > pendente) apagava o "Gravar veredito" de
+ * todo dia que recebeu pedido novo depois de uma recusa — e o pedido novo é exatamente o que
+ * ninguém decidiu ainda. Ver `abertosNoTransnet` em `montarRegistros`. */
+const resolvidoNoTransnet = (r) =>
+  ["EFETUADO", "RECUSADO"].includes(r.desfecho) && !r.abertosNoTransnet;
 
 /**
  * app.js:2088 — O SELETOR DA ABA "A DECIDIR" TEM DOIS ESTADOS, e isso é a regra.
@@ -3334,7 +3352,7 @@ function pilulaDoVeredito(it) {
  * respondia, e o dia ficava marcado pela metade. Aqui toda ocorrência sai aceita ou
  * recusada — e o botão do rodapé fica travado enquanto sobrar uma sem resposta.
  */
-function ItemAcao({ item, marca, aoMarcar, travado, motivo }) {
+function ItemAcao({ item, marca, aoMarcar, travado, motivo, fechadas }) {
   const p = pilulaDoVeredito(item);
   const detalhe = [
     item.ponta ? `ponta: ${item.ponta}` : "",
@@ -3369,8 +3387,23 @@ function ItemAcao({ item, marca, aoMarcar, travado, motivo }) {
             {rot}
           </label>
         ))}
-        <span className="dp-faint" style={MINI}>
-          {item.ids?.length ? `ocorrência ${item.ids.join(", ")}` : "sem id de ocorrência"}
+        {/* O ✓ É HONESTIDADE, NÃO ENFEITE (17/09/2026): num pedido reenviado, parte das cópias
+            já pode estar fechada na grade. Sem a marca, o DP marca "rejeitar ×3" achando que
+            decide três, quando o robô só vai mexer na que continua aberta. */}
+        <span
+          className="dp-faint"
+          style={MINI}
+          title={
+            item.ids?.some((id) => fechadas?.has(txt(id)))
+              ? "✓ = o Transnet já efetuou ou recusou essa cópia; o robô não mexe nela"
+              : undefined
+          }
+        >
+          {item.ids?.length
+            ? `ocorrência ${item.ids
+                .map((id) => (fechadas?.has(txt(id)) ? `${id} ✓` : txt(id)))
+                .join(", ")}`
+            : "sem id de ocorrência"}
         </span>
       </div>
       {motivo ? <div className="oc-vd-motivo">🔒 {motivo}</div> : null}
@@ -4457,6 +4490,8 @@ function Detalhe({
   // a trava de gravar é a de MARCAR (as quatro de `motivoSemDecisao`), nunca a do dia
   // inteiro: o dia MISTO e o dia com a simulação bloqueada são exatamente os que só se
   // resolvem por ocorrência.
+  // as cópias que o Transnet já fechou — a marca ✓ da lista de ocorrências
+  const fechadasNoTransnet = new Set(reg.fechadosNoTransnet || []);
   const idsMarcados = (letra) =>
     (reg.acoes || []).flatMap((it, i) => (marcaDaOcorrencia(reg, marcas, i) === letra ? it.ids : []));
   const aceitarIds = idsMarcados("A");
@@ -4566,6 +4601,7 @@ function Detalhe({
                         marca={marcaDaOcorrencia(reg, marcas, i)}
                         travado={travado || trancada}
                         motivo={trancada ? MOTIVO_MIOLO : ""}
+                        fechadas={fechadasNoTransnet}
                         aoMarcar={(x) => setMarcas((m) => ({ ...m, [i]: x }))}
                       />
                     );

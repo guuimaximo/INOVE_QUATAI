@@ -332,6 +332,19 @@ export function frasePedidoDoAlvo(contrato) {
   return alvo ? `O cartão solicitado deve ficar: ${alvo}.` : "";
 }
 
+/* A FRASE DO CARTÃO VAI ANTES DO FECHO, NÃO DEPOIS DA ASSINATURA (18/09/2026). O original
+   (main.py:2418) cola no fim, e a carta terminava "Atenciosamente, DP — Quataí Transporte
+   de Passageiros. O cartão solicitado deve ficar: 12:50 · 18:52 · 19:22 · 22:32." — o
+   pedido depois da assinatura. Entra antes do primeiro trecho de encerramento que os
+   modelos usam; modelo sem nenhum deles recebe no fim, como antes. */
+const FECHO = /\s(?=(Em caso de dúvida|Dúvidas\?|Atenciosamente))/i;
+export function comFraseAntesDoFecho(mensagem, frase) {
+  if (!frase) return mensagem;
+  const m = FECHO.exec(mensagem);
+  if (!m) return `${mensagem} ${frase}`;
+  return `${mensagem.slice(0, m.index)} ${frase}${mensagem.slice(m.index)}`;
+}
+
 /* ═════════════════════ o preparo: quem sai, quem é barrado ═════════════════════ */
 
 /** main.py:2400 — o texto do barrado cita a porta histórica (10 min). A régua que de
@@ -469,7 +482,7 @@ export function prepararComunicado({
       continue;
     }
     const frase = contrato ? frasePedidoDoAlvo(contrato) : "";
-    if (frase && !mensagem.includes(frase)) mensagem = `${mensagem} ${frase}`;
+    if (frase && !mensagem.includes(frase)) mensagem = comFraseAntesDoFecho(mensagem, frase);
 
     datas.add(data);
     itens.push({
@@ -802,7 +815,12 @@ export function mensagemRevisaoMotorista(template, linha, divergencia) {
  */
 export function mensagemBateuFora(template, linha, gps) {
   const d = gps?.maiorDistancia;
-  const distancia = d == null ? "—" : d >= 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d)} m`;
+  /* SEM A BATIDA E A DISTÂNCIA NÃO HÁ CARTA (18/09/2026): a frase saía "a batida das
+     ficou a — da garagem". Texto vazio faz `prepararComunicado` barrar a linha na tela,
+     em vez de a pessoa receber um aviso sem o fato que ele cobra. */
+  if (d == null || !horaMensagem(gps?.horaMaisLonge)) return "";
+  // vírgula decimal: a carta é para o colaborador ("1,3 km", não "1.3 km")
+  const distancia = d >= 1000 ? `${(d / 1000).toFixed(1).replace(".", ",")} km` : `${Math.round(d)} m`;
   return preencherTemplate(template, {
     NOME: txt(linha.nm_funcionario) || "Colaborador(a)",
     CRACHA: txt(linha.cracha),
@@ -864,6 +882,7 @@ export default {
   csvComunicado,
   contratoDaRevisao,
   frasePedidoDoAlvo,
+  comFraseAntesDoFecho,
   prepararComunicado,
   marcarReavisos,
   jornadaLiquidaDoDia,

@@ -73,7 +73,7 @@ import {
 import { supabase } from "../../../supabase";
 import { usePergunta } from "../Perguntar";
 import PainelVirada from "../PainelVirada";
-import { casoDaVirada, somaUmDia } from "../diaNoTransnet";
+import { sequenciaDaVirada, somaUmDia } from "../diaNoTransnet";
 import { runIncerto } from "../esperarRobo";
 /* =============================================================================
    Revisão (Passo 2) — porte da tela do DP360 (Sistemas/PONTO: app/ui/app.js
@@ -1848,34 +1848,47 @@ export default function Revisao() {
 
     // 🌙 OS DIAS VIZINHOS carregam em separado: a grade não espera por eles.
     setVizinhos({});
-    const dias = { antes: diaAnterior(data), depois: somaUmDia(data), depois2: somaUmDia(somaUmDia(data)) };
+    // a janela das sequências: dois dias para trás e três para frente
+    const dias = {
+      antes2: diaAnterior(diaAnterior(data)),
+      antes: diaAnterior(data),
+      depois: somaUmDia(data),
+      depois2: somaUmDia(somaUmDia(data)),
+      depois3: somaUmDia(somaUmDia(somaUmDia(data))),
+    };
+    const outros = [dias.antes2, dias.antes, dias.depois, dias.depois2, dias.depois3];
     Promise.all([
-      ...[dias.antes, dias.depois, dias.depois2].map((d) =>
+      ...outros.map((d) =>
         lerTudoDP360("ponto_diario", {
           colunas: COLUNAS_VIZINHO,
           filtros: { date_ref: `eq.${d}`, categoria: `eq.${categoria}` },
           ordem: "cracha.asc",
         }).catch(() => []),
       ),
-      // o dia seguinte que a Revisão já relançou não tem mais a sobra no Transnet
+      // dia que a Revisão já relançou não tem mais a sobra no Transnet
       lerTudoDP360("ponto_importacoes", {
-        filtros: { date_ref: `eq.${dias.depois}`, passo: "eq.2" },
+        filtros: { date_ref: `in.(${outros.join(",")})`, passo: "eq.2" },
         ordem: "importado_em.desc",
       }).catch(() => []),
-    ]).then(([antes, depois, depois2, lancDepois]) => {
+    ]).then(([antes2, antes, depois, depois2, depois3, lancOutros]) => {
       if (!ativo) return;
       const porCracha = (arr) => new Map((arr || []).map((x) => [cra8(x.cracha), x]));
-      const lancadosDepois = new Map();
-      for (const x of lancDepois || []) {
-        const cr = cra8(x.cracha);
-        if (!lancadosDepois.has(cr)) lancadosDepois.set(cr, lancamentoDaLinha(x));
+      // o lançamento mais novo de cada crachá+dia
+      const lancadosOutros = new Map();
+      for (const x of lancOutros || []) {
+        const k = chaveDia(x.cracha, x.date_ref);
+        if (!lancadosOutros.has(k)) lancadosOutros.set(k, lancamentoDaLinha(x));
       }
       setVizinhos({
         dias,
-        antes: porCracha(antes),
-        depois: porCracha(depois),
-        depois2: porCracha(depois2),
-        lancadosDepois,
+        linhasPorDia: {
+          [dias.antes2]: porCracha(antes2),
+          [dias.antes]: porCracha(antes),
+          [dias.depois]: porCracha(depois),
+          [dias.depois2]: porCracha(depois2),
+          [dias.depois3]: porCracha(depois3),
+        },
+        lancadosOutros,
       });
     });
 
@@ -2020,33 +2033,23 @@ export default function Revisao() {
      ontem). É uma chave por linha; o par vira uma coisa só no 🌙 Mover saída. */
   const viradas = useMemo(() => {
     const m = new Map();
-    const { dias, antes, depois, depois2, lancadosDepois } = vizinhos;
+    const { dias, linhasPorDia, lancadosOutros } = vizinhos;
     if (!dias) return m;
     const jaLancado = (lanc) => (String(lanc?.status || "").trim() === "lancado" ? lanc : null);
+    const ordem = [dias.antes2, dias.antes, data, dias.depois, dias.depois2, dias.depois3];
     for (const l of linhas) {
       const cr = cra8(l.cracha);
       const k = chaveDia(l.cracha, l.date_ref);
-      const certo = casoDaVirada({
-        linhaDia: l,
-        linhaSeguinte: depois.get(cr),
-        linhaDepois: depois2.get(cr),
-        isoDia: data,
-        isoSeguinte: dias.depois,
-        seguinteLancado: jaLancado(lancadosDepois?.get(cr)),
-      });
-      if (certo) {
-        m.set(k, { papel: "certo", caso: certo, cracha: cr, nome: l.nm_funcionario });
-        continue;
-      }
-      const seguinte = casoDaVirada({
-        linhaDia: antes.get(cr),
-        linhaSeguinte: l,
-        linhaDepois: depois.get(cr),
-        isoDia: dias.antes,
-        isoSeguinte: data,
-        seguinteLancado: jaLancado(lancados[k]),
-      });
-      if (seguinte) m.set(k, { papel: "seguinte", caso: seguinte, cracha: cr, nome: l.nm_funcionario });
+      const janela = ordem.map((iso) => ({
+        iso,
+        linha: iso === data ? l : linhasPorDia[iso]?.get(cr),
+        lancado: jaLancado(iso === data ? lancados[k] : lancadosOutros.get(chaveDia(cr, iso))),
+      }));
+      const cadeia = sequenciaDaVirada(janela, 2);
+      if (!cadeia.length) continue;
+      const comoCerto = cadeia.find((c) => c.isoDia === data);
+      const caso = comoCerto || cadeia.find((c) => c.isoSeguinte === data);
+      m.set(k, { papel: comoCerto ? "certo" : "seguinte", caso, cadeia, cracha: cr, nome: l.nm_funcionario });
     }
     return m;
   }, [linhas, vizinhos, data, lancados]);
@@ -2115,14 +2118,18 @@ export default function Revisao() {
     return m;
   }, [linhas, lancados, runs, viradas]);
 
-  // 🌙 os PARES das linhas marcadas (dia certo + dia seguinte são uma pessoa só)
+  // 🌙 os PARES das linhas marcadas (dia certo + dia seguinte são uma pessoa só). Dia em
+  // sequência leva a sequência inteira junto, já na ordem em que o robô tem de fazer.
   const paresVirada = useMemo(() => {
     const pares = new Map();
     for (const l of marcadas) {
       const v = viradas.get(chaveDia(l.cracha, l.date_ref));
       if (!v) continue;
-      const chave = `${v.cracha}|${v.caso.isoDia}`;
-      if (!pares.has(chave)) pares.set(chave, { chave, cracha: v.cracha, nome: v.nome, caso: v.caso });
+      const grupo = `${v.cracha}|${v.cadeia[v.cadeia.length - 1].isoDia}`;
+      for (const caso of v.cadeia) {
+        const chave = `${v.cracha}|${caso.isoDia}`;
+        if (!pares.has(chave)) pares.set(chave, { chave, grupo, cracha: v.cracha, nome: v.nome, caso });
+      }
     }
     return [...pares.values()];
   }, [marcadas, viradas]);

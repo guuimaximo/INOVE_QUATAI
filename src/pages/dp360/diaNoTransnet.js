@@ -219,7 +219,7 @@ function aPartirDe(h, ancora) {
  * DP confere na prévia. `saidaFixa` (o D) é a última batida movida: é ela a saída, sempre.
  * `slots` sai em notação 24+.
  */
-function slotsDoCartao(marcas, linha, saidaFixa = null) {
+function slotsDoCartao(marcas, linha, saidaFixa = null, semHoras = []) {
   const fmt = (m) => (m == null ? "" : min2hm(m));
   if (marcas.length === 4) return { slots: marcas.map(fmt), completo: true, nota: "as batidas dele" };
   if (marcas.length === 2) {
@@ -242,14 +242,46 @@ function slotsDoCartao(marcas, linha, saidaFixa = null) {
       nota: longa ? `sem almoço numa jornada de ${Math.floor((s - e) / 60)}h${String((s - e) % 60).padStart(2, "0")} — confira` : "sem almoço",
     };
   }
-  const sug = desenrolaSlots([linha?.entrada_sug, linha?.almoco_saida_sug, linha?.almoco_volta_sug, linha?.saida_sug]);
+  /* INCOMPLETO: parte da sugestão do dia — mas NUNCA das horas da sobra. A view calculou a
+     sugestão com a sobra dentro do dia (JAIRO 12/09: almoço "00:34 · 01:31", que é o fim do
+     turno do 11/09); reusá-la devolveria a batida ao lugar de onde o robô a está tirando. */
+  // sem módulo de 24 h: a sobra está no COMEÇO do dia (00:55) e a saída do próprio dia vem
+  // em 24+ (24:54) — PAULO MARCOS 03/09 sai todo dia perto da hora em que a sobra foi batida
+  const perto = (a, b) => a != null && b != null && Math.abs(a - b) <= 2;
+  const livre = (h) => {
+    const m = hm2min(h);
+    return m == null || semHoras.some((x) => perto(m, x)) ? "" : h;
+  };
+  const sug = desenrolaSlots(
+    [linha?.entrada_sug, linha?.almoco_saida_sug, linha?.almoco_volta_sug, linha?.saida_sug].map(livre),
+  );
+  const sugM = sug.map(hm2min);
+  const nota = `${marcas.length} batida(s) — confira e complete o cartão`;
+  if (marcas.length === 3) {
+    // três batidas: falta a entrada ou a saída. A primeira é a entrada se cai perto da
+    // entrada que se esperava (sugestão, senão escala); aí o que falta é a saída.
+    const esperada = sugM[0] ?? hm2min(linha?.esc_entrada);
+    const primeiraEhEntrada = esperada == null || Math.abs(marcas[0] - esperada) <= 90;
+    let slots;
+    if (primeiraEhEntrada) {
+      const saida =
+        saidaFixa != null && saidaFixa > marcas[2] ? saidaFixa : sugM[3] != null && sugM[3] > marcas[2] ? sugM[3] : null;
+      slots = [marcas[0], marcas[1], marcas[2], saida];
+    } else {
+      const entrada = sugM[0] != null && sugM[0] < marcas[0] ? sugM[0] : null;
+      slots = [entrada, marcas[0], marcas[1], marcas[2]];
+    }
+    return { slots: slots.map(fmt), completo: false, nota };
+  }
   // sem sugestão nenhuma: as batidas que houver, nas pontas
   if (!sug[0] && !sug[3]) {
     sug[0] = fmt(marcas[0]);
     sug[3] = marcas.length > 1 ? fmt(marcas[marcas.length - 1]) : "";
   }
-  if (saidaFixa != null) sug[3] = min2hm(saidaFixa);
-  return { slots: sug, completo: false, nota: `${marcas.length} batida(s) — confira e complete o cartão` };
+  // a última batida movida é a saída — a não ser que ela seja o próprio almoço proposto
+  const almocoAte = hm2min(sug[2]);
+  if (saidaFixa != null && (almocoAte == null || saidaFixa > almocoAte)) sug[3] = min2hm(saidaFixa);
+  return { slots: sug, completo: false, nota };
 }
 
 /**
@@ -270,19 +302,18 @@ export function problemaDoCartao(slots) {
 /**
  * O CASO DA VIRADA COMO O DP VAI VER E O ROBÔ VAI LANÇAR (18/09/2026).
  *
- * `linhaDia` é o dia certo (D), `linhaSeguinte` o D+1 e `linhaDepois` o D+2 (só para saber
- * se há sequência). Devolve null quando não é caso de virada.
+ * `linhaDia` é o dia certo (D) e `linhaSeguinte` o D+1. Devolve null quando não é caso de
+ * virada.
  *
- *   dia:      o D com a sobra no fim (sem o tapa-buraco);
+ *   dia:      o D com a sobra no fim (sem o tapa-buraco e sem a sobra que o próprio D deve
+ *             à véspera, quando há sequência);
  *   seguinte: "excluir" quando o D+1 só tinha a sobra (a tela de lançamento não salva dia
- *             vazio — o robô apaga o registro); senão "relancar" com o que sobrou nele.
+ *             vazio — o robô apaga o registro); "relancar" com o que sobrou nele; "nenhuma"
+ *             quando a Revisão já relançou o D+1.
  *
- * EM SEQUÊNCIA FICA DE FORA (LUCIO 30060646 14→15→16/09, JAIRO 30060835 10→11→12/09): quando o
- * D+1 também deixou a saída no D+2, ou o próprio D começa com a sobra da véspera, lançar um
- * dos pares apaga do Transnet a sobra que o outro ainda precisa mover. Por ora o DP resolve
- * esses à mão; a tela diz por quê.
+ * Dias em sequência: ver `sequenciaDaVirada`.
  */
-export function casoDaVirada({ linhaDia, linhaSeguinte, linhaDepois, isoDia, isoSeguinte, seguinteLancado = null }) {
+export function casoDaVirada({ linhaDia, linhaSeguinte, isoDia, isoSeguinte, seguinteLancado = null }) {
   const fim = fimDoTurnoNoDiaSeguinte(linhaDia, linhaSeguinte, isoSeguinte);
   if (!fim) return null;
   const propria = sobraDaVespera(linhaDia);
@@ -304,27 +335,84 @@ export function casoDaVirada({ linhaDia, linhaSeguinte, linhaDepois, isoDia, iso
         nota: `já relançado pela Revisão${seguinteLancado.quando ? ` (${seguinteLancado.quando})` : ""} — a sobra saiu de lá`,
       }
     : resto.length
-      ? { acao: "relancar", ...slotsDoCartao(resto, linhaSeguinte) }
+      ? { acao: "relancar", ...slotsDoCartao(resto, linhaSeguinte, null, sobra.bloco) }
       : { acao: "excluir", slots: null, completo: true, nota: "o dia era folga e só tinha a sobra: o registro é apagado" };
-
-  const isoDepois = somaUmDia(isoSeguinte);
-  const depois = linhaDepois ? fimDoTurnoNoDiaSeguinte(linhaSeguinte, linhaDepois, isoDepois) : null;
-  let bloqueio = "";
-  if (depois)
-    bloqueio = `em sequência: o ${ddmm(isoSeguinte)} também deixou a saída no ${depois.dia} (${depois.horas}) — resolva esses dias à mão`;
-  else if (propria)
-    bloqueio = `em sequência: o ${ddmm(isoDia)} começa com batida de madrugada da véspera (${propria.bloco.map(min2hm).join(" · ")}) — resolva esses dias à mão`;
 
   return {
     isoDia,
     isoSeguinte,
     sobra: sobra.bloco.map(min2hm),
+    // a sobra que o PRÓPRIO D deve à véspera (o D é o dia seguinte de outro caso)
+    comecaComSobra: propria ? propria.bloco.map(min2hm) : null,
     antesDia: batidasDaLinha(linhaDia).map(min2hm),
     antesSeguinte: batidasDaLinha(linhaSeguinte).map(min2hm),
     dia,
     seguinte,
-    bloqueio,
+    bloqueio: "",
   };
+}
+
+/**
+ * DIAS EM SEQUÊNCIA — O ROBÔ FAZ TUDO (dono, 18/09/2026: "não quero na mão, quero que o bot
+ * faça tudo").
+ *
+ * LUCIO 30060646: 14/09 "14:48 · 14:49", 15/09 "00:15 · 00:45 · 14:49 · …", 16/09 "01:41 · …" —
+ * cada dia recebe a saída do anterior e perde a sua para o próximo. Arrumar um par sozinho
+ * estraga o outro: gravar o 15/09 com a saída 01:41 regrava o registro inteiro, e o 00:15 ·
+ * 00:45 some antes de ir para o 14/09.
+ *
+ * A saída é a ordem: do ÚLTIMO par para o primeiro. O dia certo de cada par é gravado sem a
+ * sobra que ele deve à véspera (`casoDaVirada` já monta assim) — e é isso que deixa limpo o
+ * dia seguinte do par anterior. Então só o último par limpa o dia seguinte dele; os outros vão
+ * com "nenhuma", e o robô confere no Transnet que a sobra saiu mesmo antes de gravar. Se um
+ * passo falha, o seguinte encontra a sobra lá e para sem mexer.
+ *
+ * `dias` = [{ iso, linha, lancado }] consecutivos e em ordem crescente; `alvo` = índice do dia
+ * que o DP está olhando. Devolve os pares da sequência que passa por ele, na ordem do robô.
+ */
+export function sequenciaDaVirada(dias, alvo) {
+  const pares = [];
+  for (let k = 0; k + 1 < dias.length; k++)
+    pares[k] = casoDaVirada({
+      linhaDia: dias[k].linha,
+      linhaSeguinte: dias[k + 1].linha,
+      isoDia: dias[k].iso,
+      isoSeguinte: dias[k + 1].iso,
+      seguinteLancado: dias[k + 1].lancado || null,
+    });
+  const i = pares[alvo] ? alvo : pares[alvo - 1] ? alvo - 1 : -1;
+  if (i < 0) return [];
+  let ini = i;
+  let fim = i;
+  while (ini - 1 >= 0 && pares[ini - 1]) ini--;
+  while (fim + 1 < pares.length && pares[fim + 1]) fim++;
+
+  // o primeiro dia da sequência não pode começar com sobra de ninguém: ou a sequência começa
+  // antes do que a tela leu, ou é batida de madrugada que não fecha turno nenhum — apagá-la
+  // seria perder registro
+  const primeiro = pares[ini];
+  let bloqueio = "";
+  if (primeiro.comecaComSobra)
+    bloqueio =
+      ini === 0
+        ? `a sequência começa antes do ${ddmm(primeiro.isoDia)} — abra a Revisão do dia anterior`
+        : `o ${ddmm(primeiro.isoDia)} começa com ${primeiro.comecaComSobra.join(" · ")}, que não fecha turno nenhum — confira à mão`;
+
+  const total = fim - ini + 1;
+  const saida = [];
+  for (let k = fim; k >= ini; k--) {
+    const caso = { ...pares[k], bloqueio };
+    if (k < fim)
+      caso.seguinte = {
+        acao: "nenhuma",
+        slots: null,
+        completo: true,
+        nota: `limpo no passo anterior (o ${ddmm(caso.isoSeguinte)} é gravado sem a sobra)`,
+      };
+    caso.sequencia = total > 1 ? { passo: fim - k + 1, total } : null;
+    saida.push(caso);
+  }
+  return saida;
 }
 
 /** dd/mm/aaaa de um ISO */

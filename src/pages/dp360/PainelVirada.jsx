@@ -68,11 +68,21 @@ export default function PainelVirada({ pares, aoFechar, aoConcluir }) {
     const probSeg = p.caso.seguinte.acao === "relancar" ? problemaDoCartao(c.seguinte) : "";
     return { probDia, probSeg, pode: !p.caso.bloqueio && !probDia && !probSeg };
   };
+  // DIAS EM SEQUÊNCIA VÃO JUNTOS OU NÃO VÃO: o passo de um deixa limpo o dia do outro
+  const grupoDe = (p) => p.grupo || p.chave;
+  const doGrupo = (g) => pares.filter((p) => grupoDe(p) === g);
+  const grupoPode = (g) => doGrupo(g).every((p) => avaliar(p).pode);
   // entra marcado quem está pronto sem ninguém mexer; o resto o DP confere e marca
-  const [incluidos, setIncluidos] = useState(
-    () => new Set(pares.filter((p) => !p.caso.bloqueio && p.caso.dia.completo && p.caso.seguinte.completo).map((p) => p.chave)),
+  const [incluidos, setIncluidos] = useState(() => {
+    const prontos = new Set();
+    for (const g of new Set(pares.map(grupoDe)))
+      if (doGrupo(g).every((p) => !p.caso.bloqueio && p.caso.dia.completo && p.caso.seguinte.completo)) prontos.add(g);
+    return prontos;
+  });
+  const lote = useMemo(
+    () => pares.filter((p) => incluidos.has(grupoDe(p)) && grupoPode(grupoDe(p))),
+    [pares, incluidos, cartoes], // eslint-disable-line react-hooks/exhaustive-deps
   );
-  const lote = useMemo(() => pares.filter((p) => incluidos.has(p.chave) && avaliar(p).pode), [pares, incluidos, cartoes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const escapa = (e) => {
@@ -283,8 +293,9 @@ export default function PainelVirada({ pares, aoFechar, aoConcluir }) {
 
           {pares.map((p) => {
             const c = cartoes[p.chave];
-            const { probDia, probSeg, pode } = avaliar(p);
-            const marcado = incluidos.has(p.chave);
+            const { probDia, probSeg } = avaliar(p);
+            const podeGrupo = grupoPode(grupoDe(p));
+            const marcado = incluidos.has(grupoDe(p));
             const apaga = p.caso.seguinte.acao === "excluir";
             return (
               <div
@@ -295,9 +306,9 @@ export default function PainelVirada({ pares, aoFechar, aoConcluir }) {
                 <label className="flex flex-wrap items-center gap-2" style={{ cursor: p.caso.bloqueio ? "default" : "pointer" }}>
                   <input
                     type="checkbox"
-                    checked={marcado && pode}
-                    disabled={!pode}
-                    onChange={() => alternar(p.chave)}
+                    checked={marcado && podeGrupo}
+                    disabled={!podeGrupo}
+                    onChange={() => alternar(grupoDe(p))}
                   />
                   <b>{p.nome || "—"}</b>
                   <span className="dp-mono dp-num dp-muted">{p.cracha}</span>
@@ -306,6 +317,15 @@ export default function PainelVirada({ pares, aoFechar, aoConcluir }) {
                     <span className="dp-mono">{p.caso.sobra.join(" · ")}</span>
                   </span>
                 </label>
+                {p.caso.sequencia && (
+                  <div style={{ marginTop: 6 }}>
+                    <Pilula texto={`sequência · passo ${p.caso.sequencia.passo} de ${p.caso.sequencia.total}`} tom="accent" />{" "}
+                    <span className="dp-muted" style={{ fontSize: 11.5 }}>
+                      vão juntos: o robô faz do último dia para o primeiro, e se um passo falhar os seguintes param
+                      sem mexer.
+                    </span>
+                  </div>
+                )}
                 {p.caso.bloqueio && (
                   <div style={{ marginTop: 6 }}>
                     <Pilula texto="não vai para o robô" tom="danger" /> <span className="dp-muted">{p.caso.bloqueio}</span>

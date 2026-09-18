@@ -643,6 +643,62 @@ function getEstoqueSituacaoCounts(row) {
   return [...counts.entries()].map(([label, value]) => ({ label, value }));
 }
 
+/* EXCEL DO ESTOQUE — o mesmo arquivo para UM lote (botão no modal do lote) e para TODOS os
+   lotes filtrados (botão do topo da aba). Duas abas:
+     · "Pneus"           — uma linha por pneu, como já saía;
+     · "Resumo por lote" — uma linha por lote, com a contagem por situação e por conferência
+                           (o mesmo quadro "Resumo por situacao" do modal).
+   As colunas de situação/conferência saem da união de TODOS os lotes do arquivo: um lote sem
+   SUCATA ganha 0 na coluna, em vez de a coluna mudar de lugar de uma linha para outra. */
+function linhasPneusEstoque(lotes) {
+  return (lotes || []).flatMap((row) =>
+    (row.itens || []).map((item) => ({
+      ficha: row.ficha_estoque,
+      data: formatDate(row.created_at),
+      quem_lancou: row.criado_por_nome || row.criado_por_login,
+      numero_fogo: item.numero_fogo || item.numero_pneu,
+      numero_interno: item.numero_pneu || "",
+      marca: item.marca,
+      situacao: item.situacao,
+      conferencia: item.transnet_status || "Pendente",
+      conferido_em: item.transnet_conferido_em ? formatDate(item.transnet_conferido_em) : "",
+      conferido_por: item.transnet_conferido_por_nome || item.transnet_conferido_por_login || "",
+      observacoes: row.observacoes || "",
+    })),
+  );
+}
+
+function linhasResumoEstoque(lotes) {
+  const lista = lotes || [];
+  const situacoes = [...SITUACOES_ESTOQUE];
+  const conferencias = [];
+  for (const row of lista) {
+    for (const { label } of getEstoqueSituacaoCounts(row)) if (!situacoes.includes(label)) situacoes.push(label);
+    for (const { label } of getEstoqueConferenciaCounts(row)) if (!conferencias.includes(label)) conferencias.push(label);
+  }
+  return lista.map((row) => {
+    const linha = {
+      ficha: row.ficha_estoque,
+      data: formatDate(row.created_at),
+      quem_lancou: row.criado_por_nome || row.criado_por_login,
+      qtd_pneus: (row.itens || []).length,
+    };
+    const porSituacao = new Map(getEstoqueSituacaoCounts(row).map(({ label, value }) => [label, value]));
+    for (const s of situacoes) linha[s] = porSituacao.get(s) || 0;
+    const porConferencia = new Map(getEstoqueConferenciaCounts(row).map(({ label, value }) => [label, value]));
+    for (const c of conferencias) linha[`conferencia: ${c}`] = porConferencia.get(c) || 0;
+    linha.observacoes = row.observacoes || "";
+    return linha;
+  });
+}
+
+function baixarExcelEstoque(lotes, nomeArquivo) {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhasPneusEstoque(lotes)), "Pneus");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhasResumoEstoque(lotes)), "Resumo por lote");
+  XLSX.writeFile(wb, nomeArquivo);
+}
+
 function getEstoqueConferenciaCounts(row) {
   const counts = new Map();
 
@@ -2568,8 +2624,25 @@ function ConsultaModal({
       </div>
     );
 
+    // O Excel DESTE lote (o do topo da aba baixa todos os lotes filtrados). No app nativo
+    // não há download de arquivo — lá o modal segue só com o Fechar, como o topo da página.
     footer = IS_NATIVE ? null : (
-      <div className="flex justify-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+        {isNativeShell ? null : (
+          <button
+            type="button"
+            onClick={() =>
+              baixarExcelEstoque(
+                [row],
+                `pcm_estoque_${norm(row.ficha_estoque).replace(/[^\w-]+/g, "_") || "lote"}.xlsx`,
+              )
+            }
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
+          >
+            <FaDownload />
+            Baixar Excel deste lote
+          </button>
+        )}
         <button
           type="button"
           onClick={onClose}
@@ -4826,25 +4899,9 @@ export default function PCMTrocaPneus({ embutido = false, aba: abaExterna, onAba
       return;
     }
 
-      const sheet = estoqueFiltrado.flatMap((row) =>
-      (row.itens || []).map((item) => ({
-        ficha: row.ficha_estoque,
-        data: formatDate(row.created_at),
-        quem_lancou: row.criado_por_nome || row.criado_por_login,
-        numero_fogo: item.numero_fogo || item.numero_pneu,
-        numero_interno: item.numero_pneu || "",
-        marca: item.marca,
-        situacao: item.situacao,
-        conferencia: item.transnet_status || "Pendente",
-        conferido_em: item.transnet_conferido_em ? formatDate(item.transnet_conferido_em) : "",
-        conferido_por: item.transnet_conferido_por_nome || item.transnet_conferido_por_login || "",
-        observacoes: row.observacoes || "",
-      }))
-    );
-
+    // TODOS os lotes que os filtros da aba deixam na tela: pneus + resumo por lote
     if (activeTab === TAB_ESTOQUE) {
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheet), "Estoque");
-      XLSX.writeFile(wb, "pcm_estoque_pneus.xlsx");
+      baixarExcelEstoque(estoqueFiltrado, "pcm_estoque_pneus.xlsx");
       return;
     }
 
@@ -4932,7 +4989,7 @@ export default function PCMTrocaPneus({ embutido = false, aba: abaExterna, onAba
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
             >
               <FaDownload />
-              Baixar Excel
+              {activeTab === TAB_ESTOQUE ? "Baixar Excel de todos os lotes" : "Baixar Excel"}
             </button>
           ) : null}
           <button

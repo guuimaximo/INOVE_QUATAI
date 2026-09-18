@@ -2114,6 +2114,11 @@ export default function Gordura() {
           linha={detalhe}
           aoFechar={() => setDetalhe(null)}
           aoAvisar={(r) => setEnvio([r])}
+          /* O REAL CRAVADO "SUMIA" AO SALVAR (18/09/2026). `recarregarDia` existia desde
+             06/09 (336b99a) e nunca foi passado: o cartão gravava, não relia, e o
+             formulário voltava para a sugestão com "Ninguém cravou este dia" — quem
+             salvava de novo regravava a sugestão por cima do que tinha acabado de cravar. */
+          aoRecarregar={recarregarDia}
         />
       )}
 

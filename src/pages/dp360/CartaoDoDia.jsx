@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Lock, X } from "lucide-react";
 import MapaBatidas from "./MapaBatidas";
 import { apagarDP360, dispararRoboDP360, lerDP360, upsertDP360, upsertDP360Insistente } from "../../services/dp360Api";
@@ -1492,6 +1492,11 @@ export default function CartaoDoDia({
   // Gravação: um recado por bloco, para o sucesso/erro aparecer ONDE a pessoa clicou.
   const [salvando, setSalvando] = useState("");
   const [recadoRm, setRecadoRm] = useState(null);
+  // a confirmação de apagar ponta cravada (ver `salvarRealManual`)
+  const [perguntar, caixaPergunta] = usePergunta();
+  // a caixa e o cartão ouvem o Esc no MESMO `document`: sem isto o Esc que responde
+  // "não" à pergunta fecharia o cartão junto
+  const perguntando = useRef(false);
   // O detalhamento das viagens abre SOBRE o cartão (não no lugar dele): o DP está
   // olhando o caso e as viagens são a explicação da operação que ele está lendo.
   const [verViagens, setVerViagens] = useState(false);
@@ -1730,7 +1735,7 @@ export default function CartaoDoDia({
     const escapa = (e) => {
       // Com um pop-up aberto por cima (viagens ou pedido de exclusão), o Esc fecha SÓ
       // ele — quem trata é o próprio — senão os dois sumiriam de uma vez.
-      if (e.key === "Escape" && !verViagens && !pedirExclusao) aoFechar();
+      if (e.key === "Escape" && !verViagens && !pedirExclusao && !perguntando.current) aoFechar();
     };
     document.addEventListener("keydown", escapa);
     return () => document.removeEventListener("keydown", escapa);
@@ -1893,6 +1898,28 @@ export default function CartaoDoDia({
       return;
     }
     const preenchidos = gravaveis.filter((k) => limpos[k]);
+    /* SALVAR NÃO APAGA EM SILÊNCIO O QUE JÁ ESTÁ CRAVADO (18/09/2026). O payload leva as
+       pontas inteiras, e campo vazio vai como NULL — então cravar só a saída num dia que
+       já tinha a entrada cravada APAGAVA a entrada. A trilha (`dp360_auditoria`) achou
+       dois: CICERO 30061229 03/09 (entrada 12:50) e 30007663 06/09 (entrada 03:50, cravada
+       por Recursos em 15/09). "Tudo vazio" continua sendo o jeito de limpar — ali a pessoa
+       quer apagar; aqui ela só não viu que o campo estava vazio. */
+    const apagaria = preenchidos.length
+      ? gravaveis.filter((k) => rmDoBanco[k] && !limpos[k])
+      : [];
+    if (apagaria.length) {
+      perguntando.current = true;
+      const seguir = await perguntar(
+        "Salvar assim APAGA o que já está cravado neste dia:\n\n" +
+          apagaria.map((k) => `· ${ROTULO_RM[k]} ${rmDoBanco[k]}`).join("\n") +
+          (linha.rm_por
+            ? `\n\n(cravado por ${linha.rm_por}${linha.rm_em ? ` em ${fmtDataHora(linha.rm_em)}` : ""})`
+            : "") +
+          "\n\nPara manter, preencha o campo de novo antes de salvar. Apagar mesmo?",
+      );
+      perguntando.current = false;
+      if (!seguir) return;
+    }
     setSalvando("rm");
     try {
       if (!preenchidos.length) {
@@ -2101,6 +2128,7 @@ export default function CartaoDoDia({
        grid impedem que uma coluna comprida (o mapa, a lista de batidas) empurre a
        outra. Mesmo desenho do `gd-modal` do INOVE Guard, que já resolveu isto. */
     <div className="rv-overlay">
+      {caixaPergunta}
       <div className="rv-box dp-card" style={{ padding: 0 }}>
         <header
           className="flex items-start gap-3 rv-fixo"

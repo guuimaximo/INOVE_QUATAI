@@ -435,6 +435,9 @@ const ROBOS: Record<string, { arquivo: string; inputs: Record<string, string[] |
   login: { arquivo: "login.yml", inputs: { usuario: null } },
   ocorrencias: { arquivo: "ocorrencias.yml", inputs: { csv: null, confirmar: ["true", "false"] } },
   ponto: { arquivo: "ponto.yml", inputs: { csv: null, data: null, confirmar: ["true", "false"] } },
+  // 🌙 A SAÍDA GRAVADA NO DIA SEGUINTE (18/09/2026): limpa o D+1 e lança a saída no D
+  // (DP360 bot_virada.py). `casos` é o JSON que a Revisão montou com os dois cartões.
+  virada: { arquivo: "virada.yml", inputs: { casos: null, confirmar: ["true", "false"] } },
   comunicado: {
     arquivo: "comunicado.yml",
     inputs: {

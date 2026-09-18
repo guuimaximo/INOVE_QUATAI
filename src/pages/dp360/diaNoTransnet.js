@@ -189,3 +189,147 @@ export function fimDoTurnoNoDiaSeguinte(linhaDia, linhaSeguinte, isoSeguinte) {
     jornada,
   };
 }
+
+/* ═══════════ os dois cartões do robô `virada` (bot_virada.py, no DP360) ═══════════ */
+
+// ferramenta/montador.py `_tapa_buraco` (LIÇÃO 4): batida a ≤ 1 min da anterior é o
+// tapa-buraco do Transnet — a pessoa esqueceu uma batida e o sistema somou 1 min na última
+// para fechar o cartão. Sai o SEGUNDO do par; a batida real é a primeira (15:00 · 15:01).
+const TAPA_BURACO = 1;
+function semTapaBuraco(mins) {
+  const out = [];
+  for (const m of mins) {
+    if (out.length && m - out[out.length - 1] <= TAPA_BURACO) continue;
+    out.push(m);
+  }
+  return out;
+}
+
+/** hora da linha desenrolada a partir da entrada: antes dela é do dia seguinte */
+function aPartirDe(h, ancora) {
+  const m = hm2min(h);
+  if (m == null) return null;
+  return ancora != null && m < ancora ? m + 1440 : m;
+}
+
+/**
+ * Os 4 campos a partir das batidas: 4 → elas; 2 → entrada e saída, com a refeição que a
+ * importação propôs no meio quando ela cabe (motorista: o almoço é lançado por nós — a mesma
+ * refeição que a Revisão lançaria); outro número → incompleto: parte da sugestão do dia, e o
+ * DP confere na prévia. `saidaFixa` (o D) é a última batida movida: é ela a saída, sempre.
+ * `slots` sai em notação 24+.
+ */
+function slotsDoCartao(marcas, linha, saidaFixa = null) {
+  const fmt = (m) => (m == null ? "" : min2hm(m));
+  if (marcas.length === 4) return { slots: marcas.map(fmt), completo: true, nota: "as batidas dele" };
+  if (marcas.length === 2) {
+    const [e, s] = marcas;
+    const as = aPartirDe(linha?.almoco_saida_sug, e);
+    const av = aPartirDe(linha?.almoco_volta_sug, e);
+    if (as != null && av != null && e < as && as < av && av < s) {
+      const curto = s - e >= 6 * 60 && av - as < 30;
+      return {
+        slots: [fmt(e), fmt(as), fmt(av), fmt(s)],
+        completo: !curto,
+        nota: curto ? `almoço proposto de ${av - as} min — confira` : "almoço da refeição proposta",
+      };
+    }
+    // jornada de 6 h ou mais sem almoço nenhum: pode ser, mas o DP confere
+    const longa = s - e >= 6 * 60;
+    return {
+      slots: [fmt(e), "", "", fmt(s)],
+      completo: !longa,
+      nota: longa ? `sem almoço numa jornada de ${Math.floor((s - e) / 60)}h${String((s - e) % 60).padStart(2, "0")} — confira` : "sem almoço",
+    };
+  }
+  const sug = desenrolaSlots([linha?.entrada_sug, linha?.almoco_saida_sug, linha?.almoco_volta_sug, linha?.saida_sug]);
+  // sem sugestão nenhuma: as batidas que houver, nas pontas
+  if (!sug[0] && !sug[3]) {
+    sug[0] = fmt(marcas[0]);
+    sug[3] = marcas.length > 1 ? fmt(marcas[marcas.length - 1]) : "";
+  }
+  if (saidaFixa != null) sug[3] = min2hm(saidaFixa);
+  return { slots: sug, completo: false, nota: `${marcas.length} batida(s) — confira e complete o cartão` };
+}
+
+/**
+ * O CARTÃO PODE SUBIR? Entrada e saída; almoço inteiro ou nenhum; tudo em ordem com a virada
+ * desenrolada; até 13 h. Devolve o motivo, ou "".
+ */
+export function problemaDoCartao(slots) {
+  const [e, as, av, s] = (slots || []).map((h) => txt(h));
+  if (!e || !s) return "falta entrada ou saída";
+  if (!!as !== !!av) return "almoço pela metade";
+  const mins = desenrolaSlots([e, as, av, s]).map(hm2min);
+  const cheios = mins.filter((m) => m != null);
+  for (let i = 1; i < cheios.length; i++) if (cheios[i] <= cheios[i - 1]) return "horários fora de ordem";
+  if (cheios[cheios.length - 1] - cheios[0] > JORNADA_MAX) return "passa de 13 h";
+  return "";
+}
+
+/**
+ * O CASO DA VIRADA COMO O DP VAI VER E O ROBÔ VAI LANÇAR (18/09/2026).
+ *
+ * `linhaDia` é o dia certo (D), `linhaSeguinte` o D+1 e `linhaDepois` o D+2 (só para saber
+ * se há sequência). Devolve null quando não é caso de virada.
+ *
+ *   dia:      o D com a sobra no fim (sem o tapa-buraco);
+ *   seguinte: "excluir" quando o D+1 só tinha a sobra (a tela de lançamento não salva dia
+ *             vazio — o robô apaga o registro); senão "relancar" com o que sobrou nele.
+ *
+ * EM SEQUÊNCIA FICA DE FORA (LUCIO 30060646 14→15→16/09, JAIRO 30060835 10→11→12/09): quando o
+ * D+1 também deixou a saída no D+2, ou o próprio D começa com a sobra da véspera, lançar um
+ * dos pares apaga do Transnet a sobra que o outro ainda precisa mover. Por ora o DP resolve
+ * esses à mão; a tela diz por quê.
+ */
+export function casoDaVirada({ linhaDia, linhaSeguinte, linhaDepois, isoDia, isoSeguinte }) {
+  const fim = fimDoTurnoNoDiaSeguinte(linhaDia, linhaSeguinte, isoSeguinte);
+  if (!fim) return null;
+  const propria = sobraDaVespera(linhaDia);
+  const doDia = propria ? propria.resto : batidasDaLinha(linhaDia);
+  const movidas = fim.movidas.map(hm2min);
+  const dia = slotsDoCartao(semTapaBuraco([...doDia, ...movidas]), linhaDia, movidas[movidas.length - 1]);
+
+  const sobra = sobraDaVespera(linhaSeguinte);
+  const resto = semTapaBuraco(sobra.resto);
+  const seguinte = resto.length
+    ? { acao: "relancar", ...slotsDoCartao(resto, linhaSeguinte) }
+    : { acao: "excluir", slots: null, completo: true, nota: "o dia era folga e só tinha a sobra: o registro é apagado" };
+
+  const isoDepois = somaUmDia(isoSeguinte);
+  const depois = linhaDepois ? fimDoTurnoNoDiaSeguinte(linhaSeguinte, linhaDepois, isoDepois) : null;
+  let bloqueio = "";
+  if (depois)
+    bloqueio = `em sequência: o ${ddmm(isoSeguinte)} também deixou a saída no ${depois.dia} (${depois.horas}) — resolva esses dias à mão`;
+  else if (propria)
+    bloqueio = `em sequência: o ${ddmm(isoDia)} começa com batida de madrugada da véspera (${propria.bloco.map(min2hm).join(" · ")}) — resolva esses dias à mão`;
+
+  return {
+    isoDia,
+    isoSeguinte,
+    sobra: sobra.bloco.map(min2hm),
+    antesDia: batidasDaLinha(linhaDia).map(min2hm),
+    antesSeguinte: batidasDaLinha(linhaSeguinte).map(min2hm),
+    dia,
+    seguinte,
+    bloqueio,
+  };
+}
+
+/** dd/mm/aaaa de um ISO */
+const br = (iso) => `${txt(iso).slice(8, 10)}/${txt(iso).slice(5, 7)}/${txt(iso).slice(0, 4)}`;
+
+/** O item que vai para o robô (o `casos` do virada.yml), com os cartões que o DP confirmou. */
+export function casoParaORobo({ cracha, nome, caso, slotsDia, slotsSeguinte }) {
+  const cartao = ([e, as, av, s]) => ({ entrada: e || "", alm_saida: as || "", alm_volta: av || "", saida: s || "" });
+  return {
+    cracha: txt(cracha),
+    nome: txt(nome),
+    dia: br(caso.isoDia),
+    seguinte: br(caso.isoSeguinte),
+    sobra: caso.sobra,
+    seguinte_acao: caso.seguinte.acao,
+    ...(caso.seguinte.acao === "relancar" ? { seguinte_cartao: cartao(slotsSeguinte) } : {}),
+    dia_cartao: cartao(slotsDia),
+  };
+}

@@ -72,6 +72,8 @@ import {
 
 import { supabase } from "../../../supabase";
 import { usePergunta } from "../Perguntar";
+import PainelVirada from "../PainelVirada";
+import { casoDaVirada, somaUmDia } from "../diaNoTransnet";
 import { runIncerto } from "../esperarRobo";
 /* =============================================================================
    Revisão (Passo 2) — porte da tela do DP360 (Sistemas/PONTO: app/ui/app.js
@@ -136,6 +138,16 @@ const {
 
 const CATEGORIAS_PADRAO = ["MOTORISTA", "INTERNO", "APRENDIZ"];
 const PAGINAS_POR_LOTE = 6; // 6 x 1000 linhas de ponto_diario ~ 15 dias de datas
+/* 🌙 A VIRADA (18/09/2026): o fim do turno de ontem gravado hoje, ou o de hoje gravado
+   amanhã. Para achar os dois lados a Revisão lê também a véspera, o dia seguinte e o
+   depois dele (este só para saber se há sequência) — só as colunas que a regra usa. */
+const COLUNAS_VIZINHO =
+  "cracha,date_ref,nm_funcionario,todas_batidas,esc_entrada,entrada_sug,almoco_saida_sug,almoco_volta_sug,saida_sug";
+const diaAnterior = (iso) => {
+  const [a, m, d] = String(iso ?? "").slice(0, 10).split("-").map(Number);
+  if (!a || !m || !d) return "";
+  return new Date(Date.UTC(a, m - 1, d - 1)).toISOString().slice(0, 10);
+};
 
 // Quantos nomes a confirmacao lista antes de resumir o resto. A pessoa precisa
 // reconhecer QUEM vai receber; uma lista de 80 linhas num window.confirm nao e lida.
@@ -1727,6 +1739,9 @@ export default function Revisao() {
   const [erro, setErro] = useState("");
 
   const [filtro, setFiltro] = useState("REVISAR");
+  // os dias vizinhos (véspera, seguinte, depois) e o pop-up do 🌙 Mover saída
+  const [vizinhos, setVizinhos] = useState({});
+  const [viradaAberta, setViradaAberta] = useState(false);
   const [busca, setBusca] = useState("");
   const [aberta, setAberta] = useState(null);
 
@@ -1830,6 +1845,23 @@ export default function Revisao() {
       .finally(() => {
         if (ativo) setCarregando(false);
       });
+
+    // 🌙 OS DIAS VIZINHOS carregam em separado: a grade não espera por eles.
+    setVizinhos({});
+    const dias = { antes: diaAnterior(data), depois: somaUmDia(data), depois2: somaUmDia(somaUmDia(data)) };
+    Promise.all(
+      [dias.antes, dias.depois, dias.depois2].map((d) =>
+        lerTudoDP360("ponto_diario", {
+          colunas: COLUNAS_VIZINHO,
+          filtros: { date_ref: `eq.${d}`, categoria: `eq.${categoria}` },
+          ordem: "cracha.asc",
+        }).catch(() => []),
+      ),
+    ).then(([antes, depois, depois2]) => {
+      if (!ativo) return;
+      const porCracha = (arr) => new Map((arr || []).map((x) => [cra8(x.cracha), x]));
+      setVizinhos({ dias, antes: porCracha(antes), depois: porCracha(depois), depois2: porCracha(depois2) });
+    });
 
     // GPS carrega em separado: a grade não espera por ele.
     // A `ponto_gordura` entra aqui por DOIS motivos, os mesmos do app antigo
@@ -1967,6 +1999,39 @@ export default function Revisao() {
     return m;
   }, [linhas]);
 
+  /* 🌙 QUEM É CASO DE VIRADA NESTE DIA (`casoDaVirada`, diaNoTransnet.js): a linha é o
+     "dia certo" (a saída dela ficou amanhã) ou o "dia seguinte" (ela começa com a saída de
+     ontem). É uma chave por linha; o par vira uma coisa só no 🌙 Mover saída. */
+  const viradas = useMemo(() => {
+    const m = new Map();
+    const { dias, antes, depois, depois2 } = vizinhos;
+    if (!dias) return m;
+    for (const l of linhas) {
+      const cr = cra8(l.cracha);
+      const k = chaveDia(l.cracha, l.date_ref);
+      const certo = casoDaVirada({
+        linhaDia: l,
+        linhaSeguinte: depois.get(cr),
+        linhaDepois: depois2.get(cr),
+        isoDia: data,
+        isoSeguinte: dias.depois,
+      });
+      if (certo) {
+        m.set(k, { papel: "certo", caso: certo, cracha: cr, nome: l.nm_funcionario });
+        continue;
+      }
+      const seguinte = casoDaVirada({
+        linhaDia: antes.get(cr),
+        linhaSeguinte: l,
+        linhaDepois: depois.get(cr),
+        isoDia: dias.antes,
+        isoSeguinte: data,
+      });
+      if (seguinte) m.set(k, { papel: "seguinte", caso: seguinte, cracha: cr, nome: l.nm_funcionario });
+    }
+    return m;
+  }, [linhas, vizinhos, data]);
+
   const visiveis = useMemo(() => {
     const q = busca.trim().toLowerCase();
     return linhas.filter((l) => {
@@ -1975,6 +2040,7 @@ export default function Revisao() {
         const cra = String(l.cracha ?? "");
         if (!nome.includes(q) && !cra.includes(q)) return false;
       }
+      if (filtro === "VIRADA") return viradas.has(chaveDia(l.cracha, l.date_ref));
       const ok = jaResolvido(l);
       if (filtro === "REVISAR") return !ok;
       if (filtro === "OK") return ok;
@@ -1984,7 +2050,7 @@ export default function Revisao() {
       }
       return true;
     });
-  }, [linhas, busca, filtro, gpsPorCracha, jaResolvido]);
+  }, [linhas, busca, filtro, gpsPorCracha, jaResolvido, viradas]);
 
   /* ---- o lote do "✅ Lançar ajuste" ----
      Sai das linhas VISÍVEIS (o filtro e a busca da barra são a seleção, como já
@@ -2022,9 +2088,25 @@ export default function Revisao() {
       // competência fechada: mandar de novo só gera outra recusa do Transnet
       if (e === "fechado")
         m[k] = { ...lancados[k], motivoLote: `o Transnet não aceita mais este dia — ponto fechado (${lancados[k].quando})` };
+      // 🌙 com a saída no dia seguinte o Transnet recusa o lançamento normal (a batida de
+      // lá fica dentro do turno); quem resolve é o 🌙 Mover saída, que limpa antes
+      if (!m[k] && viradas.has(k))
+        m[k] = { motivoLote: "a saída ficou no dia seguinte — use 🌙 Mover saída" };
     }
     return m;
-  }, [linhas, lancados, runs]);
+  }, [linhas, lancados, runs, viradas]);
+
+  // 🌙 os PARES das linhas marcadas (dia certo + dia seguinte são uma pessoa só)
+  const paresVirada = useMemo(() => {
+    const pares = new Map();
+    for (const l of marcadas) {
+      const v = viradas.get(chaveDia(l.cracha, l.date_ref));
+      if (!v) continue;
+      const chave = `${v.cracha}|${v.caso.isoDia}`;
+      if (!pares.has(chave)) pares.set(chave, { chave, cracha: v.cracha, nome: v.nome, caso: v.caso });
+    }
+    return [...pares.values()];
+  }, [marcadas, viradas]);
 
   const loteAjuste = useMemo(
     () => montarLoteAjuste(marcadas, casos, bloqueios, travados),
@@ -2191,8 +2273,39 @@ export default function Revisao() {
             render: (l) => <LocalGps gps={gpsPorCracha[cra8(l.cracha)]} />,
           };
 
+        /* 🌙 A VIRADA É O MOTIVO (dono, 18/09/2026: "o virada tem que ficar no motivo"). O
+           motivo da view continua no title e no CSV: é o diagnóstico de antes. */
         if (col.id === "motivo")
-          return { ...col, valor: (l) => String(l.motivo ?? "").trim(), render: (l) => <Motivo linha={l} /> };
+          return {
+            ...col,
+            valor: (l) => {
+              const v = viradas.get(chaveDia(l.cracha, l.date_ref));
+              const m = String(l.motivo ?? "").trim();
+              return v ? `VIRADA (${m})` : m;
+            },
+            render: (l) => {
+              const v = viradas.get(chaveDia(l.cracha, l.date_ref));
+              if (!v) return <Motivo linha={l} />;
+              const sobra = v.caso.sobra.join(" · ");
+              return (
+                <span
+                  title={
+                    (v.papel === "certo"
+                      ? `A saída deste dia ficou gravada em ${fmtData(v.caso.isoSeguinte)} (${sobra}).`
+                      : `${sobra} é o fim do turno de ${fmtData(v.caso.isoDia)}, gravado neste dia.`) +
+                    ` Use 🌙 Mover saída. Motivo da view: ${String(l.motivo ?? "").trim() || "—"}.`
+                  }
+                >
+                  <Pilula texto="🌙 VIRADA" tom="accent" />{" "}
+                  <span className="dp-muted" style={{ fontSize: 11.5 }}>
+                    {v.papel === "certo"
+                      ? `saída no ${fmtData(v.caso.isoSeguinte).slice(0, 5)}`
+                      : `${sobra} é do ${fmtData(v.caso.isoDia).slice(0, 5)}`}
+                  </span>
+                </span>
+              );
+            },
+          };
 
         // Data em dd/mm/aaaa: a `chaveOrd` da grade entende esse formato e ordena por
         // ano/mês/dia — foi justamente aqui que a ferramenta ordenava pelo DIA DO MÊS.
@@ -2253,7 +2366,7 @@ export default function Revisao() {
           },
         };
       }),
-    [bloqueios, casos, gpsPorCracha, gravarCampoSug, lancados, estadoDe],
+    [bloqueios, casos, gpsPorCracha, gravarCampoSug, lancados, estadoDe, viradas],
   );
 
   /* ═══════════════════ AVISO AO TRABALHADOR (o robô do Transnet) ═══════════════════
@@ -2520,6 +2633,8 @@ export default function Revisao() {
     ["REVISAR", "REVISAR"],
     ["OK", "OK"],
     ["FORA", "📍 FORA"],
+    // só aparece no dia que tem caso de virada
+    ...(viradas.size ? [["VIRADA", "🌙 VIRADA"]] : []),
   ];
 
   return (
@@ -2566,7 +2681,7 @@ export default function Revisao() {
               onClick={() => setFiltro(id)}
               className={`dp-chip-f ${filtro === id ? "on" : ""}`}
             >
-              {rotulo} <span className="n">{contagens[id] || 0}</span>
+              {rotulo} <span className="n">{id === "VIRADA" ? viradas.size : contagens[id] || 0}</span>
             </button>
           ))}
 
@@ -2646,6 +2761,21 @@ export default function Revisao() {
               ✅ Lançar ajuste
             </BotaoSemAlvo>
           )}
+          {/* 🌙 MOVER SAÍDA — só existe no dia que tem caso de virada */}
+          {paresVirada.length ? (
+            <button
+              type="button"
+              className="dp-btn"
+              onClick={() => setViradaAberta(true)}
+              title="A saída ficou gravada no dia seguinte: o robô limpa o dia seguinte e grava a saída no dia certo. Abre a prévia dos dois dias."
+            >
+              🌙 Mover saída ({paresVirada.length})
+            </button>
+          ) : viradas.size ? (
+            <BotaoSemAlvo titulo="Marque na grade (✔) os dias com 🌙 — o filtro 🌙 VIRADA mostra todos os deste dia.">
+              🌙 Mover saída
+            </BotaoSemAlvo>
+          ) : null}
           {alvoFora.length ? (
             <button
               type="button"
@@ -2790,6 +2920,10 @@ export default function Revisao() {
           lancado={lancados[chaveDia(aberta.cracha, aberta.date_ref)]}
           aoFechar={() => setVerAjuste(false)}
         />
+      )}
+
+      {viradaAberta && (
+        <PainelVirada pares={paresVirada} aoFechar={() => setViradaAberta(false)} aoConcluir={carregarDia} />
       )}
 
       {loteAberto && (

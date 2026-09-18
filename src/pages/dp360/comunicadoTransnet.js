@@ -234,6 +234,22 @@ export function assinaturaExclusao(linha) {
  *  com vírgula no meio desloca a coluna Comunicado. */
 const campoCsv = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
 
+/* O TRANSNET SÓ GUARDA LATIN-1 (18/09/2026). Ele lê o arquivo como Windows-1252 e grava o
+   comunicado num banco ISO-8859-1: o que não existe ali vira "¿". Foi assim que o CICERO
+   30061229 recebeu "NÃ¿O" e "DP â¿¿ QuataÃ" — o modelo reproduz o print dele letra por
+   letra. Os acentos cabem; o travessão "—", as aspas curvas e as reticências "…" NÃO: mesmo
+   com o arquivo em Windows-1252 a carta chegaria "DP ¿ Quataí". Aqui eles viram o sinal
+   simples que o colaborador lê igual, antes de a mensagem virar prévia ou arquivo. O que
+   sobrar fora do Latin-1 (emoji, por exemplo) vira "?" — e a prévia mostra. */
+const TROCAS_LATIN1 = {
+  "—": "-", "–": "-", "‒": "-", "―": "-", "−": "-",
+  "‘": "'", "’": "'", "‚": ",", "“": '"', "”": '"', "„": '"',
+  "…": "...", "•": "·", "€": "EUR", "™": "(TM)", "\u00A0": " ",
+};
+export function paraLatin1(texto) {
+  return String(texto ?? "").replace(/[^\x00-\x7F\xA1-\xFF]/gu, (c) => TROCAS_LATIN1[c] ?? "?");
+}
+
 /**
  * O arquivo inteiro: cabeçalho + uma linha por pessoa.
  * `itens` = [{ cracha, mensagem }] — já barrados e já achatados para uma linha.
@@ -243,7 +259,7 @@ export function csvComunicado(itens) {
   const linhas = [CABECALHO_CSV.map(campoCsv).join(",")];
   for (const item of itens || []) {
     linhas.push(
-      [EMPRESA_TRANSNET, cracha8(item.cracha), umaLinha(item.mensagem)].map(campoCsv).join(","),
+      [EMPRESA_TRANSNET, cracha8(item.cracha), paraLatin1(umaLinha(item.mensagem))].map(campoCsv).join(","),
     );
   }
   return linhas.join("\n");
@@ -483,6 +499,8 @@ export function prepararComunicado({
     }
     const frase = contrato ? frasePedidoDoAlvo(contrato) : "";
     if (frase && !mensagem.includes(frase)) mensagem = comFraseAntesDoFecho(mensagem, frase);
+    // a PRÉVIA é o que chega no celular: o mesmo texto que `csvComunicado` põe no arquivo
+    mensagem = paraLatin1(mensagem);
 
     datas.add(data);
     itens.push({
@@ -880,6 +898,7 @@ export default {
   MARCACOES_COLADA_MAX,
   assinaturaExclusao,
   csvComunicado,
+  paraLatin1,
   contratoDaRevisao,
   frasePedidoDoAlvo,
   comFraseAntesDoFecho,

@@ -244,10 +244,56 @@ const campoCsv = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
 const TROCAS_LATIN1 = {
   "—": "-", "–": "-", "‒": "-", "―": "-", "−": "-",
   "‘": "'", "’": "'", "‚": ",", "“": '"', "”": '"', "„": '"',
-  "…": "...", "•": "·", "€": "EUR", "™": "(TM)", "\u00A0": " ",
+  "…": "...", "•": "·", "€": "EUR", "™": "(TM)",
 };
+// O espaço inquebrável (0xA0) FICA: é Latin-1, e é dele que sai o espaço entre os blocos
+// (`espacarBlocos`). O resto de fora do Latin-1 vira o sinal simples ou "?".
 export function paraLatin1(texto) {
-  return String(texto ?? "").replace(/[^\x00-\x7F\xA1-\xFF]/gu, (c) => TROCAS_LATIN1[c] ?? "?");
+  return String(texto ?? "").replace(/[^\x00-\x7F\xA0-\xFF]/gu, (c) => TROCAS_LATIN1[c] ?? "?");
+}
+
+/* O ESPAÇO ENTRE OS BLOCOS DA CARTA (18/09/2026, aprovado pelo dono no celular da Eduarda).
+   O app do CSC não mostra parágrafo por caminho nenhum: o CSV guarda só a 1ª linha, a quebra
+   de linha vira espaço e `<br>` aparece escrito. O que ele respeita é o ESPAÇO INQUEBRÁVEL,
+   que não junta. Então, antes de cada bloco, vai uma fileira de 66 deles — quase uma linha
+   inteira: ela nunca cabe no fim da frase anterior, desce sozinha e empurra o bloco para uma
+   linha nova (quase sempre deixando uma linha em branco). O começo do bloco vai GRUDADO
+   (~22 letras com espaço inquebrável), para nunca caber no que sobra da linha da fileira.
+   Assim o resultado NÃO depende do tamanho do nome nem dos horários; depende só da largura
+   da tela, e 66 funcionou de 280 a 420 px (simulação com a fonte do app, 3 nomes × 4
+   larguras) e no celular da Eduarda (TESTE DO DP 6). A 45 era sorte; a 90 recuava o bloco.
+   Os blocos são os marcadores dos modelos do `app_config` ("O QUE ACONTECEU:", …); modelo
+   sem marcador sai como antes. A ferramenta do PC não passa por aqui: lá a carta segue numa
+   linha só, com os mesmos marcadores. */
+const NBSP = "\u00A0";
+export const ESPACO_ENTRE_BLOCOS = NBSP.repeat(66);
+const INICIOS_DE_BLOCO = [
+  "O QUE ACONTECEU:",
+  "O QUE FAZER:",
+  "O cartão solicitado deve ficar:",
+  "Em caso de dúvida",
+  "Por isso, fica registrada",
+  "Atenciosamente,",
+];
+function grudaInicio(trecho, minimo = 22) {
+  const palavras = trecho.split(" ");
+  let n = 0;
+  for (let i = 0; i < palavras.length; i += 1) {
+    n += palavras[i].length + 1;
+    if (n >= minimo) {
+      const resto = palavras.slice(i + 1).join(" ");
+      return palavras.slice(0, i + 1).join(NBSP) + (resto ? ` ${resto}` : "");
+    }
+  }
+  return palavras.join(NBSP);
+}
+export function espacarBlocos(texto) {
+  let s = String(texto ?? "");
+  for (const inicio of INICIOS_DE_BLOCO) {
+    const i = s.indexOf(` ${inicio}`);
+    if (i >= 0) s = `${s.slice(0, i)} ${ESPACO_ENTRE_BLOCOS} ${grudaInicio(s.slice(i + 1))}`;
+  }
+  return s;
 }
 
 /**
@@ -259,7 +305,9 @@ export function csvComunicado(itens) {
   const linhas = [CABECALHO_CSV.map(campoCsv).join(",")];
   for (const item of itens || []) {
     linhas.push(
-      [EMPRESA_TRANSNET, cracha8(item.cracha), paraLatin1(umaLinha(item.mensagem))].map(campoCsv).join(","),
+      [EMPRESA_TRANSNET, cracha8(item.cracha), paraLatin1(espacarBlocos(umaLinha(item.mensagem)))]
+        .map(campoCsv)
+        .join(","),
     );
   }
   return linhas.join("\n");
@@ -899,6 +947,7 @@ export default {
   assinaturaExclusao,
   csvComunicado,
   paraLatin1,
+  espacarBlocos,
   contratoDaRevisao,
   frasePedidoDoAlvo,
   comFraseAntesDoFecho,

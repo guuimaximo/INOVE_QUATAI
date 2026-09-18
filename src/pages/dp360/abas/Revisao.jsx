@@ -1036,13 +1036,14 @@ function CelulaSug({ linha, campo, bloqueio, aoGravar }) {
     setValor(salvo);
   }, [salvo]);
 
-  // ALMOÇO TRAVADO (main.py:906-910): os dois campos do miolo não são editáveis e
-  // não vão no payload — o servidor recusa o dia inteiro se forem. Mesma regra do
-  // pop-up, lida do mesmo campo.
+  // O ALMOÇO É EDITÁVEL MESMO NO DIA "TRAVADO" (dono, 18/09/2026: "deixa livre"). A
+  // trava da Revisão sugere o miolo; para quem não operou ela vinha com horário solto
+  // (LUCIO 30060646 07/09: 26:24 → 27:24) e a célula não deixava corrigir. O marcador
+  // continua aparecendo — é informação, não proibição.
   const travado = ehVerdadeiro(linha.almoco_travado) && ["almoco_saida_sug", "almoco_volta_sug"].includes(campo);
 
   const gravar = async () => {
-    if (travado || estado === "gravando") return;
+    if (estado === "gravando") return;
     const bruto = String(valor ?? "").trim();
     if (bruto === salvo) return; // nada mudou: não gasta gravação
     // `hm2min`/`min2hm` são do motor: aceitam "1420" (o que a tela do Cartão de Ponto
@@ -1076,7 +1077,7 @@ function CelulaSug({ linha, campo, bloqueio, aoGravar }) {
   };
 
   const titulo = travado
-    ? "Almoço travado pela regra da Revisão — este campo não é editável."
+    ? "Almoço sugerido pela trava da Revisão. Edite e saia do campo para cravar outro no Real manual — o que você cravar é o que vale."
     : bloqueio
       ? `⚠ ${bloqueio} — o valor está aqui para leitura, mas o dia não dá para avisar nem lançar.`
       : "Edite e saia do campo (ou Enter) para cravar no Real manual deste dia. Vazio limpa só este campo.";
@@ -1089,7 +1090,6 @@ function CelulaSug({ linha, campo, bloqueio, aoGravar }) {
         inputMode="numeric"
         placeholder="--:--"
         value={valor}
-        readOnly={travado}
         disabled={estado === "gravando"}
         aria-label={`${campo} de ${linha.nm_funcionario || linha.cracha}`}
         onChange={(e) => setValor(e.target.value)}
@@ -2080,9 +2080,6 @@ export default function Revisao() {
       const dia = String(linha.date_ref ?? "").slice(0, 10);
       const real = SUG_PARA_REAL[campo];
       if (!real) throw new Error(`Campo inválido: ${campo}`);
-      if (["alm_saida", "alm_volta"].includes(real) && ehVerdadeiro(linha.almoco_travado)) {
-        throw new Error("O almoço deste motorista foi travado pela regra da Revisão.");
-      }
       await upsertDP360("ponto_real_manual", {
         cracha: cra8(linha.cracha),
         date_ref: dia,

@@ -188,7 +188,8 @@ export function avaliarAjustePonto(linha, { caso = null, digitado = null, bloque
 
   // 2) O QUE FOI DIGITADO É HORA? Só existe na origem "digitado": na Revisão os
   //    horários já vêm normalizados da view.
-  //    MIOLO TRAVADO: o valor é o da view, o que o DP digitou não é lido.
+  //    MIOLO TRAVADO: sem almoço digitado, vale o da view; digitado, vale o do DP
+  //    (dono, 18/09/2026: "a parte do almoço que é bloqueada — deixa livre").
   const travado = almocoTravado(linha);
   let entrada;
   let saida;
@@ -197,8 +198,10 @@ export function avaliarAjustePonto(linha, { caso = null, digitado = null, bloque
   if (origem === "digitado") {
     entrada = horaDigitada(digitado?.entrada);
     saida = horaDigitada(digitado?.saida);
-    almIni = travado ? fmtHora(linha?.almoco_saida_sug) : horaDigitada(digitado?.alm_saida);
-    almFim = travado ? fmtHora(linha?.almoco_volta_sug) : horaDigitada(digitado?.alm_volta);
+    const digIni = horaDigitada(digitado?.alm_saida);
+    const digFim = horaDigitada(digitado?.alm_volta);
+    almIni = travado && digIni === "" ? fmtHora(linha?.almoco_saida_sug) : digIni;
+    almFim = travado && digFim === "" ? fmtHora(linha?.almoco_volta_sug) : digFim;
     const ilegivel = [
       entrada === null && "entrada",
       almIni === null && "saída do almoço",
@@ -207,10 +210,9 @@ export function avaliarAjustePonto(linha, { caso = null, digitado = null, bloque
     ].filter(Boolean);
     if (ilegivel.length) return fora(`horário ilegível em ${ilegivel.join(", ")} — use HH:MM (ou 1420)`);
   } else {
-    // O MIOLO vem de `almoco_saida_sug`/`almoco_volta_sug`, que é o alvo da
-    // própria view — e é isso que o dia de ALMOÇO TRAVADO manda. O overlay do
-    // Real manual respeita a mesma trava (`aplicarRealManual`), então um horário
-    // digitado pelo DP nunca chega aqui num dia travado.
+    // O MIOLO vem de `almoco_saida_sug`/`almoco_volta_sug`, que é o alvo da view
+    // COM O REAL MANUAL POR CIMA (`aplicarRealManual`). Desde 18/09/2026 o almoço
+    // cravado pelo DP vale também no dia de ALMOÇO TRAVADO — é ele que chega aqui.
     entrada = entradaDoLancamento(linha);
     saida = saidaDoLancamento(linha);
     almIni = fmtHora(linha?.almoco_saida_sug);

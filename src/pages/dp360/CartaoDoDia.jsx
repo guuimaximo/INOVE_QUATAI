@@ -325,9 +325,13 @@ export const pontoCorrigido = (caso) => !!String(caso?.correcao_final_em ?? "").
 /* ---------- Real manual do DP (overlay de exibição) ---------- */
 // Porte de main.py `get_revisao._rm`: o Real cravado pelo DP substitui a
 // sugestão na tela. AQUI É SÓ LEITURA — nada é gravado nesta fase.
+/* O ALMOÇO CRAVADO PELO DP MANDA, MESMO NO DIA "TRAVADO" (dono, 18/09/2026: "a parte do
+   almoço que é bloqueada — deixa livre"). A trava da Revisão sugere o miolo do motorista a
+   partir da escala; para quem não operou ela devolve horário solto — LUCIO 30060646 07/09
+   ficou com 26:24 → 27:24, depois da saída — e o DP não tinha como corrigir. Antes o overlay
+   ignorava o almoço do Real manual nesses dias; agora o que o DP cravou é o que vale. */
 export function aplicarRealManual(linha, rm) {
   if (!rm) return linha;
-  const travado = ehVerdadeiro(linha.almoco_travado);
   const out = {
     ...linha,
     rm_entrada: rm.entrada || "",
@@ -345,11 +349,11 @@ export function aplicarRealManual(linha, rm) {
     out.saida_sug = rm.saida;
     out.alvo_saida = rm.saida;
   }
-  if (rm.alm_saida && !travado) {
+  if (rm.alm_saida) {
     out.almoco_saida_sug = rm.alm_saida;
     out.alvo_saida_almoco = rm.alm_saida;
   }
-  if (rm.alm_volta && !travado) {
+  if (rm.alm_volta) {
     out.almoco_volta_sug = rm.alm_volta;
     out.alvo_volta_almoco = rm.alm_volta;
   }
@@ -1760,15 +1764,24 @@ export default function CartaoDoDia({
     [linha.rm_entrada, linha.rm_alm_saida, linha.rm_alm_volta, linha.rm_saida],
   );
   const [form, setForm] = useState(null);
-  const semente = useMemo(
-    () => ({
-      entrada: rmDoBanco.entrada || fmtHora(linha.entrada_sug),
-      alm_saida: rmDoBanco.alm_saida || fmtHora(linha.almoco_saida_sug),
-      alm_volta: rmDoBanco.alm_volta || fmtHora(linha.almoco_volta_sug),
-      saida: rmDoBanco.saida || fmtHora(linha.saida_sug),
-    }),
-    [rmDoBanco, linha.entrada_sug, linha.almoco_saida_sug, linha.almoco_volta_sug, linha.saida_sug],
-  );
+  const semente = useMemo(() => {
+    const entrada = rmDoBanco.entrada || fmtHora(linha.entrada_sug);
+    const saida = rmDoBanco.saida || fmtHora(linha.saida_sug);
+    /* O ALMOÇO SUGERIDO SÓ ENTRA NO CAMPO SE COUBER NA JORNADA (18/09/2026). Para quem não
+       operou, a sugestão da Revisão vem com horário solto — LUCIO 30060646 07/09: entrada e
+       saída 14:54, almoço 26:24 → 27:24. Pré-preencher isso num campo agora editável é
+       convidar a gravar lixo com um clique. Fora da jornada, o campo nasce vazio. */
+    const sugIni = fmtHora(linha.almoco_saida_sug);
+    const sugFim = fmtHora(linha.almoco_volta_sug);
+    const [e, s, a, b] = [entrada, saida, sugIni, sugFim].map(hm2min);
+    const cabe = [e, s, a, b].every((v) => v != null) && e < a && a < b && b < s;
+    return {
+      entrada,
+      alm_saida: rmDoBanco.alm_saida || (cabe ? sugIni : ""),
+      alm_volta: rmDoBanco.alm_volta || (cabe ? sugFim : ""),
+      saida,
+    };
+  }, [rmDoBanco, linha.entrada_sug, linha.almoco_saida_sug, linha.almoco_volta_sug, linha.saida_sug]);
   useEffect(() => setForm(null), [cracha, dia, rmDoBanco]);
   const valores = form || semente;
   const mudarCampo = (k, v) => setForm({ ...valores, [k]: v });
@@ -1860,11 +1873,10 @@ export default function CartaoDoDia({
   // motorista entra na matriz — interno/aprendiz seguem o alvo de 60 min da view 4, e
   // dizer "30 min" pra eles seria régua errada. É informativo; quem decide é o DP.
   const almocoExigido = useMemo(() => {
-    if (travado) return null;
     const jor = jornadaEntreMin(valores.entrada, valores.saida);
     if (jor == null) return null;
     return { exige: almocoMatrizPorCategoria(valores.entrada, valores.saida, linha.categoria), jornada: jor };
-  }, [travado, valores.entrada, valores.saida, linha.categoria]);
+  }, [valores.entrada, valores.saida, linha.categoria]);
 
   /* ═══════════════════════ GRAVAÇÃO ═══════════════════════
      Grava SÓ no clique. Depois de gravar, a linha é RELIDA do banco (`aoRecarregar`)
@@ -1885,13 +1897,12 @@ export default function CartaoDoDia({
   // main.py `salvar_real_manual` (~392). Tudo vazio APAGA a linha, igual ao Python.
   const salvarRealManual = async () => {
     setRecadoRm(null);
-    // ALMOÇO TRAVADO (main.py:400-402): o servidor RECUSA o dia inteiro se o payload
-    // trouxer almoço. A trava do cliente é esta — as duas pontas do miolo saem do jogo
-    // ANTES de qualquer coisa: os campos continuam visíveis (o DP precisa ver o que
-    // está lá, e vêm preenchidos com a sugestão), mas não são editáveis, não contam
-    // para o "tudo vazio limpa" e não vão no payload. Coluna ausente no upsert não é
-    // tocada, então o que já estiver gravado também não é apagado.
-    const gravaveis = travado ? ["entrada", "saida"] : CAMPOS_RM;
+    // O ALMOÇO ENTRA SEMPRE (dono, 18/09/2026). Até aqui, no dia "travado" pela Revisão,
+    // as duas pontas do miolo saíam do jogo — não editáveis e fora do payload, espelhando a
+    // recusa do `salvar_real_manual` da ferramenta (main.py:400-402). Para quem não operou,
+    // a sugestão travada vinha com horário solto (LUCIO 30060646 07/09: 26:24 → 27:24) e o
+    // DP não tinha como corrigir. A ferramenta do PC continua recusando do lado dela.
+    const gravaveis = CAMPOS_RM;
     const { limpos, erro: falhaFormato } = normalizarRealManual(valores, gravaveis);
     if (!limpos) {
       setRecadoRm({ tipo: "erro", texto: falhaFormato });
@@ -1935,14 +1946,12 @@ export default function CartaoDoDia({
           cracha: cra8(cracha),
           date_ref: dia,
           entrada: limpos.entrada || null,
+          alm_saida: limpos.alm_saida || null,
+          alm_volta: limpos.alm_volta || null,
           saida: limpos.saida || null,
           definido_por: quemEstaUsando(),
           definido_em: agoraUtc(),
         };
-        if (!travado) {
-          payload.alm_saida = limpos.alm_saida || null;
-          payload.alm_volta = limpos.alm_volta || null;
-        }
         await upsertDP360("ponto_real_manual", payload, "Real manual cravado no Cartão do dia");
         setRecadoRm({ tipo: "ok", texto: "Real cravado." });
       }
@@ -2484,8 +2493,8 @@ export default function CartaoDoDia({
                 <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {[
                     ["Entrada", "entrada", false],
-                    ["Saída almoço", "alm_saida", travado],
-                    ["Volta almoço", "alm_volta", travado],
+                    ["Saída almoço", "alm_saida", false],
+                    ["Volta almoço", "alm_volta", false],
                     ["Saída", "saida", false],
                   ].map(([rot, campo, cadeado]) => (
                     <label key={campo} className="block">
@@ -2556,7 +2565,7 @@ export default function CartaoDoDia({
                 {travado && (
                   <span
                     className="dp-pill mute"
-                    title="Miolo travado pela regra da Revisão — não é editável."
+                    title="A regra da Revisão trava este almoço na sugestão. No Real manual (bloco 4) você pode cravar outro — o que você cravar é o que vale."
                     style={{ textTransform: "none", letterSpacing: 0 }}
                   >
                     <Lock size={10} /> travado

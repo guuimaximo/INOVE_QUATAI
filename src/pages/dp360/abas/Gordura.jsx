@@ -481,22 +481,28 @@ function mensagemGordura(template, r) {
   const alvoSaida = horaMensagem(contrato?.alvo_saida) || operouAte;
 
   // Gordura só cobra ENTRADA e SAÍDA — almoço nunca entra.
+  /* UM HORÁRIO SÓ NA CARTA (dono, 18/09/2026: "o ponto da operação precisa ser o mesmo que
+     ele precisa corrigir"). A frase dizia "encerramento da operação às 22:24" e o pedido
+     "corrija sua saída para 22:32": dois horários para o mesmo fato — a diferença é a
+     tolerância (entrada −10, saída +8), que o colaborador não conhece e lê como erro. Agora a
+     operação aparece pelo horário que ela INDICA, o mesmo do pedido e do cartão. "Indica" e
+     não "terminou às": o término cru continua sendo 22:24, e a carta não pode afirmar outro. */
   let divergencia;
   let pedido;
   if (temEntrada && temSaida) {
     divergencia =
-      `a entrada foi apontada às ${apontadaEntrada} e a saída às ${apontadaSaida}, porém nossos ` +
-      `sistemas identificam início de operação às ${operouDe} e encerramento às ${operouAte}`;
+      `a entrada foi apontada às ${apontadaEntrada} e a saída às ${apontadaSaida}, porém a ` +
+      `operação indica entrada às ${alvoEntrada} e saída às ${alvoSaida}`;
     pedido = `corrija sua entrada para ${alvoEntrada} e sua saída para ${alvoSaida}`;
   } else if (temEntrada) {
     divergencia =
-      `a entrada foi apontada às ${apontadaEntrada}, porém nossos sistemas identificam início ` +
-      `de operação às ${operouDe}`;
+      `a entrada foi apontada às ${apontadaEntrada}, porém o início da operação indica ` +
+      `entrada às ${alvoEntrada}`;
     pedido = `corrija sua entrada para ${alvoEntrada}`;
   } else if (temSaida) {
     divergencia =
-      `a saída foi apontada às ${apontadaSaida}, porém nossos sistemas identificam encerramento ` +
-      `da operação às ${operouAte}`;
+      `a saída foi apontada às ${apontadaSaida}, porém o encerramento da operação indica ` +
+      `saída às ${alvoSaida}`;
     pedido = `corrija sua saída para ${alvoSaida}`;
   } else {
     // Rede de segurança: sem ponta a linha é BARRADA antes de virar CSV

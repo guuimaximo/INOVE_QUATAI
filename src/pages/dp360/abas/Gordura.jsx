@@ -442,6 +442,38 @@ function contratoDaGordura(r) {
 }
 
 /**
+ * SÓ SAI CARTA DE GORDURA COM O DIA OK NA REVISÃO (dono, 18/09/2026: "na gordura só vai
+ * quando estiver OK na revisão"). A ferramenta antiga não travava: mandava quem estivesse
+ * marcado. Medido nas 72 cartas de 16/09: as 28 que saíam erradas — falta de marcação lida
+ * como gordura ("saída apontada às 12:12", que era a volta do almoço), batida solta da
+ * madrugada citada como entrada, alvo de 22 h — estavam TODAS em dia não-OK (REVISAR, ajuste
+ * já lançado ou ajuste que falhou); as 32 de dia OK saíam todas certas. Dia aberto na
+ * Revisão ainda vai mudar de cartão: cobrar gordura antes é cobrar sobre um cartão que não
+ * é o final. O status é o `status_ponto` CRU da `ponto_diario` — o mesmo que a Revisão lê.
+ *
+ * AJUSTOU OU CORRIGIU, LIBERA SOZINHO. O ajuste da Revisão (ou a correção do colaborador)
+ * muda o cartão no Transnet, e a importação seguinte recalcula o dia: medido de 09 a 15/09,
+ * 45 de 50 dias lançados pela Revisão voltaram OK. Até essa importação a `ponto_gordura`
+ * ainda tem o cartão VELHO — cobrar nela citaria a batida que acabou de ser corrigida —,
+ * por isso o dia fica barrado, com o motivo dizendo o que se espera.
+ */
+function alvoDoEnvio(r) {
+  const status = txt(r?.__statusRevisao).toUpperCase();
+  if (status !== "OK") {
+    const situacao = txt(r?.__revisao?.texto);
+    const espera = "a gordura sai quando a próxima importação trouxer o cartão novo";
+    let erro;
+    if (situacao === "AJUSTADO" || situacao === "ajuste enviado")
+      erro = `a Revisão já lançou o ajuste — ${espera}`;
+    else if (situacao === "CORRIGIDO") erro = `o ponto já foi corrigido — ${espera}`;
+    else if (status) erro = `dia ${status} na Revisão — a gordura só sai com o dia OK lá`;
+    else erro = "o dia não chegou à Revisão — a gordura só sai com o dia OK lá";
+    return { contrato: null, erro };
+  }
+  return contratoDaGordura(r);
+}
+
+/**
  * Porte de app.js `fillTpl` — o texto da gordura, por linha. A carta contrapõe o
  * que foi APONTADO (tn_*) ao que a operação mostra (real_*), e o PEDIDO usa o
  * ALVO (real com a tolerância de entrada −10 / saída +8): é ele que o caso congela
@@ -1029,7 +1061,7 @@ function ModalComunicado({ linhas, casoDe, comPontoAntes, aoFechar, aoConcluir }
         tipo: TIPO.GORDURA, // é ele que liga a barreira da ponta e a origem do caso
         linhas,
         mensagemDe: (l) => mensagemGordura(template, l),
-        alvoDe: contratoDaGordura,
+        alvoDe: alvoDoEnvio, // dia OK na Revisão + alvo que fecha
         comPontoAntes,
         agora,
       }),
@@ -1784,6 +1816,8 @@ export default function Gordura() {
         // (para saber que isto é um REaviso e não reescrever o alvo congelado) e a
         // presença da coluna `ponto_antes`, que não existe em toda instalação.
         __caso: casoMapa.has(chave) ? caso : null,
+        // a trava do envio (`alvoDoEnvio`): só dia OK na Revisão recebe carta de gordura
+        __statusRevisao: pdMapa.has(chave) ? txt(pd.status_ponto) : "",
         __revisao: situacaoNaRevisao(
           pdMapa.has(chave) ? pd : null,
           casoMapa.has(chave) ? caso : null,
@@ -2020,8 +2054,9 @@ export default function Gordura() {
   /* ---- POR QUE o 📣 do cartão está apagado ----
      As MESMAS duas barreiras do envio (`prepararComunicado`), ditas antes do clique:
      sem ponta acima da régua fixa o texto viraria um pedido que não pede nada; sem
-     alvo cronológico não há horário a cobrar. Nada é recalculado aqui — `pontaConta`
-     e `contratoDaGordura` são as funções do próprio envio. */
+     alvo cronológico não há horário a cobrar; e dia que não está OK na Revisão não é
+     cobrado. Nada é recalculado aqui — `pontaConta` e `alvoDoEnvio` são as funções do
+     próprio envio. */
   const impedimentoAviso = useMemo(() => {
     if (!detalhe) return "";
     const temPonta =
@@ -2029,7 +2064,7 @@ export default function Gordura() {
       pontaConta(detalhe.nivel_saida, detalhe.gordura_saida, "saida");
     if (!temPonta)
       return "Nenhuma ponta acima da régua fixa (entrada 10 min · saída 8 min) — não há gordura a cobrar neste dia.";
-    return contratoDaGordura(detalhe).erro;
+    return alvoDoEnvio(detalhe).erro;
   }, [detalhe]);
 
   /* ---- a MENSAGEM que o balão da linha do tempo mostra ----

@@ -514,6 +514,13 @@ export function prepararComunicado({
     // ofereceu o botão: quem monta o envio não pode depender de quem clicou.
     // Sem marcação nenhuma o texto sairia com "consta em seu cartão o registro nenhuma".
     if (tipo === TIPO.PEDIR_EXCLUSAO) {
+      // COM PROVA DE JORNADA NÃO SE PEDE EXCLUSÃO (18/09/2026): em 54 de 67 dias de batida
+      // colada a pessoa trabalhou (operação, reserva, fim do turno no dia seguinte). O
+      // cartão já não oferece; a barreira repete para não depender de quem clicou.
+      if (txt(linha.__provaJornada)) {
+        barra(`o dia teve jornada (${txt(linha.__provaJornada)}) — pedir exclusão apagaria ponto de quem trabalhou`);
+        continue;
+      }
       const assinatura = assinaturaExclusao(linha);
       if (!assinatura.marcacoes) {
         barra("cartão sem marcação — não há batida a excluir");

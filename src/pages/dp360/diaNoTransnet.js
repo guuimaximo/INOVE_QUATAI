@@ -120,3 +120,72 @@ export function fimNoDiaSeguinte(saida, linhaSeguinte, isoSeguinte) {
 
 /** A frase genérica de recusa do Transnet — a que não diz nada sem a coluna [Situação]. */
 export const ehRecusaSemMotivo = (frase) => /existem erros que impe/i.test(txt(frase));
+
+/* ═══════════════ a sobra da véspera: o fim do turno de ontem gravado hoje ═══════════════ */
+
+// main.py:3083 (`_sug_sem_op`): "1ª batida de madrugada (< 03:00) e isolada (gap > 4h da
+// próxima) é sobra do turno da véspera — não é a entrada do dia".
+const MADRUGADA_ATE = 3 * 60;
+const BURACO_ISOLA = 4 * 60;
+// Escala que começa de madrugada: a batida das 01:00 é a ENTRADA dele (NELIO 30060246,
+// escala 01:30). Sem esta trava a regra roubaria o começo do turno de quem entra cedo.
+const ESCALA_DE_MADRUGADA = 5 * 60;
+// main.py:1573 `SUG_JORNADA_MAX_MIN`: 98,4% das jornadas fecham em até 13 h. Juntar a
+// sobra a um dia que passaria disso não é devolver o fim do turno, é colar dois turnos.
+const JORNADA_MAX = 13 * 60;
+
+/**
+ * A SOBRA DA VÉSPERA NO COMEÇO DO DIA (18/09/2026, pedido do dono).
+ *
+ * Quem sai depois da meia-noite e esquece de bater a saída no próprio turno às vezes bate
+ * no app já com o dia virado, e o Transnet grava no DIA SEGUINTE: JOSE AUGUSTO 30061213
+ * ficou com 14/09 "15:00 · 15:01" e 15/09 "00:58 · 14:50 · 18:50 · 19:20 · 23:30 · 23:31"
+ * — o 00:58 é a saída do dia 14. A regra da ferramenta olhava só a 1ª batida; aqui ela
+ * vale para um BLOCO, porque às vezes vão almoço e saída juntos (EDUARDO 30060711 06/09:
+ * "00:08 · 00:38 · 01:38 · 01:39").
+ *
+ * Devolve `{ bloco, resto }` em minutos, ou null.
+ */
+export function sobraDaVespera(linha) {
+  const b = batidasDaLinha(linha);
+  if (!b.length || b[0] >= MADRUGADA_ATE) return null;
+  const esc = hm2min(linha?.esc_entrada);
+  if (esc != null && esc < ESCALA_DE_MADRUGADA) return null;
+  let k = 0;
+  while (k < b.length && b[k] < MADRUGADA_ATE) k++;
+  const bloco = b.slice(0, k);
+  const resto = b.slice(k);
+  if (resto.length && resto[0] - bloco[bloco.length - 1] <= BURACO_ISOLA) return null;
+  return { bloco, resto };
+}
+
+/**
+ * O FIM DO TURNO DE `linhaDia` ESTÁ GRAVADO EM `linhaSeguinte`?
+ *
+ * Só quando devolver o bloco FECHA o turno: a véspera tem batida própria (tirada a sobra
+ * que ela mesma deve ao dia anterior), não fechou depois da meia-noite, e o turno com a
+ * sobra cabe em 13 h. Medido de 01/08 a 17/09: 26 dias, 22 pessoas; em 10 o dia seguinte
+ * era folga e só tinha a sobra.
+ *
+ * Devolve `{ dia, horas, movidas, resto, jornada }` (`movidas` em notação 24+), ou null.
+ */
+export function fimDoTurnoNoDiaSeguinte(linhaDia, linhaSeguinte, isoSeguinte) {
+  const sobra = sobraDaVespera(linhaSeguinte);
+  if (!sobra) return null;
+  const propria = sobraDaVespera(linhaDia);
+  const doDia = propria ? propria.resto : batidasDaLinha(linhaDia);
+  if (!doDia.length) return null;
+  const ultima = doDia[doDia.length - 1];
+  if (ultima >= 1440) return null;
+  const movidas = sobra.bloco.map((m) => m + 1440);
+  if (movidas[0] <= ultima) return null;
+  const jornada = movidas[movidas.length - 1] - doDia[0];
+  if (jornada > JORNADA_MAX) return null;
+  return {
+    dia: ddmm(isoSeguinte || linhaSeguinte?.date_ref),
+    horas: sobra.bloco.map(min2hm).join(" · "),
+    movidas: movidas.map(min2hm),
+    resto: sobra.resto.map(min2hm),
+    jornada,
+  };
+}

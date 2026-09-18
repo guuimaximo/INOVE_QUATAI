@@ -18,6 +18,7 @@ import {
   prepararComunicado,
   variaveisPendentes,
 } from "./comunicadoTransnet";
+import { fimDoTurnoNoDiaSeguinte, somaUmDia } from "./diaNoTransnet";
 import {
   CONSTANTES,
   almocoDaRefeicao,
@@ -1506,6 +1507,9 @@ export default function CartaoDoDia({
   const [verViagens, setVerViagens] = useState(false);
   // A SEMANA (main.py `get_semana`) e o pedido de exclusão da batida indevida.
   const [semana, setSemana] = useState(null);
+  // a linha do DIA SEGUINTE (lida junto com a semana): é nela que fica o fim do turno de
+  // quem virou a noite e bateu a saída já no outro dia (`fimDoTurnoNoDiaSeguinte`)
+  const [diaSeguinte, setDiaSeguinte] = useState(null);
   const [erroSemana, setErroSemana] = useState("");
   const [pedirExclusao, setPedirExclusao] = useState(false);
 
@@ -1653,17 +1657,21 @@ export default function CartaoDoDia({
   useEffect(() => {
     let ativo = true;
     setSemana(null);
+    setDiaSeguinte(null);
     setErroSemana("");
     const dias = semanaDe(dia);
     if (!dias.length) {
       setSemana([]);
       return undefined;
     }
+    // No domingo o dia seguinte é da semana que vem: entra na mesma leitura.
+    const seguinte = somaUmDia(dia);
+    const pedidos = dias.includes(seguinte) ? dias : [...dias, seguinte];
     lerDP360("ponto_diario", {
-      colunas: "cracha,date_ref,todas_batidas,status_ponto",
+      colunas: "cracha,date_ref,todas_batidas,status_ponto,esc_entrada",
       filtros: {
         cracha: `in.(${variantesCracha(cracha).join(",")})`,
-        date_ref: `in.(${dias.join(",")})`,
+        date_ref: `in.(${pedidos.join(",")})`,
       },
       limite: 60,
     })
@@ -1671,6 +1679,7 @@ export default function CartaoDoDia({
         if (!ativo) return;
         const porDia = new Map();
         for (const l of linhas || []) porDia.set(String(l.date_ref ?? "").slice(0, 10), l);
+        setDiaSeguinte(porDia.get(seguinte) || null);
         setSemana(
           dias.map((d, i) => {
             const l = porDia.get(d) || {};
@@ -1858,14 +1867,56 @@ export default function CartaoDoDia({
   // PONTO INVERTIDO tem tratamento próprio e a rota não se oferece nele (app.js:4882:
   // `if (pontoInvertidoAtivo) return`). E dia já conferido pelo DP também não: pedir
   // exclusão de um dia que ele mesmo deu por certo seria mandar apagar a decisão.
-  const cabeExclusao =
-    exclusao.colada && !ehPontoInvertido(linha) && !pontoConferido(caso);
+  /* ---- O DIA TEVE JORNADA? Então não se pede exclusão (18/09/2026) ----
+     A batida colada quase nunca é leitura repetida: é a ENTRADA com o tapa-buraco do
+     Transnet (+1 min) de quem esqueceu a saída. De 01/08 a 17/09 a tela ofereceu "Pedir
+     exclusão" em 67 dias, e em 54 a pessoa TRABALHOU: operação apurada em 52, reserva
+     lançada em 3, o fim do turno gravado no dia seguinte em 20. LUCIO 30060646 07/09 foi
+     reserva 14:30 → 19:00 e a tela mandava apagar a batida (dono: "ele foi reserva e
+     diversas vezes pede para fazer exclusão"). Com prova de jornada, a exclusão apagaria
+     ponto de quem trabalhou — então a rota não se oferece, e a tela diz por quê. */
+  const fimAmanha = useMemo(
+    () =>
+      diaSeguinte
+        ? fimDoTurnoNoDiaSeguinte(
+            { todas_batidas: exclusao.fonte, esc_entrada: linha.esc_entrada },
+            diaSeguinte,
+            somaUmDia(dia),
+          )
+        : null,
+    [diaSeguinte, exclusao.fonte, linha.esc_entrada, dia],
+  );
+  const provasDeJornada = useMemo(() => {
+    const provas = [];
+    const r = extra.reserva;
+    if (r)
+      provas.push(
+        `reserva lançada pelo gestor (${fmtHora(r.hora_entrada) || "--"} → ${fmtHora(r.hora_saida) || "--"})`,
+      );
+    const ini = g.real_inicio || g.op_inicio || g.val_inicio || g.sst_vinculo;
+    const fim = g.real_fim || g.op_fim || g.val_fim || g.sst_desvinculo;
+    if (ini || fim) provas.push(`operação apurada (${fmtHora(ini) || "--"} → ${fmtHora(fim) || "--"})`);
+    if (fimAmanha) provas.push(`o fim do turno ficou gravado em ${fimAmanha.dia} (${fimAmanha.horas})`);
+    return provas;
+  }, [extra.reserva, g, fimAmanha]);
+
+  // Só decide depois de ler as provas: antes disso a faixa da exclusão piscaria na tela.
+  const coladaDoDia =
+    exclusao.colada && !ehPontoInvertido(linha) && !pontoConferido(caso) && !carregando && semana !== null;
+  const cabeExclusao = coladaDoDia && !provasDeJornada.length;
+  const coladaTrabalhada = coladaDoDia && provasDeJornada.length > 0;
 
   // A linha que vai no comunicado: a mesma do cartão, com o `todas_batidas` que a
   // rota apurou (é ele que vira o {BATIDAS} da carta — o registro a ser apagado).
+  // As provas vão junto: o envio barra de novo (`prepararComunicado`, barreira 1b).
   const linhaExclusao = useMemo(
-    () => ({ ...linha, date_ref: dia, todas_batidas: exclusao.fonte }),
-    [linha, dia, exclusao.fonte],
+    () => ({
+      ...linha,
+      date_ref: dia,
+      todas_batidas: exclusao.fonte,
+      __provaJornada: provasDeJornada.join("; "),
+    }),
+    [linha, dia, exclusao.fonte, provasDeJornada],
   );
 
   // Quanto de almoço a jornada CRAVADA exige (main.py `_almoco_matriz`): < 4h nada,
@@ -2267,6 +2318,27 @@ export default function CartaoDoDia({
               >
                 🗑 Pedir exclusão desta batida
               </button>
+            </div>
+          )}
+
+          {/* A MESMA ASSINATURA, MAS O DIA TEVE JORNADA: nada de exclusão. */}
+          {coladaTrabalhada && (
+            <div className="dp-card cd-acao">
+              <div className="cd-acao-t">
+                <b>
+                  {exclusao.marcacoes} marcação(ões) em {exclusao.span == null ? 0 : exclusao.span} min
+                </b>
+                , mas este dia <b>teve jornada</b>: {provasDeJornada.join("; ")}. A batida{" "}
+                <b>não é para excluir</b> —{" "}
+                {fimAmanha ? (
+                  <>
+                    é a entrada, e a saída ficou no dia <b>{fimAmanha.dia}</b> ({fimAmanha.horas}): ela tem
+                    de voltar para este dia e sair de lá.
+                  </>
+                ) : (
+                  <>é a entrada, e falta registrar a saída.</>
+                )}
+              </div>
             </div>
           )}
         </div>

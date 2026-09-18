@@ -1,6 +1,8 @@
 // src/pages/SOSTratamento.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
+import { AuthContext } from "../../context/AuthContext";
+import { autorDoPasso } from "./sosAutoria";
 import { listarFuncionariosAtivos } from "../../utils/funcionariosBCNT";
 import { FaTools, FaCheckCircle, FaTimes, FaBus, FaCalendarAlt, FaRoad, FaWrench, FaInfoCircle } from "react-icons/fa";
 
@@ -273,6 +275,7 @@ useEffect(() => {
 }
 
 function TratamentoModal({ sos, onClose, onAtualizar }) {
+  const { user } = useContext(AuthContext) || {};
   const [form, setForm] = useState({
     setor_manutencao: "",
     grupo_manutencao: "",
@@ -490,6 +493,9 @@ function TratamentoModal({ sos, onClose, onAtualizar }) {
       km_veiculo_sos: Number(form.km_atual_veiculo),
 
       data_fechamento: new Date().toISOString(),
+      tratamento_em: new Date().toISOString(),
+      tratamento_por_nome: autorDoPasso(user).nome,
+      tratamento_por_login: autorDoPasso(user).login,
       status: "Fechado",
     };
 

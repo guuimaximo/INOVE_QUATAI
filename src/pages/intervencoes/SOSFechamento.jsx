@@ -1,6 +1,8 @@
 // src/pages/SOSFechamento.jsx
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { supabase } from "../../supabase";
+import { AuthContext } from "../../context/AuthContext";
+import { autorDoPasso } from "./sosAutoria";
 import { FaCheckCircle, FaTimes, FaWrench } from "react-icons/fa";
 
 /* =======================
@@ -135,6 +137,7 @@ export default function SOSFechamento() {
 
 // 🟨 Modal de Fechamento (sem alteração de campos)
 function FechamentoModal({ sos, onClose, onAtualizar }) {
+  const { user } = useContext(AuthContext) || {};
   const [form, setForm] = useState({
     avaliador: "",
     procedencia_socorrista: "Procedente",
@@ -181,6 +184,10 @@ function FechamentoModal({ sos, onClose, onAtualizar }) {
         carro_substituto: form.carro_substituto,
         sr_numero: form.sr_numero,
         data_fechamento: new Date().toISOString(),
+        // o Tratamento regrava data_fechamento; a hora DESTE passo fica em fechamento_em
+        fechamento_em: new Date().toISOString(),
+        fechamento_por_nome: autorDoPasso(user).nome,
+        fechamento_por_login: autorDoPasso(user).login,
         status: "Em Andamento",
       })
       .eq("id", sos.id);

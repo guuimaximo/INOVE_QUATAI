@@ -1,6 +1,8 @@
 // src/pages/SOSCentral.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
+import { AuthContext } from "../../context/AuthContext";
+import { HistoricoSOS, autorDoPasso } from "./sosAutoria";
 import OcorrenciasVeiculoModal from "../../components/sos/OcorrenciasVeiculoModal";
 import {
   FaSearch,
@@ -489,6 +491,7 @@ function LoginModal({ onConfirm, onCancel, title = "Acesso Restrito" }) {
 
 /* --- Modal de Detalhes do SOS --- */
 function DetalheSOSModal({ sos, onClose, onAtualizar }) {
+  const { user } = useContext(AuthContext) || {};
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState({});
   const [loginModalOpen, setLoginModalOpen] = useState(false);
@@ -544,6 +547,8 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
       dias_ultima_preventiva: calcularDiasDecorridos(dataPrev, dataSosFormatada),
       dias_ultima_inspecao: calcularDiasDecorridos(dataInsp, dataSosFormatada),
       atualizado_em: new Date().toISOString(),
+      editado_por_nome: autorDoPasso(user).nome,
+      editado_por_login: autorDoPasso(user).login,
     };
 
     const { error } = await supabase.from("sos_acionamentos").update(payload).eq("id", sos.id);
@@ -617,6 +622,7 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
         </div>
 
         <div className="p-6 space-y-6 overflow-y-auto bg-slate-50/50 flex-1">
+          <HistoricoSOS sos={formData} />
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
             <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2"><FaBus className="text-slate-400" /> Informações da Ocorrência</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

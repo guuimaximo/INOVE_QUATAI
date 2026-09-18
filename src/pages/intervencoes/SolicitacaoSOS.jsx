@@ -1,6 +1,8 @@
 // src/pages/SolicitacaoSOS.jsx
-import { useState, useEffect } from "react";
+import { useContext, useState, useEffect } from "react";
 import { supabase } from "../../supabase";
+import { AuthContext } from "../../context/AuthContext";
+import { autorDoPasso } from "./sosAutoria";
 import CampoMotorista from "../../components/CampoMotorista";
 
 // ✅ pega data/hora no fuso de São Paulo (para salvar no banco sem +3h)
@@ -83,6 +85,7 @@ function montarResumoPreventiva(item, tipo, dias) {
 }
 
 export default function SolicitacaoSOS() {
+  const { user } = useContext(AuthContext) || {};
   const [motorista, setMotorista] = useState({ chapa: "", nome: "" });
 
   const [form, setForm] = useState({
@@ -223,6 +226,9 @@ export default function SolicitacaoSOS() {
       const payload = {
         numero_sos: numeroSOS,
         plantonista: form.plantonista,
+        // quem estava logado no INOVE ao criar (o "Quem fez cada passo" da Central)
+        criado_por_nome: autorDoPasso(user).nome,
+        criado_por_login: autorDoPasso(user).login,
         veiculo: form.veiculo,
         motorista_id: motorista.chapa,
         motorista_nome: motorista.nome,

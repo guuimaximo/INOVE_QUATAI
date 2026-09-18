@@ -3,6 +3,7 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
 import DateRangePopover from "../../components/DateRangePopover";
+import { HistoricoSOS, autorDoPasso } from "./sosAutoria";
 import {
   FaSearch,
   FaEye,
@@ -298,6 +299,9 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
       dias_ultima_preventiva: calcularDiasDecorridos(dataPrev, dataSosFormatada),
       dias_ultima_inspecao: calcularDiasDecorridos(dataInsp, dataSosFormatada),
       atualizado_em: new Date().toISOString(),
+      // quem editou por último (o quadro "Quem fez cada passo" mostra)
+      editado_por_nome: autorDoPasso(user).nome,
+      editado_por_login: autorDoPasso(user).login,
     };
 
     const { error } = await supabase
@@ -438,6 +442,8 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
         {/* Scrollable Content */}
         <div className="p-6 space-y-6 overflow-y-auto bg-slate-50/50 flex-1">
           
+          <HistoricoSOS sos={formData} />
+
           {/* Seção 1: Dados da Ocorrência */}
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
             <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2">

@@ -282,7 +282,7 @@ export function problemaDoCartao(slots) {
  * dos pares apaga do Transnet a sobra que o outro ainda precisa mover. Por ora o DP resolve
  * esses à mão; a tela diz por quê.
  */
-export function casoDaVirada({ linhaDia, linhaSeguinte, linhaDepois, isoDia, isoSeguinte }) {
+export function casoDaVirada({ linhaDia, linhaSeguinte, linhaDepois, isoDia, isoSeguinte, seguinteLancado = null }) {
   const fim = fimDoTurnoNoDiaSeguinte(linhaDia, linhaSeguinte, isoSeguinte);
   if (!fim) return null;
   const propria = sobraDaVespera(linhaDia);
@@ -292,9 +292,20 @@ export function casoDaVirada({ linhaDia, linhaSeguinte, linhaDepois, isoDia, iso
 
   const sobra = sobraDaVespera(linhaSeguinte);
   const resto = semTapaBuraco(sobra.resto);
-  const seguinte = resto.length
-    ? { acao: "relancar", ...slotsDoCartao(resto, linhaSeguinte) }
-    : { acao: "excluir", slots: null, completo: true, nota: "o dia era folga e só tinha a sobra: o registro é apagado" };
+  /* O DIA SEGUINTE JÁ FOI RELANÇADO PELA REVISÃO (18/09/2026: 16/09 de NAELSON, ROGERIO,
+     LUCIO e LUCIANO, lançados às 09:56). O lançamento grava os 4 campos e zera as extras, então
+     a sobra já saiu do Transnet — a `ponto_diario` só vai saber na próxima importação. Aí não
+     há o que limpar: o robô só confere que ela não está mais lá e grava o dia certo. */
+  const seguinte = seguinteLancado
+    ? {
+        acao: "nenhuma",
+        slots: null,
+        completo: true,
+        nota: `já relançado pela Revisão${seguinteLancado.quando ? ` (${seguinteLancado.quando})` : ""} — a sobra saiu de lá`,
+      }
+    : resto.length
+      ? { acao: "relancar", ...slotsDoCartao(resto, linhaSeguinte) }
+      : { acao: "excluir", slots: null, completo: true, nota: "o dia era folga e só tinha a sobra: o registro é apagado" };
 
   const isoDepois = somaUmDia(isoSeguinte);
   const depois = linhaDepois ? fimDoTurnoNoDiaSeguinte(linhaSeguinte, linhaDepois, isoDepois) : null;

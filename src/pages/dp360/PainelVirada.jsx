@@ -65,7 +65,7 @@ export default function PainelVirada({ pares, aoFechar, aoConcluir }) {
   const avaliar = (p) => {
     const c = cartoes[p.chave];
     const probDia = problemaDoCartao(c.dia);
-    const probSeg = p.caso.seguinte.acao === "excluir" ? "" : problemaDoCartao(c.seguinte);
+    const probSeg = p.caso.seguinte.acao === "relancar" ? problemaDoCartao(c.seguinte) : "";
     return { probDia, probSeg, pode: !p.caso.bloqueio && !probDia && !probSeg };
   };
   // entra marcado quem está pronto sem ninguém mexer; o resto o DP confere e marca
@@ -105,9 +105,11 @@ export default function PainelVirada({ pares, aoFechar, aoConcluir }) {
       .map((p) => {
         const c = cartoes[p.chave];
         const seg =
-          p.caso.seguinte.acao === "excluir"
-            ? `${ddmm(p.caso.isoSeguinte)}: apagar o registro (${p.caso.sobra.join(" · ")})`
-            : `${ddmm(p.caso.isoSeguinte)}: ${cartaoTexto(c.seguinte)}`;
+          p.caso.seguinte.acao === "nenhuma"
+            ? `${ddmm(p.caso.isoSeguinte)}: já limpo`
+            : p.caso.seguinte.acao === "excluir"
+              ? `${ddmm(p.caso.isoSeguinte)}: apagar o registro (${p.caso.sobra.join(" · ")})`
+              : `${ddmm(p.caso.isoSeguinte)}: ${cartaoTexto(c.seguinte)}`;
         return `· ${p.nome || p.cracha} (${p.cracha}) — ${seg} → ${ddmm(p.caso.isoDia)}: ${cartaoTexto(c.dia)}`;
       })
       .join("\n");
@@ -169,7 +171,11 @@ export default function PainelVirada({ pares, aoFechar, aoConcluir }) {
         try {
           await inserirDP360(
             "ponto_importacoes",
-            lote.flatMap((p) => [registroDoDia(p, "seguinte", "disparado"), registroDoDia(p, "dia", "disparado")]),
+            lote.flatMap((p) =>
+              p.caso.seguinte.acao === "nenhuma"
+                ? [registroDoDia(p, "dia", "disparado")]
+                : [registroDoDia(p, "seguinte", "disparado"), registroDoDia(p, "dia", "disparado")],
+            ),
           );
         } catch {
           aviso = " (não foi possível registrar o histórico em ponto_importacoes)";
@@ -193,7 +199,7 @@ export default function PainelVirada({ pares, aoFechar, aoConcluir }) {
         aba: "revisao",
         titulo: confirmar ? "🌙 Movendo a saída para o dia certo" : "🤖 Teste do robô da virada",
         casos: enviados.flatMap((p) =>
-          ["seguinte", "dia"].map((qual) => {
+          (p.caso.seguinte.acao === "nenhuma" ? ["dia"] : ["seguinte", "dia"]).map((qual) => {
             const iso = qual === "dia" ? p.caso.isoDia : p.caso.isoSeguinte;
             return { chave: chaveDe(p, qual), cracha: p.cracha, date_ref: iso, nome: p.nome || p.cracha, dataBR: fmtData(iso) };
           }),
@@ -212,7 +218,8 @@ export default function PainelVirada({ pares, aoFechar, aoConcluir }) {
                       : "";
             const resultados = [];
             for (const p of enviados) {
-              const rSeg = conta.porCaso.get(chaveDe(p, "seguinte"));
+              const jaLimpo = p.caso.seguinte.acao === "nenhuma";
+              const rSeg = jaLimpo ? null : conta.porCaso.get(chaveDe(p, "seguinte"));
               const rDia = conta.porCaso.get(chaveDe(p, "dia"));
               const stSeg = statusDe(rSeg);
               let stDia = statusDe(rDia);
@@ -320,7 +327,11 @@ export default function PainelVirada({ pares, aoFechar, aoConcluir }) {
                       </td>
                       <td className="dp-mono dp-num dp-faint">{p.caso.antesSeguinte.join(" · ") || "—"}</td>
                       <td>
-                        {apaga ? (
+                        {p.caso.seguinte.acao === "nenhuma" ? (
+                          <span>
+                            <b>nada a fazer</b> <span className="dp-muted">— a sobra já saiu</span>
+                          </span>
+                        ) : apaga ? (
                           <span>
                             <b>apagar o registro</b> <span className="dp-muted">— só tinha a sobra</span>
                           </span>

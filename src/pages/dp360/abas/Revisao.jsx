@@ -1849,18 +1849,34 @@ export default function Revisao() {
     // 🌙 OS DIAS VIZINHOS carregam em separado: a grade não espera por eles.
     setVizinhos({});
     const dias = { antes: diaAnterior(data), depois: somaUmDia(data), depois2: somaUmDia(somaUmDia(data)) };
-    Promise.all(
-      [dias.antes, dias.depois, dias.depois2].map((d) =>
+    Promise.all([
+      ...[dias.antes, dias.depois, dias.depois2].map((d) =>
         lerTudoDP360("ponto_diario", {
           colunas: COLUNAS_VIZINHO,
           filtros: { date_ref: `eq.${d}`, categoria: `eq.${categoria}` },
           ordem: "cracha.asc",
         }).catch(() => []),
       ),
-    ).then(([antes, depois, depois2]) => {
+      // o dia seguinte que a Revisão já relançou não tem mais a sobra no Transnet
+      lerTudoDP360("ponto_importacoes", {
+        filtros: { date_ref: `eq.${dias.depois}`, passo: "eq.2" },
+        ordem: "importado_em.desc",
+      }).catch(() => []),
+    ]).then(([antes, depois, depois2, lancDepois]) => {
       if (!ativo) return;
       const porCracha = (arr) => new Map((arr || []).map((x) => [cra8(x.cracha), x]));
-      setVizinhos({ dias, antes: porCracha(antes), depois: porCracha(depois), depois2: porCracha(depois2) });
+      const lancadosDepois = new Map();
+      for (const x of lancDepois || []) {
+        const cr = cra8(x.cracha);
+        if (!lancadosDepois.has(cr)) lancadosDepois.set(cr, lancamentoDaLinha(x));
+      }
+      setVizinhos({
+        dias,
+        antes: porCracha(antes),
+        depois: porCracha(depois),
+        depois2: porCracha(depois2),
+        lancadosDepois,
+      });
     });
 
     // GPS carrega em separado: a grade não espera por ele.
@@ -2004,8 +2020,9 @@ export default function Revisao() {
      ontem). É uma chave por linha; o par vira uma coisa só no 🌙 Mover saída. */
   const viradas = useMemo(() => {
     const m = new Map();
-    const { dias, antes, depois, depois2 } = vizinhos;
+    const { dias, antes, depois, depois2, lancadosDepois } = vizinhos;
     if (!dias) return m;
+    const jaLancado = (lanc) => (String(lanc?.status || "").trim() === "lancado" ? lanc : null);
     for (const l of linhas) {
       const cr = cra8(l.cracha);
       const k = chaveDia(l.cracha, l.date_ref);
@@ -2015,6 +2032,7 @@ export default function Revisao() {
         linhaDepois: depois2.get(cr),
         isoDia: data,
         isoSeguinte: dias.depois,
+        seguinteLancado: jaLancado(lancadosDepois?.get(cr)),
       });
       if (certo) {
         m.set(k, { papel: "certo", caso: certo, cracha: cr, nome: l.nm_funcionario });
@@ -2026,11 +2044,12 @@ export default function Revisao() {
         linhaDepois: depois.get(cr),
         isoDia: dias.antes,
         isoSeguinte: data,
+        seguinteLancado: jaLancado(lancados[k]),
       });
       if (seguinte) m.set(k, { papel: "seguinte", caso: seguinte, cracha: cr, nome: l.nm_funcionario });
     }
     return m;
-  }, [linhas, vizinhos, data]);
+  }, [linhas, vizinhos, data, lancados]);
 
   const visiveis = useMemo(() => {
     const q = busca.trim().toLowerCase();

@@ -1979,24 +1979,29 @@ FOTOS_NOTURNO_ARQUIVOS = [
 # A largura se divide pelo numero de fotos, com folga para o arredondamento nao quebrar
 # a linha: com 4 fotos elas ficam menores em vez de a quarta cair sozinha embaixo.
 _N_FOTOS = max(len(FOTOS_NOTURNO_ARQUIVOS), 1)
-# Com uma foto so, esticar para a largura cheia da faixa (98%) daria uma celula de ~5:1:
-# o object-fit:cover cortaria a foto de grupo na altura do peito. Uma foto fica em meia
-# largura e um pouco mais alta - proporcao perto de 16:9, que e como o celular fotografa.
-if _N_FOTOS == 1:
-    _LARG_FOTO, _ALT_FOTO = 48.0, 190
-else:
-    _LARG_FOTO, _ALT_FOTO = 99.0 / _N_FOTOS - 0.8, 150
+_LARG_FOTO = 99.0 / _N_FOTOS - 0.8
 FOTOS_NOTURNO = "".join(
-    f'<div style="display:inline-block;width:{_LARG_FOTO:.2f}%;height:{_ALT_FOTO}px;margin:0 .4%;'
+    f'<div style="display:inline-block;width:{_LARG_FOTO:.2f}%;height:150px;margin:0 .4%;'
     f'border-radius:10px;overflow:hidden;border:1px solid #CFE4DF;vertical-align:top;">'
     f'<img src="{_f}" style="width:100%;height:100%;object-fit:cover;'
     f'object-position:center {_foco};display:block;"/></div>'
     for _f, _foco in FOTOS_NOTURNO_ARQUIVOS)
+# Uma foto so nao vira faixa: sozinha na faixa de largura cheia ela ficaria 5:1 (corte na
+# altura do peito) ou, estreitada para caber na proporcao, uma miniatura com meia folha
+# vazia em volta. Ela vai para dentro do card da visita, ocupando a altura que sobra
+# abaixo do texto - que e justamente o buraco que o texto curto de setembro deixou.
+_UMA_FOTO = len(FOTOS_NOTURNO_ARQUIVOS) == 1
+FOTO_NO_CARD = (
+    f'<div style="flex:1;min-height:150px;margin-top:7px;border-radius:10px;'
+    f'overflow:hidden;border:1px solid #CFE4DF;">'
+    f'<img src="{FOTOS_NOTURNO_ARQUIVOS[0][0]}" style="width:100%;height:100%;'
+    f'object-fit:cover;object-position:center {FOTOS_NOTURNO_ARQUIVOS[0][1]};display:block;"/></div>'
+    if _UMA_FOTO else "")
 FOTOS_NOTURNO_BLOCO = (
     f'<div class="card" style="margin-top:7px;"><div class="card-title">Registro fotográfico da visita</div>'
     f'<div class="card-body" style="padding:7px 8px;text-align:center;font-size:0;line-height:0;">'
     f'{FOTOS_NOTURNO}</div></div>'
-    if FOTOS_NOTURNO_ARQUIVOS else "")
+    if FOTOS_NOTURNO_ARQUIVOS and not _UMA_FOTO else "")
 # ================= PAGINA 17: ACOMPANHAMENTO NOTURNO =================
 # Esta pagina tem so dois cards curtos e sobrava quase metade da folha em branco (a visita
 # de julho nem teve fotos). A pagina vira uma coluna flex e o grid ocupa a altura restante,
@@ -2016,8 +2021,8 @@ pages.append(f"""<div class="page-break"></div><div class="page" style="display:
       <div style="font-size:7.8px;color:#0E7C6E;font-weight:700;margin-bottom:4px;">Acompanhamento: Hélio Ramos — instrutor de treinamento</div>
       <div class="cons-text" style="text-align:justify;">Treinamento prático com os manobristas em campo, nos veículos Volkswagen automáticos, reforçando técnicas de condução, manobras, controle do veículo e os cuidados para evitar avarias e acidentes no pátio.</div>
       <div class="cons-text" style="text-align:justify;margin-top:5px;">A prática na garagem, com o veículo que o manobrista movimenta todo dia, é o que transforma a orientação em hábito: mais treinamento significa mais segurança, mais confiança e mais cuidado com o patrimônio.</div>
-      <div style="flex:1;min-height:0;"></div>
-      <div class="metric"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">30/09/2026</div>
+      {FOTO_NO_CARD}
+      <div class="metric" style="margin-top:7px;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">30/09/2026</div>
         <div style="font-size:7.6px;color:#48605C;margin-top:2px;">2ª das 2 visitas noturnas de setembro (18/09 e 30/09)</div></div>
     </div></div>
   </div>

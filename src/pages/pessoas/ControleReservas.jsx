@@ -15,7 +15,7 @@ import {
 
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
-import { supabaseBCNT } from "../../supabaseBCNT";
+import { linhasDoCadastro } from "../../utils/funcionariosBCNT";
 
 const FIELD_INPUT =
   "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
@@ -99,21 +99,10 @@ async function fetchReservas() {
 }
 
 async function fetchMotoristas() {
-  const pageSize = 1000;
-  const rows = [];
-  let start = 0;
-  while (true) {
-    const { data, error } = await supabaseBCNT
-      .from("funcionarios_atualizada")
-      .select("id_funcionario, nr_cracha, nm_funcionario, nm_funcao, status")
-      .order("nm_funcionario", { ascending: true })
-      .range(start, start + pageSize - 1);
-    if (error) throw error;
-    if (!data?.length) break;
-    rows.push(...data);
-    if (data.length < pageSize) break;
-    start += pageSize;
-  }
+  const rows = await linhasDoCadastro({
+    status: null,
+    colunas: "id_funcionario,nr_cracha,nm_funcionario,nm_funcao,status",
+  });
   // So motoristas: a reserva e sempre de motorista a disposicao. Se o cadastro
   // usar outro rotulo de funcao e o filtro nao achar ninguem, cai pra lista
   // completa para o modulo nunca ficar inutilizavel.

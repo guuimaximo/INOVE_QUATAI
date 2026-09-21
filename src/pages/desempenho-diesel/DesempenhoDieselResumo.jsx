@@ -17,6 +17,7 @@ import {
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { isSupabaseBCNTConfigured, supabaseBCNT } from "../../supabaseBCNT";
+import { linhasDoCadastro } from "../../utils/funcionariosBCNT";
 import {
   buildMotoristaContextMap,
   deriveClusterFromPrefixo,
@@ -529,29 +530,10 @@ export default function DesempenhoDieselAnalise() {
       throw new Error("Supabase BCNT nao configurado.");
     }
 
-    const pageSize = 1000;
-    let start = 0;
-    let all = [];
-
-    while (true) {
-      const end = start + pageSize - 1;
-      const { data, error } = await supabaseBCNT
-        .from("funcionarios_atualizada")
-        .select("nr_cracha, nm_funcionario, status")
-        .eq("status", "ativo")
-        .range(start, end);
-
-      if (error) throw error;
-
-      const chunk = data || [];
-      all = all.concat(chunk);
-
-      if (chunk.length < pageSize) break;
-      start += pageSize;
-      if (all.length >= 10000) break;
-    }
-
-    return all;
+    return linhasDoCadastro({
+      status: "ativo",
+      colunas: "nr_cracha,nm_funcionario,status",
+    });
   }
 
   async function carregarAcompanhamentos() {

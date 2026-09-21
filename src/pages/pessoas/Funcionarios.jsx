@@ -13,7 +13,7 @@ import {
 } from "react-icons/fa";
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
-import { supabaseBCNT } from "../../supabaseBCNT";
+import { linhasDoCadastro } from "../../utils/funcionariosBCNT";
 
 function normalizeText(value = "") {
   return String(value || "")
@@ -326,28 +326,9 @@ export default function Funcionarios() {
 
   async function carregar() {
     setLoading(true);
-    const pageSize = 1000;
-    let start = 0;
-    let all = [];
-
     try {
-      while (true) {
-        const { data, error } = await supabaseBCNT
-          .from("funcionarios_atualizada")
-          .select("id_funcionario, nr_cracha, nm_funcionario, nm_funcao, nr_telefone_celular, dt_inicio_atividade, status")
-          .in("status", ["ativo", "afastado"])
-          .order("nm_funcionario", { ascending: true })
-          .range(start, start + pageSize - 1);
-
-        if (error) throw error;
-        const chunk = data || [];
-        all = all.concat(chunk);
-        if (chunk.length < pageSize) break;
-        start += pageSize;
-        if (all.length >= 30000) break;
-      }
-
-      setFuncionarios(all);
+      // ativos e afastados, do cadastro da base de importação (ver o cabeçalho do helper)
+      setFuncionarios(await linhasDoCadastro({ status: ["ativo", "afastado"] }));
     } catch (error) {
       console.error(error);
       setFuncionarios([]);

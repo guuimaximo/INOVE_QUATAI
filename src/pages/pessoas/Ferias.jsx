@@ -21,7 +21,7 @@ import {
 
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
-import { supabaseBCNT } from "../../supabaseBCNT";
+import { linhasDoCadastro } from "../../utils/funcionariosBCNT";
 
 const STATUS_VIEW = [
   { value: "todos", label: "Todos" },
@@ -1246,24 +1246,16 @@ export default function Ferias() {
 
     // ➜ Cross-check BCNT: marca como afastado tudo que está com status='afastado' lá
     try {
-      const bcntPageSize = 1000;
-      let bcntStart = 0;
-      while (true) {
-        const { data: bcntRows, error: bcntErr } = await supabaseBCNT
-          .from("funcionarios_atualizada")
-          .select("nr_cracha, nm_funcionario, status")
-          .in("status", ["afastado", "inativo"])
-          .range(bcntStart, bcntStart + bcntPageSize - 1);
-        if (bcntErr || !bcntRows?.length) break;
-        for (const row of bcntRows) {
-          const key = buildFuncionarioKey({
-            nr_cracha: row.nr_cracha,
-            nm_funcionario: row.nm_funcionario,
-          });
-          if (key) afastadosKeys.add(key);
-        }
-        if (bcntRows.length < bcntPageSize) break;
-        bcntStart += bcntPageSize;
+      const bcntRows = await linhasDoCadastro({
+        status: ["afastado", "inativo"],
+        colunas: "nr_cracha,nm_funcionario,status",
+      });
+      for (const row of bcntRows) {
+        const key = buildFuncionarioKey({
+          nr_cracha: row.nr_cracha,
+          nm_funcionario: row.nm_funcionario,
+        });
+        if (key) afastadosKeys.add(key);
       }
     } catch (e) {
       console.warn("BCNT afastados lookup falhou:", e);

@@ -34,7 +34,7 @@ import {
 } from "react-icons/fa";
 
 import { supabase } from "../../supabase";
-import { supabaseBCNT } from "../../supabaseBCNT";
+import { linhasDoCadastro } from "../../utils/funcionariosBCNT";
 
 const CORES = {
   stone: { label: "Neutro", border: "border-slate-300", bg: "bg-white", chip: "bg-slate-100 text-slate-700", hex: "#94a3b8" },
@@ -1363,25 +1363,11 @@ export default function OrganogramaCanvas() {
   const reactFlowInstance = useRef(null);
 
   async function carregarFuncionariosBCNT() {
-    const pageSize = 1000;
-    let start = 0;
-    let all = [];
     try {
-      while (true) {
-        const { data, error } = await supabaseBCNT
-          .from("funcionarios_atualizada")
-          .select("id_funcionario, nr_cracha, nm_funcionario, nm_funcao, dt_inicio_atividade, status")
-          .eq("status", "ativo")
-          .order("nm_funcionario", { ascending: true })
-          .range(start, start + pageSize - 1);
-        if (error) throw error;
-        const chunk = data || [];
-        all = all.concat(chunk);
-        if (chunk.length < pageSize) break;
-        start += pageSize;
-        if (all.length >= 30000) break;
-      }
-      return all;
+      return await linhasDoCadastro({
+        status: "ativo",
+        colunas: "id_funcionario,nr_cracha,nm_funcionario,nm_funcao,dt_inicio_atividade,status",
+      });
     } catch (error) {
       console.error("Erro ao carregar funcionarios:", error);
       return [];

@@ -113,6 +113,14 @@ const TABELAS: Record<string, Acesso> = {
   ponto_leitura: { ler: true, escrever: ["insert"] },
   app_config: { ler: true, escrever: ["upsert"], conflito: "chave" },
 
+  // — CADASTRO DA 046 (21/09/2026): nome, funcao, status e celular, do lake
+  // (vw_funcionarios_celular) para a base de importacao. SOMENTE LEITURA: quem preenche e
+  // o importador diario. Entrou porque a base BCNT, que o INOVE lia direto do navegador
+  // com a chave publica, passou a recusar ("permission denied") e as telas de Pessoas
+  // ficaram vazias. Agora o cadastro vem pelo mesmo caminho do ponto: chave de servico
+  // aqui dentro, sessao do INOVE na porta.
+  funcionarios: { ler: true },
+
   // — FOLHA: liberada a pedido do dono (2026-09-06) para a tela Banco de Horas —
   // ATENCAO: esta tabela tem HORA EXTRA E VALOR EM R$ por colaborador. Foi
   // deliberadamente mantida fora da allowlist ate aqui. Entra SOMENTE LEITURA:
@@ -287,7 +295,18 @@ const PAGINAS_DO_PONTO = ["dp360", "dp360_abandonos", "dp360_resumo", "dp360_evi
    mudou: `fraude_cartao_bloqueado` continua so para Administrador, porque e a unica com
    `numero_cartao` inteiro. */
 const PAGINAS_DO_GUARD = ["guard_fraudes"];
+/* QUEM LE O CADASTRO DE FUNCIONARIOS (21/09/2026). Estas telas nao sao do ponto, mas
+   precisam do nome/funcao/status de quem trabalha na 046. Elas entram pela porta deste
+   gateway SO para a tabela `funcionarios`: `podeTabela` continua exigindo as paginas do
+   ponto em tudo o mais, e nenhuma delas escreve. */
+const PAGINAS_DO_CADASTRO = [
+  "pessoas_funcionarios", "pessoas_ferias", "pessoas_atestados", "pessoas_reservas",
+  "pessoas_organograma", "pessoas_vagas", "checklists_central", "diesel_resumo",
+  "diesel_lancamento", "diesel_agente",
+];
 const ACESSO_DAS_TABELAS: Record<string, string[] | "admin"> = {
+  // CADASTRO: o ponto e as telas que mostram gente (Pessoas, Checklists, Diesel)
+  funcionarios: [...PAGINAS_DO_PONTO, ...PAGINAS_DO_CADASTRO],
   // FOLHA: hora extra e valor em R$ — so quem tem o Banco de Horas liberado
   banco_horas: ["dp360_banco_horas"],
   // INOVE Guard: quem tem a pagina de Fraudes liberada. A do cadastro da bilhetagem NAO
@@ -997,7 +1016,8 @@ serve(async (req: Request) => {
     return (regra ?? PAGINAS_DO_PONTO).some(pode);
   };
   // a porta: qualquer pagina servida por este gateway (ponto, banco de horas ou Guard)
-  const temAcesso = ehAdmin || [...PAGINAS_DO_PONTO, "dp360_banco_horas", ...PAGINAS_DO_GUARD].some(pode);
+  const temAcesso = ehAdmin
+    || [...PAGINAS_DO_PONTO, "dp360_banco_horas", ...PAGINAS_DO_GUARD, ...PAGINAS_DO_CADASTRO].some(pode);
   if (perfilError || !perfil || !ativo || !aprovado || !temAcesso) {
     return json(
       { ok: false, error: "sem acesso — peça ao Administrador para liberar a página no seu usuário" },

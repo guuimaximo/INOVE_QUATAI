@@ -18,7 +18,7 @@ import {
 
 import { AuthContext } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
-import { supabaseBCNT } from "../../supabaseBCNT";
+import { linhasDoCadastro } from "../../utils/funcionariosBCNT";
 
 const TIPOS_DOCUMENTO = [
   { value: "ATESTADO_MEDICO", label: "Atestado médico" },
@@ -124,22 +124,11 @@ async function fetchAtestados() {
 }
 
 async function fetchFuncionarios() {
-  const pageSize = 1000;
-  const rows = [];
-  let start = 0;
-  while (true) {
-    const { data, error } = await supabaseBCNT
-      .from("funcionarios_atualizada")
-      .select("id_funcionario, nr_cracha, nm_funcionario, nm_funcao, status")
-      .order("nm_funcionario", { ascending: true })
-      .range(start, start + pageSize - 1);
-    if (error) throw error;
-    if (!data?.length) break;
-    rows.push(...data);
-    if (data.length < pageSize) break;
-    start += pageSize;
-  }
-  return rows;
+  // o cadastro inteiro (ativo, afastado e inativo): o atestado pode ser de quem já saiu
+  return linhasDoCadastro({
+    status: null,
+    colunas: "id_funcionario,nr_cracha,nm_funcionario,nm_funcao,status",
+  });
 }
 
 async function uploadArquivo(file) {

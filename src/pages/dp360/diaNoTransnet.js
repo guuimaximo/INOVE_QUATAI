@@ -460,10 +460,16 @@ export function almocoInventado(linha) {
 /** A linha do dia sem o almoço que a matriz inventou (ver `almocoInventado`). */
 export function semAlmocoInventado(linha) {
   if (!linha || !almocoInventado(linha)) return linha;
+  /* A SUGESTÃO TAMBÉM (21/09/2026). Conferido no ar com o dono: mesmo com o alvo limpo, o
+     pop-up seguia oferecendo "+ Completar saída almoço com o alvo (16:00)" — a mesma hora,
+     vinda das colunas de SUGESTÃO (`almoco_saida_sug`/`almoco_volta_sug`, que no JOAO vêm
+     com `sugestao_fonte = SEM_BASE`). Enquanto elas ficarem lá, a invenção volta no clique. */
   return {
     ...linha,
     alvo_saida_almoco: "",
     alvo_volta_almoco: "",
+    almoco_saida_sug: "",
+    almoco_volta_sug: "",
     almoco_travado: "",
     fonte_almoco: "SEM_FIM_DE_JORNADA",
   };

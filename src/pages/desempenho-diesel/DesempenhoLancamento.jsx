@@ -2,7 +2,7 @@
 import { useMemo, useState, useContext, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
-import { supabaseBCNT } from "../../supabaseBCNT";
+import { lerBCNT } from "../../services/bcntApi";
 import CampoMotorista from "../../components/CampoMotorista";
 import { AuthContext } from "../../context/AuthContext";
 import {
@@ -131,14 +131,12 @@ async function buscarContextoOperacionalMotorista(chapa) {
   const registro = String(chapa || "").trim();
   if (!registro) return { linha: "", cluster: "", prefixo: "" };
 
-  const { data, error } = await supabaseBCNT
-    .from("premiacao_diaria_atualizada")
-    .select("dia, motorista, linha, cluster, prefixo")
-    .ilike("motorista", `%${registro}%`)
-    .order("dia", { ascending: false })
-    .limit(30);
-
-  if (error) throw error;
+  const data = await lerBCNT("premiacao_diaria_atualizada", {
+    colunas: "dia,motorista,linha,cluster,prefixo",
+    filtros: { motorista: `ilike.*${registro}*` },
+    ordem: "dia.desc",
+    limite: 30,
+  });
 
   const match = (data || []).find(
     (item) => extractDriverChapa(item?.motorista) === registro

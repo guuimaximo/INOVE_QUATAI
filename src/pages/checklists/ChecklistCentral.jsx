@@ -1,6 +1,6 @@
 // src/pages/ChecklistCentral.jsx
 import { useEffect, useMemo, useState } from "react";
-import { isSupabaseBCNTConfigured, supabaseBCNT } from "../../supabaseBCNT";
+import { lerTudoBCNT } from "../../services/bcntApi";
 import ChecklistDetalheModal from "../../components/ChecklistDetalheModal";
 import { listarFuncionariosAtivos } from "../../utils/funcionariosBCNT";
 import {
@@ -195,112 +195,70 @@ export default function ChecklistCentral() {
   const [modalOpen, setModalOpen] = useState(false);
   const [rowSelecionada, setRowSelecionada] = useState(null);
 
-  function applyCommonFilters(query) {
+  /* OS FILTROS QUE O SERVIDOR APLICA. O gateway `bcnt-api` aceita os filtros simples do
+     PostgREST, mas não o "ou" montado na tela (valor entre parênteses não passa na
+     validação, e afrouxá-la seria deixar a tela montar consulta). Por isso o nome/chapa do
+     motorista é filtrado aqui, sobre o que veio — e os contadores também, que antes eram
+     três consultas `count` a mais. */
+  function filtrosDoServidor() {
     const f = filtros;
-
-    if (f.prefixo) query = query.ilike("numero_veiculo", `%${f.prefixo}%`);
-
-    if (f.motorista) {
-      query = query.or(
-        `nome_motorista.ilike.%${f.motorista}%,chapa_motorista.ilike.%${f.motorista}%`
-      );
-    }
-
+    const out = {};
+    if (f.prefixo) out.numero_veiculo = `ilike.*${f.prefixo}*`;
     if (f.dia) {
       const dia = onlyDateISO(f.dia);
-      const next = addDaysISO(dia, 1);
-      query = query.gte("created_at", dia).lt("created_at", next);
+      out.created_at = [`gte.${dia}`, `lt.${addDaysISO(dia, 1)}`];
     }
+    return out;
+  }
 
-    return query;
+  function filtroDoMotorista(linhas) {
+    const busca = String(filtros.motorista || "").trim().toLowerCase();
+    if (!busca) return linhas;
+    return linhas.filter((r) =>
+      `${r?.nome_motorista ?? ""} ${r?.chapa_motorista ?? ""}`.toLowerCase().includes(busca),
+    );
   }
 
   async function carregarLista() {
-    if (!isSupabaseBCNTConfigured) {
-      setErroConfig("A base BCNT não está configurada neste APK.");
-      setRows([]);
-      return;
-    }
-
-    let q = supabaseBCNT
-      .from("checklists")
-      .select(
-        [
-          "id",
-          "created_at",
-          "numero_veiculo",
-          "nome_motorista",
-          "chapa_motorista",
-          "telefone",
-          "video_url",
-          "fileurls",
-          "resumo_texto",
-          "resposta_texto",
-          "link_atendimento",
-        ].join(",")
-      )
-      .limit(100000);
-
-    q = applyCommonFilters(q);
-
-    const { data, error } = await q.order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Erro ao carregar checklists:", error);
-      setRows([]);
-      return;
-    }
-
+    let data = [];
     try {
-      const mapaFuncionarios = await carregarMapaFuncionariosChecklist();
-      setRows((data || []).map((row) => aplicarNomeFuncionario(row, mapaFuncionarios)));
-    } catch (funcError) {
-      console.warn("Nao foi possivel cruzar checklists com funcionarios_atualizada:", funcError);
-      setRows(data || []);
-    }
-  }
-
-  async function carregarContadoresHead() {
-    if (!isSupabaseBCNTConfigured) {
+      data = filtroDoMotorista(
+        await lerTudoBCNT("checklists", {
+          colunas:
+            "id,created_at,numero_veiculo,nome_motorista,chapa_motorista,telefone,video_url,fileurls,resumo_texto,resposta_texto,link_atendimento",
+          filtros: filtrosDoServidor(),
+          ordem: "created_at.desc",
+        }),
+      );
+    } catch (error) {
+      console.error("Erro ao carregar checklists:", error);
+      setErroConfig(error?.message || "não foi possível ler os checklists");
+      setRows([]);
       setTotalCount(0);
       setComVideoCount(0);
       setComFotosCount(0);
       return;
     }
 
-    // Total
-    let qTotal = supabaseBCNT.from("checklists").select("id", { count: "exact", head: true });
-    qTotal = applyCommonFilters(qTotal);
-    const { count: total } = await qTotal;
+    const tem = (v) => String(v ?? "").trim() !== "";
+    setTotalCount(data.length);
+    setComVideoCount(data.filter((r) => tem(r.video_url)).length);
+    setComFotosCount(data.filter((r) => tem(r.fileurls)).length);
 
-    // Com vídeo
-    let qVideo = supabaseBCNT
-      .from("checklists")
-      .select("id", { count: "exact", head: true })
-      .not("video_url", "is", null)
-      .neq("video_url", "");
-    qVideo = applyCommonFilters(qVideo);
-    const { count: comVideo } = await qVideo;
-
-    // Com fotos
-    let qFotos = supabaseBCNT
-      .from("checklists")
-      .select("id", { count: "exact", head: true })
-      .not("fileurls", "is", null)
-      .neq("fileurls", "");
-    qFotos = applyCommonFilters(qFotos);
-    const { count: comFotos } = await qFotos;
-
-    setTotalCount(total || 0);
-    setComVideoCount(comVideo || 0);
-    setComFotosCount(comFotos || 0);
+    try {
+      const mapaFuncionarios = await carregarMapaFuncionariosChecklist();
+      setRows(data.map((row) => aplicarNomeFuncionario(row, mapaFuncionarios)));
+    } catch (funcError) {
+      console.warn("Nao foi possivel cruzar checklists com o cadastro:", funcError);
+      setRows(data);
+    }
   }
 
   async function aplicar() {
     setLoading(true);
     setErroConfig("");
     try {
-      await Promise.all([carregarLista(), carregarContadoresHead()]);
+      await carregarLista();
     } catch (e) {
       console.error("Erro ao aplicar filtros:", e);
     } finally {

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
 import {
   Area,
   AreaChart,
@@ -28,14 +27,8 @@ import {
 } from "react-icons/fa";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../supabase";
+import { lerTudoBCNT } from "../../services/bcntApi";
 
-const SUPABASE_A_URL = import.meta.env.VITE_SUPA_BASE_BCNT_URL;
-const SUPABASE_A_ANON_KEY = import.meta.env.VITE_SUPA_BASE_BCNT_ANON_KEY;
-
-const supabaseA =
-  SUPABASE_A_URL && SUPABASE_A_ANON_KEY
-    ? createClient(SUPABASE_A_URL, SUPABASE_A_ANON_KEY)
-    : null;
 
 const EMBARCADOS_ABERTOS = new Set(["ABERTA", "EM_ANALISE", "EM_EXECUCAO", "AG_PECAS"]);
 
@@ -697,18 +690,12 @@ export default function Dashboard() {
         // sessão caiu p/ anon) NÃO derruba o dashboard inteiro — só aquele KPI
         // fica vazio, o resto carrega normal.
         const _dashRes = await Promise.allSettled([
-          supabaseA
-            ? fetchAllRows(
-                supabaseA
-                  .from("premiacao_diaria_atualizada")
-                  .select(
-                    "id_premiacao_diaria, dia, linha, km_rodado, litros_consumidos, meta_kml_usada, litros_ideais"
-                  )
-                  .gte("dia", start)
-                  .lte("dia", end),
-                "dia"
-              )
-            : Promise.resolve([]),
+          // a BCNT responde pelo gateway `bcnt-api`: a chave dela não vive mais no site
+          lerTudoBCNT("premiacao_diaria_atualizada", {
+            colunas: "id_premiacao_diaria,dia,linha,km_rodado,litros_consumidos,meta_kml_usada,litros_ideais",
+            filtros: { dia: [`gte.${start}`, `lte.${end}`] },
+            ordem: "dia.asc",
+          }),
           fetchAllRows(
             supabase
               .from("km_rodado_diario")

@@ -22,7 +22,8 @@ import {
   FaChartLine,
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
-import { supabaseBCNT } from "../../supabaseBCNT";
+import { arquivosBCNT, urlArquivoBCNT } from "../../services/bcntApi";
+import { linhasDoCadastro } from "../../utils/funcionariosBCNT";
 import { DieselPageShell } from "../../components/desempenho/DieselPageShell";
 import DateRangePopover from "../../components/DateRangePopover";
 
@@ -36,7 +37,6 @@ const WF_ACOMP = "ordem-acompanhamento.yml";
 const WF_PARCIAL = "parcial-meritocracia.yml"; // ajuste aqui se o nome real do arquivo for outro
 
 const SUPABASE_BASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_BCNT_BASE_URL = import.meta.env.VITE_SUPA_BASE_BCNT_URL;
 const BUCKET_RELATORIOS = "relatorios";
 const BUCKET_PARCIAL = "parcial_meritocracia";
 
@@ -123,55 +123,19 @@ function normalizeChapa(v) {
 }
 
 async function carregarMapaFuncionariosAtualizados() {
+  // O cadastro saiu da BCNT (21/09/2026): vem da base de importação, pelo gateway.
   const mapa = {};
-  const clientes = [supabaseBCNT, supabase];
-
-  for (const client of clientes) {
-    try {
-      let start = 0;
-      const pageSize = 1000;
-      let encontrouAlgumaLinha = false;
-
-      while (true) {
-        const end = start + pageSize - 1;
-
-        const { data, error } = await client
-          .from("funcionarios_atualizada")
-          .select("id_funcionario, nr_cracha, nm_funcionario, status")
-          .range(start, end);
-
-        if (error) throw error;
-
-        const rows = data || [];
-        if (rows.length) encontrouAlgumaLinha = true;
-
-        rows.forEach((row) => {
-          const chapa = normalizeChapa(row.nr_cracha);
-          const nome = String(row.nm_funcionario || "").trim().toUpperCase();
-          const status = String(row.status || "").trim().toLowerCase();
-
-          if (!chapa || !nome) return;
-
-          // Preferir registro ativo. Se não houver status, ainda usa como fallback.
-          if (!mapa[chapa] || status === "ativo") {
-            mapa[chapa] = nome;
-          }
-        });
-
-        if (rows.length < pageSize) break;
-        start += pageSize;
-
-        if (start > 10000) break;
-      }
-
-      if (encontrouAlgumaLinha && Object.keys(mapa).length > 0) {
-        return mapa;
-      }
-    } catch (e) {
-      console.warn("Não foi possível carregar funcionarios_atualizada neste client:", e);
+  try {
+    for (const row of await linhasDoCadastro({
+      status: null,
+      colunas: "id_funcionario,nr_cracha,nm_funcionario,status",
+    })) {
+      const chapa = normalizeChapa(row?.nr_cracha);
+      if (chapa && !mapa[chapa]) mapa[chapa] = String(row?.nm_funcionario || "").trim();
     }
+  } catch (error) {
+    console.warn("Nao foi possivel carregar o cadastro:", error);
   }
-
   return mapa;
 }
 
@@ -186,21 +150,31 @@ function maxIsoDate(...values) {
   return new Date(Math.max(...valid.map((d) => d.getTime()))).toISOString();
 }
 
+async function listarParcial(prefixo, limite) {
+  try {
+    return { data: await arquivosBCNT(BUCKET_PARCIAL, String(prefixo || "").replace(/^\//, ""), { limite }), error: null };
+  } catch (error) {
+    return { data: [], error };
+  }
+}
+
 function getPublicUrl(bucket, path, baseUrl = SUPABASE_BASE_URL) {
   if (!path) return null;
   if (path.startsWith("http")) return path;
+  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+  return `${baseUrl}/storage/v1/object/public/${bucket}/${cleanPath}`;
+}
 
+/* OS ARQUIVOS DA BCNT NÃO TÊM MAIS LINK PÚBLICO (21/09/2026). A chave dela saiu do site,
+   então o endereço é assinado na hora do clique, pelo gateway `bcnt-api`, e vale 1 hora. */
+async function abrirArquivoBCNT(caminho) {
+  if (!caminho) return;
   try {
-    if (bucket === BUCKET_PARCIAL) {
-      const { data } = supabaseBCNT.storage.from(bucket).getPublicUrl(path);
-      if (data?.publicUrl) return data.publicUrl;
-    }
-
-    const cleanPath = path.startsWith("/") ? path.slice(1) : path;
-    return `${baseUrl}/storage/v1/object/public/${bucket}/${cleanPath}`;
-  } catch {
-    const cleanPath = path.startsWith("/") ? path.slice(1) : path;
-    return `${baseUrl}/storage/v1/object/public/${bucket}/${cleanPath}`;
+    const url = await urlArquivoBCNT(BUCKET_PARCIAL, caminho);
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+    else alert("Não consegui abrir o arquivo agora. Tente de novo.");
+  } catch (error) {
+    alert(error?.message || "Não consegui abrir o arquivo agora.");
   }
 }
 
@@ -525,14 +499,13 @@ function IndividualParcialTable({ items, busca, setBusca, mesRef }) {
                 <td className="p-3">{item.nome || "-"}</td>
                 <td className="p-3 text-slate-500">{item.fileName}</td>
                 <td className="p-3 text-right">
-                  <a
-                    href={item.publicUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => abrirArquivoBCNT(item.path)}
                     className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 text-white px-3 py-2 font-bold hover:bg-cyan-700"
                   >
                     <FaFilePdf /> Abrir PDF
-                  </a>
+                  </button>
                 </td>
               </tr>
             ))}
@@ -667,11 +640,7 @@ function ParcialMeritocraciaView({ onAlert }) {
       let lastError = null;
 
       for (const p of rootCandidates) {
-        const resp = await supabaseBCNT.storage.from(BUCKET_PARCIAL).list(p, {
-          limit: 500,
-          offset: 0,
-          sortBy: { column: "name", order: "asc" },
-        });
+        const resp = await listarParcial(p, 500);
 
         if (!resp.error && Array.isArray(resp.data) && resp.data.length > 0) {
           rootData = resp.data;
@@ -683,11 +652,7 @@ function ParcialMeritocraciaView({ onAlert }) {
       }
 
       for (const p of indCandidates) {
-        const resp = await supabaseBCNT.storage.from(BUCKET_PARCIAL).list(p, {
-          limit: 1000,
-          offset: 0,
-          sortBy: { column: "name", order: "asc" },
-        });
+        const resp = await listarParcial(p, 1000);
 
         if (!resp.error && Array.isArray(resp.data) && resp.data.length > 0) {
           indData = resp.data;
@@ -699,29 +664,17 @@ function ParcialMeritocraciaView({ onAlert }) {
       }
 
       if (!rootData.length && !indData.length) {
-        const fallbackRoot = await supabaseBCNT.storage.from(BUCKET_PARCIAL).list("", {
-          limit: 500,
-          offset: 0,
-          sortBy: { column: "name", order: "asc" },
-        });
+        const fallbackRoot = await listarParcial("", 500);
 
         if (fallbackRoot.error && lastError) throw lastError;
 
         const pastaMes = (fallbackRoot.data || []).find((f) => String(f.name || "") === mesRef);
         if (pastaMes) {
           rootPathUsed = mesRef;
-          const retryRoot = await supabaseBCNT.storage.from(BUCKET_PARCIAL).list(mesRef, {
-            limit: 500,
-            offset: 0,
-            sortBy: { column: "name", order: "asc" },
-          });
+          const retryRoot = await listarParcial(mesRef, 500);
           if (!retryRoot.error) rootData = retryRoot.data || [];
 
-          const retryInd = await supabaseBCNT.storage.from(BUCKET_PARCIAL).list(`${mesRef}/individuais`, {
-            limit: 1000,
-            offset: 0,
-            sortBy: { column: "name", order: "asc" },
-          });
+          const retryInd = await listarParcial(`${mesRef}/individuais`, 1000);
           if (!retryInd.error) {
             indData = retryInd.data || [];
             indPathUsed = `${mesRef}/individuais`;
@@ -746,7 +699,6 @@ function ParcialMeritocraciaView({ onAlert }) {
             path,
             chapa: extractChapaFromName(f.name),
             nome: extractNomeFromName(f.name, mesRef),
-            publicUrl: getPublicUrl(BUCKET_PARCIAL, path, SUPABASE_BCNT_BASE_URL),
             updated_at: f.updated_at || f.created_at || null,
           };
         });
@@ -774,7 +726,6 @@ function ParcialMeritocraciaView({ onAlert }) {
           ? {
               fileName: consolidadoFile.name,
               path: `${cleanRootBase}/${consolidadoFile.name}`,
-              publicUrl: getPublicUrl(BUCKET_PARCIAL, `${cleanRootBase}/${consolidadoFile.name}`, SUPABASE_BCNT_BASE_URL),
               updated_at: consolidadoFile.updated_at || consolidadoFile.created_at || null,
             }
           : null
@@ -784,7 +735,6 @@ function ParcialMeritocraciaView({ onAlert }) {
           ? {
               fileName: resumoFile.name,
               path: `${cleanRootBase}/${resumoFile.name}`,
-              publicUrl: getPublicUrl(BUCKET_PARCIAL, `${cleanRootBase}/${resumoFile.name}`, SUPABASE_BCNT_BASE_URL),
               updated_at: resumoFile.updated_at || resumoFile.created_at || null,
             }
           : null
@@ -978,15 +928,14 @@ function ParcialMeritocraciaView({ onAlert }) {
               </div>
             </div>
 
-            {consolidado?.publicUrl ? (
-              <a
-                href={consolidado.publicUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+            {consolidado?.path ? (
+              <button
+                type="button"
+                onClick={() => abrirArquivoBCNT(consolidado.path)}
                 className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 text-white px-4 py-3 font-bold hover:bg-cyan-700"
               >
                 <FaFilePdf /> Abrir Consolidado
-              </a>
+              </button>
             ) : null}
           </div>
         </div>
@@ -1007,15 +956,14 @@ function ParcialMeritocraciaView({ onAlert }) {
               </div>
             </div>
 
-            {resumo?.publicUrl ? (
-              <a
-                href={resumo.publicUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+            {resumo?.path ? (
+              <button
+                type="button"
+                onClick={() => abrirArquivoBCNT(resumo.path)}
                 className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 text-white px-4 py-3 font-bold hover:bg-emerald-700"
               >
                 <FaFilePdf /> Abrir Resumo
-              </a>
+              </button>
             ) : null}
           </div>
         </div>

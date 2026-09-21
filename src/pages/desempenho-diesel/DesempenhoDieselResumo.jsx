@@ -16,7 +16,7 @@ import {
   FaArrowDown as FaDownload,
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
-import { isSupabaseBCNTConfigured, supabaseBCNT } from "../../supabaseBCNT";
+import { lerTudoBCNT } from "../../services/bcntApi";
 import { linhasDoCadastro } from "../../utils/funcionariosBCNT";
 import {
   buildMotoristaContextMap,
@@ -324,10 +324,6 @@ function EvolucaoBadge({ value, invert = false, percent = false }) {
 function mensagemErroFonteDados(nomeFonte, erro) {
   const msg = erro?.message || String(erro || "erro desconhecido");
 
-  if (!isSupabaseBCNTConfigured) {
-    return `${nomeFonte}: Supabase BCNT nao configurado no ambiente local. Configure VITE_SUPA_BASE_BCNT_URL e VITE_SUPA_BASE_BCNT_ANON_KEY para carregar esses dados.`;
-  }
-
   if (erro?.code === "PGRST205" || msg.includes("Could not find the table")) {
     return `${nomeFonte}: tabela nao encontrada no Supabase BCNT configurado.`;
   }
@@ -442,50 +438,24 @@ export default function DesempenhoDieselAnalise() {
   // mes corrente + mes anterior; outros meses sao carregados sob
   // demanda quando o usuario escolhe nos seletores.
   async function carregarPremiacao(mesesYYYYMM = []) {
-    if (!isSupabaseBCNTConfigured) {
-      throw new Error("Supabase BCNT nao configurado.");
+    // A BCNT agora responde pelo gateway `bcnt-api` (a chave dela nao vive mais no site).
+    const filtros = {};
+    if (Array.isArray(mesesYYYYMM) && mesesYYYYMM.length) {
+      const meses = Array.from(
+        new Set(mesesYYYYMM.map((m) => String(m).replace("-", "").slice(0, 6)).filter(Boolean)),
+      );
+      if (meses.length) filtros.anomes = `in.(${meses.join(",")})`;
     }
-
-    const pageSize = 1000;
-    let start = 0;
-    let all = [];
-
-    while (true) {
-      const end = start + pageSize - 1;
-      let query = supabaseBCNT
-        .from("premiacao_diaria_atualizada")
-        .select(
-          "id_premiacao_diaria, dia, ano, mes, anomes, motorista, linha, prefixo, fabricante, cluster, km_rodado, litros_consumidos, km_l, meta_kml_usada, litros_ideais"
-        )
-        .order("dia", { ascending: false });
-
-      if (Array.isArray(mesesYYYYMM) && mesesYYYYMM.length) {
-        // Tenta filtrar tanto por string ("202605") quanto por inteiro (202605)
-        const variants = Array.from(
-          new Set(
-            mesesYYYYMM.flatMap((m) => {
-              const s = String(m).replace("-", "").slice(0, 6);
-              const n = Number.isFinite(Number(s)) ? Number(s) : null;
-              return n != null ? [s, n] : [s];
-            })
-          )
-        );
-        query = query.in("anomes", variants);
-      }
-
-      const { data, error } = await query.range(start, end);
-
-      if (error) throw error;
-
-      const chunk = data || [];
-      all = all.concat(chunk);
-
-      if (chunk.length < pageSize) break;
-      start += pageSize;
-      if (all.length >= 50000) break;
-    }
-
-    return all;
+    return lerTudoBCNT(
+      "premiacao_diaria_atualizada",
+      {
+        colunas:
+          "id_premiacao_diaria,dia,ano,mes,anomes,motorista,linha,prefixo,fabricante,cluster,km_rodado,litros_consumidos,km_l,meta_kml_usada,litros_ideais",
+        filtros,
+        ordem: "dia.desc",
+      },
+      50,
+    );
   }
 
   function defaultMesesParaCarregar() {
@@ -526,10 +496,6 @@ export default function DesempenhoDieselAnalise() {
   }
 
   async function carregarFuncionarios() {
-    if (!isSupabaseBCNTConfigured) {
-      throw new Error("Supabase BCNT nao configurado.");
-    }
-
     return linhasDoCadastro({
       status: "ativo",
       colunas: "nr_cracha,nm_funcionario,status",

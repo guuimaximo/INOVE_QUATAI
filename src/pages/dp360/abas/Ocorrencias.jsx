@@ -107,6 +107,7 @@ import {
   ehRecusaSemMotivo,
   fimNoDiaSeguinte,
   semAlmocoInventado,
+  semTapaBuracoNoAlvo,
   somaUmDia,
 } from "../diaNoTransnet";
 import {
@@ -1263,7 +1264,7 @@ function montarRegistros(base) {
     /* O almoço que a matriz inventou num dia SEM FIM sai aqui, na porta: de `cp` descem o
        cartão, o alvo, a trava e tudo o que a tela desenha, então tirar num lugar só vale
        para o pop-up, para a grade e para o que a correção lança. Ver `almocoInventado`. */
-    const cp = semAlmocoInventado(mapaDiario.get(k) || {});
+    const cp = semTapaBuracoNoAlvo(semAlmocoInventado(mapaDiario.get(k) || {}));
     const temLinhaDoDia = mapaDiario.has(k);
     const g = mapaGordura.get(k) || {};
     const rm = mapaReal.get(k) || {};

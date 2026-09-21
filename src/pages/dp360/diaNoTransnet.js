@@ -480,3 +480,34 @@ export function semAlmocoInventado(linha) {
  *  que travar, e o DP precisa dos quatro campos para cravar o cartão à mão. */
 export const almocoSemFim = (linha) =>
   txt(linha?.fonte_almoco).toUpperCase() === "SEM_FIM_DE_JORNADA";
+
+/* ═══ O ALVO QUE NASCEU NO TAPA-BURACO (21/09/2026) ═══════════════════════════
+ *
+ * GILBERTO 30061169 · 15/09 bateu `E14:25 | S14:26` — uma vez, e o Transnet somou 1 min
+ * para fechar. No lake, `batidas_limpas` guardou a SEGUNDA (14:26) e o alvo herdou: a
+ * correção entraria às 14:26, um minuto depois do que ele bateu. O mesmo em CARLOS LEANDRO
+ * 12/09 (13:52 → alvo 13:53) e JOAO CARLOS 14/09 (03:20 → alvo 03:21). São 29 dias entre os
+ * 211 recusados sem advertência.
+ *
+ * A raiz é a view do lake, que não é nossa. Aqui a gente conserta o que a tela mostra e o
+ * que a correção lança: alvo que caiu exatamente no segundo do par volta para a batida de
+ * verdade, a primeira. Não inventa nada — só desfaz o minuto que o Transnet somou. */
+export function semTapaBuracoNoAlvo(linha) {
+  if (!linha) return linha;
+  const mins = batidasDaLinha(linha);
+  if (mins.length < 2) return linha;
+  const parDe = new Map();                      // o segundo do par -> a batida real
+  for (let i = 1; i < mins.length; i += 1) {
+    if (mins[i] - mins[i - 1] <= 1) parDe.set(mins[i], mins[i - 1]);
+  }
+  if (!parDe.size) return linha;
+  const arruma = (h) => {
+    const m = hm2min(h);
+    return m != null && parDe.has(m) ? min2hm(parDe.get(m)) : h;
+  };
+  const novo = { ...linha };
+  for (const campo of ["alvo_entrada", "alvo_saida", "entrada_sug", "saida_sug"]) {
+    if (txt(novo[campo])) novo[campo] = arruma(novo[campo]);
+  }
+  return novo;
+}

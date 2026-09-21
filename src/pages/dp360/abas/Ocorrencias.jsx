@@ -100,6 +100,8 @@ import { csvDoAjustePonto } from "../regrasAjustePonto";
 // seguinte) e a virada do dia desenrolada — a mesma regra da Revisão e do Histórico.
 import {
   atestadoDoDia,
+  casoDaVirada,
+  casoParaORobo,
   desenrolaSlots,
   ehRecusaSemMotivo,
   fimNoDiaSeguinte,
@@ -5827,7 +5829,8 @@ export default function Ocorrencias() {
    * FECHADO → ponto fechado; o resto fica onde está, com a frase em `transnet_resposta`.
    * Devolve `true` se o robô saiu. */
   const lancarCorrecao = useCallback(
-    async ({ podem, cartaoDe, titulo = "🔧 Corrigindo o ponto no Transnet" }) => {
+    async ({ podem: marcados, cartaoDe, titulo = "🔧 Corrigindo o ponto no Transnet" }) => {
+      const correcaoDireta = async (podem) => {
       const dias = [...new Set(podem.map((r) => r.iso))].sort();
       const csv = csvDoAjustePonto(
         podem.map((r) => {
@@ -5890,6 +5893,86 @@ export default function Ocorrencias() {
             setRecado(`O robô terminou, mas não gravei o desfecho no nosso banco: ${e?.message || e}`);
           }
           atualizarSilencioso();
+        },
+      });
+      return true;
+      };
+
+      /* ══ A SOBRA NO DIA SEGUINTE VAI ANTES, PELO ROBÔ `virada` (21/09/2026) ═══════
+       * Dono, vendo sete dias parados no mesmo erro: "não consegue colocar uma regra, se
+       * aparecer esse problema ele chama o outro robô para esses?".
+       *
+       * O Transnet não grava uma jornada por cima de outra. Enquanto o fim do turno
+       * estiver lançado na madrugada seguinte, a correção DESTE dia é recusada — e a
+       * recusa volta como "Existem erros que impeçam a inserção de pontos", que não
+       * explica nada. Eram 7 dias travados assim, de 28/08 a 14/09 (DOUGLAS, SILVANO,
+       * RENATO, GILBERTO, HENDESON, EDUARDO e LUCIO), cada um com a saída presa no D+1 e
+       * o "pode lançar de novo" repetindo o mesmo erro.
+       *
+       * A regra: quem tem a sobra lá vai PRIMEIRO pelo `virada` — o robô confere os dois
+       * dias no Transnet, limpa o seguinte (apaga o registro quando era só a sobra, ou
+       * regrava o dia sem ela) e grava o dia certo com a saída depois da meia-noite. Só
+       * quando ele terminar a correção sai, para todos. Um run de cada vez, porque a fila
+       * do GitHub cancela o pendente mais velho quando chega outro.
+       *
+       * Dia que a regra não sabe desenrolar sozinha (`bloqueio`, ou sem a linha do dia
+       * seguinte lida) NÃO vira: segue pela correção normal, como antes. */
+      const presos = marcados.filter((r) => fimPresoNoDiaSeguinte(r, cartaoDe(r)));
+      const viradas = presos
+        .map((r) => {
+          if (!r?.cartao || !r?.diaSeguinte) return null;
+          const caso = casoDaVirada({
+            linhaDia: r.cartao,
+            linhaSeguinte: r.diaSeguinte,
+            isoDia: r.iso,
+            isoSeguinte: somaUmDia(r.iso),
+          });
+          if (!caso || caso.bloqueio) return null;
+          return {
+            reg: r,
+            envio: casoParaORobo({
+              cracha: r.cracha,
+              nome: r.nome,
+              caso,
+              slotsDia: caso.dia.slots,
+              slotsSeguinte: caso.seguinte.slots || ["", "", "", ""],
+            }),
+          };
+        })
+        .filter(Boolean);
+
+      if (!viradas.length) return correcaoDireta(marcados);
+
+      const resp = await dispararRoboDP360("virada", {
+        casos: JSON.stringify(viradas.map((v) => v.envio)),
+        confirmar: "true",
+      });
+      acompanharLote({
+        runId: resp?.execucao?.run_id || null,
+        painel: resp?.painel || "",
+        robo: "virada",
+        tipo: "corrigir",
+        titulo: `🌙 Tirando a saída presa no dia seguinte — ${viradas.length} dia(s), a correção sai depois`,
+        aba,
+        casos: casosDoPainel(viradas.map((v) => v.reg)),
+        aoTerminar: async (fim) => {
+          atualizarSilencioso();
+          /* Só encadeia se o `virada` terminou bem. Se ele falhou, a sobra continua no
+             Transnet e a correção seria recusada de novo — queimar o run não ajuda
+             ninguém, e a frase da recusa acabaria gravada no caso como se fosse nova. */
+          if (fim !== "success") {
+            setRecado(
+              "O robô da virada não terminou bem — a correção não foi disparada. " +
+                "Veja o log do run e mande de novo.",
+            );
+            return;
+          }
+          // agora sem a sobra no caminho: a correção vai para TODOS os marcados
+          try {
+            await correcaoDireta(marcados);
+          } catch (e) {
+            setRecado(`A saída do dia seguinte saiu, mas a correção não disparou: ${e?.message || e}`);
+          }
         },
       });
       return true;

@@ -1018,7 +1018,7 @@ function _argmin(lista, fn) {
 const TOL_TAPA_BURACO = 1;
 
 export function julgaAcoes({
-  pedidos = [], alvo = {}, gordura = {}, sugestao = {}, escala = {}, cartao = [],
+  pedidos = [], alvo = {}, gordura = {}, sugestao = {}, escala = {}, cartao = [], slots = null,
 } = {}) {
   const caso = alvo || {};
   const g = gordura || {};
@@ -1109,34 +1109,48 @@ export function julgaAcoes({
       hm = mm ? hm2min(mm[1]) : null;
     }
 
-    /* ALTERAR O TAPA-BURACO É MEXER NA PONTA QUE FALTAVA (21/09/2026).
+    /* A PONTA DA ALTERAÇÃO É ONDE A BATIDA ESTÁ (21/09/2026).
      *
      * JOAO CAETANO 3202677 · 25/08: cartão `04:29 | 04:30` — uma batida e o minuto que o
      * Transnet somou para fechar. Ele pediu "alterar 04:30 para 07:30". A ponta saía da
      * ESCALA (03:05–12:15) e o 07:30 caiu 20 min mais perto da entrada: o pop-up punha o
      * 07:30 na ENTRADA e empurrava o 04:30 para a SAÍDA, virando 28:30 e 21 h de jornada.
      *
-     * Quem sabe a ponta aqui não é a escala, é o cartão: a batida real é a PRIMEIRA do par
-     * (a entrada), e o tapa-buraco é o lugar da ponta que ficou faltando. Então alterar o
-     * tapa-buraco de um cartão de duas batidas é alterar a SAÍDA — o que dá 04:29 · 07:30,
-     * a jornada que aconteceu.
+     * Dono: "mas o 04:30 está na saída e ele tem que entender". Está mesmo — a linha
+     * PONTO (BATEU) do pop-up mostra `E 04:29 | — | — | S 04:30`. Quem sabe a ponta não é a
+     * escala, é o CARTÃO: alterar uma batida é mexer na ponta em que ela está. Com os
+     * quatro compartimentos em mãos (`slots`), a origem do "D/ ... P/ ..." é procurada
+     * neles e a ponta sai daí; dá 04:29 · 07:30, a jornada que aconteceu.
      *
-     * Estreito: só cartão com as DUAS batidas do par. Com quatro batidas e um par no meio a
-     * tela não adivinha — segue pela escala, como antes. */
-    let pontaDoTapaBuraco = '';
-    if (alt) {
+     * Sem os slots (outras chamadas do motor), vale a leitura do par de 1 min: a batida
+     * real é a primeira e o tapa-buraco ocupa a ponta que faltou. Não achando a origem em
+     * lugar nenhum, segue pela escala, como antes. */
+    let pontaDaBatida = '';
+    if (alt && Array.isArray(slots) && slots.length === 4) {
+      const deM = hm2min(alt[1]);
+      const ordem = [PONTA_ENTRADA, PONTA_ALM_SAIDA, PONTA_ALM_VOLTA, PONTA_SAIDA];
+      const i = deM === null
+        ? -1
+        : slots.findIndex((h) => {
+          const m = hm2min(h);
+          return m !== null && difRelogio(m, deM) === 0;
+        });
+      if (i >= 0) pontaDaBatida = ordem[i];
+    }
+    if (!pontaDaBatida && alt) {
+      // sem os slots da tela (outras chamadas), vale o par de 1 min: a real é a primeira
       const deM = hm2min(alt[1]);
       const ordenadas = batCp.slice().sort((x, y) => x - y);
       const i = deM === null ? -1 : ordenadas.findIndex((b) => difRelogio(deM, b) === 0);
       if (i === 1 && ordenadas.length === 2 && ordenadas[1] - ordenadas[0] <= TOL_TAPA_BURACO) {
-        pontaDoTapaBuraco = PONTA_SAIDA;
+        pontaDaBatida = PONTA_SAIDA;
       }
     }
 
     let cand = alvos;
     if (hm !== null && alvos.length && mira.length) {
       // QUAL PONTA ELE MIROU — pela ESCALA, não pelo alvo que sobrou (main.py:6585-6592)
-      const mp = pontaDoTapaBuraco || _argmin(mira, (x) => difRelogio(hm, x[1]))[0];
+      const mp = pontaDaBatida || _argmin(mira, (x) => difRelogio(hm, x[1]))[0];
       const rotsComAlvo = new Set(alvos.map((x) => x[0]));
       if (!rotsComAlvo.has(mp)) {
         item.ponta = mp;

@@ -1427,8 +1427,17 @@ function montarRegistros(base) {
     // dele é OUTRA — o ALVO do aviso, não a cascata da régua: é o que PEDIMOS, e é contra
     // isso que o pedido dele responde. A cascata do alvo é a do Python, com o degrau da
     // gordura agora vivo (ver `alvoDaGordura`).
+    /* OS QUATRO COMPARTIMENTOS ANTES DE JULGAR (21/09/2026). Dono, no JOAO CAETANO:
+       "mas o 04:30 está na saída e ele tem que entender". Está mesmo — a linha PONTO
+       (BATEU) do pop-up já mostra `E 04:29 | — | — | S 04:30`. Só que o julgamento rodava
+       antes de o cartão ser montado e escolhia a ponta pela ESCALA. Montando aqui, o
+       `julgaAcoes` recebe o cartão como a tela o desenha e a alteração vai para a ponta
+       onde a batida ESTÁ. */
+    const slotsHoje = slotsDoCartao({ cp, caso, lim });
+
     const acoes = julgaAcoes({
       pedidos: grupo.map(pedidoDoMotor),
+      slots: slotsHoje,
       alvo: {
         entrada: caso.alvo_entrada,
         saida: caso.alvo_saida,
@@ -1473,8 +1482,7 @@ function montarRegistros(base) {
     const situacao = situacaoDoCaso(veredito, ciclo, temAviso);
     const rot = rotuloCaso(caso.origem, caso.tipo);
 
-    // os DOIS cartões da tela — montados aqui e nunca recalculados adiante
-    const slotsHoje = slotsDoCartao({ cp, caso, lim });
+    // os DOIS cartões da tela — o `slotsHoje` foi montado acima, antes do julgamento
     // NA PORTA "PEDIDO" NUNCA HÁ ALVO CONGELADO — é a definição da porta: não avisamos
     // ninguém, então o `ponto_caso` não guardou alvo. A coluna dizia "sem alvo congelado"
     // em 100% das linhas, e o DP decide sem ver o que vai ser lançado. O terceiro degrau

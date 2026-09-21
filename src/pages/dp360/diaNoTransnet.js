@@ -432,3 +432,39 @@ export function casoParaORobo({ cracha, nome, caso, slotsDia, slotsSeguinte }) {
     dia_cartao: cartao(slotsDia),
   };
 }
+
+/* ═══════════ O ALMOÇO DE MEIO DE JORNADA PRECISA DE UM FIM (21/09/2026) ═══════════
+ *
+ * Dono, no JOAO CAETANO 3202677 · 25/08: "ele inventou o almoço e aí jogou a correção para
+ * frente... por que deu almoço de meio de jornada se não tinha final?".
+ *
+ * O importador fecha o almoço pela matriz quando não há batida de refeição. A `MATRIZ_PARADO`
+ * ancora no fim conhecido do dia; a `MATRIZ_MEIO_JORNADA` divide a jornada ao meio — e num
+ * dia SEM FIM não existe meio para dividir. O que sai é um almoço inventado (16:00/17:00 num
+ * cartão que tem só 04:29), e ele estraga tudo que vem depois: a ponta seguinte precisa cair
+ * DEPOIS do almoço, então 07:30 vira 31:30 e o dia fecha com 26 h líquidas.
+ *
+ * Medido no lake (janela de 70 dias): 220 dias com `MATRIZ_MEIO_JORNADA`, e 212 deles não têm
+ * saída — nem apurada, nem de alvo. Ou seja, 96% do que essa fonte produz é almoço sem fim de
+ * jornada. As outras matrizes (PARADO, PARADO_MAIOR) têm alvo de saída em 100% dos dias e
+ * ficam como estão.
+ *
+ * Dia assim não tem almoço para mostrar nem para travar: o cartão fica com as pontas que
+ * existem e o DP crava as quatro à mão se quiser. */
+export function almocoInventado(linha) {
+  const fonte = txt(linha?.fonte_almoco).toUpperCase();
+  if (!fonte.startsWith("MATRIZ_MEIO")) return false;
+  return !txt(linha?.saida) && !txt(linha?.alvo_saida);
+}
+
+/** A linha do dia sem o almoço que a matriz inventou (ver `almocoInventado`). */
+export function semAlmocoInventado(linha) {
+  if (!linha || !almocoInventado(linha)) return linha;
+  return {
+    ...linha,
+    alvo_saida_almoco: "",
+    alvo_volta_almoco: "",
+    almoco_travado: "",
+    fonte_almoco: "SEM_FIM_DE_JORNADA",
+  };
+}

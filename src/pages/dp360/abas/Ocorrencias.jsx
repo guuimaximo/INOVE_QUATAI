@@ -105,6 +105,7 @@ import {
   desenrolaSlots,
   ehRecusaSemMotivo,
   fimNoDiaSeguinte,
+  semAlmocoInventado,
   somaUmDia,
 } from "../diaNoTransnet";
 import {
@@ -1258,7 +1259,10 @@ function montarRegistros(base) {
     // linhas sem pedido e sem aviso não são caso nenhum (só ruído do join)
     if (!grupo.length && !temAvisoCaso) return;
 
-    const cp = mapaDiario.get(k) || {};
+    /* O almoço que a matriz inventou num dia SEM FIM sai aqui, na porta: de `cp` descem o
+       cartão, o alvo, a trava e tudo o que a tela desenha, então tirar num lugar só vale
+       para o pop-up, para a grade e para o que a correção lança. Ver `almocoInventado`. */
+    const cp = semAlmocoInventado(mapaDiario.get(k) || {});
     const temLinhaDoDia = mapaDiario.has(k);
     const g = mapaGordura.get(k) || {};
     const rm = mapaReal.get(k) || {};

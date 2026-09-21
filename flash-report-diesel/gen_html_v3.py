@@ -1990,9 +1990,12 @@ FOTOS_NOTURNO = "".join(
 # altura do peito) ou, estreitada para caber na proporcao, uma miniatura com meia folha
 # vazia em volta. Ela vai para dentro do card da visita, ocupando a altura que sobra
 # abaixo do texto - que e justamente o buraco que o texto curto de setembro deixou.
+# O max-height existe porque a coluna tem ~520px: deixando a foto crescer ate o fim do
+# card ela fica quase quadrada e o cover corta a largura - na foto de grupo isso come as
+# pessoas das pontas. Em 330px o recorte fica em ~5% de cada lado e ninguem sai do quadro.
 _UMA_FOTO = len(FOTOS_NOTURNO_ARQUIVOS) == 1
 FOTO_NO_CARD = (
-    f'<div style="flex:1;min-height:150px;margin-top:7px;border-radius:10px;'
+    f'<div style="flex:1;min-height:150px;max-height:330px;margin-top:7px;border-radius:10px;'
     f'overflow:hidden;border:1px solid #CFE4DF;">'
     f'<img src="{FOTOS_NOTURNO_ARQUIVOS[0][0]}" style="width:100%;height:100%;'
     f'object-fit:cover;object-position:center {FOTOS_NOTURNO_ARQUIVOS[0][1]};display:block;"/></div>'
@@ -2022,6 +2025,7 @@ pages.append(f"""<div class="page-break"></div><div class="page" style="display:
       <div class="cons-text" style="text-align:justify;">Treinamento prático com os manobristas em campo, nos veículos Volkswagen automáticos, reforçando técnicas de condução, manobras, controle do veículo e os cuidados para evitar avarias e acidentes no pátio.</div>
       <div class="cons-text" style="text-align:justify;margin-top:5px;">A prática na garagem, com o veículo que o manobrista movimenta todo dia, é o que transforma a orientação em hábito: mais treinamento significa mais segurança, mais confiança e mais cuidado com o patrimônio.</div>
       {FOTO_NO_CARD}
+      <div style="flex:1;min-height:0;"></div>
       <div class="metric" style="margin-top:7px;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">30/09/2026</div>
         <div style="font-size:7.6px;color:#48605C;margin-top:2px;">2ª das 2 visitas noturnas de setembro (18/09 e 30/09)</div></div>
     </div></div>

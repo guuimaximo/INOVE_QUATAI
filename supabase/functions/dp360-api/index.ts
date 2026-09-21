@@ -304,9 +304,10 @@ const PAGINAS_DO_CADASTRO = [
   "pessoas_organograma", "pessoas_vagas", "checklists_central", "diesel_resumo",
   "diesel_lancamento", "diesel_agente",
 ];
-const ACESSO_DAS_TABELAS: Record<string, string[] | "admin"> = {
-  // CADASTRO: o ponto e as telas que mostram gente (Pessoas, Checklists, Diesel)
-  funcionarios: [...PAGINAS_DO_PONTO, ...PAGINAS_DO_CADASTRO],
+const ACESSO_DAS_TABELAS: Record<string, string[] | "admin" | "logado"> = {
+  // CADASTRO: quem esta dentro do INOVE (o campo de motorista esta em toda tela de
+  // lancamento). O celular so sai para as paginas de PAGINAS_DO_CADASTRO — ver o `read`.
+  funcionarios: "logado",
   // FOLHA: hora extra e valor em R$ — so quem tem o Banco de Horas liberado
   banco_horas: ["dp360_banco_horas"],
   // INOVE Guard: quem tem a pagina de Fraudes liberada. A do cadastro da bilhetagem NAO
@@ -317,6 +318,12 @@ const ACESSO_DAS_TABELAS: Record<string, string[] | "admin"> = {
   fraude_bloqueio_cartao: PAGINAS_DO_GUARD,
   fraude_bloqueio_historico: PAGINAS_DO_GUARD,
 };
+
+/* As colunas de contato do cadastro e a lista sem elas (ver o `read` de `funcionarios`). */
+const CONTATO = new Set(["numero_celular", "nr_telefone_celular", "dt_nascimento"]);
+const CADASTRO_SEM_CONTATO =
+  "id_funcionario,nr_cracha,nm_funcionario,nm_funcao,status," +
+  "dt_inicio_atividade,dt_fim_atividade,dt_inicio_afastamento,dt_fim_afastamento,atualizado_em";
 
 const LIMITE_MAX = 5000;
 
@@ -1009,14 +1016,48 @@ serve(async (req: Request) => {
   const chaves = (v: unknown) => new Set((Array.isArray(v) ? v : []).map((x) => String(x ?? "").trim()));
   const liberadas = chaves(perfil?.paginas_liberadas);
   const bloqueadas = chaves(perfil?.paginas_bloqueadas);
-  const pode = (pagina: string) => ehAdmin || (liberadas.has(pagina) && !bloqueadas.has(pagina));
+  /* O PERFIL DO NÍVEL TAMBÉM ABRE — menos onde a decisão foi ser nominal (21/09/2026).
+     O `access.js` do INOVE soma `paginas_liberadas` AO perfil do nível (`app_niveis_acesso`),
+     e só exige liberação nominal no cluster DP360, no Guard e nas Configurações (folha e
+     fraude; o perfil do Gestor traz quase tudo). Este gateway olhava só a individual, então
+     quem tem acesso pelo nível — a Kamilly, Plantão, com Checklists e Reservas no perfil —
+     via a tela pelo menu e levava 403 na porta. Agora a regra é a mesma dos dois lados. */
+  const soNominal = (p: string) =>
+    p === "dp360" || p.startsWith("dp360_") || p.startsWith("guard_") || p.startsWith("config_");
+  const { data: nivelRow } = await inoveAdmin
+    .from("app_niveis_acesso")
+    .select("paginas")
+    .eq("nome", perfil?.nivel ?? "")
+    .maybeSingle();
+  const doNivel = chaves(nivelRow?.paginas);
+  const pode = (pagina: string) => {
+    if (ehAdmin) return true;
+    if (bloqueadas.has(pagina)) return false;
+    if (liberadas.has(pagina)) return true;
+    if (soNominal(pagina)) return false;
+    return doNivel.has(pagina);
+  };
   const podeTabela = (tabela: string) => {
     const regra = ACESSO_DAS_TABELAS[tabela];
     if (regra === "admin") return ehAdmin;
+    if (regra === "logado") return true; // o cadastro: ver `funcionarios` em ACESSO_DAS_TABELAS
     return (regra ?? PAGINAS_DO_PONTO).some(pode);
   };
-  // a porta: qualquer pagina servida por este gateway (ponto, banco de horas ou Guard)
-  const temAcesso = ehAdmin
+  let corpo: Record<string, unknown> = {};
+  try {
+    corpo = await req.json();
+  } catch {
+    return json({ ok: false, error: "corpo JSON inválido" }, 400);
+  }
+  /* A PORTA: qualquer pagina servida por este gateway (ponto, banco de horas, Guard ou as
+     telas que mostram gente). O CADASTRO ENTRA SEM PÁGINA (21/09/2026): o `CampoMotorista`
+     está em oito telas de lançamento (SOS, Tratativas, Acidentes, Avarias, SAC, Controle
+     Especial, Preventivas, Diesel) e nenhuma delas cabia numa lista — listar página por
+     página ia quebrar de novo a cada tela nova. Quem está dentro do INOVE lê nome, crachá e
+     função de quem trabalha aqui; o celular continua só para quem mostra celular (abaixo). */
+  const soOCadastro = String(corpo.tabela ?? "") === "funcionarios"
+    && ["read", "datas"].includes(String(corpo.action ?? ""));
+  const temAcesso = ehAdmin || soOCadastro
     || [...PAGINAS_DO_PONTO, "dp360_banco_horas", ...PAGINAS_DO_GUARD, ...PAGINAS_DO_CADASTRO].some(pode);
   if (perfilError || !perfil || !ativo || !aprovado || !temAcesso) {
     return json(
@@ -1026,13 +1067,6 @@ serve(async (req: Request) => {
   }
   const semAcessoTabela = (tabela: string) =>
     json({ ok: false, error: `seu usuário não tem acesso a esta parte da DP360 (${tabela})` }, 403);
-
-  let corpo: Record<string, unknown> = {};
-  try {
-    corpo = await req.json();
-  } catch {
-    return json({ ok: false, error: "corpo JSON inválido" }, 400);
-  }
 
   const base = dp360Url.replace(/\/$/, "");
   const hDp = {
@@ -1139,13 +1173,24 @@ serve(async (req: Request) => {
     const select = colunasValidas(corpo.colunas);
     if (select === null) return json({ ok: false, error: "colunas inválidas" }, 400);
 
+    /* O CELULAR É DE QUEM MOSTRA CELULAR. O cadastro abre para qualquer pessoa logada
+       (nome, crachá, função), mas telefone e nascimento saem só para as telas de Pessoas,
+       Checklists e Diesel — as mesmas de PAGINAS_DO_CADASTRO. Quem não tem nenhuma delas
+       recebe a linha sem essas colunas, e não um erro: o campo de motorista continua
+       funcionando em todas as telas de lançamento. */
+    const selectFinal = tabela === "funcionarios" && !ehAdmin && !PAGINAS_DO_CADASTRO.some(pode)
+      ? (select === "*"
+          ? CADASTRO_SEM_CONTATO
+          : (select.split(",").filter((c) => !CONTATO.has(c)).join(",") || "nr_cracha"))
+      : select;
+
     const filtros = montarFiltros(corpo.filtros);
     if (filtros === null) return json({ ok: false, error: "filtros inválidos" }, 400);
 
     const limite = Math.min(Math.max(Number(corpo.limite ?? 1000) || 1000, 1), LIMITE_MAX);
     const offset = Math.max(Number(corpo.offset ?? 0) || 0, 0);
 
-    let qs = `select=${encodeURIComponent(select)}&limit=${limite}&offset=${offset}`;
+    let qs = `select=${encodeURIComponent(selectFinal)}&limit=${limite}&offset=${offset}`;
     if (filtros.qs) qs += `&${filtros.qs}`;
     if (corpo.ordem != null) {
       const ordem = String(corpo.ordem);

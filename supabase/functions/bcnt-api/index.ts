@@ -117,9 +117,24 @@ serve(async (req: Request) => {
   const chaves = (v: unknown) => new Set((Array.isArray(v) ? v : []).map((x) => String(x ?? "").trim()));
   const liberadas = chaves(perfil?.paginas_liberadas);
   const bloqueadas = chaves(perfil?.paginas_bloqueadas);
-  // "home" todo mundo tem; o resto é liberação individual (ou Administrador)
-  const pode = (pagina: string) =>
-    pagina === "home" || ehAdmin || (liberadas.has(pagina) && !bloqueadas.has(pagina));
+  /* O NÍVEL TAMBÉM ABRE (21/09/2026). A Kamilly (nível Plantão, nenhuma página liberada
+     nominalmente) abria a Central de Checklists pelo menu e levava 403 aqui: o `access.js`
+     do INOVE soma a liberação individual AO PERFIL DO NÍVEL (`app_niveis_acesso`), e este
+     gateway só olhava a individual. Agora a regra é a mesma dos dois lados — e "Bloquear"
+     continua ganhando. As páginas sensíveis (dp360*, guard_*, config_*) seguem só na
+     liberação nominal, mas nenhuma delas é servida por esta função. */
+  const { data: nivelRow } = await admin
+    .from("app_niveis_acesso")
+    .select("paginas")
+    .eq("nome", perfil?.nivel ?? "")
+    .maybeSingle();
+  const doNivel = chaves(nivelRow?.paginas);
+  const pode = (pagina: string) => {
+    if (pagina === "home" || ehAdmin) return true;
+    if (bloqueadas.has(pagina)) return false;
+    if (liberadas.has(pagina)) return true;
+    return doNivel.has(pagina);
+  };
 
   let corpo: Record<string, unknown> = {};
   try {

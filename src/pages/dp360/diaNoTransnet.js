@@ -468,3 +468,9 @@ export function semAlmocoInventado(linha) {
     fonte_almoco: "SEM_FIM_DE_JORNADA",
   };
 }
+
+/** O dia cujo almoço saiu por não ter fim de jornada (marca de `semAlmocoInventado`).
+ *  É por ele que o miolo do motorista deixa de ser travado: sem refeição apurada não há o
+ *  que travar, e o DP precisa dos quatro campos para cravar o cartão à mão. */
+export const almocoSemFim = (linha) =>
+  txt(linha?.fonte_almoco).toUpperCase() === "SEM_FIM_DE_JORNADA";

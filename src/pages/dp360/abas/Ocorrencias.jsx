@@ -2307,6 +2307,24 @@ async function conferirDiasSemBatida(regs) {
  * no Transnet sem mexer no ponto já lançado. Até 17/09/2026 a trava barrava também a recusa,
  * e a tela dizia o contrário do que fazia: "só se recusa" com o botão desligado (PAULO
  * MARCOS 30060767, 03/09). */
+/* A FRASE DO DIA JÁ DECIDIDO — vazia quando ainda há veredito a dar.
+ * Usa o que já está no caso: o que o DP decidiu, quando isso foi confirmado no Transnet e o
+ * que o Transnet respondeu aos pedidos. Nada de novo é calculado aqui. */
+function fraseDoDiaDecidido(reg) {
+  if (!reg?.decJa && !resolvidoNoTransnet(reg)) return "";
+  const decisao = decisaoJaTomada(reg?.caso);
+  const partes = [];
+  if (decisao) {
+    const verbo = decisao.aceito ? "aceito" : "recusado";
+    const quando = txt(decisao.quando).slice(0, 10);
+    partes.push(quando ? `${verbo} por você em ${paraBR(quando)}` : verbo);
+  }
+  const desfecho = txt(reg?.desfecho).toUpperCase();
+  if (desfecho === "EFETUADO") partes.push("o Transnet efetuou o pedido");
+  else if (desfecho === "RECUSADO") partes.push("o Transnet recusou o pedido");
+  return partes.join(" · ") || "já decidido";
+}
+
 function motivoSemDecisao(reg, { soRecusa = false } = {}) {
   if (reg.decJa) return "já decidido";
   if (resolvidoNoTransnet(reg)) return "o Transnet já resolveu";
@@ -4597,6 +4615,18 @@ function Detalhe({
             {/* ─────────────── ESQUERDA: O QUE ELE PEDIU ─────────────── */}
             <div className="dp-card">
               <div className="dp-muted" style={ROTULO_CARD}>O que ele pediu</div>
+              {/* DIA JÁ DECIDIDO ABRE MOSTRANDO A DECISÃO, não o formulário (21/09/2026).
+                  Dono, no FABIO 30008248 · 21/08: "mas como está aparecendo um pop-up já
+                  decidido?". O caso continua na fila de CORRIGIR — e é a fila certa: ele foi
+                  julgado e ainda não foi corrigido. O que estava errado era a janela, que
+                  montava o veredito com "aceitar" marcado e escrevia "o dia fica aceito" num
+                  dia recusado por ele em 24/08 e já respondido pelo Transnet. */}
+              {fraseDoDiaDecidido(reg) ? (
+                <div className="oc-vd-motivo" style={{ margin: "8px 0 0" }}>
+                  ✅ <b>Este dia já foi decidido</b> — {fraseDoDiaDecidido(reg)}. Não há veredito a
+                  dar aqui; o que falta é a correção, e ela sai na tela principal.
+                </div>
+              ) : null}
               {reg.acoes?.length ? (
                 <ul style={{ listStyle: "none", margin: "8px 0 0", padding: 0 }}>
                   {reg.acoes.map((it, i) => {

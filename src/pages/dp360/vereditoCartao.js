@@ -21,6 +21,7 @@
 // módulo existe justamente para ser importado por `node` no teste diferencial.
 import { CONSTANTES, hm2min, jornadaDoCartao, min2hm, textoBatidas } from "./regrasPonto.js";
 import { encaixaEmQuatro, validaCartao } from "./regrasMontador.js";
+import { almocoSemFim } from "./diaNoTransnet";
 
 const txt = (v) => String(v ?? "").trim();
 
@@ -176,8 +177,10 @@ export const PONTAS_MANUAIS = ["entrada", "saida"];
  * motorista o miolo continua sem campo: é a refeição que NÓS lançamos, travada. No
  * interno/aprendiz ele é livre — o montador encaixa quando dá, e quando não dá (o cartão
  * de seis batidas do WILKER 30061203) quem sabe onde fica o almoço é o DP. */
-export const camposAMao = (categoria) =>
-  mioloTravado(categoria) ? PONTAS_MANUAIS : COMPARTIMENTOS.map((c) => c.chave);
+export const camposAMao = (categoria, { travado } = {}) =>
+  (travado === undefined ? mioloTravado(categoria) : travado)
+    ? PONTAS_MANUAIS
+    : COMPARTIMENTOS.map((c) => c.chave);
 
 /* O TRAÇO NO CAMPO = "ESTA PONTA FICA VAZIA". É o que sobra quando o DP arrasta a hora
  * de um compartimento para outro: sem ele, a ponta de onde a hora saiu voltaria a mostrar
@@ -558,7 +561,13 @@ export function montaCompartimentos({
   const cat = txt(reg?.categoria).toUpperCase();
   // "da escala" é horário PROGRAMADO, não apurado — a ponta tem de dizer isso.
   const origemDaRegua = txt(reg?.reguaFonte) === "escala" ? "escala" : "alvo";
-  const travaMiolo = mioloTravado(cat);
+  /* O MIOLO DO MOTORISTA SÓ TRAVA COM REFEIÇÃO APURADA (21/09/2026). Dono: "como ele trava o
+     almoço se não tem a certeza?" — e, no dia sem fim de jornada, "tem que ter o manual dos 4
+     pontos e não só 2". Num dia desses o almoço que vinha era invenção da matriz
+     (`semAlmocoInventado` já o tira), então não há o que travar: o miolo fica livre, os
+     quatro campos aparecem e quem crava o cartão é o DP. Nos outros dias do motorista nada
+     muda — a refeição continua sendo a que nós lançamos. */
+  const travaMiolo = mioloTravado(cat) && !almocoSemFim(reg?.cartao);
   const hoje = (reg?.slotsHoje || ["", "", "", ""]).map((h) => hm2min(h));
   const regua = (reg?.regua || ["", "", "", ""]).map((h) => hm2min(h));
   const acoes = reg?.acoes || [];
@@ -688,7 +697,8 @@ export function montaCompartimentos({
   const criticas = {};
   const mao = {};
   const maoVazia = {};
-  const campos = camposAMao(cat);
+  // os campos seguem o MIOLO do dia, não só a categoria: dia sem refeição apurada dá os quatro
+  const campos = camposAMao(cat, { travado: travaMiolo });
   const lidos = {};
   campos.forEach((chave) => {
     lidos[chave] = leHoraDigitada(manual[chave]);

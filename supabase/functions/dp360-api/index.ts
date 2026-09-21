@@ -325,6 +325,12 @@ const CADASTRO_SEM_CONTATO =
   "id_funcionario,nr_cracha,nm_funcionario,nm_funcao,status," +
   "dt_inicio_atividade,dt_fim_atividade,dt_inicio_afastamento,dt_fim_afastamento,atualizado_em";
 
+/* O que o `loteEmExecucao` procura no log do robo (ver a acao `robo_log`). Generico de
+   proposito: qualquer rotulo seguido de cracha e data entra, entao passo novo no bot nao
+   some da tela sem ninguem perceber. */
+const LINHA_DE_INTERESSE =
+  /\[bot_[a-z_]*\]\s+(?:LOTE\b|STEP\b|\S+\s{2,}\d{6,8}\s+(?:\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2}))|Alert Text:/;
+
 const LIMITE_MAX = 5000;
 
 /* ══ A TRILHA DE QUEM MEXEU (15/09/2026) ═══════════════════════════════════════
@@ -1664,8 +1670,17 @@ serve(async (req: Request) => {
      GitHub serve o log de um job EM ANDAMENTO. Entao a tela le o que ele esta
      escrevendo, em vez de esperar o `sc.gravar_caso` do fim.
 
-     SOMENTE LEITURA, e do MESMO repo do robo. Devolve so o FIM do log: o arquivo passa
-     de megabyte e a tela so precisa do que aconteceu desde a ultima olhada.
+     SOMENTE LEITURA, e do MESMO repo do robo.
+
+     O QUE VOLTA SAO AS LINHAS QUE A TELA LE, NAO O FIM DO LOG (21/09/2026). Antes eu
+     devolvia os ultimos 120 KB do arquivo. Num lote de 66 dias o log do Selenium passa de
+     250 KB, entao o comeco caia fora: o run 35628828756 confirmou 62 de 66 no Transnet e o
+     painel mostrou "32 de 66", carimbando "o robo nao chegou neste dia" em 29 dias que ele
+     tinha corrigido -- e essa frase fica gravada no `transnet_resposta` do caso. Cortar o
+     comeco de um lote e pior do que cortar o fim: o que ficou de fora foi o trabalho ja
+     feito. Agora o filtro tira o ruido (posicao de campo, linha relida, screenshot) e
+     guarda so o que o `loteEmExecucao` analisa -- 13 KB no lugar de 254 KB no mesmo run,
+     ou seja, o lote inteiro cabe com folga.
 
      O DOWNLOAD E EM DOIS PASSOS de proposito. O GitHub responde 302 para uma URL
      assinada do storage dele; seguir o redirecionamento com o `Authorization` junto
@@ -1707,11 +1722,18 @@ serve(async (req: Request) => {
         // 404 enquanto o job nao comecou a escrever e o normal, nao e erro da tela.
         return json({ ok: true, texto: "", nota: `log ainda não disponível (${r.status})` });
       }
+      /* As linhas que a tela analisa: "PASSO  cracha data: frase", os cabecalhos e erros
+         do LOTE, e o alerta que o Transnet devolve. Se o bot mudar de formato e o filtro
+         nao achar nada, volta o comportamento antigo (o fim do arquivo cru) — melhor um
+         pedaco do que nada. */
+      const uteis = texto.split(/\r?\n/).filter((l) => LINHA_DE_INTERESSE.test(l));
+      const escolhido = uteis.length ? uteis.join(String.fromCharCode(10)) : texto;
       return json({
         ok: true,
         job: job.id,
         status: String(job?.status ?? ""),
-        texto: texto.length > MAX ? texto.slice(-MAX) : texto,
+        cortado: escolhido.length > MAX,
+        texto: escolhido.length > MAX ? escolhido.slice(-MAX) : escolhido,
       });
     } catch (error) {
       return json({ ok: false, error: mensagemSegura(error) }, 502);

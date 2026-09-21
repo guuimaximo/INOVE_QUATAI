@@ -2016,7 +2016,8 @@ pages.append(f"""<div class="page-break"></div><div class="page" style="display:
       <div style="font-size:7.8px;color:#0E7C6E;font-weight:700;margin-bottom:4px;">Acompanhamento: Hélio Ramos — instrutor de treinamento</div>
       <div class="cons-text" style="text-align:justify;">Treinamento prático com os manobristas em campo, nos veículos Volkswagen automáticos, reforçando técnicas de condução, manobras, controle do veículo e os cuidados para evitar avarias e acidentes no pátio.</div>
       <div class="cons-text" style="text-align:justify;margin-top:5px;">A prática na garagem, com o veículo que o manobrista movimenta todo dia, é o que transforma a orientação em hábito: mais treinamento significa mais segurança, mais confiança e mais cuidado com o patrimônio.</div>
-      <div class="metric" style="margin-top:auto;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">30/09/2026</div>
+      <div style="flex:1;min-height:0;"></div>
+      <div class="metric"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">30/09/2026</div>
         <div style="font-size:7.6px;color:#48605C;margin-top:2px;">2ª das 2 visitas noturnas de setembro (18/09 e 30/09)</div></div>
     </div></div>
   </div>

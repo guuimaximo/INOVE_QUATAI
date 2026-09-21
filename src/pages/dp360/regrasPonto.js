@@ -29,6 +29,8 @@ const TOL_MENOS_MIN = 60;
 const TOL_CASA = 5;
 // simulador.py:99 — duas batidas a <=6 min são o MESMO evento (bug do coletor)
 const TOL_FANTASMA = 6;
+// batida a <= 1 min da anterior e o tapa-buraco do Transnet (montador.py, LICAO 4)
+const TOL_TAPA_BURACO = 1;
 // main.py:6454 — tolerância do casamento batida×cartão na realocação de dia
 const TOL_REALOCA_DIA = 5;
 // simulador.py:332 — piso do intervalo: abaixo disso o Citatti pegou parada curta, não refeição
@@ -260,8 +262,24 @@ export function removeFantasmas(batidas, { desenrolar = true } = {}) {
   const fora = [];
   for (const t of base) {
     if (limpas.length && (t - limpas[limpas.length - 1]) <= TOL_FANTASMA) {
-      fora.push(limpas[limpas.length - 1]);   // a anterior vira fantasma
-      limpas[limpas.length - 1] = t;          // preserva a última/maior do grupo
+      /* QUEM FICA DO PAR DEPENDE DA DISTÂNCIA (21/09/2026).
+       *
+       * Até aqui ficava sempre a ÚLTIMA. Vale para o fantasma de verdade — a mesma pessoa
+       * passando o crachá duas vezes em poucos minutos, onde a boa é a última. Mas o par de
+       * ATÉ 1 MINUTO não é isso: é o tapa-buraco do Transnet, que soma 1 min na última para
+       * fechar um cartão a que falta batida (montador.py `_tapa_buraco`, LIÇÃO 4). Ali a
+       * batida real é a PRIMEIRA, e ficar com a segunda empurra a entrada 1 minuto para
+       * frente — foi o que pôs o alvo do GILBERTO entrando 14:26 quando ele bateu 14:25.
+       *
+       * Medido no lake (70 dias): 409 dias têm par de ≤1 min; os de 2 a 6 min seguem como
+       * estavam. */
+      const tapaBuraco = t - limpas[limpas.length - 1] <= TOL_TAPA_BURACO;
+      if (tapaBuraco) {
+        fora.push(t);                         // sai o SEGUNDO: é o minuto que o Transnet somou
+      } else {
+        fora.push(limpas[limpas.length - 1]); // a anterior vira fantasma
+        limpas[limpas.length - 1] = t;        // preserva a última/maior do grupo
+      }
       continue;
     }
     limpas.push(t);
@@ -1014,9 +1032,6 @@ function _argmin(lista, fn) {
  *   ids, depoisConf(depois_conf), menos, redundante, viraAlteracao(vira_alteracao),
  *   orfao, semAlvoPonta(sem_alvo_ponta).
  */
-// batida a <= 1 min da anterior e o tapa-buraco do Transnet (montador.py, LICAO 4)
-const TOL_TAPA_BURACO = 1;
-
 export function julgaAcoes({
   pedidos = [], alvo = {}, gordura = {}, sugestao = {}, escala = {}, cartao = [], slots = null,
 } = {}) {

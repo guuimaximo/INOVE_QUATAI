@@ -46,6 +46,20 @@ const BUCKETS: Record<string, string[]> = {
   relatorios: ["diesel_agente", "diesel_resumo"],
 };
 
+/* O PAINEL DA INÍCIO x AS TELAS DO DIESEL (21/09/2026). `premiacao_diaria_atualizada` é
+   meritocracia POR MOTORISTA, e a página `home` estava na lista dela porque o painel da
+   Início mostra o KM/L do mês. Como `home` era passe livre aqui dentro, qualquer pessoa
+   logada podia pedir a tabela inteira — com a chapa e o consumo de cada motorista, dia a
+   dia — enquanto na tela só aparece o total. Agora `home` vale como qualquer página (dos
+   14 perfis, só 5 a têm) e quem chega por ela lê apenas as colunas do consolidado: sem
+   `motorista`, nem para selecionar nem para filtrar. Quem tem uma página do Diesel
+   continua vendo por motorista, que é o trabalho dela. */
+const PAGINAS_DO_DIESEL = ["diesel_resumo", "diesel_lancamento", "diesel_agente"];
+const COLUNAS_DO_PAINEL = new Set([
+  "id_premiacao_diaria", "dia", "ano", "mes", "anomes", "linha", "prefixo", "cluster",
+  "km_rodado", "litros_consumidos", "km_l", "meta_kml_usada", "litros_ideais",
+]);
+
 const LIMITE_MAX = 5000;
 const SEGUNDOS_URL = 300;
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -130,7 +144,7 @@ serve(async (req: Request) => {
     .maybeSingle();
   const doNivel = chaves(nivelRow?.paginas);
   const pode = (pagina: string) => {
-    if (pagina === "home" || ehAdmin) return true;
+    if (ehAdmin) return true;
     if (bloqueadas.has(pagina)) return false;
     if (liberadas.has(pagina)) return true;
     return doNivel.has(pagina);
@@ -156,6 +170,20 @@ serve(async (req: Request) => {
     if (select === null) return json({ ok: false, error: "colunas inválidas" }, 400);
     const filtros = montarFiltros(corpo.filtros);
     if (filtros === null) return json({ ok: false, error: "filtros inválidos" }, 400);
+
+    // ver COLUNAS_DO_PAINEL: quem só tem a Início não lê motorista, nem pelo filtro
+    if (tabela === "premiacao_diaria_atualizada" && !ehAdmin && !PAGINAS_DO_DIESEL.some(pode)) {
+      const pedidas = select === "*" ? ["*"] : select.split(",");
+      const doFiltro = Object.keys((corpo.filtros ?? {}) as Record<string, unknown>);
+      const fora = [...pedidas, ...doFiltro].filter((c) => !COLUNAS_DO_PAINEL.has(c));
+      if (fora.length) {
+        return json(
+          { ok: false, error: `o painel da Início lê só o consolidado do dia (sem ${[...new Set(fora)].join(", ")})` },
+          403,
+        );
+      }
+    }
+
     const limite = Math.min(Math.max(Number(corpo.limite ?? 1000) || 1000, 1), LIMITE_MAX);
     const offset = Math.max(Number(corpo.offset ?? 0) || 0, 0);
 

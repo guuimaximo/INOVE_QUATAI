@@ -579,11 +579,43 @@ export function simulaCartao({
   const refsMin = (referencias || []).map(paraMinutos).filter((r) => r !== null && r !== undefined);
 
   // desenrola a virada de dia ANTES de qualquer coisa (00:01 -> 24:01) — simulador.py:241
-  const { limpas, fora: fantasmas } = removeFantasmas(
+  const { limpas, fora: foraBruto } = removeFantasmas(
     Array.isArray(batidas) ? batidas : batidasDoCartao(batidas),
     { desenrolar: true },
   );
-  const bat = limpas.slice();
+  /* O PEDIDO MANDA MAIS QUE O REMOVEDOR DE FANTASMAS (21/09/2026).
+   *
+   * JOAO CAETANO 3202677 · 25/08: cartão `E04:29 | S04:30` — a pessoa bateu uma vez e o
+   * Transnet somou 1 min para fechar. Ela pediu "alterar 04:30 para 07:30", que é a saída
+   * de verdade. O removedor via o par de 1 min e apagava o 04:29 ANTES de o pedido ser
+   * aplicado: sobrava uma batida só, o cartão não fechava e a tela caía no alvo — com o
+   * almoço da matriz, virando 31:30 e 26 h de jornada. O dono: "ele trabalhou das 04:29 às
+   * 07:30... entender a jornada no aceite e corrigir como está ali".
+   *
+   * Então: batida que o PEDIDO cita (a origem do alterar/excluir) não é apagada como
+   * fantasma — o par existe justamente porque falta a batida que o pedido vem trazer, e
+   * depois de aplicado ele deixa de ser par. Aqui: 04:29 volta, o 04:30 vira 07:30 e o
+   * cartão fecha em 04:29 · 07:30, que é a jornada que aconteceu.
+   *
+   * ESTREITO DE PROPÓSITO: só volta a batida a ≤1 min de um horário que o pedido nomeia.
+   * Medido no lake (70 dias): de 5.407 pedidos com cartão, 261 caem em dia com par de 1
+   * min e só 66 têm o pedido apontando para uma batida do par — são esses 66 que hoje
+   * perdem a jornada. Nos outros 5.341 nada muda. */
+  const citados = [];
+  for (const o of pedidos || []) {
+    const tipo = _tipo(o);
+    if (!tipo.startsWith('altera') && !tipo.startsWith('exclu')) continue;
+    const t = temposDoAjuste(_txtAjuste(o))[0];
+    if (t !== null && t !== undefined) citados.push(t);
+  }
+  const pedidoCita = (m) =>
+    citados.some((c) => {
+      const d = Math.abs(((m - c) % 1440 + 1440) % 1440);
+      return Math.min(d, 1440 - d) <= 1;
+    });
+  const devolvidas = foraBruto.filter(pedidoCita);
+  const fantasmas = foraBruto.filter((m) => !devolvidas.includes(m));
+  const bat = limpas.concat(devolvidas).sort((a, b) => a - b);
   const notas = [];
   if (fantasmas.length) notas.push(`_fantasma:${fantasmas.map(min2hm).join(',')}`);
 
@@ -630,6 +662,22 @@ export function simulaCartao({
       notas.push(`tipo '${(o && o.tipo) || ''}' não simulado`);
     }
     bat.sort((a, b) => a - b);                       // numérico! o sort padrão do JS é textual
+  }
+
+  /* E O TAPA-BURACO SAI DEPOIS, se o pedido não o resolveu (21/09/2026).
+   * Só vale quando alguma batida foi devolvida acima: com o pedido aplicado, o par de 1 min
+   * ou some (a batida virou outra hora) ou sobra como o tapa-buraco que sempre foi. No JOAO
+   * o cartão vira 04:29 · 04:30 · 07:30 — o 04:30 é o minuto que o Transnet somou para
+   * fechar, e sai; fica 04:29 · 07:30, a jornada que aconteceu. Sai o SEGUNDO do par, como
+   * no `_tapa_buraco` do montador (ferramenta/montador.py, LIÇÃO 4). */
+  if (devolvidas.length && bat.length > 1) {
+    const limpo = [];
+    for (const m of bat) {
+      if (limpo.length && m - limpo[limpo.length - 1] <= 1) { notas.push(`_tapa_buraco:${min2hm(m)}`); continue; }
+      limpo.push(m);
+    }
+    bat.length = 0;
+    bat.push(...limpo);
   }
 
   // simulador.py:293-296 — o cartão só tem 4 campos: passar disso é resultado impossível de

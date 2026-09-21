@@ -1969,9 +1969,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 # recorte se apoia. Paisagem de grupo pede ~40%; retrato de corpo inteiro pede ~24%, senao
 # o corte pega a cintura em vez do rosto. So um numero para acertar no mes que vem.
 FOTOS_NOTURNO_ARQUIVOS = [
-    ("noturno_ago_1.jpg", "40%"),
-    ("noturno_ago_2.jpg", "40%"),
-    ("noturno_ago_3.jpg", "24%"),
+    ("noturno_set_1.jpg", "40%"),
 ]
 # inline-block em vez de flex de proposito: o flex-wrap do WeasyPrint nao e confiavel e as
 # fotos empilhavam uma por linha. font-size:0 no pai mata o espaco entre os inline-blocks.
@@ -1981,9 +1979,15 @@ FOTOS_NOTURNO_ARQUIVOS = [
 # A largura se divide pelo numero de fotos, com folga para o arredondamento nao quebrar
 # a linha: com 4 fotos elas ficam menores em vez de a quarta cair sozinha embaixo.
 _N_FOTOS = max(len(FOTOS_NOTURNO_ARQUIVOS), 1)
-_LARG_FOTO = 99.0 / _N_FOTOS - 0.8
+# Com uma foto so, esticar para a largura cheia da faixa (98%) daria uma celula de ~5:1:
+# o object-fit:cover cortaria a foto de grupo na altura do peito. Uma foto fica em meia
+# largura e um pouco mais alta - proporcao perto de 16:9, que e como o celular fotografa.
+if _N_FOTOS == 1:
+    _LARG_FOTO, _ALT_FOTO = 48.0, 190
+else:
+    _LARG_FOTO, _ALT_FOTO = 99.0 / _N_FOTOS - 0.8, 150
 FOTOS_NOTURNO = "".join(
-    f'<div style="display:inline-block;width:{_LARG_FOTO:.2f}%;height:150px;margin:0 .4%;'
+    f'<div style="display:inline-block;width:{_LARG_FOTO:.2f}%;height:{_ALT_FOTO}px;margin:0 .4%;'
     f'border-radius:10px;overflow:hidden;border:1px solid #CFE4DF;vertical-align:top;">'
     f'<img src="{_f}" style="width:100%;height:100%;object-fit:cover;'
     f'object-position:center {_foco};display:block;"/></div>'
@@ -1999,7 +2003,7 @@ FOTOS_NOTURNO_BLOCO = (
 # entao os dois cards esticam ate o rodape e o calendario cresce junto (linhas 1fr) em vez
 # de ficar espremido no topo. margin-bottom deixa a faixa do rodape livre - ele e absoluto.
 pages.append(f"""<div class="page-break"></div><div class="page" style="display:flex;flex-direction:column;">
-  {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "18/09")}
+  {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "30/09")}
   <div class="grid-2" style="flex:1;min-height:0;margin-bottom:0;">
     <div class="card" style="display:flex;flex-direction:column;"><div class="card-title">Calendário de visitas — {MESREF}</div><div class="card-body" style="flex:1;display:flex;flex-direction:column;">
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:2px;">{CAL_JULHO_HEADER}</div>
@@ -2007,14 +2011,13 @@ pages.append(f"""<div class="page-break"></div><div class="page" style="display:
       <div class="cons-box" style="margin-top:8px;"><div class="cons-title">Programação</div>
       <div class="cons-text">{len(_visita_label)} visitas noturnas programadas para {MESREF_NOME.lower()} — {_visitas_datas} — mantendo a cadência mensal de visitas noturnas. Cada visita inclui verificação de manobras no pátio, orientação aos motoristas em campo e reforço das boas práticas de condução econômica.</div></div>
     </div></div>
-    <div class="card" style="display:flex;flex-direction:column;"><div class="card-title">Última visita realizada — 14/08/2026</div><div class="card-body" style="flex:1;display:flex;flex-direction:column;">
-      <div style="font-weight:800;font-size:10.5px;color:#1F2D2B;margin-bottom:2px;">Treinamento Prático de Manobristas em Campo — Acompanhamento do Instrutor</div>
-      <div style="font-size:7.8px;color:#0E7C6E;font-weight:700;margin-bottom:4px;">Acompanhamento: instrutor Hélio</div>
-      <div class="cons-text" style="text-align:justify;">Foi realizado treinamento prático com os manobristas em campo, com acompanhamento do instrutor, trabalhando a dinâmica “o instrutor leva e o manobrista traz”, proporcionando mais segurança e confiança durante as manobras.</div>
-      <div class="cons-text" style="text-align:justify;margin-top:5px;">Também foi realizado teste prático de manobrista para motorista, sendo o colaborador Maurício <b>APROVADO</b> na avaliação e apto a exercer a função de motorista.</div>
-      <div class="cons-text" style="text-align:justify;margin-top:5px;">Treinamento, avaliação e desenvolvimento profissional em busca de mais segurança e qualidade na operação.</div>
-      <div class="metric" style="margin-top:auto;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">18/09/2026</div>
-        <div style="font-size:7.6px;color:#48605C;margin-top:2px;">1ª das 2 visitas noturnas de setembro (18/09 e 30/09)</div></div>
+    <div class="card" style="display:flex;flex-direction:column;"><div class="card-title">Última visita realizada — 18/09/2026</div><div class="card-body" style="flex:1;display:flex;flex-direction:column;">
+      <div style="font-weight:800;font-size:10.5px;color:#1F2D2B;margin-bottom:2px;">Treinamento em Campo — Volkswagen Automático</div>
+      <div style="font-size:7.8px;color:#0E7C6E;font-weight:700;margin-bottom:4px;">Acompanhamento: Hélio Ramos — instrutor de treinamento</div>
+      <div class="cons-text" style="text-align:justify;">Treinamento prático com os manobristas em campo, nos veículos Volkswagen automáticos, reforçando técnicas de condução, manobras, controle do veículo e os cuidados para evitar avarias e acidentes no pátio.</div>
+      <div class="cons-text" style="text-align:justify;margin-top:5px;">A prática na garagem, com o veículo que o manobrista movimenta todo dia, é o que transforma a orientação em hábito: mais treinamento significa mais segurança, mais confiança e mais cuidado com o patrimônio.</div>
+      <div class="metric" style="margin-top:auto;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">30/09/2026</div>
+        <div style="font-size:7.6px;color:#48605C;margin-top:2px;">2ª das 2 visitas noturnas de setembro (18/09 e 30/09)</div></div>
     </div></div>
   </div>
   {FOTOS_NOTURNO_BLOCO}
@@ -2038,13 +2041,23 @@ CRONOGRAMA = [
         ("Comunicação Telemetria (3)", "Como meu KM/L é calculado no dia e no mês?", "11/09", True),
     ]),
     ("3ª Semana", "14 a 18/09", [
-        ("Comunicações da semana", "", "18/09", False),
+        ("Imagem Motivacional", "", "14/09", True),
+        ("Min. do Conhecimento", "Segurança no Embarque e Desembarque de Passageiros", "15/09", True),
+        ("Imagem Informativa", "Segurança no Embarque e Desembarque de Passageiros", "16/09", True),
+        ("Podcast “Fala, Motô!”", "Indo Contra a Rota: como ser um motorista diferente", "17/09", True),
+        ("Enquete de Fixação", "Segurança no Embarque e Desembarque de Passageiros", "18/09", True),
     ]),
     ("4ª Semana", "21 a 25/09", [
-        ("Comunicações da semana", "", "25/09", False),
+        ("Imagem Motivacional", "", "21/09", True),
+        ("Min. do Conhecimento", "", "22/09", False),
+        ("Imagem Informativa", "", "23/09", False),
+        ("Podcast “Fala, Motô!”", "", "24/09", False),
+        ("Enquete de Fixação", "", "25/09", False),
     ]),
     ("5ª Semana", "28 a 30/09", [
-        ("Comunicações da semana", "", "30/09", False),
+        ("Imagem Motivacional", "", "28/09", False),
+        ("Min. do Conhecimento", "", "29/09", False),
+        ("Imagem Informativa", "", "30/09", False),
     ]),
 ]
 
@@ -2100,7 +2113,7 @@ pages.append(f"""<div class="page-break"></div><div class="page">
     <div>{_crono_left}</div>
     <div>{_crono_right}
       <div class="cons-box"><div class="cons-title">Sobre o cronograma</div>
-      <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas. Em setembro a série é sobre KM/L e Telemetria — como o sistema apura, no dia e no mês, o indicador que este relatório acompanha. A 1ª semana abriu as comunicações com "Por trás dos processos" e "Como o Sistema sabe meu KM/L?". A 2ª semana seguiu com "Como o Sistema sabe minhas viagens?" e "Como meu KM/L é calculado no dia e no mês?", além do fechamento e da divulgação da data da Premiação Telemetria de agosto/2026. Das {len(CRONOGRAMA)} semanas de {MESREF_NOME.lower()}, {_n_feitos} dos {_n_itens} conteúdos já foram executados. {_crono_pend}</div></div>
+      <div class="cons-text">Programação semanal de comunicação e engajamento com os motoristas. Setembro teve duas séries. A primeira, nas duas primeiras semanas, foi sobre KM/L e Telemetria — como o sistema apura, no dia e no mês, o indicador que este relatório acompanha: "Por trás dos processos", "Como o Sistema sabe meu KM/L?", "Como o Sistema sabe minhas viagens?" e "Como meu KM/L é calculado no dia e no mês?", além do fechamento e da divulgação da data da Premiação Telemetria de agosto/2026. A partir da 3ª semana o tema passou a ser Segurança no Embarque e Desembarque de Passageiros, com o ciclo completo — imagem motivacional, Min. do Conhecimento, imagem informativa, podcast "Fala, Motô!" e enquete de fixação — de 14 a 18/09. Das {len(CRONOGRAMA)} semanas de {MESREF_NOME.lower()}, {_n_feitos} dos {_n_itens} conteúdos já foram executados. {_crono_pend}</div></div>
     </div>
   </div>
   {footer(18)}

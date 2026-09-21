@@ -561,13 +561,24 @@ export function montaCompartimentos({
   const cat = txt(reg?.categoria).toUpperCase();
   // "da escala" é horário PROGRAMADO, não apurado — a ponta tem de dizer isso.
   const origemDaRegua = txt(reg?.reguaFonte) === "escala" ? "escala" : "alvo";
-  /* O MIOLO DO MOTORISTA SÓ TRAVA COM REFEIÇÃO APURADA (21/09/2026). Dono: "como ele trava o
-     almoço se não tem a certeza?" — e, no dia sem fim de jornada, "tem que ter o manual dos 4
-     pontos e não só 2". Num dia desses o almoço que vinha era invenção da matriz
-     (`semAlmocoInventado` já o tira), então não há o que travar: o miolo fica livre, os
-     quatro campos aparecem e quem crava o cartão é o DP. Nos outros dias do motorista nada
-     muda — a refeição continua sendo a que nós lançamos. */
-  const travaMiolo = mioloTravado(cat) && !almocoSemFim(reg?.cartao);
+  /* O CADEADO DO ALMOÇO SEGUE O DIA, NÃO A CATEGORIA (21/09/2026).
+   *
+   * Dono, no JARDEL 30027746 · 29/08: "tira o bloqueio do almoço, deixa livre — olha esse
+   * almoço nada a ver". O cartão dele é 05:14 · 14:57 · 21:12 · 21:42: o montador chamou de
+   * almoço as duas batidas do meio, 375 min, e o cadeado impedia o DP de arrumar.
+   *
+   * O cadeado vinha SÓ da categoria (MOTORISTA trava sempre). Mas quem diz se a refeição foi
+   * apurada é a linha do dia — e nela `almoco_travado` estava FALSE, com `almoco_confiavel`
+   * também false. Ou seja: a tela trancava o que o próprio lake dizia não ter apurado, e
+   * `camposParaRealManual` (a gravação) já olhava esse mesmo campo — a tela é que discordava
+   * dela. Agora as duas leem o dia: sem refeição apurada, o miolo é livre, o cadeado some e
+   * o "Cravar à mão" abre as quatro pontas. Com refeição apurada (o `almoco_travado` do
+   * CARTAO_PRESERVADO e das matrizes), nada muda: continua sendo a que nós lançamos.
+   *
+   * O pedido do colaborador que mira o miolo segue recusado por regra própria
+   * (`pedidoMiraOMiolo` + MOTIVO_MIOLO): aquilo é sobre quem PODE mudar a refeição, e não
+   * sobre o DP poder consertar o cartão. */
+  const travaMiolo = mioloTravado(cat) && reg?.almocoTravado === true && !almocoSemFim(reg?.cartao);
   const hoje = (reg?.slotsHoje || ["", "", "", ""]).map((h) => hm2min(h));
   const regua = (reg?.regua || ["", "", "", ""]).map((h) => hm2min(h));
   const acoes = reg?.acoes || [];

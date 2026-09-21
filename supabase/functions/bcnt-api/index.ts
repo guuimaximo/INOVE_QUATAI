@@ -32,8 +32,12 @@ const json = (corpo: unknown, status = 200) =>
    A página é a mesma do menu do INOVE (`accessCatalog.js`). Quem não tem a página
    liberada no usuário não lê a tabela, mesmo com sessão válida.                */
 const TABELAS: Record<string, string[]> = {
-  // checklists preenchidos no app — Central de Checklists
-  checklists: ["checklists_central", "checklists_painel_sr", "checklists_fichas_sr_manutencao"],
+  /* checklists preenchidos no app — SÓ a Central de Checklists (21/09/2026). O Painel SR e
+     as Fichas SR estavam nesta lista e não leem a BCNT: as duas telas vivem de
+     `solicitacao_reparo_aberta`, na base do INOVE. A conta da TV da Manutenção tem essas
+     duas páginas liberadas e a Central BLOQUEADA — e mesmo assim alcançava os checklists
+     por aqui. Página que não lê a tabela não entra na lista dela. */
+  checklists: ["checklists_central"],
   // meritocracia por motorista/dia — Resumo e Lançamento do Diesel e o painel da Home
   premiacao_diaria_atualizada: ["diesel_resumo", "diesel_lancamento", "diesel_agente", "home"],
   // meritocracia consolidada do mês

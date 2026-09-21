@@ -25,6 +25,12 @@
 import fs from "fs";
 
 const perfis = JSON.parse(fs.readFileSync("perfis.json", "utf8")).rows;
+const mapaPerfil = Object.fromEntries(perfis.map((p) => [p.nome, p.paginas || []]));
+/* As PESSOAS de verdade, quando houver despejo (o perfil é o padrão; a liberação e o
+   bloqueio individuais só aparecem aqui). Sem o arquivo, roda só nos perfis. */
+const usuarios = fs.existsSync("usuarios.json")
+  ? JSON.parse(fs.readFileSync("usuarios.json", "utf8")).rows
+  : [];
 
 /* ── as telas: página -> tabelas que ela pede ao gateway ──────────────────── */
 const PONTO = ["app_config", "ponto_diario", "ponto_caso", "ponto_conferido", "ponto_ajustes",
@@ -65,7 +71,7 @@ const ACESSO_DP360 = {
   fraude_bloqueio_historico: PAGINAS_DO_GUARD,
 };
 const ACESSO_BCNT = {
-  "BCNT:checklists": ["checklists_central", "checklists_painel_sr", "checklists_fichas_sr_manutencao"],
+  "BCNT:checklists": ["checklists_central"],
   "BCNT:premiacao_diaria_atualizada": ["diesel_resumo", "diesel_lancamento", "diesel_agente", "home"],
   "BCNT:arquivos": ["diesel_agente", "diesel_resumo"],
 };
@@ -128,7 +134,36 @@ for (const { nome, paginas } of perfis) {
   }
 }
 
+const negativasPessoa = [], folgasPessoa = [];
+for (const u of usuarios) {
+  const g = fabricar(u.nivel, mapaPerfil[u.nivel] || [], u.liberadas || [], u.bloqueadas || []);
+  const o = { homeUniversal: process.env.ANTES === "1" };
+  const pelasTelas = new Set();
+  for (const [pagina, tabelas] of Object.entries(TELAS)) {
+    if (g.veNoMenu(pagina)) tabelas.forEach((t) => pelasTelas.add(t));
+  }
+  for (const [pagina, tabelas] of Object.entries(TELAS)) {
+    if (!g.veNoMenu(pagina)) continue;
+    for (const t of tabelas) {
+      if (!g.podeTabela(t, o)) negativasPessoa.push(`${u.nome} (${u.nivel}) · ${pagina} → ${t}`);
+    }
+  }
+  if (!g.ehAdmin) {
+    for (const t of new Set(Object.values(TELAS).flat())) {
+      if (!pelasTelas.has(t) && g.podeTabela(t, o) && t !== "funcionarios") {
+        folgasPessoa.push(`${u.nome} (${u.nivel}) → ${t}`);
+      }
+    }
+  }
+}
+
 const unico = (a) => [...new Set(a)];
+if (usuarios.length) {
+  console.log(`=== PESSOAS (${usuarios.length} ativas e aprovadas) ===`);
+  console.log("falsa negativa: " + (unico(negativasPessoa).join(" | ") || "nenhuma"));
+  console.log("folga:          " + (unico(folgasPessoa).join(" | ") || "nenhuma"));
+  console.log("");
+}
 console.log("=== FALSA NEGATIVA (menu abre, gateway recusa) ===");
 console.log(unico(falsasNegativas).join(String.fromCharCode(10)) || "  nenhuma");
 console.log("=== FOLGA (servidor responde tabela que nenhuma tela dela alcanca) ===");

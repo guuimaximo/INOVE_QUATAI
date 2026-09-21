@@ -99,6 +99,7 @@ import { csvDoAjustePonto } from "../regrasAjustePonto";
 // O que faz o Transnet recusar um dia sem dizer por quê (atestado, fim do turno no dia
 // seguinte) e a virada do dia desenrolada — a mesma regra da Revisão e do Histórico.
 import {
+  almocoSemFim,
   atestadoDoDia,
   casoDaVirada,
   casoParaORobo,
@@ -1266,7 +1267,13 @@ function montarRegistros(base) {
     const temLinhaDoDia = mapaDiario.has(k);
     const g = mapaGordura.get(k) || {};
     const rm = mapaReal.get(k) || {};
-    const caso = casoBruto || {};
+    /* E O ALMOÇO INVENTADO TAMBÉM SAI DO ALVO CONGELADO (21/09/2026). Tirar da linha do dia
+       não bastou: o alvo que o aviso congelou no CASO guarda a mesma matriz, e o pop-up
+       oferecia "+ Completar saída almoço com o alvo (16:00)" — a invenção voltando por
+       outra porta, no clique. Sem fim de jornada não há almoço para completar. */
+    const caso = almocoSemFim(cp)
+      ? { ...(casoBruto || {}), alvo_alm_saida: "", alvo_alm_volta: "" }
+      : casoBruto || {};
     const reaberto = ehReaberto(caso);
     const ciclo = casoDoCiclo(caso);
     const temAviso = diasComAviso.has(k);

@@ -1014,6 +1014,9 @@ function _argmin(lista, fn) {
  *   ids, depoisConf(depois_conf), menos, redundante, viraAlteracao(vira_alteracao),
  *   orfao, semAlvoPonta(sem_alvo_ponta).
  */
+// batida a <= 1 min da anterior e o tapa-buraco do Transnet (montador.py, LICAO 4)
+const TOL_TAPA_BURACO = 1;
+
 export function julgaAcoes({
   pedidos = [], alvo = {}, gordura = {}, sugestao = {}, escala = {}, cartao = [],
 } = {}) {
@@ -1106,10 +1109,34 @@ export function julgaAcoes({
       hm = mm ? hm2min(mm[1]) : null;
     }
 
+    /* ALTERAR O TAPA-BURACO É MEXER NA PONTA QUE FALTAVA (21/09/2026).
+     *
+     * JOAO CAETANO 3202677 · 25/08: cartão `04:29 | 04:30` — uma batida e o minuto que o
+     * Transnet somou para fechar. Ele pediu "alterar 04:30 para 07:30". A ponta saía da
+     * ESCALA (03:05–12:15) e o 07:30 caiu 20 min mais perto da entrada: o pop-up punha o
+     * 07:30 na ENTRADA e empurrava o 04:30 para a SAÍDA, virando 28:30 e 21 h de jornada.
+     *
+     * Quem sabe a ponta aqui não é a escala, é o cartão: a batida real é a PRIMEIRA do par
+     * (a entrada), e o tapa-buraco é o lugar da ponta que ficou faltando. Então alterar o
+     * tapa-buraco de um cartão de duas batidas é alterar a SAÍDA — o que dá 04:29 · 07:30,
+     * a jornada que aconteceu.
+     *
+     * Estreito: só cartão com as DUAS batidas do par. Com quatro batidas e um par no meio a
+     * tela não adivinha — segue pela escala, como antes. */
+    let pontaDoTapaBuraco = '';
+    if (alt) {
+      const deM = hm2min(alt[1]);
+      const ordenadas = batCp.slice().sort((x, y) => x - y);
+      const i = deM === null ? -1 : ordenadas.findIndex((b) => difRelogio(deM, b) === 0);
+      if (i === 1 && ordenadas.length === 2 && ordenadas[1] - ordenadas[0] <= TOL_TAPA_BURACO) {
+        pontaDoTapaBuraco = PONTA_SAIDA;
+      }
+    }
+
     let cand = alvos;
     if (hm !== null && alvos.length && mira.length) {
       // QUAL PONTA ELE MIROU — pela ESCALA, não pelo alvo que sobrou (main.py:6585-6592)
-      const mp = _argmin(mira, (x) => difRelogio(hm, x[1]))[0];
+      const mp = pontaDoTapaBuraco || _argmin(mira, (x) => difRelogio(hm, x[1]))[0];
       const rotsComAlvo = new Set(alvos.map((x) => x[0]));
       if (!rotsComAlvo.has(mp)) {
         item.ponta = mp;

@@ -626,16 +626,17 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
             <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 border-b pb-2 flex items-center gap-2"><FaBus className="text-slate-400" /> Informações da Ocorrência</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* a mesma abertura da Central (21/09/2026) — só o "Criado em" fica fixo */}
               {renderField("Criado em", "created_at", false, "date", true)}
-              {renderField("Plantonista", "plantonista", false, "text", true)}
-              {renderField("Data SOS", "data_sos", false, "date", true)}
-              {renderField("Hora SOS", "hora_sos", false, "text", true)}
-              {renderField("Veículo", "veiculo", false, "text", true)}
-              {renderField("Linha", "linha", false, "text", true)}
-              {renderField("Motorista", "motorista_nome", false, "text", true)}
-              {renderField("Local", "local_ocorrencia", false, "text", true)}
-              {renderField("Tabela Operacional", "tabela_operacional", false, "text", true)}
-              <div className="md:col-span-3">{renderField("Reclamação do Motorista", "reclamacao_motorista", true, "text", true)}</div>
+              {renderField("Plantonista", "plantonista")}
+              {renderField("Data SOS", "data_sos", false, "date")}
+              {renderField("Hora SOS", "hora_sos", false, "time")}
+              {renderField("Veículo", "veiculo")}
+              {renderField("Linha", "linha")}
+              {renderField("Motorista", "motorista_nome")}
+              {renderField("Local", "local_ocorrencia")}
+              {renderField("Tabela Operacional", "tabela_operacional")}
+              <div className="md:col-span-3">{renderField("Reclamação do Motorista", "reclamacao_motorista", true)}</div>
             </div>
           </div>
 

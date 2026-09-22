@@ -2347,7 +2347,28 @@ function fraseDoDiaDecidido(reg) {
 }
 
 function motivoSemDecisao(reg, { soRecusa = false } = {}) {
-  if (reg.decJa) return "já decidido";
+  /* PEDIDO ABERTO NO TRANSNET NAO ESTA DECIDIDO — nem pelo dia, nem pelo carimbo
+   * (22/09/2026). O dono mandou dez casos: "todos esses nao consigo aceitar a ocorrencia".
+   * Entrei um a um no lake e eram QUATRO motivos diferentes; sete estao mesmo acabados
+   * (ele recusou/aceitou E o Transnet efetuou ou recusou — nao ha o que decidir). Os outros
+   * eram esta falha:
+   *
+   *   · NATALIA 30061178 26/08 — dia aceito por ele em 02/09, as duas ocorrencias EFETUADAS,
+   *     e uma TERCEIRA (781685) aberta em 21/09, ainda PENDENTE. O `decJa` olha o dia, entao
+   *     o pedido novo nascia ja respondido: "ja decidido", sem ninguem ter decidido nada.
+   *   · EDVALDO 30060443 10/09 — dia carimbado `correcao_final_em` em 21/09 e ocorrencia
+   *     781409 aberta no MESMO dia, PENDENTE, pedindo 03:35 -> 04:05. A trava diz que
+   *     aceitar "desfaz a correcao ja lancada" — mas o cartao do dia continua
+   *     `E03:35 | S09:11 | E09:41 | S14:05`, o alvo e igual as batidas e o caso nao tem
+   *     `ponto_final`: nao ha correcao lancada para desfazer.
+   *
+   * Esta e a MESMA regra que ja foi escrita aqui ao lado em 17/09 para o
+   * `resolvidoNoTransnet` ("o dia so esta resolvido quando nao sobra pedido aberto") e que
+   * ficou faltando nestas duas clausulas. Medido no lake: 18 dias ja decididos tem
+   * ocorrencia PENDENTE aberta DEPOIS da decisao. Dia sem pedido aberto continua travado —
+   * os sete acabados seguem sem veredito, que e o certo. */
+  const temPedidoAberto = Number(reg?.abertosNoTransnet || 0) > 0;
+  if (reg.decJa && !temPedidoAberto) return "já decidido";
   if (resolvidoNoTransnet(reg)) return "o Transnet já resolveu";
   // NÃO EXISTE DECISÃO SOBRE O NADA. Dia sem pedido nenhum não se aceita nem se recusa:
   // gravaria aceite com ajuste_ids vazio e tiraria o caso da fila de advertência em
@@ -2359,7 +2380,8 @@ function motivoSemDecisao(reg, { soRecusa = false } = {}) {
   // PEDIDO POSTERIOR: ele abriu o pedido DEPOIS de o dia já ter sido julgado, advertido e
   // corrigido. Aceitar aqui DESFAZ a correção já lançada, e re-advertir seria punir duas
   // vezes o mesmo fato. A única saída é recusar (main.py:2222 `recusar_posterior`).
-  if ((txt(reg.caso?.correcao_final_em) || reg.situacaoAviso === "posterior") && !soRecusa)
+  if ((txt(reg.caso?.correcao_final_em) || reg.situacaoAviso === "posterior")
+      && !soRecusa && !temPedidoAberto)
     return "o dia já foi corrigido — pedido posterior só se recusa, nunca se aceita";
   return "";
 }

@@ -510,7 +510,6 @@ export function semTapaBuracoNoAlvo(linha) {
      pelo miolo: alvo/sugestao de almoco que caem no segundo do par saem um minuto adiante
      e a correcao lanca esse minuto. Os oito campos sao a mesma batida vista de oito
      lugares; consertar quatro e deixar quatro e consertar pela metade. */
-  let mexeu = false;
   for (const campo of ["alvo_entrada", "alvo_saida", "entrada_sug", "saida_sug",
                        "alvo_saida_almoco", "alvo_volta_almoco",
                        "almoco_saida_sug", "almoco_volta_sug"]) {
@@ -518,8 +517,25 @@ export function semTapaBuracoNoAlvo(linha) {
     const arrumado = arruma(novo[campo]);
     if (arrumado === novo[campo]) continue;
     novo[campo] = arrumado;
-    mexeu = true;
   }
+  /* O PAR QUE E CARTAO NAO E TAPA-BURACO (22/09/2026, investigacao dos cartoes).
+     FABIANO 30061088 13/09 bateu `E19:00 | S19:30 | E21:19 | S21:20`: cartao legitimo de
+     quatro pontas — entra 19:00, almoca 19:30-21:19, sai 21:20. Esta regra viu 21:19/21:20
+     a um minuto e puxou a saida para 21:19; a clausula seguinte (o intervalo batido) poe a
+     volta do almoco tambem em 21:19, e o dia sai com a MESMA hora duas vezes: volta do
+     almoco e saida no mesmo minuto, cartao que nao se lanca.
+     Colapsar o par so vale quando ele NAO ocupa dois compartimentos diferentes do cartao.
+     Onde a troca criaria ponta repetida, a hora original fica. */
+  for (const quarteto of [["entrada_sug", "almoco_saida_sug", "almoco_volta_sug", "saida_sug"],
+                          ["alvo_entrada", "alvo_saida_almoco", "alvo_volta_almoco", "alvo_saida"]]) {
+    for (const campo of quarteto) {
+      if (novo[campo] === linha[campo]) continue;              // esta nao foi trocada
+      const repetiu = quarteto.some((outro) => outro !== campo
+        && txt(novo[outro]) && txt(novo[outro]) === txt(novo[campo]));
+      if (repetiu) novo[campo] = linha[campo];
+    }
+  }
+  const mexeu = Object.keys(novo).some((k) => novo[k] !== linha[k]);
   /* SO DEVOLVE COPIA SE MOVEU ALGUMA HORA (22/09/2026). Antes bastava EXISTIR um par de
      1 min no cartao para esta funcao devolver objeto novo, mesmo sem mexer em nada — e o
      dia saia carimbado com "tapa-buraco: a batida real e a primeira do par", um motivo que
@@ -672,7 +688,18 @@ function semSugestaoImpossivel(linha) {
  * para ser refeicao, sai, e (c) num dia sem saida real, o cartao volta a PEDIR a saida — que
  * e a verdade: a pessoa nao bateu a saida dela.
  */
-const ALMOCO_CURTO_DEMAIS = 15;   // abaixo disto nao existe refeicao batida no lake
+/* O PISO DA REFEICAO E O DO PROPRIO SISTEMA (22/09/2026, investigacao dos cartoes).
+   Era 15. O `simulador.py` — a mesma regra que o robo usa — define `MIN_ALMOCO = 27` com
+   esta frase: "abaixo disso o Citatti nao pegou a refeicao de verdade, pegou uma parada
+   curta". Dois numeros para a mesma pergunta e a tela propondo almoco de 4 minutos
+   (30060984 15/05, 04:50-04:54) enquanto o robo nao chamaria aquilo de refeicao.
+
+   MEDIDO ANTES DE MUDAR, nos 49.084 dias do lake: 342 dias tem refeicao PROPOSTA (que
+   ninguem bateu) abaixo de 27 min — 6 abaixo de 15 e 336 na faixa 15-26 —, e os 342 estao
+   em REVISAR: NENHUM dia ja decidido e tocado. Do outro lado, 624 dias tem refeicao
+   BATIDA abaixo de 27 min: essas sao FATO e a regra nao encosta nelas (a licao do piso de
+   almoco do interno, que quase barrou o ponto real de muita gente). */
+const ALMOCO_CURTO_DEMAIS = 27;
 
 function almocoDeMatrizInventado(linha) {
   if (!txt(linha?.fonte_almoco).toUpperCase().startsWith("MATRIZ")) return false;
@@ -683,19 +710,45 @@ function almocoDeMatrizInventado(linha) {
   return !(bateu.has(ini) && bateu.has(fim));
 }
 
+/* REFEICAO CURTA DEMAIS QUE NINGUEM BATEU — DE QUALQUER CONTA NOSSA (22/09/2026).
+   O `almocoDeMatrizInventado` so olha `MATRIZ*`, e a investigacao achou 124 dias com
+   refeicao curta sem fonte nenhuma e outras com fonte diferente: o defeito nao e da matriz,
+   e de propor como refeicao uma parada que nao chega a ser refeicao.
+
+   FICA DE FORA O QUE E REGISTRO, nao conta nossa: `MODULO_REFEICAO` (a empresa lancou no
+   modulo do Transnet — vale mesmo divergindo das batidas), `CARTAO_PRESERVADO` (e a batida
+   da pessoa) e `INTERVALO_BATIDO` (a nossa propria regra ja concluiu que a parada foi
+   batida). E, em qualquer caso, par BATIDO nao se toca. */
+const FONTE_E_REGISTRO = /MODULO_REFEICAO|CARTAO_PRESERVADO|INTERVALO_BATIDO/i;
+
+function almocoCurtoInventado(linha) {
+  if (FONTE_E_REGISTRO.test(txt(linha?.fonte_almoco))) return false;
+  const ini = hm2min(linha?.almoco_saida_sug);
+  const fim = hm2min(linha?.almoco_volta_sug);
+  if (ini == null || fim == null || fim - ini <= 0) return false;
+  if (fim - ini >= ALMOCO_CURTO_DEMAIS) return false;
+  const bateu = new Set(batidasDaLinha(linha));
+  return !(bateu.has(ini) && bateu.has(fim));
+}
+
 function semAlmocoDeMentira(linha) {
-  if (!almocoDeMatrizInventado(linha)) return linha;
+  const daMatriz = almocoDeMatrizInventado(linha);
+  if (!daMatriz && !almocoCurtoInventado(linha)) return linha;
   const ini = hm2min(linha.almoco_saida_sug);
   const fim = hm2min(linha.almoco_volta_sug);
-  const curto = fim - ini < ALMOCO_CURTO_DEMAIS;
-  const travado = ["true", "t", "1", "sim"].includes(txt(linha.almoco_travado).toLowerCase());
+  const curto = almocoCurtoInventado(linha);
+  /* TRANCA e PEDIR A SAIDA continuam sendo assunto da MATRIZ. Sao efeitos fortes (o
+     `MODULO_REFEICAO` tranca com razao) e nao foi isso que a investigacao achou. */
+  const travado = daMatriz
+    && ["true", "t", "1", "sim"].includes(txt(linha.almoco_travado).toLowerCase());
   /* O DIA MUDO: a ferramenta completou o cartao com invencao e a tela parou de pedir. Volta
      a pedir a SAIDA, que e o que de fato falta — `pede_saida` e o campo que a Revisao le
      (`marcacaoAusente`) para liberar a ocorrencia. Dia ja OK nao e mexido: ali o DP decidiu. */
   const semSaidaReal = !txt(linha.saida);
   const telaMuda = txt(linha.pede_entrada) !== "true" && txt(linha.pede_saida) !== "true" &&
                    txt(linha.requer_alvo_manual) !== "true";
-  const vaiPedirSaida = semSaidaReal && telaMuda && txt(linha.status_ponto).toUpperCase() !== "OK";
+  const vaiPedirSaida = daMatriz && semSaidaReal && telaMuda
+    && txt(linha.status_ponto).toUpperCase() !== "OK";
   if (!curto && !travado && !vaiPedirSaida) return linha;
   const novo = { ...linha };
   const porques = [];

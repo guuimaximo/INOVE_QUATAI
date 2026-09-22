@@ -510,12 +510,23 @@ export function semTapaBuracoNoAlvo(linha) {
      pelo miolo: alvo/sugestao de almoco que caem no segundo do par saem um minuto adiante
      e a correcao lanca esse minuto. Os oito campos sao a mesma batida vista de oito
      lugares; consertar quatro e deixar quatro e consertar pela metade. */
+  let mexeu = false;
   for (const campo of ["alvo_entrada", "alvo_saida", "entrada_sug", "saida_sug",
                        "alvo_saida_almoco", "alvo_volta_almoco",
                        "almoco_saida_sug", "almoco_volta_sug"]) {
-    if (txt(novo[campo])) novo[campo] = arruma(novo[campo]);
+    if (!txt(novo[campo])) continue;
+    const arrumado = arruma(novo[campo]);
+    if (arrumado === novo[campo]) continue;
+    novo[campo] = arrumado;
+    mexeu = true;
   }
-  return novo;
+  /* SO DEVOLVE COPIA SE MOVEU ALGUMA HORA (22/09/2026). Antes bastava EXISTIR um par de
+     1 min no cartao para esta funcao devolver objeto novo, mesmo sem mexer em nada — e o
+     dia saia carimbado com "tapa-buraco: a batida real e a primeira do par", um motivo que
+     nao aconteceu. Foi o ensaio horario que pegou, pela pergunta "sanear duas vezes muda o
+     dia?": na segunda passada o motivo encolhia. O dado nunca mudou, mas o texto que o DP
+     le mudava entre uma abertura de tela e outra, e a regra tem de ser a mesma nas duas. */
+  return mexeu ? novo : linha;
 }
 
 

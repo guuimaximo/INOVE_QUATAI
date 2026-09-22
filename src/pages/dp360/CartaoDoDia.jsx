@@ -1463,6 +1463,130 @@ function ModalPedirExclusao({ linha, caso, aoFechar, aoConcluir }) {
 /* =============================================================================
    O CARTÃO
    ========================================================================== */
+/* ═══════════ "COMO FICOU O PONTO" — O POP-UP DO DESFECHO (22/09/2026) ════════
+ *
+ * Dono, depois de eu ter posto o desfecho como texto na linha do tempo: "estou falando que
+ * faltou o ponto final, como ficou — lembra? Íamos colocar um pop-up".
+ *
+ * A pergunta dele é simples e a ferramenta nunca respondeu: depois de tudo — aviso, decisão,
+ * advertência, correção —, COMO ESTÁ O PONTO DESTE DIA? A linha do tempo conta a história;
+ * ela não mostra o resultado.
+ *
+ * E a resposta tem de existir SEMPRE, inclusive nos dias antigos em que a base não guardou
+ * nada. Por isso são quatro blocos, e o último nunca falha:
+ *
+ *   1. COMO ESTAVA      `ponto_antes` — o retrato congelado quando o aviso saiu;
+ *   2. O QUE SUBIU      `ponto_final` — as quatro pontas que o robô mandou;
+ *   3. O QUE O TRANSNET DEVOLVEU  `transnet_resposta` — a grade que o robô releu depois de
+ *      gravar (bot_ponto.py:551), a única prova de que ficou como o DP fechou;
+ *   4. COMO ESTÁ HOJE   o cartão desta tela, lido agora. Esse SEMPRE tem resposta, e é a
+ *      verdade de hoje: se a correção não pegou, está aqui que se vê.
+ *
+ * Medido nos 837 casos corrigidos: 494 têm o que subiu (os da ferramenta antiga do PC), 164
+ * são correções do INOVE que não registravam (consertado em 22/09) e 179 foram carimbados no
+ * MESMO instante do "Ponto OK" — nesses o DP deu o dia por certo e nada foi lançado, que é
+ * uma resposta legítima e o pop-up diz isso em vez de inventar um cartão que não existiu. */
+export function ComoFicouOPonto({ linha, caso, aoFechar }) {
+  useEffect(() => {
+    const escapa = (e) => { if (e.key === "Escape") { e.stopPropagation(); aoFechar(); } };
+    document.addEventListener("keydown", escapa, true);
+    return () => document.removeEventListener("keydown", escapa, true);
+  }, [aoFechar]);
+
+  const lim = (v) => String(v ?? "").trim();
+  const horas = (v) => lim(v).split(/[|,;]/).map((h) => lim(h).replace(/^[ES]\s*/i, "")).filter(Boolean);
+  const antes = horas(caso?.ponto_antes) ;
+  const subiu = horas(caso?.ponto_final);
+  const devolveu = lim(caso?.transnet_resposta);
+  const hoje = [linha?.entrada, linha?.saida_almoco, linha?.volta_almoco, linha?.saida]
+    .map((h) => fmtHora(h)).filter(Boolean);
+  const bateu = lim(linha?.todas_batidas);
+
+  // NADA FOI LANÇADO: o "Ponto OK" do DP carimba a correção no MESMO instante. Dizer
+  // "a ferramenta não guardou" nesses dias seria culpar a ferramenta por um lançamento
+  // que ninguém pediu — o DP deu o dia por certo, e isso é um desfecho, não uma falha.
+  const semLancamento = !!lim(caso?.conferido_em) &&
+    lim(caso?.conferido_em) === lim(caso?.correcao_final_em) && !subiu.length;
+
+  const Bloco = ({ titulo, ajuda, children }) => (
+    <div className="dp-card" style={{ padding: "10px 12px" }}>
+      <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: .2, marginBottom: 4 }}>{titulo}</div>
+      {!!ajuda && <div className="dp-faint" style={{ fontSize: 11, marginBottom: 6 }}>{ajuda}</div>}
+      {children}
+    </div>
+  );
+  const Pontas = ({ v }) => (
+    <div className="dp-num dp-mono" style={{ fontSize: 14, fontWeight: 700 }}>{v.join("  ·  ")}</div>
+  );
+  const Vazio = ({ children }) => (
+    <div className="dp-muted" style={{ fontSize: 12.5 }}>{children}</div>
+  );
+
+  return (
+    <div className="rv-overlay rv-overlay-alto" onClick={(e) => e.target === e.currentTarget && aoFechar()}>
+      <div className="rv-box dp-card" style={{ maxWidth: 620, padding: 0 }}>
+        <header className="rv-head">
+          <div className="min-w-0">
+            <b style={{ fontSize: 14 }}>🔧 Como ficou o ponto</b>
+            <div className="dp-muted" style={{ fontSize: 12, marginTop: 2 }}>
+              <b style={{ color: "var(--dp-ink)" }}>{lim(linha?.nm_funcionario) || "—"}</b>
+              <span className="dp-num"> · crachá {lim(linha?.cracha)} · {fmtData(lim(linha?.date_ref))}</span>
+            </div>
+          </div>
+          <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar">
+            <X size={14} />
+          </button>
+        </header>
+
+        <div className="rv-corpo rv-corpo-pad" style={{ display: "grid", gap: 10 }}>
+          <Bloco titulo="1 · COMO ESTAVA" ajuda="o cartão no momento em que o aviso saiu">
+            {antes.length ? <Pontas v={antes} /> : <Vazio>não foi guardado o retrato deste dia</Vazio>}
+          </Bloco>
+
+          <Bloco titulo="2 · O QUE SUBIU" ajuda="as pontas que o robô mandou para o Transnet">
+            {subiu.length ? <Pontas v={subiu} /> : semLancamento ? (
+              <Vazio>
+                <b>nada foi lançado</b> — o DP deu o dia por certo (Ponto OK) em{" "}
+                {fmtDataHora(caso?.conferido_em)}, e o cartão ficou como estava.
+              </Vazio>
+            ) : (
+              <Vazio>
+                a ferramenta não guardou o cartão que subiu — esta correção é anterior a
+                22/09/2026, quando ela passou a registrar o que manda e o que recebe.
+              </Vazio>
+            )}
+          </Bloco>
+
+          <Bloco titulo="3 · O QUE O TRANSNET DEVOLVEU" ajuda="a grade que o robô releu depois de gravar">
+            {devolveu ? (
+              <div className="rv-balao" style={{ margin: 0 }}>{devolveu}</div>
+            ) : (
+              <Vazio>sem a grade relida deste dia.</Vazio>
+            )}
+          </Bloco>
+
+          <Bloco titulo="4 · COMO ESTÁ HOJE" ajuda="lido agora do cartão deste dia — a resposta que sempre existe">
+            {hoje.length ? <Pontas v={hoje} /> : <Vazio>o cartão deste dia está vazio</Vazio>}
+            {!!bateu && (
+              <div className="dp-faint dp-num dp-mono" style={{ fontSize: 11.5, marginTop: 6 }}>
+                batidas: {bateu}
+              </div>
+            )}
+            <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {!!lim(linha?.status_ponto) && (
+                <span className={`dp-pill${lim(linha?.status_ponto) === "OK" ? " ok" : " warn"}`}>
+                  {lim(linha.status_ponto)}
+                </span>
+              )}
+              {!!lim(linha?.motivo) && <span className="dp-pill">{lim(linha.motivo)}</span>}
+            </div>
+          </Bloco>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CartaoDoDia({
   linha,
   caso,
@@ -1505,6 +1629,8 @@ export default function CartaoDoDia({
   // O detalhamento das viagens abre SOBRE o cartão (não no lugar dele): o DP está
   // olhando o caso e as viagens são a explicação da operação que ele está lendo.
   const [verViagens, setVerViagens] = useState(false);
+  // "como ficou o ponto": o desfecho abre SOBRE o cartão, a pedido do dono
+  const [verDesfecho, setVerDesfecho] = useState(false);
   // A SEMANA (main.py `get_semana`) e o pedido de exclusão da batida indevida.
   const [semana, setSemana] = useState(null);
   // a linha do DIA SEGUINTE (lida junto com a semana): é nela que fica o fim do turno de
@@ -1748,7 +1874,7 @@ export default function CartaoDoDia({
     const escapa = (e) => {
       // Com um pop-up aberto por cima (viagens ou pedido de exclusão), o Esc fecha SÓ
       // ele — quem trata é o próprio — senão os dois sumiriam de uma vez.
-      if (e.key === "Escape" && !verViagens && !pedirExclusao && !perguntando.current) aoFechar();
+      if (e.key === "Escape" && !verViagens && !verDesfecho && !pedirExclusao && !perguntando.current) aoFechar();
     };
     document.addEventListener("keydown", escapa);
     return () => document.removeEventListener("keydown", escapa);
@@ -2122,8 +2248,13 @@ export default function CartaoDoDia({
   const horasDe = (v) =>
     limpo(v).split(/[|,;]/).map((h) => limpo(h).replace(/^[ES]\s*/i, "")).filter(Boolean);
   const pontoFinal = horasDe(caso?.ponto_final);
-  const pontoAntes = horasDe(caso?.ponto_antes);
-  const respostaTransnet = limpo(caso?.transnet_resposta);
+  /* NADA FOI LANÇADO ≠ A FERRAMENTA PERDEU O REGISTRO. O "Ponto OK" do DP carimba
+     `correcao_final_em` no MESMO instante do `conferido_em`: ali ele deu o dia por certo e
+     não houve lançamento nenhum. São 179 dos 343 casos sem `ponto_final` — dizer "a
+     ferramenta não guardou" neles seria culpar a ferramenta por um lançamento que ninguém
+     pediu. */
+  const semLancamento = !!limpo(caso?.conferido_em) &&
+    limpo(caso?.conferido_em) === limpo(caso?.correcao_final_em) && !pontoFinal.length;
 
   const passos = [
     {
@@ -2191,16 +2322,14 @@ export default function CartaoDoDia({
       nota: String(caso?.correcao_final_em ?? "").trim()
         ? (pontoFinal.length
             ? `ponto lançado ${pontoFinal.join(" · ")}`
-            : alvoCongelado.length
-              ? `lançado — a ferramenta não guardou o cartão que subiu (o alvo do aviso era ${alvoCongelado.join(" · ")})`
-              : "lançado") +
-          (gorduraCortada > 0 ? ` · ${fmtMin(gorduraCortada)} de gordura cortada` : "")
+            : semLancamento
+              ? "o DP deu o dia por certo — nada foi lançado"
+              : "lançado — o cartão que subiu não ficou registrado") +
+          (gorduraCortada > 0 && pontoFinal.length ? ` · ${fmtMin(gorduraCortada)} de gordura cortada` : "")
         : alvoCongelado.length
           ? `vai lançar ${alvoCongelado.join(" · ")}`
           : "",
-      antes: String(caso?.correcao_final_em ?? "").trim() && pontoAntes.length ? pontoAntes : null,
-      transnet: String(caso?.correcao_final_em ?? "").trim() ? respostaTransnet : "",
-      semProva: !!String(caso?.correcao_final_em ?? "").trim() && !respostaTransnet,
+      desfecho: !!String(caso?.correcao_final_em ?? "").trim(),
     },
   ];
   // "agora" = o primeiro passo que ainda não aconteceu (app.js:4712).
@@ -2811,25 +2940,21 @@ export default function CartaoDoDia({
 
                   {p.nota && <div className="rv-tl-nota">{p.nota}</div>}
 
-                  {/* COMO ESTAVA → COMO FICOU. O "antes" é o retrato congelado no aviso; o
-                      balão é a grade que o robô releu no Transnet depois de gravar — a
-                      única prova de que o cartão ficou como o DP fechou. */}
-                  {!!p.antes?.length && (
-                    <div className="rv-tl-nota dp-faint">
-                      antes: <b className="dp-num dp-mono">{p.antes.join(" · ")}</b>
-                    </div>
-                  )}
-                  {!!p.transnet && (
-                    <div className="rv-balao">
-                      <span className="rv-balao-lb">como ficou no Transnet (cartão relido pelo robô)</span>
-                      {p.transnet}
-                    </div>
-                  )}
-                  {p.semProva && (
-                    <div className="rv-tl-nota dp-faint">
-                      sem a grade relida deste dia — a correção é anterior a 22/09/2026, quando a
-                      ferramenta passou a guardar o que o Transnet devolve
-                    </div>
+                  {/* COMO FICOU O PONTO — a pergunta que a linha do tempo não respondia.
+                      Ela conta a história (avisou, decidiu, advertiu, corrigiu) e parava aí;
+                      o dono quer o RESULTADO, e num pop-up: "faltou o ponto final, como
+                      ficou — íamos colocar um pop-up". O detalhe cabe lá dentro, com o
+                      antes, o que subiu, o que o Transnet devolveu e como está hoje. */}
+                  {p.desfecho && (
+                    <button
+                      type="button"
+                      className="dp-btn"
+                      style={{ marginTop: 6, fontSize: 11.5 }}
+                      onClick={() => setVerDesfecho(true)}
+                      title="Abre o antes, o que subiu, o que o Transnet devolveu e como o cartão está hoje"
+                    >
+                      🔧 ver como ficou o ponto
+                    </button>
                   )}
 
                   {/* O BALÃO. Se já mandamos, é o que saiu; se não, a prévia do que
@@ -2916,6 +3041,12 @@ export default function CartaoDoDia({
           dia={dia}
           aoFechar={() => setVerViagens(false)}
         />
+      )}
+
+      {/* O DESFECHO abre POR CIMA, pelo mesmo motivo das viagens: o DP está lendo a linha
+          do tempo e quer ver COMO FICOU sem perder o caso de vista. */}
+      {verDesfecho && (
+        <ComoFicouOPonto linha={linha} caso={caso} aoFechar={() => setVerDesfecho(false)} />
       )}
 
       {/* O pedido de exclusão também abre POR CIMA: quem vai mandar apagar uma batida

@@ -360,46 +360,65 @@ export async function evidenciasDoRun(runId, ano, mes, { semUrl = false } = {}) 
  */
 export const EVENTO_ROBO_DISPARADO = "dp360:robo-disparado";
 
-/* ═══ A FILA DO TRANSNET SÓ GUARDA UM (22/09/2026) ════════════════════════════
+/* ═══ NINGUÉM ESPERA NA FILA DO TRANSNET (22/09/2026) ═════════════════════════
  *
- * Dono, com o quadro na tela: "0 de 10 comunicado(s) enviado(s) — o robô terminou em
- * cancelled... ainda não está saindo, corrige".
+ * Dono, depois de eu oferecer um botão de "mandar de novo": "mas não é mandar de novo e
+ * sim NÃO DAR O PROBLEMA".
  *
- * Não foi o robô que falhou. Os quatro workflows do Transnet dividem o MESMO grupo de
- * concurrency (`bots-transnet`, `cancel-in-progress: false`), e o GitHub guarda apenas o
- * run MAIS RECENTE esperando na fila: quando chega um terceiro, o que estava esperando é
- * CANCELADO. Medido nos runs de hoje — 15:00 `Ajustes` rodando, 15:02 comunicado entra na
- * fila, 15:03 outro comunicado entra e MATA o das 15:02, 15:11 um terceiro mata o das
- * 15:03. Os dez comunicados morreram na fila sem nunca abrir o Transnet.
+ * Ele está certo, e a diferença é toda: reenviar conserta o estrago depois; o que se quer é
+ * que o estrago não aconteça. E dá para garantir isso sem tocar nos robôs.
  *
- * E o ciclo se alimentava sozinho: o DP não via nada acontecer, clicava de novo, e o
- * clique novo matava o anterior.
+ * O QUE ACONTECE. Os quatro workflows do Transnet dividem `concurrency: bots-transnet` com
+ * `cancel-in-progress: false`. Nesse desenho o GitHub mantém **um** run rodando e **um**
+ * esperando; quando chega um terceiro, o que estava ESPERANDO é cancelado. Em 22/09 isso
+ * matou dois lotes de comunicado (15:02 e 15:03) e os dez avisos não saíram.
  *
- * A trava fica AQUI, na porta única de disparo, e não em cada tela — são quatro telas que
- * disparam, e a quinta nasceria sem a trava. Robô RODANDO não é problema: o novo espera a
- * vez. Robô ESPERANDO é: disparar por cima dele o mata. */
-const ESPERANDO_NA_FILA = new Set(["queued", "waiting", "pending", "requested", "action_required"]);
+ * A CHAVE: run que já ENTROU em execução nunca é cancelado por este grupo — só morre quem
+ * está na fila. Então a regra é simples: **não pôr ninguém na fila**. A tela espera o
+ * Transnet ficar livre e só então dispara, e o run vai direto para execução.
+ *
+ * É por isso que a espera é por qualquer robô (rodando OU esperando), e não só pelos que
+ * esperam: disparar enquanto um robô roda criaria exatamente a fila que mata.
+ *
+ * O CUSTO, dito com todas as letras: o DP espera alguns minutos com a tela aberta, em vez
+ * de achar que mandou e descobrir depois que não foi. A tela mostra a espera (`aoEsperar`)
+ * e o robô de quem ela está esperando. */
+const OCUPANDO_A_FILA = new Set(["queued", "waiting", "pending", "requested", "in_progress"]);
+const ESPERA_ENTRE_OLHADAS_MS = 6000;
+const ESPERA_MAXIMA_MS = 12 * 60 * 1000;
 
-export async function dispararRoboDP360(robo, inputs, { forcar = false } = {}) {
-  if (!forcar) {
-    let naFila = [];
+async function esperarAFilaLivre({ aoEsperar, maximoMs = ESPERA_MAXIMA_MS }) {
+  const inicio = Date.now();
+  for (;;) {
+    let ocupada = [];
     try {
       const runs = await statusRoboDP360(2);
-      naFila = (runs || []).filter((r) => ESPERANDO_NA_FILA.has(String(r?.status ?? "").toLowerCase()));
+      ocupada = (runs || []).filter((r) => OCUPANDO_A_FILA.has(String(r?.status ?? "").toLowerCase()));
     } catch {
-      // Sem conseguir LER a fila eu não barro: deixar de disparar por não ter conseguido
-      // olhar seria trocar uma perda certa por outra.
-      naFila = [];
+      // Sem conseguir LER a fila eu não seguro o disparo: deixar de mandar por não ter
+      // conseguido olhar seria trocar uma perda possível por uma perda certa.
+      return;
     }
-    if (naFila.length) {
-      const q = naFila[0];
+    if (!ocupada.length) return;
+    const esperando = Date.now() - inicio;
+    if (esperando >= maximoMs) {
       throw new Error(
-        `Já tem um robô esperando na fila do Transnet (${q.nome || "robô"}). A fila guarda ` +
-        "só um: disparar agora CANCELA ele, e nada sai — foi assim que 10 comunicados se " +
-        "perderam em 22/09. Espere esse entrar (costuma levar 1 a 3 min) e mande de novo.",
+        `O Transnet está ocupado há ${Math.round(esperando / 60000)} min (${ocupada[0]?.nome || "outro robô"}) ` +
+        "e eu não disparei: entrar na fila agora faria este lote ser cancelado por quem vier depois. " +
+        "Veja o robô que está rodando e mande quando ele terminar.",
       );
     }
+    aoEsperar?.({
+      segundos: Math.round(esperando / 1000),
+      quem: ocupada[0]?.nome || "outro robô",
+      quantos: ocupada.length,
+    });
+    await new Promise((ok) => setTimeout(ok, ESPERA_ENTRE_OLHADAS_MS));
   }
+}
+
+export async function dispararRoboDP360(robo, inputs, { forcar = false, aoEsperar } = {}) {
+  if (!forcar) await esperarAFilaLivre({ aoEsperar });
   // A credencial viaja no corpo da chamada, para o gateway — NUNCA como input do
   // workflow: o GitHub imprime os inputs no log da execução (medido neste projeto).
   const pedido = chamar({ action: "robo", robo, inputs, credencial: lerCredencialTransnet() });

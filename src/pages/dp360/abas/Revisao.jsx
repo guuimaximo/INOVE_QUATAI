@@ -510,7 +510,19 @@ function ModalComunicado({
           data: p.datas[0],
           motivo: MOTIVO_AVISO, // aviso. Advertência (103) não sai desta tela.
           confirmar: "true",
+        }, {
+          /* A ESPERA APARECE (22/09/2026). Antes o botão ficava em "Disparando…" e o DP não
+             sabia se estava travado. Agora ele lê de quem a tela está esperando e há quanto
+             tempo — e por que vale esperar: entrar na fila é o que faz o lote morrer. */
+          aoEsperar: ({ segundos, quem }) =>
+            setRecado({
+              tipo: "ok",
+              texto:
+                `Esperando a vez no Transnet — ${quem} está rodando (${segundos}s). ` +
+                "Não feche esta tela: disparar por cima faria este lote ser cancelado.",
+            }),
         });
+        setRecado(null);
         acompanharLote({
           casos: casosDoQuadro,
           runId: r?.execucao?.run_id,

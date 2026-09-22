@@ -877,7 +877,22 @@ export function montaCompartimentos({
    * intervalo menor do que o direito dele. */
   const origemMiolo = [bruto[1]?.origem, bruto[2]?.origem];
   const mioloProposto = origemMiolo.every((o) => ["alvo", "escala", "manual"].includes(o));
-  const almocoCurto = !travaMiolo && mins.length === 4 && mins[2] - mins[1] < ALMOCO_INTERNO_MIN;
+  /* O PISO DE UMA HORA É DA CATEGORIA, NÃO DA TRAVA (22/09/2026) ─────────────
+   *
+   * Dono, com o cartão do NELSON 30061207 (15/09) na tela: "aqui ele não deixa o almoço,
+   * sendo que o almoço ali era para interno". Ele está certo — o NELSON é MOTORISTA, e a
+   * tela cobrava dele a hora de almoço do interno, barrando um cartão de 30 min, que é
+   * justamente a refeição padrão do motorista.
+   *
+   * A causa era `!travaMiolo`, que mistura duas coisas: `travaMiolo` só é verdadeiro no
+   * motorista COM almoço travado nesta linha. Num dia sem batida — o do NELSON não tem
+   * nenhuma — a trava não vale, e o piso do interno caía sobre o motorista.
+   *
+   * Quem manda aqui é a CATEGORIA, e o outro lugar que aplica a mesma regra
+   * (`cartaoDoRealManual`) já fazia certo com `!mioloTravado(cat)`. Os dois passam a
+   * concordar — e a constante já dizia isto na primeira linha: "Não vale para motorista". */
+  const almocoCurto =
+    !mioloTravado(cat) && mins.length === 4 && mins[2] - mins[1] < ALMOCO_INTERNO_MIN;
   const problema =
     validaCartao(mins, cat) ||
     (almocoCurto && mioloProposto

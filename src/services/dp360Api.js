@@ -384,6 +384,14 @@ export const EVENTO_ROBO_DISPARADO = "dp360:robo-disparado";
  * de achar que mandou e descobrir depois que não foi. A tela mostra a espera (`aoEsperar`)
  * e o robô de quem ela está esperando. */
 const OCUPANDO_A_FILA = new Set(["queued", "waiting", "pending", "requested", "in_progress"]);
+
+/* QUEM DIVIDE A FILA, E QUEM NÃO DIVIDE (22/09/2026). Eu esperava QUALQUER run do
+   repositório — mas o `0 · Validar login do Transnet` roda no grupo `login-transnet`, que é
+   outro: ele não cancela nem é cancelado por estes. Esperar por ele segurava o comunicado
+   por nada, e o login roda o tempo todo. Os oito abaixo são os que declaram
+   `concurrency: bots-transnet` (lido dos próprios workflows, 22/09). */
+const FORA_DA_FILA_DO_TRANSNET = /validar login|^0\s*·/i;
+const divideAFila = (r) => !FORA_DA_FILA_DO_TRANSNET.test(String(r?.nome ?? ""));
 const ESPERA_ENTRE_OLHADAS_MS = 6000;
 const ESPERA_MAXIMA_MS = 12 * 60 * 1000;
 
@@ -393,7 +401,8 @@ async function esperarAFilaLivre({ aoEsperar, maximoMs = ESPERA_MAXIMA_MS }) {
     let ocupada = [];
     try {
       const runs = await statusRoboDP360(2);
-      ocupada = (runs || []).filter((r) => OCUPANDO_A_FILA.has(String(r?.status ?? "").toLowerCase()));
+      ocupada = (runs || []).filter(
+        (r) => OCUPANDO_A_FILA.has(String(r?.status ?? "").toLowerCase()) && divideAFila(r));
     } catch {
       // Sem conseguir LER a fila eu não seguro o disparo: deixar de mandar por não ter
       // conseguido olhar seria trocar uma perda possível por uma perda certa.

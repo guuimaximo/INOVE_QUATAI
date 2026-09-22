@@ -621,6 +621,69 @@ function semSugestaoImpossivel(linha) {
   };
 }
 
+/* ═══ 5. ALMOCO QUE NINGUEM BATEU NAO COMPLETA O CARTAO (22/09/2026) ══════════
+ *
+ * Dono, mandando dois dias: "nao deixa lancar a ocorrencia / e o real nao entra".
+ *
+ * MARCOS 30060856 04/09 bateu DUAS vezes (04:59 e 10:10). A `MATRIZ_PARADO_MAIOR`
+ * inventou um almoco de SEIS MINUTOS (08:00-08:06), chamou a segunda batida de saida e
+ * TRANCOU o miolo. O estrago e duplo:
+ *   · o DP nao consegue digitar o Real (motorista com almoco travado tem o miolo fechado),
+ *     entao ele salva a invencao — foi o que aconteceu: o Real gravado tem 08:00/08:06;
+ *   · e o cartao fica PARECENDO completo, entao `marcacaoAusente` devolve "" e a ocorrencia
+ *     nunca pode ser enviada. A pessoa nunca e cobrada pelo proprio cartao, para sempre.
+ *
+ * MEDIDO (12.190 dias, 20/08 a 22/09): 357 dias com almoco de matriz, 304 com almoco que
+ * NINGUEM bateu — e os 304 travados. Destes, 106 tem duracao impossivel (6, 8, 9, 11 min;
+ * a menor refeicao batida de motorista em 5.687 cartoes fechados foi 7 min, a mediana 30) e
+ * 132 sao "mudos" como o MARCOS: sem saida real e sem a tela pedir nada.
+ *
+ * A REGRA, que e a mesma de sempre: proposta da ferramenta nao tranca o DP e nao faz as
+ * vezes de fato. Almoco de matriz que ninguem bateu (a) nunca trava, (b) se for curto demais
+ * para ser refeicao, sai, e (c) num dia sem saida real, o cartao volta a PEDIR a saida — que
+ * e a verdade: a pessoa nao bateu a saida dela.
+ */
+const ALMOCO_CURTO_DEMAIS = 15;   // abaixo disto nao existe refeicao batida no lake
+
+function almocoDeMatrizInventado(linha) {
+  if (!txt(linha?.fonte_almoco).toUpperCase().startsWith("MATRIZ")) return false;
+  const ini = hm2min(linha.almoco_saida_sug);
+  const fim = hm2min(linha.almoco_volta_sug);
+  if (ini == null || fim == null) return false;
+  const bateu = new Set(batidasDaLinha(linha));
+  return !(bateu.has(ini) && bateu.has(fim));
+}
+
+function semAlmocoDeMentira(linha) {
+  if (!almocoDeMatrizInventado(linha)) return linha;
+  const ini = hm2min(linha.almoco_saida_sug);
+  const fim = hm2min(linha.almoco_volta_sug);
+  const curto = fim - ini < ALMOCO_CURTO_DEMAIS;
+  const travado = ["true", "t", "1", "sim"].includes(txt(linha.almoco_travado).toLowerCase());
+  /* O DIA MUDO: a ferramenta completou o cartao com invencao e a tela parou de pedir. Volta
+     a pedir a SAIDA, que e o que de fato falta — `pede_saida` e o campo que a Revisao le
+     (`marcacaoAusente`) para liberar a ocorrencia. Dia ja OK nao e mexido: ali o DP decidiu. */
+  const semSaidaReal = !txt(linha.saida);
+  const telaMuda = txt(linha.pede_entrada) !== "true" && txt(linha.pede_saida) !== "true" &&
+                   txt(linha.requer_alvo_manual) !== "true";
+  const vaiPedirSaida = semSaidaReal && telaMuda && txt(linha.status_ponto).toUpperCase() !== "OK";
+  if (!curto && !travado && !vaiPedirSaida) return linha;
+  const novo = { ...linha };
+  const porques = [];
+  if (travado) { novo.almoco_travado = ""; porques.push("almoco de matriz nao tranca o DP"); }
+  if (curto) {
+    novo.almoco_saida_sug = "";
+    novo.almoco_volta_sug = "";
+    novo.alvo_saida_almoco = "";
+    novo.alvo_volta_almoco = "";
+    novo.fonte_almoco = "SEM_ALMOCO_APURADO";
+    porques.push(`almoco de ${fim - ini} min que ninguem bateu nao e refeicao`);
+  }
+  if (vaiPedirSaida) { novo.pede_saida = "true"; porques.push("sem saida batida, o cartao volta a pedir a saida"); }
+  novo.__porque = porques.join(" e ");
+  return novo;
+}
+
 /**
  * A PORTA UNICA. Toda leitura de `ponto_diario` passa por aqui (`lerDP360`), entao as nove
  * telas recebem o dia ja saneado e nenhuma precisa lembrar de chamar nada.
@@ -640,7 +703,7 @@ export function saneiaDiaDoPonto(linha) {
   const semAlmoco = semAlmocoInventado(atual);
   if (semAlmoco !== atual) { porques.push("almoco de meio de jornada num dia sem fim de jornada"); atual = semAlmoco; }
 
-  for (const passo of [intervaloBatidoManda, semSugestaoImpossivel]) {
+  for (const passo of [intervaloBatidoManda, semAlmocoDeMentira, semSugestaoImpossivel]) {
     const depois = passo(atual);
     if (depois === atual) continue;
     if (depois.__porque) porques.push(depois.__porque);

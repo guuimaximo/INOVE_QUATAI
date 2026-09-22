@@ -446,6 +446,46 @@ export function desfechosDaCorrecao(casos, log, fim) {
     // por que não subiu depois que este quadro fechar
     let item;
     if (passo === "CONFERIDO") item = { estado: "corrigido" };
+    /* O `ajustes` FALA OUTRA LÍNGUA (22/09/2026).
+     *
+     * Run 35731388639: o quadro disse "0 de 22 conferido(s)" e carimbou "leitura ao vivo
+     * veio vazia" nos 22 — e o log do robô dizia outra coisa: 12 `subiu`, 3 `nao_subiu`,
+     * 7 `sem_base`. Nos 7, a leitura ao vivo veio CHEIA; vazio estava o `esperado`.
+     *
+     * A causa é vocabulário. Este quadro nasceu para o robô `ponto`, que escreve
+     * CONFERIDO/FECHADO/DIVERGENTE. O `bot_ajustes_app` conferindo ao vivo escreve
+     * `VERIFICAR <cracha> <dia>: subiu|nao_subiu|sem_base | esperado [...] ao vivo [...]`.
+     * Sem entender essas três palavras, tudo caía no balde "pendente" com a frase errada.
+     *
+     * O que cada uma quer dizer, no bot (`bot_ajustes_app.verificar_ao_vivo`):
+     *   subiu      — o cartão no Transnet é o que o DP fechou: conferido;
+     *   nao_subiu  — está lá, mas diferente do que o DP fechou: divergente;
+     *   sem_base   — não deu para comparar, porque falta o cartão fechado no nosso banco
+     *                (`esperado` vazio) ou porque a leitura veio vazia (`ao vivo` vazio).
+     *                Os dois casos são do MESMO status no bot, então a frase tem de citar
+     *                os dois — foi inventar um só que produziu a mensagem errada. */
+    else if (passo === "VERIFICAR" && RESULTADO_DO_AJUSTES.test(txt(fala?.frase))) {
+      const r = RESULTADO_DO_AJUSTES.exec(txt(fala.frase))[1];
+      if (r === "subiu") item = { estado: "corrigido" };
+      else if (r === "nao_subiu")
+        item = {
+          estado: "divergente",
+          texto: "o cartão no Transnet não é o que você fechou",
+          motivo: `o cartão no Transnet não é o que você fechou (${fala.frase})`,
+        };
+      else if (r === "sem_base")
+        item = {
+          estado: "pendente",
+          texto: "não deu para comparar — faltou o cartão que você fechou",
+          motivo: `não deu para comparar: ${fala.frase}`,
+        };
+      else
+        item = {
+          estado: "pendente",
+          texto: `não conferiu — ${r.replace(/_/g, " ")}`,
+          motivo: fala.frase,
+        };
+    }
     else if (passo === "FECHADO") item = { estado: "ponto_fechado", motivo: fala.frase };
     else if (passo === "DIVERGENTE")
       item = {
@@ -505,7 +545,12 @@ const DESFECHO_CASO = {
   conferido: { icone: "✅", tom: "ok", texto: "conferido — fora da fila" },
   ponto_fechado: { icone: "🔒", tom: "warn", texto: "ponto fechado — o Transnet não grava mais esse dia" },
   divergente: { icone: "⚠", tom: "warn", texto: "o cartão não ficou como o DP fechou" },
-  sem_base: { icone: "⚠", tom: "warn", texto: "leitura ao vivo veio vazia — não reescreveu no escuro" },
+  // as DUAS causas do `sem_base` do bot, porque ele usa um status só para as duas
+  sem_base: {
+    icone: "⚠",
+    tom: "warn",
+    texto: "não deu para comparar — faltou o cartão que você fechou (ou a leitura veio vazia)",
+  },
   pendente: { icone: "⏳", tom: "mute", texto: "continua pendente — o robô não conseguiu mexer" },
   esperando: { icone: "⏳", tom: "mute", texto: "esperando o robô" },
   // recusar pedido (modo `cancelar pedidos`): o bot marca aceite=cancelado só no dia cuja
@@ -651,6 +696,10 @@ const RE_LOG_CASO =
   /\[bot_[a-z_]+\]\s+([A-Za-zÇÃÕ-]+)\s{2,}(\d{6,8})\s+(\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4})\s*:\s*(.+)/;
 
 const TOM_DO_PASSO = { OK: "ok", CORRIGIR: "warn", PENDENTE: "warn", VERIFICAR: "mute" };
+
+/* As palavras que o `bot_ajustes_app` usa ao conferir ao vivo (ver `desfechosDaCorrecao`).
+   `nao_subiu` vem antes de `subiu` de propósito: um contém o outro. */
+const RESULTADO_DO_AJUSTES = /^\s*(nao_subiu|subiu|sem_base|falha_tecnica|na_fila)\b/;
 
 /* O RECADO DO TRANSNET, quando existe, VALE MAIS QUE O NOME DA EXCEÇÃO.
    Quando o Transnet recusa um lançamento ele abre um alerta, e o Selenium devolve isso

@@ -108,9 +108,28 @@ export function horaDigitada(valor) {
 const MOTIVO_INVERTIDO =
   "ponto invertido — a view não propõe lançamento, exige decisão manual do DP";
 
-const MOTIVO_MEXIDO =
-  "o cartão deste dia já foi mexido no Transnet depois do último import — " +
-  "lançar por cima devolveria as pontas antigas e desfaria a correção";
+/* QUEM MEXEU NO CARTÃO, DE VERDADE (22/09/2026).
+ *
+ * Dono, no EDVALDO 30002393 · 27/08: "essa batida duplicada tem que lançar o ajuste e não
+ * está deixando lançar, por quê?". O dia é o do relógio que registrou três vezes seguidas
+ * (13:15 · 13:20 · 13:21) e precisa justamente do ajuste para ficar com as quatro batidas
+ * reais. A trava barrava porque o caso tinha `conferido_em` — só que o que foi conferido ali
+ * foi a RECUSA de um pedido, e recusar não encosta nas batidas: o cartão no Transnet é o
+ * mesmo do nosso retrato.
+ *
+ * Então a trava passa a olhar o que de fato reescreve o cartão:
+ *   · `correcao_final_em` — a correção rodou e gravou os quatro campos;
+ *   · `conferido_em` com aceite ACEITO — o pedido aceito insere ou altera uma batida.
+ * Recusa conferida não trava mais. Medido no lake (desde 01/06): dos 1.426 dias travados
+ * hoje, 837 tiveram correção, 352 tiveram aceite — esses seguem travados — e 225 eram
+ * recusa, que passam a poder ser lançados. */
+const MOTIVO_CORRIGIDO =
+  "a correção deste dia já rodou no Transnet — lançar por cima devolveria as pontas " +
+  "antigas e desfaria o que foi corrigido";
+
+const MOTIVO_ACEITE =
+  "o pedido aceito já mudou o cartão no Transnet — lançar por cima devolveria as pontas " +
+  "antigas";
 
 const FRASES = {
   view: {
@@ -244,7 +263,10 @@ export function avaliarAjustePonto(linha, { caso = null, digitado = null, bloque
   //    e desfaz a correção, sem ninguém ver. Não dá para saber isso sem ler o
   //    Transnet — dá para saber quando ALGUÉM MEXEU: `conferido_em` (a decisão
   //    foi executada) ou `correcao_final_em` (a correção rodou).
-  if (txt(caso?.conferido_em) || txt(caso?.correcao_final_em)) return fora(MOTIVO_MEXIDO);
+  const correcaoRodou = Boolean(txt(caso?.correcao_final_em));
+  const aceiteMexeu = Boolean(txt(caso?.conferido_em)) && txt(caso?.aceite) !== "rejeitado";
+  if (correcaoRodou) return fora(MOTIVO_CORRIGIDO);
+  if (aceiteMexeu) return fora(MOTIVO_ACEITE);
 
   // 5) AS DUAS PONTAS (`_fila_correcoes`, teste final: entrada e saída
   //    preenchidas). Lá quem não tinha as duas sumia da contagem; aqui aparece

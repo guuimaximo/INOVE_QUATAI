@@ -325,11 +325,21 @@ const CADASTRO_SEM_CONTATO =
   "id_funcionario,nr_cracha,nm_funcionario,nm_funcao,status," +
   "dt_inicio_atividade,dt_fim_atividade,dt_inicio_afastamento,dt_fim_afastamento,atualizado_em";
 
-/* O que o `loteEmExecucao` procura no log do robo (ver a acao `robo_log`). Generico de
-   proposito: qualquer rotulo seguido de cracha e data entra, entao passo novo no bot nao
-   some da tela sem ninguem perceber. */
+/* O QUE FICA DO LOG DO ROBO (ver a acao `robo_log`).
+ *
+ * A regra e o ROTULO: os bots escrevem `[bot_x]  ROTULO  resto`, e o rotulo em MAIUSCULA e
+ * o que significa alguma coisa (LOTE, OK, ERRO, STEP, VERIFICAR, CONFERIDO, ALERTA, PROVA,
+ * RECUSADO, PAROU...). Em minuscula sao os campos que o bot digitou (`hora`, `linha`,
+ * `data`, `evidencia`) — e e isso que faz o arquivo passar de 250 KB.
+ *
+ * A PRIMEIRA VERSAO DESTE FILTRO (21/09) ERA UMA LISTA DE PALAVRAS e derrubou uma que
+ * importava: `OK  CSV enviado pelo 'Envio via CSV'`, a UNICA confirmacao do robo do
+ * comunicado. O painel passou a dizer "0 de 8 enviados · nao li a confirmacao" em avisos
+ * que tinham saido. Por isso agora a regra e a forma, nao a lista: rotulo novo entra
+ * sozinho. No log de 66 dias sao 21 KB no lugar de 254 KB, com os 66 itens do lote, os 62
+ * CONFERIDO e o `LOTE FIM` preservados. */
 const LINHA_DE_INTERESSE =
-  /\[bot_[a-z_]*\]\s+(?:LOTE\b|STEP\b|\S+\s{2,}\d{6,8}\s+(?:\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2}))|Alert Text:/;
+  /\[bot_[a-z_]*\]\s+([A-ZÇÃÕÉ][A-ZÇÃÕÉ_ ]{1,20})\s{2,}|Alert Text:/;
 
 const LIMITE_MAX = 5000;
 

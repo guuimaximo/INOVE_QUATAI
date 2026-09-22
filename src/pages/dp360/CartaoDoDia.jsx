@@ -2106,6 +2106,25 @@ export default function CartaoDoDia({
     .filter(Boolean);
   const gorduraCortada = parseInt(caso?.gordura_min, 10);
 
+  /* ═══ O DESFECHO DA CORREÇÃO, COM PROVA (22/09/2026) ═══════════════════════════
+   * Dono, abrindo um caso corrigido: "o pop-up fala que corrigiu, mas não tem o histórico
+   * ou ponto final · no corrigido abre como ficou o ponto final e como ficou o Transnet".
+   *
+   * O passo mostrava o ALVO CONGELADO DO AVISO, que é a intenção de dias antes — no ANDRE
+   * 27/08 dizia "lançado para 16:44" quando o que subiu foi 16:52 (o DP cravou depois). As
+   * três coisas que o DP precisa ver aqui são outras:
+   *   · como estava   `ponto_antes`        o cartão antes de mexermos
+   *   · o que subiu   `ponto_final`        as quatro pontas que o robô mandou
+   *   · o que ficou   `transnet_resposta`  a grade RELIDA pelo robô depois de gravar
+   * Nos casos antigos as duas últimas podem não existir (o INOVE só passou a gravar hoje);
+   * aí o passo diz isso com todas as letras em vez de fingir que o alvo é o resultado. */
+  const limpo = (v) => String(v ?? "").trim();
+  const horasDe = (v) =>
+    limpo(v).split(/[|,;]/).map((h) => limpo(h).replace(/^[ES]\s*/i, "")).filter(Boolean);
+  const pontoFinal = horasDe(caso?.ponto_final);
+  const pontoAntes = horasDe(caso?.ponto_antes);
+  const respostaTransnet = limpo(caso?.transnet_resposta);
+
   const passos = [
     {
       icone: "📤",
@@ -2170,11 +2189,18 @@ export default function CartaoDoDia({
       quando: fmtDataHora(caso?.correcao_final_em),
       feito: !!String(caso?.correcao_final_em ?? "").trim(),
       nota: String(caso?.correcao_final_em ?? "").trim()
-        ? (alvoCongelado.length ? `ponto lançado para ${alvoCongelado.join(" · ")}` : "lançado") +
+        ? (pontoFinal.length
+            ? `ponto lançado ${pontoFinal.join(" · ")}`
+            : alvoCongelado.length
+              ? `lançado — a ferramenta não guardou o cartão que subiu (o alvo do aviso era ${alvoCongelado.join(" · ")})`
+              : "lançado") +
           (gorduraCortada > 0 ? ` · ${fmtMin(gorduraCortada)} de gordura cortada` : "")
         : alvoCongelado.length
           ? `vai lançar ${alvoCongelado.join(" · ")}`
           : "",
+      antes: String(caso?.correcao_final_em ?? "").trim() && pontoAntes.length ? pontoAntes : null,
+      transnet: String(caso?.correcao_final_em ?? "").trim() ? respostaTransnet : "",
+      semProva: !!String(caso?.correcao_final_em ?? "").trim() && !respostaTransnet,
     },
   ];
   // "agora" = o primeiro passo que ainda não aconteceu (app.js:4712).
@@ -2784,6 +2810,27 @@ export default function CartaoDoDia({
                   )}
 
                   {p.nota && <div className="rv-tl-nota">{p.nota}</div>}
+
+                  {/* COMO ESTAVA → COMO FICOU. O "antes" é o retrato congelado no aviso; o
+                      balão é a grade que o robô releu no Transnet depois de gravar — a
+                      única prova de que o cartão ficou como o DP fechou. */}
+                  {!!p.antes?.length && (
+                    <div className="rv-tl-nota dp-faint">
+                      antes: <b className="dp-num dp-mono">{p.antes.join(" · ")}</b>
+                    </div>
+                  )}
+                  {!!p.transnet && (
+                    <div className="rv-balao">
+                      <span className="rv-balao-lb">como ficou no Transnet (cartão relido pelo robô)</span>
+                      {p.transnet}
+                    </div>
+                  )}
+                  {p.semProva && (
+                    <div className="rv-tl-nota dp-faint">
+                      sem a grade relida deste dia — a correção é anterior a 22/09/2026, quando a
+                      ferramenta passou a guardar o que o Transnet devolve
+                    </div>
+                  )}
 
                   {/* O BALÃO. Se já mandamos, é o que saiu; se não, a prévia do que
                       vai sair — o DP não clica mais no botão sem saber o texto. */}

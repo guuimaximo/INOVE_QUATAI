@@ -3,6 +3,7 @@
 // ponto como secret. O navegador nunca vê credencial da base DP360.
 import { supabase } from "../supabase";
 import { getStoredUser } from "../utils/auth";
+import { saneiaDiaDoPonto } from "../pages/dp360/diaNoTransnet.js";
 
 /* A PAGINA E DE 1000 PORQUE O SERVIDOR CORTA EM 1000 — e isso NAO se negocia daqui.
    O gateway aceita pedir ate 5000 (`LIMITE_MAX`), mas o PostgREST da base do ponto tem
@@ -90,7 +91,21 @@ export async function lerDP360(tabela, { colunas, filtros, ordem, limite, offset
     limite,
     offset,
   });
-  return dados.linhas || [];
+  const linhas = dados.linhas || [];
+  /* A REGRA DA SUGESTAO PASSA AQUI, E SO AQUI (22/09/2026) ────────────────────
+   *
+   * Dono: "voce nao pode ajustar 1 ou outro e sim a regra". Eram 25 leituras de
+   * `ponto_diario` em nove telas (Folgas, Gordura, Motorista, Ocorrencias, Refeicao,
+   * Revisao, Cartao do dia, Abandonos, Resumo). Consertar na tela significa lembrar de
+   * consertar em nove lugares e errar no decimo — foi exatamente o que aconteceu com o
+   * almoco inventado, que eu tirei das Ocorrencias e continuou de pe na Revisao.
+   *
+   * Aqui e a porta: `lerTudoDP360` tambem passa por esta funcao, entao nenhuma tela
+   * precisa lembrar de nada. O dia chega saneado ou nao chega.
+   *
+   * Custo: uma passada por linha, sem alocar quando nao ha o que desfazer (3,5% dos dias
+   * medidos). O resto volta pela mesma referencia. */
+  return tabela === "ponto_diario" ? linhas.map(saneiaDiaDoPonto) : linhas;
 }
 
 /**

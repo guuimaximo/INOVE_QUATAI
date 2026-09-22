@@ -106,8 +106,6 @@ import {
   desenrolaSlots,
   ehRecusaSemMotivo,
   fimNoDiaSeguinte,
-  semAlmocoInventado,
-  semTapaBuracoNoAlvo,
   somaUmDia,
 } from "../diaNoTransnet";
 import {
@@ -1264,7 +1262,12 @@ function montarRegistros(base) {
     /* O almoço que a matriz inventou num dia SEM FIM sai aqui, na porta: de `cp` descem o
        cartão, o alvo, a trava e tudo o que a tela desenha, então tirar num lugar só vale
        para o pop-up, para a grade e para o que a correção lança. Ver `almocoInventado`. */
-    const cp = semTapaBuracoNoAlvo(semAlmocoInventado(mapaDiario.get(k) || {}));
+    /* SANEADO NA PORTA, NAO AQUI (22/09/2026): `lerDP360` passa todo `ponto_diario` pela
+       `saneiaDiaDoPonto`, entao a linha ja chega sem o almoco inventado e sem o minuto do
+       tapa-buraco. Chamar de novo era no-op — e era tambem a armadilha: quem copiasse esta
+       tela para outra aba copiaria a lembranca, e quem nao copiasse ficava com o defeito
+       (foi o que houve com a Revisao). */
+    const cp = mapaDiario.get(k) || {};
     const temLinhaDoDia = mapaDiario.has(k);
     const g = mapaGordura.get(k) || {};
     const rm = mapaReal.get(k) || {};
@@ -5908,14 +5911,32 @@ export default function Ocorrencias() {
             const reg = regDaChave.get(chave);
             if (!reg) continue;
             const chaveCaso = chaveDoCaso(reg);
-            if (item.estado === "corrigido")
+            if (item.estado === "corrigido") {
+              /* O QUE FOI LANCADO E O QUE O TRANSNET DEVOLVEU (22/09/2026) ────────────
+               * Dono, abrindo um caso corrigido: "o pop-up fala que corrigiu, mas nao tem o
+               * historico ou ponto final". Nao tinha mesmo: quem escreve `ponto_final` e a
+               * ferramenta antiga do PC (por isso 494 dos 837 corrigidos tem, e sao os dela);
+               * o INOVE corrigia e nao registrava NADA — nem o cartao que mandou, nem a
+               * resposta. A linha do tempo entao mostrava o alvo congelado do aviso, que e a
+               * intencao de dias antes: no ANDRE 27/08 dizia "lancado para 16:44" quando o
+               * que subiu foi 04:14 | 11:27 | 11:57 | 16:52.
+               *
+               * Agora ficam os dois lados, no mesmo formato da ferramenta antiga para as
+               * telas que ja leem essa coluna (o Resumo usa `ponto_final` no detalhe):
+               *   ponto_final       o cartao que o robo mandou — as quatro pontas do CSV
+               *   transnet_resposta a grade RELIDA pelo robo depois de gravar
+               * `ponto_antes` fica de fora de proposito: quando ha aviso ele ja guarda o
+               * retrato congelado daquele momento, e sobrescrever aqui apagaria o original. */
+              const lancado = cartaoDe(reg).slots.map((h) => txt(h)).join(",");
               corrigidos.push({
                 ...chaveCaso,
                 correcao_status: "corrigido",
                 correcao_final_em: agora,
-                transnet_resposta: null,
+                ponto_final: lancado,
+                transnet_resposta: txt(item.prova).slice(0, 400) || null,
                 atualizado_em: agora,
               });
+            }
             else if (item.estado === "ponto_fechado")
               fechados.push({
                 ...chaveCaso,

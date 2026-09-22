@@ -506,8 +506,149 @@ export function semTapaBuracoNoAlvo(linha) {
     return m != null && parDe.has(m) ? min2hm(parDe.get(m)) : h;
   };
   const novo = { ...linha };
-  for (const campo of ["alvo_entrada", "alvo_saida", "entrada_sug", "saida_sug"]) {
+  /* O ALMOCO TAMBEM (22/09/2026). A lista so tinha as pontas, e o minuto somado reaparecia
+     pelo miolo: alvo/sugestao de almoco que caem no segundo do par saem um minuto adiante
+     e a correcao lanca esse minuto. Os oito campos sao a mesma batida vista de oito
+     lugares; consertar quatro e deixar quatro e consertar pela metade. */
+  for (const campo of ["alvo_entrada", "alvo_saida", "entrada_sug", "saida_sug",
+                       "alvo_saida_almoco", "alvo_volta_almoco",
+                       "almoco_saida_sug", "almoco_volta_sug"]) {
     if (txt(novo[campo])) novo[campo] = arruma(novo[campo]);
   }
   return novo;
+}
+
+
+/* ═══════════ A REGRA DA SUGESTAO, NUM LUGAR SO (22/09/2026) ══════════════════
+ *
+ * Dono, depois de eu consertar o quarto caso separado: "voce nao pode ajustar 1 ou outro e
+ * sim a regra". Ele esta certo — JOAO 25/08, SILVIO 24/08, GILBERTO 15/09, CLAUDEMIR 26/08
+ * e os outros eram o MESMO defeito, e eu vinha remendando tela por tela.
+ *
+ * O DEFEITO, DITO UMA VEZ: a ferramenta monta uma sugestao a partir de dado incompleto e
+ * depois trata a invencao como fato — desenha o cartao com ela, TRANCA o almoco por ela e
+ * barra o aviso e a correcao por causa dela. Foi assim que nasceram o cartao de 26 h do
+ * JOAO, o almoco das 22:04 do CLAUDEMIR e o "nao recebe" do SILVIO.
+ *
+ * A REGRA: uma sugestao so vale se ela PODE TER ACONTECIDO. Antes de qualquer tela olhar a
+ * linha do dia, ela passa por aqui.
+ *
+ * MEDIDO ANTES DE VIRAR REGRA (12.190 dias, 20/08 a 22/09), como manda a licao do piso de
+ * almoco: mexe em 176 dias (1,4%) — 78 pelo almoco sem fim, 65 pelo tapa-buraco, 51 pelo
+ * intervalo batido, 10 pela sugestao impossivel. NENHUM toca coluna de batida, de ponto
+ * real ou de status: 100% do que ela mexe e sugestao/alvo, que e proposta da ferramenta.
+ * Dos 176, 172 estao em REVISAR (o DP ainda vai olhar) e 4 em OK — nestes, o dia ja fechou
+ * pelo cartao real e o que sai e so o lixo de sugestao que sobrou do lado.
+ *
+ * O QUE ELA NAO FAZ: nao inventa hora, nao decide, nao toca em batida. So desfaz o que a
+ * ferramenta somou sozinha. Linha sa volta o MESMO objeto (identidade preservada — as telas
+ * comparam por referencia).
+ */
+
+/* O QUE E UM INTERVALO BATIDO, MEDIDO (22/09/2026). Em 5.687 cartoes que fecharam OK neste
+   mes, a parada do meio vai de 7 a 41 min no motorista e de 55 a 65 no interno — NUNCA
+   passa de 65. Piso 5 (acima do tapa-buraco), teto 120 (o dobro do maior real). Sem o teto
+   a regra chamou de almoco um vao de 8h14 do cracha 30061221 em 15/09, que e jornada
+   partida, e a partir dai zerou o cartao inteiro. */
+const ALMOCO_MIN = 5;
+const ALMOCO_MAX = 120;
+
+/** A maior parada BATIDA do dia: o intervalo que a pessoa realmente fez. */
+function paradaBatida(mins) {
+  if (mins.length < 4) return null;
+  let melhor = null;
+  for (let i = 1; i < mins.length - 1; i += 2) {   // o intervalo fica entre PARES de batidas
+    const dur = mins[i + 1] - mins[i];
+    if (dur >= ALMOCO_MIN && dur <= ALMOCO_MAX && (!melhor || dur > melhor.dur)) {
+      melhor = { ini: mins[i], fim: mins[i + 1], dur };
+    }
+  }
+  return melhor;
+}
+
+/* ═══ A BATIDA MANDA NA MATRIZ ════════════════════════════════════════════════
+ * CLAUDEMIR 26/08 bateu o intervalo dele as 16:18 e voltou 16:39 — e a matriz escreveu
+ * almoco 22:04-22:34, quatro horas adiante, em cima de um intervalo que EXISTE no cartao.
+ * A matriz e para quem nao bateu refeicao; quem bateu ja disse quando parou. */
+function intervaloBatidoManda(linha) {
+  const fonte = txt(linha?.fonte_almoco).toUpperCase();
+  if (!fonte.startsWith("MATRIZ")) return linha;
+  const parada = paradaBatida(batidasDaLinha(linha));
+  if (!parada) return linha;
+  const sugIni = hm2min(linha.almoco_saida_sug);
+  if (sugIni == null || Math.abs(sugIni - parada.ini) <= ALMOCO_MIN) return linha;
+  return {
+    ...linha,
+    almoco_saida_sug: min2hm(parada.ini),
+    almoco_volta_sug: min2hm(parada.fim),
+    alvo_saida_almoco: min2hm(parada.ini),
+    alvo_volta_almoco: min2hm(parada.fim),
+    almoco_travado: "",
+    fonte_almoco: "INTERVALO_BATIDO",
+    __porque: `o intervalo batido (${min2hm(parada.ini)}-${min2hm(parada.fim)}, ${parada.dur} min) vale mais que o da matriz`,
+  };
+}
+
+/* ═══ SUGESTAO IMPOSSIVEL **E INVENTADA** NAO E SUGESTAO ══════════════════════
+ * Jornada zero, negativa ou acima do teto, montada com hora que NINGUEM bateu, nao e
+ * proposta: e ausencia de proposta. Sai com o motivo, e a tela mostra o dia sem sugestao em
+ * vez de travar o DP com uma conta da propria ferramenta.
+ *
+ * O "inventada" nao estava aqui e quase custou caro (medido nos 12.190): sem ele a regra
+ * apagava o cartao do ANDRE de 20/08 — 04:00 | 14:46 | 15:57 | 20:10, quatro batidas dele,
+ * 14h59 de jornada. Dia longo e FATO, e esconder fato e pior que mostrar hora ruim. */
+function semSugestaoImpossivel(linha) {
+  const e = hm2min(linha?.entrada_sug);
+  const s = hm2min(linha?.saida_sug);
+  if (e == null || s == null) return linha;
+  const a1 = hm2min(linha.almoco_saida_sug);
+  const a2 = hm2min(linha.almoco_volta_sug);
+  const alm = a1 != null && a2 != null ? Math.max(0, a2 - a1) : 0;
+  const liq = (s >= e ? s - e : s + 1440 - e) - alm;
+  if (liq > 0 && liq <= JORNADA_MAX) return linha;
+  const bateu = new Set(batidasDaLinha(linha));
+  if (![e, s, a1, a2].some((m) => m != null && !bateu.has(m))) return linha;
+  return {
+    ...linha,
+    entrada_sug: "",
+    almoco_saida_sug: "",
+    almoco_volta_sug: "",
+    saida_sug: "",
+    __porque:
+      liq <= 0
+        ? "a sugestao dava jornada zero ou negativa"
+        : `a sugestao dava ${Math.floor(liq / 60)}h${dois(liq % 60)}, acima do teto de 13h`,
+  };
+}
+
+/**
+ * A PORTA UNICA. Toda leitura de `ponto_diario` passa por aqui (`lerDP360`), entao as nove
+ * telas recebem o dia ja saneado e nenhuma precisa lembrar de chamar nada.
+ *
+ * Devolve a MESMA linha quando nao ha o que desfazer. Quando ha, a copia leva
+ * `sug_saneada` com o porque em portugues — e a tela pode mostrar ao DP por que o dia
+ * chegou diferente do que estava na base.
+ */
+export function saneiaDiaDoPonto(linha) {
+  if (!linha || typeof linha !== "object") return linha;
+  const porques = [];
+  let atual = linha;
+
+  const semTapa = semTapaBuracoNoAlvo(atual);
+  if (semTapa !== atual) { porques.push("tapa-buraco: a batida real e a primeira do par"); atual = semTapa; }
+
+  const semAlmoco = semAlmocoInventado(atual);
+  if (semAlmoco !== atual) { porques.push("almoco de meio de jornada num dia sem fim de jornada"); atual = semAlmoco; }
+
+  for (const passo of [intervaloBatidoManda, semSugestaoImpossivel]) {
+    const depois = passo(atual);
+    if (depois === atual) continue;
+    if (depois.__porque) porques.push(depois.__porque);
+    delete depois.__porque;
+    atual = depois;
+  }
+
+  if (atual === linha) return linha;
+  atual.sug_saneada = porques.join(" · ");
+  return atual;
 }

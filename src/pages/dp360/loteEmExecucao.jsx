@@ -445,7 +445,18 @@ export function desfechosDaCorrecao(casos, log, fim) {
     // `motivo` é a frase que fica gravada no caso (`transnet_resposta`) para a linha dizer
     // por que não subiu depois que este quadro fechar
     let item;
-    if (passo === "CONFERIDO") item = { estado: "corrigido" };
+    /* A PROVA DO SUCESSO TAMBEM E GUARDADA (22/09/2026) ─────────────────────────
+     * Dono, abrindo um caso corrigido: "o pop-up fala que corrigiu, mas nao tem o historico
+     * ou ponto final". Estava tudo aqui e a tela jogava fora: o `bot_ponto` REABRE o cartao
+     * depois de gravar e escreve a grade relida — `CONFERIDO 30031644 27/08/2026:
+     * 04:14|11:27|11:57|16:52` (bot_ponto.py:551, com foto `relido_*` no bucket). Essa
+     * frase E "como ficou o Transnet". So que `desfechosDaCorrecao` guardava o `motivo`
+     * apenas no fracasso, e no sucesso gravava `transnet_resposta: null` — por isso 836 dos
+     * 837 casos corrigidos nao tem uma linha sequer do que o Transnet devolveu.
+     *
+     * Ficar sem a prova no caso que DEU CERTO e o pior dos dois: e nele que alguem vai
+     * perguntar, meses depois, com que cartao o dia foi fechado. */
+    if (passo === "CONFERIDO") item = { estado: "corrigido", prova: txt(fala?.frase) };
     /* O `ajustes` FALA OUTRA LÍNGUA (22/09/2026).
      *
      * Run 35731388639: o quadro disse "0 de 22 conferido(s)" e carimbou "leitura ao vivo
@@ -466,7 +477,7 @@ export function desfechosDaCorrecao(casos, log, fim) {
      *                os dois — foi inventar um só que produziu a mensagem errada. */
     else if (passo === "VERIFICAR" && RESULTADO_DO_AJUSTES.test(txt(fala?.frase))) {
       const r = RESULTADO_DO_AJUSTES.exec(txt(fala.frase))[1];
-      if (r === "subiu") item = { estado: "corrigido" };
+      if (r === "subiu") item = { estado: "corrigido", prova: txt(fala.frase) };
       else if (r === "nao_subiu")
         item = {
           estado: "divergente",

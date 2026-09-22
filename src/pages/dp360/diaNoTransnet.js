@@ -553,12 +553,27 @@ export function semTapaBuracoNoAlvo(linha) {
 const ALMOCO_MIN = 5;
 const ALMOCO_MAX = 120;
 
-/** A maior parada BATIDA do dia: o intervalo que a pessoa realmente fez. */
-function paradaBatida(mins) {
-  if (mins.length < 4) return null;
+/** A maior parada BATIDA DENTRO DA JORNADA DO DIA.
+ *
+ * O "dentro da jornada" nao estava aqui e me custou uma regressao no ar (22/09/2026).
+ * ROGERIO 30061165 05/09: o cartao do dia tem `E02:15 | S07:27 | E07:57 | S13:10`, que e o
+ * fim do turno da VESPERA, e a jornada dele naquele dia e 13:03 -> 26:01. A regra viu a
+ * parada 07:27-07:57 (30 min, cara de refeicao) e a pos no lugar do almoco da matriz — um
+ * almoco SEIS HORAS ANTES da entrada. O dono viu na tela.
+ *
+ * Batida so fala do turno em que ela esta. Sem saber onde o turno comeca e acaba, a regra
+ * nao tem o que comparar e nao mexe. */
+function paradaBatida(mins, jornadaIni, jornadaFim) {
+  if (mins.length < 4 || jornadaIni == null || jornadaFim == null || jornadaFim <= jornadaIni) return null;
   let melhor = null;
   for (let i = 1; i < mins.length - 1; i += 2) {   // o intervalo fica entre PARES de batidas
-    const dur = mins[i + 1] - mins[i];
+    let ini = mins[i];
+    let fim = mins[i + 1];
+    // A VIRADA: num turno que passa da meia-noite a jornada vem em 24+ ("26:01") e a batida
+    // nao ("01:30"). Antes de dizer que a parada esta fora, tento o mesmo dia somado.
+    if (ini < jornadaIni) { ini += 1440; fim += 1440; }
+    if (ini < jornadaIni || fim > jornadaFim) continue;
+    const dur = fim - ini;
     if (dur >= ALMOCO_MIN && dur <= ALMOCO_MAX && (!melhor || dur > melhor.dur)) {
       melhor = { ini: mins[i], fim: mins[i + 1], dur };
     }
@@ -573,7 +588,10 @@ function paradaBatida(mins) {
 function intervaloBatidoManda(linha) {
   const fonte = txt(linha?.fonte_almoco).toUpperCase();
   if (!fonte.startsWith("MATRIZ")) return linha;
-  const parada = paradaBatida(batidasDaLinha(linha));
+  // as pontas da jornada DESTE dia — e por elas que se sabe se a parada e daqui
+  const jIni = hm2min(linha.entrada_sug) ?? hm2min(linha.alvo_entrada) ?? hm2min(linha.entrada);
+  const jFim = hm2min(linha.saida_sug) ?? hm2min(linha.alvo_saida) ?? hm2min(linha.saida);
+  const parada = paradaBatida(batidasDaLinha(linha), jIni, jFim);
   if (!parada) return linha;
   const sugIni = hm2min(linha.almoco_saida_sug);
   if (sugIni == null || Math.abs(sugIni - parada.ini) <= ALMOCO_MIN) return linha;

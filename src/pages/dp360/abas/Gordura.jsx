@@ -1186,16 +1186,30 @@ function ModalComunicado({ linhas, casoDe, comPontoAntes, aoFechar, aoConcluir }
           : "Não li a confirmação do robô: os avisos foram marcados pelo run verde — confira o log.";
       };
 
-      acompanharLote({
-        casos: casosDoQuadro,
-        runId: r?.execucao?.run_id,
-        painel: r?.painel || "",
-        robo: "comunicado",
-        tipo: "comunicado",
-        aba: "gordura",
-        titulo: `📣 Enviando ${p.itens.length} comunicado(s) · ${p.datas[0]}`,
-        aoTerminar: marcar,
-      });
+      /* MANDAR DE NOVO SEM REFAZER A SELEÇÃO — mesmo motivo da Revisão (22/09/2026): quando
+         o robô morre na fila do Transnet nada sai, e o quadro passa a oferecer o reenvio do
+         MESMO lote em vez de mandar o DP remarcar todo mundo de novo. */
+      const mandar = async (resposta) => {
+        const rr = resposta ?? (await dispararRoboDP360("comunicado", {
+          csv: p.csv,
+          data: p.datas[0],
+          motivo: MOTIVO_AVISO,
+          confirmar: "true",
+        }));
+        acompanharLote({
+          casos: casosDoQuadro,
+          runId: rr?.execucao?.run_id,
+          painel: rr?.painel || "",
+          robo: "comunicado",
+          tipo: "comunicado",
+          aba: "gordura",
+          titulo: `📣 Enviando ${p.itens.length} comunicado(s) · ${p.datas[0]}`,
+          aoTerminar: marcar,
+          aoRepetir: () => mandar(),
+        });
+        return rr;
+      };
+      await mandar(r);
       aoFechar();
     } catch (falha) {
       // o disparo falhou antes de virar lote: o modal continua aberto e diz por quê

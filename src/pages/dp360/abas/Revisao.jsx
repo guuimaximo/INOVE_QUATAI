@@ -473,13 +473,6 @@ function ModalComunicado({
     try {
       // ORDEM DELIBERADA: dispara PRIMEIRO, grava o caso DEPOIS — e só quando o robô
       // confirma o envio (ver `marcar`). O caso é o que faz o prazo de 48 h correr.
-      const r = await dispararRoboDP360("comunicado", {
-        csv: p.csv,
-        data: p.datas[0],
-        motivo: MOTIVO_AVISO, // aviso. Advertência (103) não sai desta tela.
-        confirmar: "true",
-      });
-
       const marcar = async (fim, conta) => {
         if (!conta?.enviou && !conta?.semLog) {
           return "Os comunicados NÃO saíram e ninguém foi marcado como avisado. Veja o log antes de disparar de novo.";
@@ -506,16 +499,32 @@ function ModalComunicado({
           : "Não li a confirmação do robô: os avisos foram marcados pelo run verde — confira o log.";
       };
 
-      acompanharLote({
-        casos: casosDoQuadro,
-        runId: r?.execucao?.run_id,
-        painel: r?.painel || "",
-        robo: "comunicado",
-        tipo: "comunicado",
-        aba: "revisao",
-        titulo: `📣 Enviando ${p.itens.length} comunicado(s) · ${p.datas[0]}`,
-        aoTerminar: marcar,
-      });
+      /* O DISPARO VIRA FUNÇÃO PARA PODER SER REPETIDO (22/09/2026). Dono, com o quadro
+         "0 de 10 comunicado(s) enviado(s)" na tela: "ele não está carregando para lançar".
+         Quando o robô morre na fila NADA sai, e refazer a seleção dos dez à mão é trabalho
+         que a máquina pode fazer. O quadro ganha o botão "mandar de novo" e chama isto —
+         o MESMO lote, o mesmo CSV, o mesmo dia. */
+      const mandar = async () => {
+        const r = await dispararRoboDP360("comunicado", {
+          csv: p.csv,
+          data: p.datas[0],
+          motivo: MOTIVO_AVISO, // aviso. Advertência (103) não sai desta tela.
+          confirmar: "true",
+        });
+        acompanharLote({
+          casos: casosDoQuadro,
+          runId: r?.execucao?.run_id,
+          painel: r?.painel || "",
+          robo: "comunicado",
+          tipo: "comunicado",
+          aba: "revisao",
+          titulo: `📣 Enviando ${p.itens.length} comunicado(s) · ${p.datas[0]}`,
+          aoTerminar: marcar,
+          aoRepetir: mandar,
+        });
+        return r;
+      };
+      await mandar();
       aoFechar();
     } catch (falha) {
       // o disparo falhou antes de virar lote: o modal continua aberto e diz por quê

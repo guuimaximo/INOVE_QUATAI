@@ -148,6 +148,17 @@ export async function acompanharLote({
   ensaio = false,
   aoTerminar,
   aoParcial,
+  /* MANDAR DE NOVO SEM REFAZER A SELEÇÃO (22/09/2026) ──────────────────────────
+   * Dono, com o quadro "0 de 10 comunicado(s) enviado(s)" na tela: "ele não está
+   * carregando para lançar". O quadro dizia o que deu errado, listava os dez nomes e
+   * parava ali: para tentar de novo o DP tinha de fechar, voltar na lista, remarcar os
+   * dez e disparar — no meio de um dia em que o robô já tinha comido dois lotes na fila.
+   *
+   * `aoRepetir` é a função que a tela usa para disparar de novo EXATAMENTE o mesmo lote.
+   * Só faz sentido quando NADA saiu (cancelado na fila, run falhado, erro antes do
+   * envio): aí repetir é seguro, porque não há risco de mandar duas vezes para a mesma
+   * pessoa. Sem ela o botão não aparece. */
+  aoRepetir,
 }) {
   const desde = Date.now();
   // o tipo do MEU lote: `estado` pode virar outro lote (ou nada) enquanto este espera
@@ -162,6 +173,7 @@ export async function acompanharLote({
     aba,
     titulo,
     ensaio,
+    aoRepetir,
   };
   avisar();
 
@@ -834,6 +846,10 @@ export default function PainelExecucao({ aba = "" }) {
   const [agora, setAgora] = useState(() => Date.now());
   // o que o robô falou até agora vem do módulo, que lê o log mesmo com a tela fechada
   const aoVivo = execucao?.aoVivo ?? VAZIO;
+  const [repetindo, setRepetindo] = useState(false);
+  const [erroRepetir, setErroRepetir] = useState("");
+  // lote novo = botão limpo (o quadro é reaproveitado entre disparos)
+  useEffect(() => { setRepetindo(false); setErroRepetir(""); }, [execucao?.desde]);
   useEffect(() => {
     if (!execucao || execucao.fim) return undefined;
     const t = setInterval(() => setAgora(Date.now()), 1000);
@@ -857,6 +873,8 @@ export default function PainelExecucao({ aba = "" }) {
   // encerrou de verdade só quando o banco respondeu (ou quando não deu para conferir)
   const encerrou = Boolean(fim) && (Boolean(porCaso) || Boolean(erro));
   const tudoCerto = encerrou && !erro && !execucao.aviso && (ensaio || feitos === total);
+  // repetir só quando acabou, a tela sabe repetir, e NINGUÉM recebeu nada
+  const podeRepetir = Boolean(encerrou && execucao.aoRepetir && !ensaio && feitos === 0 && total > 0);
   const tom = !encerrou ? "rodando" : tudoCerto ? "ok" : "pendente";
 
   /* POP-UP NO MEIO DA ABA (dono, 15/09/2026: "a aba vai ficar com um pop-up no meio dela
@@ -961,12 +979,36 @@ export default function PainelExecucao({ aba = "" }) {
         })}
       </div>
 
-      {painel ? (
+      {(painel || podeRepetir) ? (
         <footer className="oc-exec-pe">
-          <a href={painel} target="_blank" rel="noreferrer">ver o log do run ↗</a>
+          {painel ? <a href={painel} target="_blank" rel="noreferrer">ver o log do run ↗</a> : null}
           {!encerrou ? <span className="dp-faint"> · pode sair desta tela, o robô continua</span> : null}
+          {/* MANDAR DE NOVO, daqui mesmo. Só aparece quando NADA saiu: repetir um lote que
+              saiu em parte mandaria mensagem dobrada para quem já recebeu. */}
+          {podeRepetir ? (
+            <button
+              type="button"
+              className="dp-btn"
+              style={{ marginLeft: "auto" }}
+              disabled={repetindo}
+              onClick={async () => {
+                setRepetindo(true);
+                setErroRepetir("");
+                try {
+                  await execucao.aoRepetir();
+                } catch (falha) {
+                  setErroRepetir(String(falha?.message || falha).slice(0, 220));
+                  setRepetindo(false);
+                }
+              }}
+              title="Dispara o mesmo lote outra vez — ninguém recebeu nada, então não há risco de mensagem dobrada"
+            >
+              {repetindo ? "mandando…" : `🔁 mandar de novo os ${total} que não saíram`}
+            </button>
+          ) : null}
         </footer>
       ) : null}
+      {erroRepetir ? <p className="oc-exec-erro" style={{ margin: "6px 14px 12px" }}>{erroRepetir}</p> : null}
     </section>
     </div>
   );

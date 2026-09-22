@@ -360,7 +360,46 @@ export async function evidenciasDoRun(runId, ano, mes, { semUrl = false } = {}) 
  */
 export const EVENTO_ROBO_DISPARADO = "dp360:robo-disparado";
 
-export function dispararRoboDP360(robo, inputs) {
+/* ═══ A FILA DO TRANSNET SÓ GUARDA UM (22/09/2026) ════════════════════════════
+ *
+ * Dono, com o quadro na tela: "0 de 10 comunicado(s) enviado(s) — o robô terminou em
+ * cancelled... ainda não está saindo, corrige".
+ *
+ * Não foi o robô que falhou. Os quatro workflows do Transnet dividem o MESMO grupo de
+ * concurrency (`bots-transnet`, `cancel-in-progress: false`), e o GitHub guarda apenas o
+ * run MAIS RECENTE esperando na fila: quando chega um terceiro, o que estava esperando é
+ * CANCELADO. Medido nos runs de hoje — 15:00 `Ajustes` rodando, 15:02 comunicado entra na
+ * fila, 15:03 outro comunicado entra e MATA o das 15:02, 15:11 um terceiro mata o das
+ * 15:03. Os dez comunicados morreram na fila sem nunca abrir o Transnet.
+ *
+ * E o ciclo se alimentava sozinho: o DP não via nada acontecer, clicava de novo, e o
+ * clique novo matava o anterior.
+ *
+ * A trava fica AQUI, na porta única de disparo, e não em cada tela — são quatro telas que
+ * disparam, e a quinta nasceria sem a trava. Robô RODANDO não é problema: o novo espera a
+ * vez. Robô ESPERANDO é: disparar por cima dele o mata. */
+const ESPERANDO_NA_FILA = new Set(["queued", "waiting", "pending", "requested", "action_required"]);
+
+export async function dispararRoboDP360(robo, inputs, { forcar = false } = {}) {
+  if (!forcar) {
+    let naFila = [];
+    try {
+      const runs = await statusRoboDP360(2);
+      naFila = (runs || []).filter((r) => ESPERANDO_NA_FILA.has(String(r?.status ?? "").toLowerCase()));
+    } catch {
+      // Sem conseguir LER a fila eu não barro: deixar de disparar por não ter conseguido
+      // olhar seria trocar uma perda certa por outra.
+      naFila = [];
+    }
+    if (naFila.length) {
+      const q = naFila[0];
+      throw new Error(
+        `Já tem um robô esperando na fila do Transnet (${q.nome || "robô"}). A fila guarda ` +
+        "só um: disparar agora CANCELA ele, e nada sai — foi assim que 10 comunicados se " +
+        "perderam em 22/09. Espere esse entrar (costuma levar 1 a 3 min) e mande de novo.",
+      );
+    }
+  }
   // A credencial viaja no corpo da chamada, para o gateway — NUNCA como input do
   // workflow: o GitHub imprime os inputs no log da execução (medido neste projeto).
   const pedido = chamar({ action: "robo", robo, inputs, credencial: lerCredencialTransnet() });

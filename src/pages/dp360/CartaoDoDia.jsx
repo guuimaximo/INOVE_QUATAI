@@ -1298,7 +1298,13 @@ function ModalPedirExclusao({ linha, caso, aoFechar, aoConcluir }) {
           setRecado({
             tipo: "erro",
             texto:
-              `O robô terminou em "${fim}": os comunicados NÃO saíram e ninguém foi marcado como avisado. ` +
+              (fim === "cancelled"
+                /* A fila do Transnet guarda UM run esperando; o disparo seguinte mata ele.
+                   Sem esta frase o DP lê "cancelled" e procura defeito no robô. */
+                ? "Este robô foi CANCELADO na fila: os quatro robôs do Transnet dividem uma fila " +
+                  "que guarda só um esperando, e um disparo mais novo derrubou este. Nada saiu e " +
+                  "ninguém foi marcado como avisado — espere a fila esvaziar e mande de novo. "
+                : `O robô terminou em "${fim}": os comunicados NÃO saíram e ninguém foi marcado como avisado. `) +
               "Veja o log no painel do robô antes de disparar de novo.",
             painel: r?.painel || "",
           });

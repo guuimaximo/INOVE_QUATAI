@@ -385,6 +385,12 @@ export function desfechosDoComunicado(casos, texto, fim) {
     if (c.barrado) item = { estado: "barrado", texto: `não enviado — ${c.barrado}` };
     else if (ok) item = { estado: "comunicado" };
     else if (motivoErro) item = { estado: "naoEnviado", texto: `não enviado — ${motivoErro}` };
+    /* "cancelled" TEM NOME E CAUSA (22/09/2026). Dizer só `terminou em "cancelled"` manda o
+       DP procurar defeito onde não houve: os quatro robôs do Transnet dividem uma fila que
+       guarda UM run esperando, e o disparo seguinte mata o que estava na fila. Foi o que
+       aconteceu com 10 comunicados hoje. A frase agora diz isso, e o que fazer. */
+    else if (txt(fim) === "cancelled")
+      item = { estado: "naoEnviado", texto: "não saiu — este robô foi cancelado na fila por um disparo mais novo" };
     else if (runNaoFez(fim)) item = { estado: "naoEnviado", texto: `não enviado — o robô terminou em "${fim}"` };
     else
       item = {

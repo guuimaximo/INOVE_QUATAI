@@ -78,6 +78,7 @@ import PainelExecucao, {
   useLoteEmExecucao,
 } from "../loteEmExecucao";
 import CartaoDoDia, {
+  instanteDoBanco,
   agoraUtc,
   aplicarRealManual,
   quemEstaUsando,
@@ -342,11 +343,12 @@ function fmtDataHora(valor) {
 }
 
 function horasDesde(iso) {
-  const s = txt(iso).replace("Z", "").split("+")[0].split(".")[0];
-  if (!s) return null;
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return null;
-  return (Date.now() - d.getTime()) / 3600000;
+  /* O FUSO NÃO PODE SER JOGADO FORA (22/09/2026). Isto tirava o `Z`/`+00:00` e deixava o
+     `Date` ler o texto como hora LOCAL — mas o banco grava UTC, então o instante ia três
+     horas para a frente e o prazo de 48 h só fechava 51 h depois. A favor do colaborador,
+     mas errado, e o mesmo defeito estava mostrando 19:58 onde o aviso saiu 16:58. */
+  const d = instanteDoBanco(iso);
+  return d ? (Date.now() - d.getTime()) / 3600000 : null;
 }
 
 function tempoHoras(h) {

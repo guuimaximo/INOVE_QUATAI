@@ -172,10 +172,40 @@ export function semanaDe(iso) {
   });
 }
 
+/* O INSTANTE QUE O BANCO GRAVOU — em UTC, sempre (22/09/2026) ────────────────
+ *
+ * Dono, com a linha do tempo aberta: "enviei o ajuste dia 22/09 e ele já venceu? Não
+ * entendi nada". Eram DUAS contas erradas na mesma tela, e as duas por fuso:
+ *
+ *   · a HORA. `fmtDataHora` fatiava o texto (`s.slice(11,16)`) e mostrava a hora de
+ *     Londres: o aviso do NAELSON saiu 16:58 daqui e a tela dizia 19:58. A função logo
+ *     abaixo (`fmtInstanteBR`) já sabia disso e convertia — esta não;
+ *   · o PRAZO. `venceu` não tinha conta de tempo NENHUMA (ver abaixo).
+ *
+ * Texto sem fuso é UTC também: é assim que o Postgres devolve `timestamptz` quando a
+ * coluna vem sem o sufixo. Ler como hora local joga o instante três horas para a frente. */
+export const instanteDoBanco = (v) => {
+  const s = String(v ?? "").trim();
+  if (!s || s === "registrada") return null;
+  const comFuso = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s) ? s : `${s.replace(" ", "T")}Z`;
+  const d = new Date(comFuso);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+export const PRAZO_AVISO_H = 48;   // main.py PRAZO_HORAS, o mesmo das Ocorrências
+
 export const fmtDataHora = (v) => {
   const s = String(v ?? "").trim();
   if (!s || s === "registrada") return "";
-  return `${fmtData(s.slice(0, 10))}${s.length > 10 ? ` ${s.slice(11, 16)}` : ""}`;
+  if (s.length <= 10) return fmtData(s.slice(0, 10));
+  const d = instanteDoBanco(s);
+  if (!d) return fmtData(s.slice(0, 10));
+  const br = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  }).formatToParts(d);
+  const p = Object.fromEntries(br.map((x) => [x.type, x.value]));
+  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;
 };
 
 /** INSTANTE gravado como timestamp (o `criado_em`/`atualizado_em` da reserva, que o
@@ -2228,7 +2258,17 @@ export default function CartaoDoDia({
   const idsA = String(caso?.ajuste_ids ?? "").split(",").filter((x) => x.trim().startsWith("A:")).length;
   const respondeu = !!(acoesPedidas.length || idsR || idsA || (caso?.ajuste && caso.ajuste !== "nao_ajustou"));
   const houveAviso = !!String(caso?.aviso_enviado_em ?? "").trim();
-  const venceu = !respondeu && houveAviso;
+  /* O PRAZO PRECISA DE RELÓGIO (22/09/2026). Era `!respondeu && houveAviso`: qualquer
+     aviso sem resposta aparecia como VENCIDO — um minuto depois de sair. O NAELSON
+     recebeu às 16:58 e a linha do tempo já dizia "o prazo de 48 h venceu sem ajuste, por
+     isso a advertência", com a advertência ainda por vir. Susto no DP e recado errado.
+     As 48 h são as mesmas das Ocorrências (`PRAZO_HORAS`), que é quem de fato adverte —
+     esta tela só CONTA a história, e agora conta a mesma. */
+  const horasDoAviso = (() => {
+    const d = instanteDoBanco(caso?.aviso_enviado_em);
+    return d ? (Date.now() - d.getTime()) / 3600000 : null;
+  })();
+  const venceu = !respondeu && houveAviso && horasDoAviso != null && horasDoAviso > PRAZO_AVISO_H;
   const advertido = !!String(caso?.advertencia_enviada_em ?? "").trim();
 
   // PARA QUAL HORÁRIO FOI: o alvo CONGELADO no aviso (não o alvo de hoje). É o

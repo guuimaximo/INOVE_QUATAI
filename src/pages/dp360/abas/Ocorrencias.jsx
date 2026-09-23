@@ -2369,7 +2369,22 @@ function motivoSemDecisao(reg, { soRecusa = false } = {}) {
    * os sete acabados seguem sem veredito, que e o certo. */
   const temPedidoAberto = Number(reg?.abertosNoTransnet || 0) > 0;
   if (reg.decJa && !temPedidoAberto) return "já decidido";
-  if (resolvidoNoTransnet(reg)) return "o Transnet já resolveu";
+  /* JA FECHADO NO TRANSNET AINDA PRECISA SER FECHADO AQUI — "recusa e confere"
+   * (dono, 22/09/2026: "esta na fila, ja esta fechado no transnet, recusa e confere").
+   *
+   * Os sete dias que ele mandou (DAMIAO 05/09, RICHARD 05/09, CARLOS 04/09, ROGERIO 04/09,
+   * BRUNO 03/09, NELSON 03/09, FABIO 01/09) estao todos no mesmo estado: ele decidiu, o
+   * Transnet efetuou ou recusou, o robo conferiu — e depois um AVISO NOVO chegou. Aviso mais
+   * novo que a conferencia REABRE o ciclo (`ehReaberto`), entao o `decJa` do ciclo velho nao
+   * vale mais e o dia volta para a fila. So que ai esta clausula travava TUDO, inclusive a
+   * recusa: o dia ficava na fila sem nenhuma saida, e era por isso que "nao dava para
+   * aceitar" nem para fechar.
+   *
+   * Aceitar continua travado, e tem de continuar: nao existe aceite sobre pedido que o
+   * Transnet ja resolveu. RECUSAR nao mexe no Transnet — fecha o ciclo aqui, o robo confere
+   * (a ocorrencia ja resolvida "nao entra no CLIQUE, mas continua na CONFERENCIA",
+   * bot_ajustes_app.py) e carimba `conferido_em`, que e o que tira o dia da fila. */
+  if (resolvidoNoTransnet(reg) && !soRecusa) return "o Transnet já resolveu";
   // NÃO EXISTE DECISÃO SOBRE O NADA. Dia sem pedido nenhum não se aceita nem se recusa:
   // gravaria aceite com ajuste_ids vazio e tiraria o caso da fila de advertência em
   // silêncio — o oposto do que o dia pede.

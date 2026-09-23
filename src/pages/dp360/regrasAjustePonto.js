@@ -397,6 +397,16 @@ function marcasDoCartao(linha) {
  * `00:15` e a sugestão diz `14:40`, porque o `00:15` é do dia anterior.
  */
 export function entradaDoLancamento(linha) {
+  // O REAL DO DP NAO E REGUA, E ELE MANDA (23/09/2026). Dono: "eu salvo real e a sugestao
+  // nao muda e precisa mudar, ai nao manda ocorrencia". Esta regra existe para a REGUA DA
+  // VIEW (-10 min de entrada) nao virar correcao de cartao — mas ela nao distinguia a
+  // regua da MAO DO DP: `aplicarRealManual` punha o cravado em `entrada_sug` e, logo
+  // depois, `aplicarPontasBatidas` o trocava pela batida, porque o cravado e mais cedo.
+  // O proprio `Revisao.jsx` diz a intencao ao chamar as duas: "sobre o que o DP cravou ela
+  // nao mexe". Faltava o codigo fazer isso.
+  // MEDIDO: 738 dias tem Real cravado; a batida engolia a ENTRADA em 77 deles.
+  const cravado = fmtHora(linha?.rm_entrada);
+  if (cravado) return cravado;
   const marcas = marcasDoCartao(linha);
   const primeira = marcas[0];
   const batida = marcas.length >= 2 && primeira?.tipo === "E" ? fmtHora(primeira.hora) : null;
@@ -417,6 +427,10 @@ export function saidaDoLancamento(linha) {
   // FALTA_SAIDA essa última hora é a VOLTA DO ALMOÇO — o lançamento encerraria a jornada
   // no meio da tarde. Saída é a última marca `S`; se o cartão termina em `E`, não há
   // saída batida e a sugestão é a única fonte.
+  // O REAL DO DP MANDA, igual a entrada — ver `entradaDoLancamento`. Medido: a batida
+  // engolia a SAIDA cravada em 170 dos 738 dias com Real.
+  const cravado = fmtHora(linha?.rm_saida);
+  if (cravado) return cravado;
   const marcas = marcasDoCartao(linha);
 
   // NÃO HÁ TRAVA DE TAPA-BURACO AQUI, e isso é escolha.

@@ -459,7 +459,29 @@ function contratoDaGordura(r) {
  */
 function alvoDoEnvio(r) {
   const status = txt(r?.__statusRevisao).toUpperCase();
-  if (status !== "OK") {
+  /* CONFERIDO É A PALAVRA DO DP, E ELA VALE COMO OK (dono, 22/09/2026: "está como CONFERIDO
+   * e aqui ainda fala que está como REVISAR").
+   *
+   * WANDERSON 30060859 22/08: a Revisão mostra CONFERIDO, e a trava aqui dizia "dia REVISAR
+   * na Revisão". As duas telas estavam certas sobre coisas diferentes — a Revisão mostra o
+   * `ponto_caso.tipo = ponto_ok` (o DP olhou e disse que está certo) e esta trava lia só o
+   * `status_ponto` CRU da `ponto_diario`, que vem da importação. A coluna "Situação Revisão"
+   * AQUI AO LADO já escrevia CONFERIDO (`situacaoNaRevisao`); só a trava não olhava.
+   *
+   * E o motivo da trava não se aplica a ele. A regra de 18/09 existe porque "dia aberto na
+   * Revisão ainda vai mudar de cartão, e cobrar gordura antes é cobrar sobre um cartão que
+   * não é o final" — por isso AJUSTADO e CORRIGIDO continuam esperando a importação, que vai
+   * mesmo trazer cartão novo. CONFERIDO é o contrário: ninguém lançou nada, nada vai mudar,
+   * e o DP já disse que aquele é o cartão final. O dia ficaria preso para sempre.
+   *
+   * MEDIDO NO LAKE: 245 dias marcados CONFERIDO, 217 deles com `status_ponto = REVISAR` — e
+   * os 217 têm linha de gordura, ou seja, eram 217 cartas presas. Os motivos são justamente
+   * os que a importação não desfaz sozinha: JORNADA_SUSPEITA 132, ALMOCO_AUTOMATICO 35,
+   * JORNADA_INVALIDA 26, PONTO_SEM_OPERACAO 21, FALTA_ENTRADA 3.
+   *
+   * O resto da trava continua: sem cartão cronológico válido a carta segue barrada com
+   * "revisar alvo e refeição antes de cobrar", que é a checagem do CONTRATO, não do status. */
+  if (status !== "OK" && !pontoConferido(r?.__caso)) {
     const situacao = txt(r?.__revisao?.texto);
     const espera = "a gordura sai quando a próxima importação trouxer o cartão novo";
     let erro;

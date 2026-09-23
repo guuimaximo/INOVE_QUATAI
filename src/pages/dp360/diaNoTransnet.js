@@ -688,18 +688,24 @@ function semSugestaoImpossivel(linha) {
  * para ser refeicao, sai, e (c) num dia sem saida real, o cartao volta a PEDIR a saida — que
  * e a verdade: a pessoa nao bateu a saida dela.
  */
-/* O PISO DA REFEICAO E O DO PROPRIO SISTEMA (22/09/2026, investigacao dos cartoes).
-   Era 15. O `simulador.py` — a mesma regra que o robo usa — define `MIN_ALMOCO = 27` com
-   esta frase: "abaixo disso o Citatti nao pegou a refeicao de verdade, pegou uma parada
-   curta". Dois numeros para a mesma pergunta e a tela propondo almoco de 4 minutos
-   (30060984 15/05, 04:50-04:54) enquanto o robo nao chamaria aquilo de refeicao.
+/* NAO EXISTE MINIMO DE ALMOCO AQUI (23/09/2026). Dono: "tira o minimo almoco — se na aba
+   Refeicao o motorista teve refeicao pode alocar; o que precisa e as regras de jornada".
 
-   MEDIDO ANTES DE MUDAR, nos 49.084 dias do lake: 342 dias tem refeicao PROPOSTA (que
-   ninguem bateu) abaixo de 27 min — 6 abaixo de 15 e 336 na faixa 15-26 —, e os 342 estao
-   em REVISAR: NENHUM dia ja decidido e tocado. Do outro lado, 624 dias tem refeicao
-   BATIDA abaixo de 27 min: essas sao FATO e a regra nao encosta nelas (a licao do piso de
-   almoco do interno, que quase barrou o ponto real de muita gente). */
-const ALMOCO_CURTO_DEMAIS = 27;
+   Ele esta certo, e o dado prova. De manha eu subi o piso de 15 para 27 min (o `MIN_ALMOCO`
+   do simulador) achando que abaixo disso nao era refeicao. Fui ver o que a aba Refeicao diz
+   dos dias que esse piso apagava, em 21/09:
+     · BRUNO 30061072  — `status_almoco: OK`, o Citatti registrou 09:55-10:30 = 34,8 min
+     · CARLOS 30061123 — `OK`, Citatti 17:31-17:57 = 25,2 min
+     · JOSE MARCOS 30060942 — `OK`, Citatti 06:45-07:07 = 22 min
+   Os tres COMERAM. O piso apagava a refeicao deles porque a duracao que chega na
+   `ponto_diario` (15, 15, 22 min) nao e a que o Citatti mediu.
+
+   DURACAO NAO DIZ SE HOUVE REFEICAO — quem diz e a Refeicao. O que a ferramenta tem de
+   cobrar e a REGRA DE JORNADA (`JORNADA_EXIGE_ALMOCO`, 6 h: abaixo disso nem precisa de
+   intervalo), nao um tamanho minimo inventado aqui. Entao esta funcao parou de limpar por
+   duracao; o que ela ainda faz e o que o dono manteve: almoco de matriz nao TRANCA o DP, e
+   dia mudo volta a pedir a saida. */
+
 
 function almocoDeMatrizInventado(linha) {
   if (!txt(linha?.fonte_almoco).toUpperCase().startsWith("MATRIZ")) return false;
@@ -710,33 +716,9 @@ function almocoDeMatrizInventado(linha) {
   return !(bateu.has(ini) && bateu.has(fim));
 }
 
-/* REFEICAO CURTA DEMAIS QUE NINGUEM BATEU — DE QUALQUER CONTA NOSSA (22/09/2026).
-   O `almocoDeMatrizInventado` so olha `MATRIZ*`, e a investigacao achou 124 dias com
-   refeicao curta sem fonte nenhuma e outras com fonte diferente: o defeito nao e da matriz,
-   e de propor como refeicao uma parada que nao chega a ser refeicao.
-
-   FICA DE FORA O QUE E REGISTRO, nao conta nossa: `MODULO_REFEICAO` (a empresa lancou no
-   modulo do Transnet — vale mesmo divergindo das batidas), `CARTAO_PRESERVADO` (e a batida
-   da pessoa) e `INTERVALO_BATIDO` (a nossa propria regra ja concluiu que a parada foi
-   batida). E, em qualquer caso, par BATIDO nao se toca. */
-const FONTE_E_REGISTRO = /MODULO_REFEICAO|CARTAO_PRESERVADO|INTERVALO_BATIDO/i;
-
-function almocoCurtoInventado(linha) {
-  if (FONTE_E_REGISTRO.test(txt(linha?.fonte_almoco))) return false;
-  const ini = hm2min(linha?.almoco_saida_sug);
-  const fim = hm2min(linha?.almoco_volta_sug);
-  if (ini == null || fim == null || fim - ini <= 0) return false;
-  if (fim - ini >= ALMOCO_CURTO_DEMAIS) return false;
-  const bateu = new Set(batidasDaLinha(linha));
-  return !(bateu.has(ini) && bateu.has(fim));
-}
-
 function semAlmocoDeMentira(linha) {
   const daMatriz = almocoDeMatrizInventado(linha);
-  if (!daMatriz && !almocoCurtoInventado(linha)) return linha;
-  const ini = hm2min(linha.almoco_saida_sug);
-  const fim = hm2min(linha.almoco_volta_sug);
-  const curto = almocoCurtoInventado(linha);
+  if (!daMatriz) return linha;
   /* TRANCA e PEDIR A SAIDA continuam sendo assunto da MATRIZ. Sao efeitos fortes (o
      `MODULO_REFEICAO` tranca com razao) e nao foi isso que a investigacao achou. */
   const travado = daMatriz
@@ -749,18 +731,10 @@ function semAlmocoDeMentira(linha) {
                    txt(linha.requer_alvo_manual) !== "true";
   const vaiPedirSaida = daMatriz && semSaidaReal && telaMuda
     && txt(linha.status_ponto).toUpperCase() !== "OK";
-  if (!curto && !travado && !vaiPedirSaida) return linha;
+  if (!travado && !vaiPedirSaida) return linha;
   const novo = { ...linha };
   const porques = [];
   if (travado) { novo.almoco_travado = ""; porques.push("almoco de matriz nao tranca o DP"); }
-  if (curto) {
-    novo.almoco_saida_sug = "";
-    novo.almoco_volta_sug = "";
-    novo.alvo_saida_almoco = "";
-    novo.alvo_volta_almoco = "";
-    novo.fonte_almoco = "SEM_ALMOCO_APURADO";
-    porques.push(`almoco de ${fim - ini} min que ninguem bateu nao e refeicao`);
-  }
   if (vaiPedirSaida) { novo.pede_saida = "true"; porques.push("sem saida batida, o cartao volta a pedir a saida"); }
   novo.__porque = porques.join(" e ");
   return novo;

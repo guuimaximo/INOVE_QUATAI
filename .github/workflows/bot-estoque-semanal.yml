@@ -29,6 +29,10 @@ jobs:
         uses: browser-actions/setup-chrome@v1
         with:
           chrome-version: stable
+          # O runner ja traz um chromedriver, mas de uma versao ANTERIOR ao Chrome
+          # que esta acao instala: o Selenium pegava o da maquina e morria com
+          # "This version of ChromeDriver only supports Chrome version N".
+          install-chromedriver: true
 
       - name: Install Python deps
         working-directory: bot
@@ -66,6 +70,7 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
+          CHROMEDRIVER_PATH: ${{ steps.setup-chrome.outputs.chromedriver-path }}
           HEADLESS: "true"
         run: python bot_semanal.py
 

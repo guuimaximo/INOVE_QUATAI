@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
@@ -106,7 +107,9 @@ def make_driver() -> webdriver.Chrome:
     opts.add_argument("--window-size=1600,1000")
     if CHROME_BIN:
         opts.binary_location = CHROME_BIN
-    return webdriver.Chrome(options=opts)
+    driver_path = os.environ.get("CHROMEDRIVER_PATH", "").strip()
+    service = Service(driver_path) if driver_path else None
+    return webdriver.Chrome(options=opts, service=service) if service else webdriver.Chrome(options=opts)
 
 
 def login(driver: webdriver.Chrome):

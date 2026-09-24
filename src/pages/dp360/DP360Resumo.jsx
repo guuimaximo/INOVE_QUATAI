@@ -306,6 +306,12 @@ function periodoDaCompetencia(comp) {
 
 const MESES = ["", "jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
+/** "2026-08" -> "ago/2026". O nome curto, para caber na tag da seção. */
+const rotuloCurto = (comp) => {
+  const [a, m] = txt(comp).split("-").map(Number);
+  return a && m ? `${MESES[m]}/${a}` : txt(comp);
+};
+
 function nomeCompetencia(comp) {
   if (comp === TODAS) return "Todas as competências";
   const [a, m] = txt(comp).split("-").map(Number);
@@ -925,6 +931,8 @@ export default function DP360Resumo({ embutido = false }) {
   // `null` = a lista ainda não chegou (nada escolhido); `TODAS` ("") = todas as
   // competências; qualquer outra coisa = uma competência. Ver o comentário de `TODAS`.
   const [competencia, setCompetencia] = useState(null);
+  // A TAXA MEDIDA, da competência ANTERIOR (já fechada). Ver `useEffect` abaixo.
+  const [taxaFecha, setTaxaFecha] = useState(null);
   const [valorHora, setValorHora] = useState(0);
   const [horaSalva, setHoraSalva] = useState("");   // o valor da hora como texto no banco
   const [horaTxt, setHoraTxt] = useState("");       // o que está na caixinha
@@ -1134,6 +1142,49 @@ export default function DP360Resumo({ embutido = false }) {
     return () => { vivo = false; };
   }, [competencia, recarga]);
 
+  /* A TAXA DE CONVERSÃO, MEDIDA NA COMPETÊNCIA ANTERIOR (24/09/2026) ─────────────
+   *
+   * Dono, olhando a projeção: "se tenho vencido 65 horas eu ganho essas né". Ele está
+   * certo, e a primeira conta que eu fiz estava errada: eu aplicava UMA média em cima de
+   * tudo que foi avisado, misturando dois comportamentos opostos. Medido na competência de
+   * agosto, já fechada: a hora que VENCEU e foi advertida converte 94% (188,8 h de 201,0 h);
+   * a que ainda está no prazo converte 9%. A diferença é quem corrige — na vencida somos
+   * nós, e não depende de ninguém responder.
+   *
+   * Por isso a taxa não é constante no código: ela é lida da competência anterior a cada
+   * abertura da tela. Se a operação mudar, o número muda sozinho — e se não houver
+   * competência anterior com dado suficiente, o bloco não é desenhado (melhor não dizer
+   * nada do que dizer um número que envelheceu).
+   */
+  useEffect(() => {
+    if (competencia === null || competencia === TODAS) { setTaxaFecha(null); return undefined; }
+    const [a, m] = txt(competencia).split("-").map(Number);
+    if (!a || !m) { setTaxaFecha(null); return undefined; }
+    const antes = m > 1 ? `${a}-${String(m - 1).padStart(2, "0")}` : `${a - 1}-12`;
+    const [ini, fim] = periodoDaCompetencia(antes);
+    let vivo = true;
+    (async () => {
+      try {
+        const lidos = await lerPaginado(
+          "ponto_caso",
+          { filtros: { date_ref: [`gte.${ini}`, `lte.${fim}`] }, ordem: "date_ref,cracha" },
+          20000,
+        );
+        if (!vivo) return;
+        const g = (lidos || []).filter(casoEhGordura);
+        const adv = g.filter((c) => txt(c.advertencia_enviada_em));
+        const minAdv = adv.reduce((t, c) => t + num(c.gordura_min), 0);
+        const capAdv = adv.reduce((t, c) => t + Math.max(0, capturaConfirmada(c)[0]), 0);
+        setTaxaFecha(minAdv > 0
+          ? { taxa: capAdv / minAdv, base: antes, dias: adv.length, min: minAdv }
+          : null);
+      } catch {
+        if (vivo) setTaxaFecha(null);
+      }
+    })();
+    return () => { vivo = false; };
+  }, [competencia, recarga]);
+
   // Competência escolhida, parte da OPORTUNIDADE: a gordura crua, a marcação da
   // linha 99 e as reservas lançadas no INOVE. Efeito separado de propósito (ver o
   // comentário do estado): esta leitura é a cara e a que depende de outra base.
@@ -1241,6 +1292,30 @@ export default function DP360Resumo({ embutido = false }) {
   // a etapa em que o prazo ainda corre — ela não estava em cartão nenhum, só na esteira
   const aguardandoMin = captura.caixas.aguardando?.min || 0;
   const aguardandoQtd = captura.caixas.aguardando?.qtd || 0;
+
+  /* COMO A COMPETÊNCIA FECHA. Três números, todos derivados do que já está na tela:
+   *   · em fluxo  = o que foi avisado e ainda não virou captura (vencido + advertido + no prazo);
+   *   · projetado = o confirmado + o que está em fluxo × a taxa medida;
+   *   · teto      = o projetado + o que nunca foi avisado × a mesma taxa.
+   * A JANELA fecha no dia 1º do mês seguinte ao fim da competência (a competência set/2026
+   * vai de 20/08 a 19/09 e é reportada até 01/10) — é o prazo real: depois disso o Transnet
+   * não aceita mais alterar o dia. */
+  const emFluxoMin = urgente + aguardandoMin;
+  const projetadoMin = taxaFecha
+    ? economizado.liquidoMin + emFluxoMin * taxaFecha.taxa
+    : null;
+  const tetoMin = taxaFecha && faltam
+    ? projetadoMin + faltam.min * taxaFecha.taxa
+    : null;
+  const fechaEm = (() => {
+    if (competencia === TODAS || competencia === null) return null;
+    const [a, m] = txt(competencia).split("-").map(Number);
+    if (!a || !m) return null;
+    return m < 12 ? new Date(a, m, 1) : new Date(a + 1, 0, 1);
+  })();
+  const diasAteFechar = fechaEm
+    ? Math.max(0, Math.ceil((fechaEm - new Date()) / 86400000))
+    : null;
   const taxaResposta = pct(ciclo.respondidos, ciclo.avisados);
   const taxaCorrecao = pct(ciclo.corrigidos, ciclo.avisados);
 
@@ -1581,6 +1656,48 @@ export default function DP360Resumo({ embutido = false }) {
                 />
               )}
             </Grupo>
+
+            {/* COMO A COMPETÊNCIA FECHA (24/09/2026) — o bloco que faltava: a tela dizia o
+                que já voltou e o que está aberto, e nunca onde isso termina. Só é desenhado
+                com a taxa medida em mãos; sem ela, nada (ver o `useEffect` da taxa). */}
+            {projetadoMin != null && valorHora > 0 && (
+              <Secao
+                titulo="Como a competência fecha"
+                tag={`taxa medida em ${rotuloCurto(taxaFecha.base)}, competência já fechada`}
+              >
+                <div className="dp-card" style={{ padding: "13px 15px" }}>
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: 20, flexWrap: "wrap", marginBottom: 12 }}>
+                    <div>
+                      <div className="dp-muted" style={{ fontSize: 11.5, marginBottom: 2 }}>
+                        Fechamento projetado
+                      </div>
+                      <div className="dp-num" style={{ fontSize: 30, fontWeight: 700 }}>
+                        {brl((projetadoMin / 60) * valorHora)}
+                      </div>
+                    </div>
+                    <div style={{ paddingBottom: 4 }}>
+                      <div style={{ fontSize: 12 }}>
+                        {Math.round(taxaFecha.taxa * 100)}% da hora vencida vira captura
+                        {" · "}medido em {taxaFecha.dias} dia(s) advertido(s)
+                      </div>
+                      <div className="dp-muted" style={{ fontSize: 12, marginTop: 2 }}>
+                        {tetoMin != null ? `teto ${brl((tetoMin / 60) * valorHora)} se os sem aviso entrarem` : ""}
+                        {diasAteFechar != null
+                          ? ` · a janela fecha em ${diasAteFechar} dia(s)`
+                          : ""}
+                      </div>
+                    </div>
+                  </div>
+                  <BarraProporcao
+                    partes={[
+                      { id: "confirmado", rotulo: "confirmado", valor: economizado.liquidoMin, cor: "var(--dp-ok-ink)" },
+                      { id: "entra", rotulo: "ainda deve entrar", valor: Math.max(0, projetadoMin - economizado.liquidoMin), cor: "var(--dp-accent)" },
+                      { id: "fora", rotulo: "fica de fora", valor: Math.max(0, (tetoMin ?? projetadoMin) - projetadoMin), cor: "var(--dp-faint)" },
+                    ]}
+                  />
+                </div>
+              </Secao>
+            )}
           </div>
 
           {/* ------- o valor da hora: o único campo que esta tela grava ----

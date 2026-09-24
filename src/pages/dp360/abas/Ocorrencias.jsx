@@ -1780,13 +1780,23 @@ function linhasDaAba(registros, porta, aba) {
   const base = (registros || []).filter(daPorta(porta));
   // app.js:2077 — a caixa de entrada da decisão do DP. O `!decJa` NÃO entra aqui: ele é o
   // eixo `EIXOS_CONF`, aplicado depois (com "Pendente" como padrão).
-  /* O QUE O TRANSNET JA RESOLVEU CONTINUA NA LISTA (24/09/2026). Tirar daqui era o outro
-     lado da trava acima: o caso sumia da caixa de entrada E nao tinha veredito — 60 dias de
-     julho e agosto ficaram assim, invisiveis e sem assinatura de ninguem. Quem ja foi
-     DECIDIDO continua fora, mas por outro caminho: o eixo `EIXOS_CONF` ("Aguardam a minha
-     decisao") filtra por `!decJa`, que e a pergunta certa. */
+  /* REVERTIDO EM 24/09/2026, MEIA HORA DEPOIS. Eu tirei o `!resolvidoNoTransnet` daqui para
+     trazer de volta 60 casos que precisavam de veredito — e trouxe 2.164: a caixa de entrada
+     do "Pedido do colaborador" saltou de 106 para 2.164, cheia de dias de MARCO e ABRIL que
+     a base do DP nem guarda mais ("o dia saiu da base do DP (ela guarda 120 dias; este tem
+     188) — sem cartao"). O dono viu na tela.
+
+     Esta clausula estava fazendo DUAS coisas: escondendo o lixo antigo ja resolvido (certo) e
+     escondendo os 60 que faltavam decidir (errado). Tirar a clausula conserta o segundo e
+     desfaz o primeiro. Os 60 precisam de outro caminho — pela JANELA e pela existencia do
+     cartao, nao por "o Transnet resolveu". A trava do BOTAO continua removida: quem chega
+     nesta lista da veredito. */
   if (aba === "conf")
-    return base.filter((r) => ["conf_certo", "conf_errado", "conf", "recusado"].includes(r.situacao));
+    return base.filter(
+      (r) =>
+        ["conf_certo", "conf_errado", "conf", "recusado"].includes(r.situacao) &&
+        !resolvidoNoTransnet(r),
+    );
   // app.js:2883 — caixa de entrada de "Meus avisos": só o que MONITORA, e nunca o desfecho.
   if (aba === "aguard")
     return base.filter((r) => r.monitora && !SIT_DISC.includes(r.situacaoAviso) && !jaTratado(r));

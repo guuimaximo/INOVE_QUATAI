@@ -1780,12 +1780,13 @@ function linhasDaAba(registros, porta, aba) {
   const base = (registros || []).filter(daPorta(porta));
   // app.js:2077 — a caixa de entrada da decisão do DP. O `!decJa` NÃO entra aqui: ele é o
   // eixo `EIXOS_CONF`, aplicado depois (com "Pendente" como padrão).
+  /* O QUE O TRANSNET JA RESOLVEU CONTINUA NA LISTA (24/09/2026). Tirar daqui era o outro
+     lado da trava acima: o caso sumia da caixa de entrada E nao tinha veredito — 60 dias de
+     julho e agosto ficaram assim, invisiveis e sem assinatura de ninguem. Quem ja foi
+     DECIDIDO continua fora, mas por outro caminho: o eixo `EIXOS_CONF` ("Aguardam a minha
+     decisao") filtra por `!decJa`, que e a pergunta certa. */
   if (aba === "conf")
-    return base.filter(
-      (r) =>
-        ["conf_certo", "conf_errado", "conf", "recusado"].includes(r.situacao) &&
-        !resolvidoNoTransnet(r),
-    );
+    return base.filter((r) => ["conf_certo", "conf_errado", "conf", "recusado"].includes(r.situacao));
   // app.js:2883 — caixa de entrada de "Meus avisos": só o que MONITORA, e nunca o desfecho.
   if (aba === "aguard")
     return base.filter((r) => r.monitora && !SIT_DISC.includes(r.situacaoAviso) && !jaTratado(r));
@@ -2369,22 +2370,22 @@ function motivoSemDecisao(reg, { soRecusa = false } = {}) {
    * os sete acabados seguem sem veredito, que e o certo. */
   const temPedidoAberto = Number(reg?.abertosNoTransnet || 0) > 0;
   if (reg.decJa && !temPedidoAberto) return "já decidido";
-  /* JA FECHADO NO TRANSNET AINDA PRECISA SER FECHADO AQUI — "recusa e confere"
-   * (dono, 22/09/2026: "esta na fila, ja esta fechado no transnet, recusa e confere").
+  /* JA FEITO NO TRANSNET NAO DISPENSA O VEREDITO (24/09/2026).
    *
-   * Os sete dias que ele mandou (DAMIAO 05/09, RICHARD 05/09, CARLOS 04/09, ROGERIO 04/09,
-   * BRUNO 03/09, NELSON 03/09, FABIO 01/09) estao todos no mesmo estado: ele decidiu, o
-   * Transnet efetuou ou recusou, o robo conferiu — e depois um AVISO NOVO chegou. Aviso mais
-   * novo que a conferencia REABRE o ciclo (`ehReaberto`), entao o `decJa` do ciclo velho nao
-   * vale mais e o dia volta para a fila. So que ai esta clausula travava TUDO, inclusive a
-   * recusa: o dia ficava na fila sem nenhuma saida, e era por isso que "nao dava para
-   * aceitar" nem para fechar.
+   * Dono: "se ja foi, mesmo assim abre o botao e ai ele so confere o ponto final. Ele
+   * aceita ou recusa (mas ja foi feito) e o processo segue conferindo".
    *
-   * Aceitar continua travado, e tem de continuar: nao existe aceite sobre pedido que o
-   * Transnet ja resolveu. RECUSAR nao mexe no Transnet — fecha o ciclo aqui, o robo confere
-   * (a ocorrencia ja resolvida "nao entra no CLIQUE, mas continua na CONFERENCIA",
-   * bot_ajustes_app.py) e carimba `conferido_em`, que e o que tira o dia da fila. */
-  if (resolvidoNoTransnet(reg) && !soRecusa) return "o Transnet já resolveu";
+   * O veredito e o registro DELE, nao o do Transnet. Que o Transnet ja tenha efetuado ou
+   * recusado nao decide o dia aqui: alguem tem de olhar o ponto final e assinar. Antes esta
+   * clausula devolvia "o Transnet ja resolveu" e travava o aceite — sobrava so recusar, que
+   * seria falso num pedido que o Transnet EFETUOU.
+   *
+   * MEDIDO EM 24/09/2026: 60 dias tem pedido, nenhum pedido em aberto e o Transnet EFETUADO
+   * em todos — parados de 16/07 a 08/08, sem veredito nenhum.
+   *
+   * E o robo ja sabe o que fazer com eles: "ja resolvidas no Transnet — sem clique, so
+   * conferencia do cartao" (bot_ajustes_app). Ele nao vai clicar de novo; vai abrir o
+   * cartao, fotografar, conferir e carimbar. O processo segue, conferindo. */
   // NÃO EXISTE DECISÃO SOBRE O NADA. Dia sem pedido nenhum não se aceita nem se recusa:
   // gravaria aceite com ajuste_ids vazio e tiraria o caso da fila de advertência em
   // silêncio — o oposto do que o dia pede.

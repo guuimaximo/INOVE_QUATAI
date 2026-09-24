@@ -1293,29 +1293,6 @@ export default function DP360Resumo({ embutido = false }) {
   const aguardandoMin = captura.caixas.aguardando?.min || 0;
   const aguardandoQtd = captura.caixas.aguardando?.qtd || 0;
 
-  /* COMO A COMPETÊNCIA FECHA. Três números, todos derivados do que já está na tela:
-   *   · em fluxo  = o que foi avisado e ainda não virou captura (vencido + advertido + no prazo);
-   *   · projetado = o confirmado + o que está em fluxo × a taxa medida;
-   *   · teto      = o projetado + o que nunca foi avisado × a mesma taxa.
-   * A JANELA fecha no dia 1º do mês seguinte ao fim da competência (a competência set/2026
-   * vai de 20/08 a 19/09 e é reportada até 01/10) — é o prazo real: depois disso o Transnet
-   * não aceita mais alterar o dia. */
-  const emFluxoMin = urgente + aguardandoMin;
-  const projetadoMin = taxaFecha
-    ? economizado.liquidoMin + emFluxoMin * taxaFecha.taxa
-    : null;
-  const tetoMin = taxaFecha && faltam
-    ? projetadoMin + faltam.min * taxaFecha.taxa
-    : null;
-  const fechaEm = (() => {
-    if (competencia === TODAS || competencia === null) return null;
-    const [a, m] = txt(competencia).split("-").map(Number);
-    if (!a || !m) return null;
-    return m < 12 ? new Date(a, m, 1) : new Date(a + 1, 0, 1);
-  })();
-  const diasAteFechar = fechaEm
-    ? Math.max(0, Math.ceil((fechaEm - new Date()) / 86400000))
-    : null;
   const taxaResposta = pct(ciclo.respondidos, ciclo.avisados);
   const taxaCorrecao = pct(ciclo.corrigidos, ciclo.avisados);
 
@@ -1373,6 +1350,35 @@ export default function DP360Resumo({ embutido = false }) {
     )
     : 0;
 
+  /* COMO A COMPETÊNCIA FECHA. Três números, todos derivados do que já está na tela:
+   *   · em fluxo  = o que foi avisado e ainda não virou captura (vencido + advertido + no prazo);
+   *   · projetado = o confirmado + o que está em fluxo × a taxa medida;
+   *   · teto      = o projetado + o que nunca foi avisado × a mesma taxa.
+   * A JANELA fecha no dia 1º do mês seguinte ao fim da competência (a competência set/2026
+   * vai de 20/08 a 19/09 e é reportada até 01/10) — é o prazo real: depois disso o Transnet
+   * não aceita mais alterar o dia.
+   *
+   * ESTE BLOCO MORA AQUI, DEPOIS DO `faltam`, E NÃO LÁ EM CIMA COM OS OUTROS DERIVADOS
+   * (24/09/2026). Eu o escrevi junto do `urgente`, umas 70 linhas antes, e `tetoMin` lê
+   * `faltam` — que só é declarado aqui. `const` não sobe: o app abriu com tela de erro
+   * ("Cannot access 'faltam' before initialization") no INOVE Mobile, e o dono viu. Ordem
+   * de declaração é regra, não estilo. */
+  const emFluxoMin = urgente + aguardandoMin;
+  const projetadoMin = taxaFecha
+    ? economizado.liquidoMin + emFluxoMin * taxaFecha.taxa
+    : null;
+  const tetoMin = taxaFecha && faltam
+    ? projetadoMin + faltam.min * taxaFecha.taxa
+    : null;
+  const fechaEm = (() => {
+    if (competencia === TODAS || competencia === null) return null;
+    const [a, m] = txt(competencia).split("-").map(Number);
+    if (!a || !m) return null;
+    return m < 12 ? new Date(a, m, 1) : new Date(a + 1, 0, 1);
+  })();
+  const diasAteFechar = fechaEm
+    ? Math.max(0, Math.ceil((fechaEm - new Date()) / 86400000))
+    : null;
   const abrirCaixa = (caixa) => {
     const def = CAIXAS.find((c) => c.id === caixa);
     const dados = captura.caixas[caixa];

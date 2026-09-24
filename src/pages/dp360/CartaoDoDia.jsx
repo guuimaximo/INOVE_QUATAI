@@ -294,7 +294,9 @@ export function sugBloqueio(r) {
         return "possível reserva — validar antes de lançar";
       return "alvo exige decisão manual do DP";
     }
-    if (acao === "LANCAR_ALMOCO_AUTOMATICO" && !ehVerdadeiro(r.almoco_confiavel))
+    // `almoco_manual_dp` é o escape do Real cravado, igual ao `alvo_manual_dp` acima: a
+    // base que faltava é a mão do DP, e ela chega pelo overlay `aplicarRealManual`.
+    if (acao === "LANCAR_ALMOCO_AUTOMATICO" && !r.almoco_manual_dp && !ehVerdadeiro(r.almoco_confiavel))
       return "almoço sem base confiável";
   }
   const e = hm2min(r.entrada_sug);
@@ -392,6 +394,17 @@ export function aplicarRealManual(linha, rm) {
     out.alvo_manual_dp = true;
     out.alvo_confiavel = "true";
     out.fonte_alvo = "DP_MANUAL";
+  }
+  /* O ALMOÇO CRAVADO TAMBÉM É BASE (dono, 24/09/2026: "no almoço automático eu entro no
+     pop-up, cravo o real — ele deveria ficar em amarelo para liberar o lançamento e não
+     fica"). O aviso de bloqueio manda o DP cravar o Real na mão; ele cravava, e o portão
+     continuava lendo o `almoco_confiavel` da VIEW, que é `false` para sempre — a view não
+     sabe da mão do DP. As duas pontas juntas, porque meio almoço não é almoço: só a saída
+     ou só a volta deixa o miolo aberto, e aí o bloqueio continua certo. */
+  if (rm.alm_saida && rm.alm_volta) {
+    out.almoco_manual_dp = true;
+    out.almoco_confiavel = "true";
+    out.fonte_almoco = "DP_MANUAL";
   }
   return out;
 }

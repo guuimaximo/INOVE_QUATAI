@@ -1238,6 +1238,9 @@ export default function DP360Resumo({ embutido = false }) {
   const urgenteDias = ["vencido", "advertido"].reduce(
     (s, id) => s + (captura.caixas[id]?.qtd || 0), 0,
   );
+  // a etapa em que o prazo ainda corre — ela não estava em cartão nenhum, só na esteira
+  const aguardandoMin = captura.caixas.aguardando?.min || 0;
+  const aguardandoQtd = captura.caixas.aguardando?.qtd || 0;
   const taxaResposta = pct(ciclo.respondidos, ciclo.avisados);
   const taxaCorrecao = pct(ciclo.corrigidos, ciclo.avisados);
 
@@ -1548,15 +1551,34 @@ export default function DP360Resumo({ embutido = false }) {
                   tom="warn"
                 />
               )}
-              <Cartao rotulo="Ação agora" valor={urgenteDias}
-                nota={`${hhmm(urgente)} vencidas ou advertidas`} tom="warn" />
+              {/* CADA ETAPA EM R$, E NA ORDEM DE QUEM AGE (24/09/2026). Dono: "eu preciso
+                  saber o quanto R$ tenho de gordura vencida, gordura aguardando resposta".
+                  Antes este bloco tinha "Ação agora 53" (contagem) e "Horas abertas 656h14"
+                  (soma) — nenhum dos dois dizia quanto vale cada etapa, que é a pergunta de
+                  quem decide o que fazer hoje. As duas saíram: a contagem agora está na
+                  esteira, com nome e dinheiro, e a soma virou o "Potencial aberto". */}
+              {valorHora > 0 && (
+                <Cartao
+                  rotulo="Vencida · cobrar agora"
+                  valor={brl((urgente / 60) * valorHora)}
+                  nota={`${urgenteDias} dia(s) · ${hhmm(urgente)} · venceu ou já foi advertido`}
+                  tom="danger"
+                />
+              )}
+              {valorHora > 0 && aguardandoMin > 0 && (
+                <Cartao
+                  rotulo="Aguardando resposta"
+                  valor={brl((aguardandoMin / 60) * valorHora)}
+                  nota={`${aguardandoQtd} dia(s) · ${hhmm(aguardandoMin)} · o prazo ainda corre`}
+                  tom="warn"
+                />
+              )}
               {oportunidade && (
-                <>
-                  <Cartao rotulo="Horas abertas" valor={hhmm(abertoMin)}
-                    nota="gordura desta competência ainda não encerrada (sem aviso + em fluxo)" tom="warn" />
-                  <Cartao rotulo="Ainda sem aviso" valor={faltam.qtd}
-                    nota={`${hhmm(faltam.min)} · oportunidade que não entrou no fluxo`} />
-                </>
+                <Cartao
+                  rotulo="Ainda sem aviso"
+                  valor={valorHora > 0 ? brl((faltam.min / 60) * valorHora) : faltam.qtd}
+                  nota={`${faltam.qtd} dia(s) · ${hhmm(faltam.min)} · não entrou no fluxo`}
+                />
               )}
             </Grupo>
           </div>
@@ -1659,8 +1681,13 @@ export default function DP360Resumo({ embutido = false }) {
                   </span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <b style={{ display: "block", fontSize: 12.5 }}>{c.rot}</b>
+                    {/* HORA E DINHEIRO NA MESMA PLACA (24/09/2026). Dono: "eu preciso
+                        saber o quanto R$ tenho de gordura vencida, gordura aguardando
+                        resposta". A esteira e o lugar onde ele olha etapa por etapa, e ela
+                        so falava em hora — o dinheiro estava dois blocos acima, somado. */}
                     <span className="dp-faint" style={{ fontSize: 11 }}>
                       {c.min ? hhmm(c.min) : "—"}
+                      {c.min && valorHora > 0 ? ` · ${brl((c.min / 60) * valorHora)}` : ""}
                     </span>
                   </span>
                   <span className={`dp-pill ${c.tom}`}>{c.id}</span>
@@ -1670,10 +1697,15 @@ export default function DP360Resumo({ embutido = false }) {
 
             <div style={{ marginTop: 12 }}>
               <BarraProporcao
+                /* A BARRA SEGUE O DINHEIRO, NAO A CONTAGEM DE DIAS (24/09/2026).
+                   Em dias ela dizia "ainda nao avisados 897 · 78%"; nas horas (que e a
+                   mesma proporcao do R$, porque a hora vale igual para todo mundo) esses
+                   mesmos dias sao 87%. A mesma informacao, com a urgencia certa: o que
+                   esta fora do fluxo vale quase nove de cada dez reais em jogo. */
                 partes={placas.map((c) => ({
                   id: c.id,
                   rotulo: c.rot,
-                  valor: c.qtd,
+                  valor: c.min,
                   cor: {
                     ok: "var(--dp-ok-ink)", warn: "var(--dp-warn-ink)",
                     danger: "var(--dp-danger-ink)", accent: "var(--dp-accent)",

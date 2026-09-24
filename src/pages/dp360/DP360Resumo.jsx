@@ -528,7 +528,21 @@ function caixasDoCaso(c, agoraMs) {
     out.push({ ...base, caixa: "devolvido", min: Math.round(-cap), quando: fim.slice(0, 10), detalhe: txt(c.ponto_final) });
   }
   if (fim && tp === "dia_registrado") {
-    out.push({ ...base, caixa: "registrado", min: 0, quando: fim.slice(0, 10), detalhe: txt(c.ponto_final) });
+    /* A HORA APARECE AQUI TAMBEM (24/09/2026). Dono: "a Esteira de captura tem que ter
+       horario tambem" — era a unica placa com "—" no lugar da hora, porque este `min`
+       nascia zerado.
+       Zero e verdade sobre o que foi RECUPERADO (o registro completou o cartao, nao virou
+       hora de gordura) — mas nao e o que a esteira mostra: as outras placas exibem a hora
+       QUE ESTA NAQUELA CAIXA, recuperada ou nao ("Ainda nao avisados 546h24" e oportunidade
+       aberta, nao dinheiro no bolso). Entao aqui vai a gordura do dia: o que estava na mesa
+       e o registro nao trouxe.
+       NAO MEXE EM DINHEIRO: os totais de "Acao agora" e "Potencial aberto" somam so
+       `aguardando`, `vencido`, `advertido` e `faltam` — `registrado` nunca entrou neles, e
+       continua fora. */
+    out.push({
+      ...base, caixa: "registrado", min: Math.round(num(c.gordura_min)),
+      quando: fim.slice(0, 10), detalhe: txt(c.ponto_final),
+    });
   }
   if (st === "ponto_fechado") {
     out.push({

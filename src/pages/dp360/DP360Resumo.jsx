@@ -1562,30 +1562,12 @@ export default function DP360Resumo({ embutido = false }) {
               O dinheiro abre os dois últimos blocos porque é o número que se leva para
               fora da tela. */}
           <div style={{ display: "grid", gap: 6, paddingBottom: 4 }}>
-            {(!modoTodas || oportunidade) && (
-              <Grupo
-                titulo="O tamanho da competência"
-                ajuda="quanto ponto entrou e quanta gente errou — o diagnóstico, antes de qualquer ação"
-              >
-                {/* Os quatro do Gerencial saem da `ponto_diario` — não existem em "Todas". */}
-                {!modoTodas && (
-                  <>
-                    <Cartao rotulo="Dias com cartão" valor={gerencial.kpis.diasPeriodo}
-                      nota="linhas de ponto na competência" />
-                    <Cartao rotulo="Dias errados (P1)" valor={gerencial.kpis.diasErrados}
-                      nota="sem almoço curto/longo" tom="warn" />
-                    <Cartao rotulo="Pessoas com erro" valor={gerencial.kpis.pessoasErro}
-                      nota="com pelo menos um dia errado" />
-                    <Cartao rotulo="Pessoas muito graves" valor={gerencial.kpis.pessoasGrave}
-                      nota="sinal grave ou 3+ dias errados" tom="danger" />
-                  </>
-                )}
-                {oportunidade && (
-                  <Cartao rotulo="P1 oficial" valor={hmDeHoras(horas1(oportunidade.oficialMin))}
-                    nota={`${oportunidade.pessoasP1} pessoa(s) com P1 · o único número cobrável`} />
-                )}
-              </Grupo>
-            )}
+            {/* O BLOCO "O tamanho da competência" SAIU (24/09/2026, pedido do dono).
+                Eram cinco cartões de diagnóstico — dias com cartão, dias errados, pessoas
+                com erro, pessoas muito graves e P1 oficial. Bom para entender o mês, mas
+                não é o que ele faz nesta tela: ele vem aqui decidir o que cobrar hoje, e o
+                diagnóstico empurrava o dinheiro para baixo da dobra. Os mesmos números
+                continuam no "Gerencial de ponto", logo abaixo, com a lista por pessoa. */}
 
             <Grupo
               titulo="O que já voltou"

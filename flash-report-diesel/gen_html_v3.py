@@ -1968,6 +1968,19 @@ pages.append(f"""<div class="page-break"></div><div class="page">
 # celulas sao iguais e a foto preenche com object-fit:cover - o que muda por foto e ONDE o
 # recorte se apoia. Paisagem de grupo pede ~40%; retrato de corpo inteiro pede ~24%, senao
 # o corte pega a cintura em vez do rosto. So um numero para acertar no mes que vem.
+# Os textos da visita ficam aqui, e nao soltos no HTML da pagina, porque o painel interativo
+# (gen_painel.py) mostra o mesmo conteudo e precisa le-lo como dado.
+NOTURNO = {
+    "ultima_data": "18/09/2026",
+    "titulo": "Treinamento em Campo — Volkswagen Automático",
+    "responsavel": "Hélio Ramos — instrutor de treinamento",
+    "descricao": [
+        "Treinamento prático com os manobristas em campo, nos veículos Volkswagen automáticos, reforçando técnicas de condução, manobras, controle do veículo e os cuidados para evitar avarias e acidentes no pátio.",
+        "A prática na garagem, com o veículo que o manobrista movimenta todo dia, é o que transforma a orientação em hábito: mais treinamento significa mais segurança, mais confiança e mais cuidado com o patrimônio.",
+    ],
+    "proxima_data": "30/09/2026",
+    "proxima_obs": "2ª das 2 visitas noturnas de setembro (18/09 e 30/09)",
+}
 FOTOS_NOTURNO_ARQUIVOS = [
     ("noturno_set_1.jpg", "40%"),
 ]
@@ -2013,7 +2026,7 @@ FOTOS_NOTURNO_BLOCO = (
 # entao os dois cards esticam ate o rodape e o calendario cresce junto (linhas 1fr) em vez
 # de ficar espremido no topo. margin-bottom deixa a faixa do rodape livre - ele e absoluto.
 pages.append(f"""<div class="page-break"></div><div class="page" style="display:flex;flex-direction:column;">
-  {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", "30/09")}
+  {page_header("Página 17 · Acompanhamento Noturno", "Visitas de acompanhamento presencial no período noturno — garagem", "Próxima visita", NOTURNO["proxima_data"][:5])}
   <div class="grid-2" style="flex:1;min-height:0;margin-bottom:0;">
     <div class="card" style="display:flex;flex-direction:column;"><div class="card-title">Calendário de visitas — {MESREF}</div><div class="card-body" style="flex:1;display:flex;flex-direction:column;">
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:2px;">{CAL_JULHO_HEADER}</div>
@@ -2021,14 +2034,13 @@ pages.append(f"""<div class="page-break"></div><div class="page" style="display:
       <div class="cons-box" style="margin-top:8px;"><div class="cons-title">Programação</div>
       <div class="cons-text">{len(_visita_label)} visitas noturnas programadas para {MESREF_NOME.lower()} — {_visitas_datas} — mantendo a cadência mensal de visitas noturnas. Cada visita inclui verificação de manobras no pátio, orientação aos motoristas em campo e reforço das boas práticas de condução econômica.</div></div>
     </div></div>
-    <div class="card" style="display:flex;flex-direction:column;"><div class="card-title">Última visita realizada — 18/09/2026</div><div class="card-body" style="flex:1;display:flex;flex-direction:column;">
-      <div style="font-weight:800;font-size:10.5px;color:#1F2D2B;margin-bottom:2px;">Treinamento em Campo — Volkswagen Automático</div>
-      <div style="font-size:7.8px;color:#0E7C6E;font-weight:700;margin-bottom:4px;">Acompanhamento: Hélio Ramos — instrutor de treinamento</div>
-      <div class="cons-text" style="text-align:justify;">Treinamento prático com os manobristas em campo, nos veículos Volkswagen automáticos, reforçando técnicas de condução, manobras, controle do veículo e os cuidados para evitar avarias e acidentes no pátio.</div>
-      <div class="cons-text" style="text-align:justify;margin-top:5px;">A prática na garagem, com o veículo que o manobrista movimenta todo dia, é o que transforma a orientação em hábito: mais treinamento significa mais segurança, mais confiança e mais cuidado com o patrimônio.</div>
+    <div class="card" style="display:flex;flex-direction:column;"><div class="card-title">Última visita realizada — {NOTURNO["ultima_data"]}</div><div class="card-body" style="flex:1;display:flex;flex-direction:column;">
+      <div style="font-weight:800;font-size:10.5px;color:#1F2D2B;margin-bottom:2px;">{NOTURNO["titulo"]}</div>
+      <div style="font-size:7.8px;color:#0E7C6E;font-weight:700;margin-bottom:4px;">Acompanhamento: {NOTURNO["responsavel"]}</div>
+      {"".join(f'<div class="cons-text" style="text-align:justify;{"margin-top:5px;" if _i else ""}">{_p}</div>' for _i, _p in enumerate(NOTURNO["descricao"]))}
       {FOTO_NO_CARD}
-      <div class="metric" style="margin-top:7px;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">30/09/2026</div>
-        <div style="font-size:7.6px;color:#48605C;margin-top:2px;">2ª das 2 visitas noturnas de setembro (18/09 e 30/09)</div></div>
+      <div class="metric" style="margin-top:7px;"><div class="lbl">Próxima visita programada</div><div class="val" style="font-size:13px;">{NOTURNO["proxima_data"]}</div>
+        <div style="font-size:7.6px;color:#48605C;margin-top:2px;">{NOTURNO["proxima_obs"]}</div></div>
     </div></div>
   </div>
   {FOTOS_NOTURNO_BLOCO}
@@ -2293,6 +2305,11 @@ print("dados_flash.json gerado.")
 # Falha aqui nao pode derrubar o PDF, que ja foi gerado acima.
 try:
     import gen_painel
-    gen_painel.exportar(gfd, OUT, extra={"cronograma": CRONOGRAMA})
+    gen_painel.exportar(gfd, OUT, extra={
+        "cronograma": CRONOGRAMA,
+        "noturno": {**NOTURNO, "visitas": {str(d): l for d, l in _visita_label.items()},
+                    "ano": gfd.MES_REF_ANO, "mes": gfd.MES_REF_MM,
+                    "fotos": [f for f, _ in FOTOS_NOTURNO_ARQUIVOS]},
+    })
 except Exception as _e:
     print(f"[painel] nao gerado ({_e}).")

@@ -188,6 +188,21 @@ def _relatorio(out_dir):
     return re.sub(r'src="([^":]+\.(?:png|jpe?g))"', emb, html, flags=re.I)
 
 
+def _extra(extra, out_dir):
+    """Paginas manuais (cronograma, noturno). As fotos da visita noturna vao embutidas."""
+    ex = json.loads(json.dumps(extra or {}, default=str))
+    nt = ex.get("noturno")
+    if nt:
+        fotos = []
+        for f in nt.get("fotos") or []:
+            arq = out_dir / f
+            if arq.exists():
+                mime = "image/png" if arq.suffix.lower() == ".png" else "image/jpeg"
+                fotos.append(f"data:{mime};base64,{base64.b64encode(arq.read_bytes()).decode()}")
+        nt["fotos"] = fotos
+    return ex
+
+
 def montar(gfd, out_dir, extra=None):
     """Dicionario do painel. premiacao_diaria vai em colunas (arrays paralelos)."""
     pd = getattr(gfd, "_pd", None) or []
@@ -265,7 +280,7 @@ def montar(gfd, out_dir, extra=None):
         "inove": inove,
         "merito": merito,
         "flash": _flash(gfd),
-        "extra": json.loads(json.dumps(extra or {}, default=str)),
+        "extra": _extra(extra, Path(out_dir)),
         "relatorio": _relatorio(Path(out_dir)),
     }
 

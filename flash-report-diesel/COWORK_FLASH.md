@@ -34,7 +34,7 @@ Cumprimente e diga que vai gerar o Flash Report do mês corrente. Depois peça, 
 
 Tudo em `flash-report-diesel/gen_html_v3.py`. Procure os marcadores `# [COWORK]`:
 
-- **Página 17 (noturno):** bloco `# [COWORK] PAGINA NOTURNA` — atualize última visita (data/tema/
+- **Página 17 (noturno):** bloco `# [COWORK] PAGINA NOTURNA` — atualize o dicionário `NOTURNO` (data, tema, responsável, parágrafos da descrição, próxima visita) e os nomes das fotos; última visita (data/tema/
   descrição), próxima visita, e o **calendário** (bloco `# [COWORK] CALENDARIO NOTURNO` no topo:
   ajuste o ano/mês e as `_visita_label` com as datas das visitas do mês).
 - **Fotos:** salve os arquivos anexados em `flash-report-diesel/` (ex.: `noturno1.jpg`…) e **embuta**

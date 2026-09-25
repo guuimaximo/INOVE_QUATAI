@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bus, CalendarClock, Info, PauseCircle, X } from "lucide-react";
+import { Bus, CalendarClock, ChevronLeft, ChevronRight, Info, PauseCircle, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import TabelaDP from "../TabelaDP";
 import {
@@ -1985,20 +1985,39 @@ export default function Gordura() {
     [base],
   );
 
+  const iData = datas.indexOf(data);
+
   // Barra de filtros da ferramenta: dia, piso, busca, chips de nível e a RÉGUA FIXA
   // sempre à vista (no original ela mora na segunda `gbar`, como `hbsub`).
   const filtros = (
     <>
-      <label className="dp-muted flex items-center gap-2">
+      {/* DIV, NÃO LABEL: um <label> com botões dentro repassa o clique no texto "Dia" para o
+          primeiro botão — clicar no rótulo voltaria um dia. */}
+      <div className="dp-muted flex items-center gap-2">
         Dia
-        <select value={data} onChange={(e) => setData(e.target.value)}>
-          {datas.map((d) => (
-            <option key={d} value={d}>
-              {fmtData(d)}
-            </option>
-          ))}
-        </select>
-      </label>
+        {/* AS SETAS DA DATA, IGUAIS ÀS DA REVISÃO E DAS FOLGAS (dono, 25/09/2026). `datas`
+            vem da mais nova para a mais antiga: ‹ é o dia anterior, › o seguinte. */}
+        <span className="dp-weeknav">
+          <button
+            type="button"
+            title="Dia anterior"
+            disabled={iData < 0 || iData >= datas.length - 1}
+            onClick={() => setData(datas[iData + 1])}
+          >
+            <ChevronLeft size={15} />
+          </button>
+          <select value={data} onChange={(e) => setData(e.target.value)}>
+            {datas.map((d) => (
+              <option key={d} value={d}>
+                {fmtData(d)}
+              </option>
+            ))}
+          </select>
+          <button type="button" title="Dia seguinte" disabled={iData <= 0} onClick={() => setData(datas[iData - 1])}>
+            <ChevronRight size={15} />
+          </button>
+        </span>
+      </div>
       <label className="dp-muted flex items-center gap-2">
         Mostrar acima de
         <select value={piso} onChange={(e) => setPiso(Number(e.target.value) || 0)}>

@@ -1,4 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import AbaShell from "./AbaShell";
 import TabelaDP from "../TabelaDP";
 import {
@@ -1782,6 +1783,12 @@ export default function Refeicao() {
   );
 
   const colunas = colunasDoFiltro(filtro);
+  // trocar de dia fecha o detalhe aberto — pela lista ou pelas setas
+  const iData = datas.indexOf(data);
+  const irParaData = (dia) => {
+    setData(dia);
+    setDetalhe(null);
+  };
 
   return (
     <AbaShell
@@ -1791,20 +1798,32 @@ export default function Refeicao() {
       filtros={
         !datas.length ? null : (
         <>
-          <select
-            value={data}
-            onChange={(evento) => {
-              setData(evento.target.value);
-              setDetalhe(null);
-            }}
-            aria-label="Data do intervalo"
-          >
-            {datas.map((dia) => (
-              <option key={dia} value={dia}>
-                {fmtData(dia)}
-              </option>
-            ))}
-          </select>
+          {/* AS SETAS DA DATA, IGUAIS ÀS DA REVISÃO E DAS FOLGAS (dono, 25/09/2026). `datas`
+              vem da mais nova para a mais antiga: ‹ é o dia anterior, › o seguinte. */}
+          <div className="dp-weeknav">
+            <button
+              type="button"
+              title="Dia anterior"
+              disabled={iData < 0 || iData >= datas.length - 1}
+              onClick={() => irParaData(datas[iData + 1])}
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <select
+              value={data}
+              onChange={(evento) => irParaData(evento.target.value)}
+              aria-label="Data do intervalo"
+            >
+              {datas.map((dia) => (
+                <option key={dia} value={dia}>
+                  {fmtData(dia)}
+                </option>
+              ))}
+            </select>
+            <button type="button" title="Dia seguinte" disabled={iData <= 0} onClick={() => irParaData(datas[iData - 1])}>
+              <ChevronRight size={15} />
+            </button>
+          </div>
 
           <input
             type="search"

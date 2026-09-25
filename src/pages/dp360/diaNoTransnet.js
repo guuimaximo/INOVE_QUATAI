@@ -726,7 +726,16 @@ function semAlmocoDeMentira(linha) {
   /* O DIA MUDO: a ferramenta completou o cartao com invencao e a tela parou de pedir. Volta
      a pedir a SAIDA, que e o que de fato falta — `pede_saida` e o campo que a Revisao le
      (`marcacaoAusente`) para liberar a ocorrencia. Dia ja OK nao e mexido: ali o DP decidiu. */
-  const semSaidaReal = !txt(linha.saida);
+  /* A SAÍDA BATIDA SE LÊ NAS BATIDAS, NÃO NA COLUNA (25/09/2026). O motorista de almoço
+     automático bate duas vezes — ADRIANO 30057198 23/09: `E05:11 | S11:40` — e a importação
+     põe a segunda batida na coluna `saida_almoco`, deixando `saida` vazia. Olhando a COLUNA,
+     esta regra concluía "ele não bateu a saída" e mandava pedir: a linha ficava azul ("falta
+     batida, avise o motorista") num dia em que só falta o almoço, que quem lança somos nós
+     (dono: "almoço é falta almoço — tem que ficar amarelo"). Em setembro foram 154 dias,
+     todos de duas batidas com a saída batida. Sem saída real é não ter NENHUMA batida de
+     saída (S) no dia. */
+  const temSaidaBatida = Boolean(txt(linha.saida)) || /\bS\s*\d{1,2}:\d{2}/.test(txt(linha.todas_batidas));
+  const semSaidaReal = !temSaidaBatida;
   const telaMuda = txt(linha.pede_entrada) !== "true" && txt(linha.pede_saida) !== "true" &&
                    txt(linha.requer_alvo_manual) !== "true";
   const vaiPedirSaida = daMatriz && semSaidaReal && telaMuda

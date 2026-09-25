@@ -161,26 +161,9 @@ const NOMES_NA_CONFIRMACAO = 8;
 function classeLinha(r, bloqueio) {
   if (String(r.status_ponto ?? "").toUpperCase() === "OK") return "row-ok";
   if (ehPontoInvertido(r)) return "row-sug";
-  /* O REAL COBRE A FALTA (25/09/2026). Dono: "por que fica azul e não amarelo?". O azul
-     ("falta marcação") vem da VIEW — `pede_entrada`/`pede_saida` — e ela não sabe que o DP
-     já cravou a ponta que faltava. Os 7 dias em que a Gabrielle cravou a entrada em 25/09
-     (RICARDO MIGUEL, ARNALDO, NATALIA…) tinham o lançamento pronto e seguiam azuis. Quando
-     o Real cobre a ponta que falta E o lançamento sai, a linha é amarela. `marcacaoAusente`
-     não muda: é ela que diz ao aviso quais pontas pedir ao motorista. */
-  const falta = marcacaoAusente(r);
-  if (falta && !(realCobreAFalta(r, falta) && temSugestaoUtil(r, bloqueio))) return "row-msg";
+  if (marcacaoAusente(r)) return "row-msg";
   if (temSugestaoUtil(r, bloqueio)) return "row-sug";
   return "row-sem";
-}
-
-// o Real cravado preenche a(s) ponta(s) que a view diz faltar?
-function realCobreAFalta(r, falta) {
-  const ent = Boolean(String(r.rm_entrada ?? "").trim());
-  const sai = Boolean(String(r.rm_saida ?? "").trim());
-  if (falta === "ENTRADA E SAÍDA") return ent && sai;
-  if (falta === "ENTRADA") return ent;
-  if (falta === "SAÍDA") return sai;
-  return false;
 }
 
 // Quadradinho da legenda de cores da linha.

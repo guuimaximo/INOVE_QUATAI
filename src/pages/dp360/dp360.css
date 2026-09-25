@@ -2964,7 +2964,8 @@
 .dp360 .pt-subst { --pt-cor: var(--dp-ok-ink); }
 .dp360 .pt-inter { --pt-cor: var(--dp-accent); }
 .dp360 .pt-sos { --pt-cor: var(--dp-warn-ink); }
-.dp360 .pt-anot { --pt-cor: var(--dp-res-ink); }
+.dp360 .pt-anot { --pt-cor: var(--dp-muted); }
+.dp360 .pt-res { --pt-cor: var(--dp-res-ink); }
 .dp360 .pt-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 11px; }
 .dp360 .pt-tag { font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; color: var(--pt-cor); }
 .dp360 .pt-quando { color: var(--dp-muted); font-weight: 600; }
@@ -2981,3 +2982,4 @@
 .dp360 .pt-eu { background: var(--dp-warn-bg); color: var(--dp-warn-ink); border-radius: 3px; padding: 0 2px; }
 .dp360 .pt-det { margin-top: 3px; font-size: 11.5px; line-height: 1.4; }
 .dp360 .pt-por { margin-top: 3px; font-size: 11px; }
+.dp360 .pt-nota { margin-top: 5px; font-size: 11px; line-height: 1.4; font-style: italic; }

@@ -827,30 +827,67 @@ function itensDoPlantao(plantao, eu) {
   return [...faltas, ...doDia, ...anotacoes];
 }
 
+/* A ANOTAÇÃO DA RESERVA (Controle de Reservas) entra na MESMA lista, em primeiro. Era uma
+   faixa no topo do cartão — que nunca teve estilo e saía como texto solto em cima da
+   semana. Dono, 25/09/2026: "apareceu isso ali em cima, não pode — tem que aparecer na
+   intercorrência". O conteúdo é o mesmo: horário, cobertura, observação e quem lançou. */
+function itemDaReserva(reserva) {
+  const ent = fmtHora(reserva.hora_entrada);
+  const sai = fmtHora(reserva.hora_saida);
+  const dur = ent && sai ? durHM(ent, sai) : "";
+  const cobertura = String(reserva.cobertura ?? "").trim();
+  const observacao = String(reserva.observacao ?? "").trim();
+  const lancouPor = String(reserva.criado_por_nome ?? "").trim();
+  const lancouEm = fmtInstanteBR(reserva.criado_em);
+  const mudouPor = String(reserva.atualizado_por_nome ?? "").trim();
+  const mudouEm = fmtInstanteBR(reserva.atualizado_em);
+  // só diz "alterada" quando a última alteração é OUTRO evento (outra pessoa ou instante)
+  const alterada = !!mudouEm && (mudouEm !== lancouEm || (!!mudouPor && mudouPor !== lancouPor));
+  return {
+    id: "reserva", classe: "pt-res", rotulo: "Reserva",
+    quando: ent || sai ? `${ent || "--"} → ${sai || "--"}${dur && dur !== "—" ? ` · ${dur}` : ""}` : "",
+    selo: "Controle de Reservas",
+    texto: cobertura ? `Cobertura: ${cobertura}` : "Cobertura não informada.",
+    detalhe: observacao ? `Observação do gestor: ${observacao}` : "",
+    por: [lancouPor || "—", lancouEm, alterada ? `alterada por ${mudouPor || "—"} em ${mudouEm}` : ""]
+      .filter(Boolean).join(" · "),
+    nota:
+      "Ele estava à disposição desde a hora lançada: a espera até assumir a tabela não é gordura "
+      + "(a operação real vira a união reserva ∪ operação) e, sem carro atribuído, a batida em "
+      + "local conhecido vale por si na régua do GPS.",
+  };
+}
+
+function todosOsItens(plantao, reserva, cracha) {
+  return [...(reserva ? [itemDaReserva(reserva)] : []), ...itensDoPlantao(plantao, normChapa(cracha))];
+}
+
 // por que o botão está apagado (vai no title dele)
 function semPlantao(plantao, dia) {
   if (plantao === null) return "Lendo a passagem de turno…";
   return plantao.temTurno
-    ? `A passagem de turno de ${fmtData(dia)} não cita esta chapa.`
-    : `Não houve passagem de turno lançada em ${fmtData(dia)}.`;
+    ? `A passagem de turno de ${fmtData(dia)} não cita esta chapa, e não há reserva lançada.`
+    : `Não houve passagem de turno lançada em ${fmtData(dia)}, nem reserva para ele.`;
 }
 
-function BotaoPlantao({ plantao, cracha, dia, aoAbrir }) {
-  const n = itensDoPlantao(plantao, normChapa(cracha)).length;
-  if (!n) return <BotaoSemAlvo titulo={semPlantao(plantao, dia)}>📋 Passagem de turno</BotaoSemAlvo>;
+/* "INTERCORRÊNCIAS" é a palavra do dono para esta lista (a passagem de turno inteira mais a
+   anotação da reserva) — o botão leva o nome que ele usa. */
+function BotaoPlantao({ plantao, reserva, cracha, dia, aoAbrir }) {
+  const n = todosOsItens(plantao, reserva, cracha).length;
+  if (!n) return <BotaoSemAlvo titulo={semPlantao(plantao, dia)}>📋 Intercorrências</BotaoSemAlvo>;
   return (
     <button
       type="button"
       className="dp-btn pt-botao"
       onClick={aoAbrir}
-      title="O que o plantão registrou sobre ele neste dia: falta, substituição, intercorrências, SOS e observações"
+      title="O que a operação registrou sobre ele neste dia: reserva, falta, substituição, intercorrências, SOS e observações"
     >
-      📋 Passagem de turno <b className="pt-conta">{n}</b>
+      📋 Intercorrências <b className="pt-conta">{n}</b>
     </button>
   );
 }
 
-function ModalPlantao({ plantao, cracha, nome, dia, aoFechar }) {
+function ModalPlantao({ plantao, reserva, cracha, nome, dia, aoFechar }) {
   useEffect(() => {
     const escapa = (e) => {
       if (e.key === "Escape") {
@@ -861,17 +898,17 @@ function ModalPlantao({ plantao, cracha, nome, dia, aoFechar }) {
     document.addEventListener("keydown", escapa, true);
     return () => document.removeEventListener("keydown", escapa, true);
   }, [aoFechar]);
-  const itens = itensDoPlantao(plantao, normChapa(cracha));
+  const itens = todosOsItens(plantao, reserva, cracha);
   return (
     <div className="rv-overlay rv-overlay-alto" onClick={(e) => e.target === e.currentTarget && aoFechar()}>
       <div className="rv-box dp-card" style={{ maxWidth: 640, padding: 0 }}>
         <header className="rv-head">
           <div className="min-w-0">
-            <b style={{ fontSize: 14 }}>📋 Passagem de turno</b>
+            <b style={{ fontSize: 14 }}>📋 Intercorrências do dia</b>
             <div className="dp-muted" style={{ fontSize: 12, marginTop: 2 }}>
               <b style={{ color: "var(--dp-ink)" }}>{nome || "—"}</b>
               <span className="dp-num"> · crachá {cracha} · {fmtData(dia)}</span>
-              <span> · o que o plantão registrou sobre ele</span>
+              <span> · passagem de turno e controle de reservas</span>
             </div>
           </div>
           <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar">
@@ -894,6 +931,7 @@ function ModalPlantao({ plantao, cracha, nome, dia, aoFechar }) {
                   <div className="pt-texto">{it.texto}</div>
                   {it.detalhe && <div className="pt-det dp-muted">{it.detalhe}</div>}
                   {it.por && <div className="pt-por dp-faint">lançado por {it.por}</div>}
+                  {it.nota && <div className="pt-nota dp-faint">{it.nota}</div>}
                 </li>
               ))}
             </ul>
@@ -901,65 +939,6 @@ function ModalPlantao({ plantao, cracha, nome, dia, aoFechar }) {
         </div>
       </div>
     </div>
-  );
-}
-
-/* ---------- a ANOTAÇÃO da reserva, na tela ---------- */
-/**
- * O que o gestor lançou no Controle de Reservas, dito com todas as letras. Antes
- * disto a reserva só existia como um SINAL ("é reserva") e a anotação — a
- * observação, a cobertura, o horário e quem lançou — ficava para trás.
- */
-function BlocoReserva({ reserva }) {
-  if (!reserva) return null;
-  const ent = fmtHora(reserva.hora_entrada);
-  const sai = fmtHora(reserva.hora_saida);
-  const dur = ent && sai ? durHM(ent, sai) : "";
-  const cobertura = String(reserva.cobertura ?? "").trim();
-  const observacao = String(reserva.observacao ?? "").trim();
-  const lancouPor = String(reserva.criado_por_nome ?? "").trim();
-  const lancouEm = fmtInstanteBR(reserva.criado_em);
-  const mudouPor = String(reserva.atualizado_por_nome ?? "").trim();
-  const mudouEm = fmtInstanteBR(reserva.atualizado_em);
-  // Só vira linha própria quando a última alteração é OUTRO evento (outra pessoa ou
-  // outro instante): repetir "lançada por X" duas vezes é ruído.
-  const alterada = !!mudouEm && (mudouEm !== lancouEm || (!!mudouPor && mudouPor !== lancouPor));
-
-  return (
-    <section className="rv-res">
-      <div className="rv-res-cab">
-        🗓 Reserva lançada pelo gestor
-        {(ent || sai) && (
-          <span className="dp-num dp-mono rv-res-hora">
-            {ent || "--"} → {sai || "--"}
-            {dur && dur !== "—" ? ` · ${dur}` : ""}
-          </span>
-        )}
-      </div>
-      <div className="rv-res-grade">
-        <div>
-          <span className="rv-res-rot">Cobertura</span>
-          <span className="rv-res-val">{cobertura || "não informada"}</span>
-        </div>
-        <div>
-          <span className="rv-res-rot">Observação do gestor</span>
-          <span className="rv-res-val">{observacao || "sem observação"}</span>
-        </div>
-        <div>
-          <span className="rv-res-rot">Lançamento</span>
-          <span className="rv-res-val">
-            {lancouPor || "—"}
-            {lancouEm ? ` · ${lancouEm}` : ""}
-            {alterada ? ` · alterada por ${mudouPor || "—"} em ${mudouEm}` : ""}
-          </span>
-        </div>
-      </div>
-      <p className="rv-res-nota">
-        Ele estava <b>à disposição</b> desde a hora lançada: a espera até assumir a tabela não é
-        gordura (a operação real vira a união <b>reserva ∪ operação</b>) e, sem carro atribuído,
-        a batida em local conhecido vale por si na régua do GPS.
-      </p>
-    </section>
   );
 }
 
@@ -2710,11 +2689,11 @@ export default function CartaoDoDia({
             <Pilula
               texto="🗓 reserva"
               tom="res"
-              titulo="O gestor lançou reserva para este dia no Controle de Reservas — a anotação está no cartão."
+              titulo="O gestor lançou reserva para este dia no Controle de Reservas — a anotação está em Intercorrências."
             />
           )}
           {/* a PASSAGEM DE TURNO abre por cima (dono: "coloca lá em cima um botão") */}
-          <BotaoPlantao plantao={plantao} cracha={cracha} dia={dia} aoAbrir={() => setVerPlantao(true)} />
+          <BotaoPlantao plantao={plantao} reserva={extra.reserva} cracha={cracha} dia={dia} aoAbrir={() => setVerPlantao(true)} />
           {/* CORRIGIDO e CONFERIDO tomam o lugar do status da régua (dono, 16/09/2026: "o
               status sai de REVISAR e vira CORRIGIDO"). O status de antes fica no title. */}
           {statusSelo ||
@@ -2747,10 +2726,9 @@ export default function CartaoDoDia({
               <span className="dp-pill danger">{erro}</span>
             </div>
           )}
-          {/* A ANOTAÇÃO DO GESTOR fica em faixa, antes das colunas: é fato do DIA
-              INTEIRO (muda a operação real, a gordura e a régua do GPS) e o dono
-              reclamou justamente que ela "não estava vindo do controle de reserva". */}
-          <BlocoReserva reserva={extra.reserva} />
+          {/* A ANOTAÇÃO DA RESERVA não fica mais em faixa aqui: está em "Intercorrências",
+              o botão do cabeçalho (dono, 25/09/2026). O horário dela segue na linha
+              "Reserva (INOVE)" das Fontes, que é o que mexe na operação real. */}
 
           {/* A SEMANA vem ANTES das colunas, e antes de qualquer número do dia: ela é o
               contexto que decide se o dia sequer devia ter ponto. Enfiada numa coluna,
@@ -3380,6 +3358,7 @@ export default function CartaoDoDia({
       {verPlantao && (
         <ModalPlantao
           plantao={plantao}
+          reserva={extra.reserva}
           cracha={cracha}
           nome={linha.nm_funcionario || ""}
           dia={dia}

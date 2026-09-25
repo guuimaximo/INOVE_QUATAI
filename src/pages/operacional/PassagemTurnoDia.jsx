@@ -326,8 +326,7 @@ export default function PassagemTurnoDia() {
   };
 
   const faltasPor = (p) => faltas.filter((f) => f.periodo === p);
-  // a lista de um tile: um tipo de ocorrência, ou "em aberto" (tudo que o SOS não fechou)
-  const listaDoTipo = (id) => (id === "em_aberto" ? ocorrencias?.abertos || [] : ocorrencias?.porTipo?.[id] || []);
+  const listaDoTipo = (id) => ocorrencias?.porTipo?.[id] || [];
   const interPor = (p) => inter.filter((i) => i.periodo === p);
   const hoje = isoLocal();
 
@@ -462,18 +461,13 @@ export default function PassagemTurnoDia() {
                         style={{ borderTop: `4px solid ${o.cor}` }}>
                         <div className="text-[11px] font-bold uppercase text-slate-500">{o.label}</div>
                         <div className="text-2xl font-black text-slate-800">{ocorrencias.contagem[o.id] || 0}</div>
-                        {ocorrencias.abertosPorTipo[o.id] > 0 && (
-                          <div className="text-[10px] font-bold text-amber-700">{ocorrencias.abertosPorTipo[o.id]} em aberto</div>
-                        )}
                       </button>
                     ))}
-                    <button type="button" onClick={() => setTipoAberto(tipoAberto === "em_aberto" ? "" : "em_aberto")}
-                      className={`text-left rounded-xl border p-2 transition ${tipoAberto === "em_aberto" ? "border-slate-800 bg-amber-50" : "border-amber-200 bg-amber-50/40 hover:bg-amber-50"}`}
-                      style={{ borderTop: "4px solid #d97706" }}>
-                      <div className="text-[11px] font-bold uppercase text-amber-800">Em aberto</div>
+                    {/* só a quantidade (dono, 25/09/2026) — a regra é a do Dashboard do SOS */}
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-2" style={{ borderTop: "4px solid #d97706" }}>
+                      <div className="text-[11px] font-bold uppercase text-amber-800">Etiquetas em aberto</div>
                       <div className="text-2xl font-black text-slate-800">{ocorrencias.contagem.em_aberto || 0}</div>
-                      <div className="text-[10px] text-slate-500">SOS ainda não fechou</div>
-                    </button>
+                    </div>
                     <div className="rounded-xl border border-slate-200 p-2" style={{ borderTop: "4px solid #991b1b" }}>
                       <div className="text-[11px] font-bold uppercase text-slate-500">Assalto</div>
                       <div className="text-2xl font-black text-slate-800">{turno?.assalto ?? 0}</div>
@@ -504,11 +498,8 @@ export default function PassagemTurnoDia() {
                               </td>
                               <td className="pr-2 whitespace-nowrap">
                                 {emAberto(a)
-                                  ? <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-bold">Em aberto{a.status && String(a.status).trim().toLowerCase() !== "aberto" ? ` · ${a.status}` : ""}</span>
-                                  : <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-bold">Fechado</span>}
-                                {tipoAberto === "em_aberto" && (
-                                  <div className="text-[11px] text-slate-500 mt-0.5">{a.ocorrencia || "sem ocorrência ainda"}</div>
-                                )}
+                                  ? <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-bold">Em aberto</span>
+                                  : <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-bold">{String(a.status ?? "").trim() || "Fechado"}</span>}
                               </td>
                             </tr>
                           ))}

@@ -121,13 +121,14 @@ export function tipoDaOcorrencia(ocorrencia) {
   return TIPOS_OCORRENCIA.find((t) => t.valores.includes(o))?.id || "sem_classificacao";
 }
 
-/* EM ABERTO É O QUE O SOS AINDA NÃO FECHOU (dono, 25/09/2026: "se não tiver fechado
-   ainda, precisa aparecer em aberto"). O status do acionamento é Aberto, Em Andamento ou
-   Fechado, e a `ocorrencia` só é preenchida no fechamento — os 15 acionamentos "sem
-   classificação" de setembro estavam TODOS Abertos. Então: tudo que não está Fechado é
-   em aberto, tenha ou não ocorrência. */
+/* ETIQUETA EM ABERTO (dono, 25/09/2026: "só a quantidade de etiquetas em aberto naquele
+   dia"). A MESMA regra do card "Etiquetas em aberto" do Dashboard do SOS
+   (SOSDashboard.jsx `abertas`): status "Aberto" OU ocorrência ainda não preenchida. Regra
+   própria aqui faria o fechamento e o dashboard darem números diferentes para a mesma
+   pergunta. A ocorrência só é preenchida no fechamento — os 15 "sem classificação" de
+   setembro eram todos Abertos. */
 export function emAberto(acionamento) {
-  return String(acionamento?.status ?? "").trim().toLowerCase() !== "fechado";
+  return String(acionamento?.status ?? "").trim().toLowerCase() === "aberto" || !acionamento?.ocorrencia;
 }
 
 export async function lerOcorrenciasDoDia(dia) {
@@ -143,9 +144,7 @@ export async function lerOcorrenciasDoDia(dia) {
   const contagem = Object.fromEntries(Object.entries(porTipo).map(([k, v]) => [k, v.length]));
   const abertos = (data || []).filter(emAberto);
   contagem.em_aberto = abertos.length;
-  // quantos de cada tipo ainda estão abertos (ex.: SOS "Em Andamento")
-  const abertosPorTipo = Object.fromEntries(Object.entries(porTipo).map(([k, v]) => [k, v.filter(emAberto).length]));
-  return { porTipo, contagem, abertos, abertosPorTipo, total: (data || []).length };
+  return { porTipo, contagem, abertos, total: (data || []).length };
 }
 
 /* ── A FROTA PARADA, DO PCM DO DIA ─────────────────────────────────────────────

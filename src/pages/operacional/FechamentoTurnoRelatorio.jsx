@@ -102,7 +102,7 @@ function Situacao({ a }) {
         color: aberto ? "#92400e" : "#475569", background: aberto ? "#fef3c7" : "#f1f5f9", whiteSpace: "nowrap",
       }}
     >
-      {aberto ? "Em aberto" : "Fechado"}
+      {aberto ? "Em aberto" : String(a?.status ?? "").trim() || "Fechado"}
     </span>
   );
 }
@@ -183,7 +183,6 @@ const FechamentoTurnoRelatorio = forwardRef(function FechamentoTurnoRelatorio(
   const cont = ocorrencias?.contagem || {};
   const avarias = ocorrencias?.porTipo?.avaria || [];
   const abertos = ocorrencias?.abertos || [];
-  const abertosPorTipo = ocorrencias?.abertosPorTipo || {};
   const gns = frota?.gns || [];
   const faixa = frota?.faixa_amarela || [];
   const data = dataPorExtenso(t.data_referencia);
@@ -228,38 +227,13 @@ const FechamentoTurnoRelatorio = forwardRef(function FechamentoTurnoRelatorio(
       <Secao titulo="Ocorrências do dia" extra="do módulo de SOS">
         <Grade colunas={7}>
           {TIPOS_OCORRENCIA.map((o) => (
-            <Tile
-              key={o.id} rotulo={o.label} valor={cont[o.id] ?? 0} cor={o.cor}
-              sub={abertosPorTipo[o.id] ? `${abertosPorTipo[o.id]} em aberto` : ""}
-            />
+            <Tile key={o.id} rotulo={o.label} valor={cont[o.id] ?? 0} cor={o.cor} />
           ))}
           <Tile rotulo="Assalto" valor={t.assalto ?? 0} cor="#991b1b" />
-          <Tile rotulo="Em aberto" valor={abertos.length} cor="#d97706" sub="SOS ainda não fechou" />
+          {/* só a quantidade (dono): a lista do que está aberto fica no módulo de SOS */}
+          <Tile rotulo="Etiquetas em aberto" valor={abertos.length} cor="#d97706" />
         </Grade>
       </Secao>
-
-      {/* O QUE FICOU EM ABERTO: é o que o próximo turno precisa saber primeiro */}
-      {abertos.length > 0 && (
-        <Secao titulo={`Em aberto no SOS · ${abertos.length}`}>
-          <Tabela
-            cabecalho={["Hora", "SOS", "Veículo", "Linha", "Motorista", "Reclamação", "Ocorrência"]}
-            linhas={abertos.map((a) => (
-              <tr key={a.id}>
-                <td style={{ ...td, fontFamily: "Consolas, monospace" }}>{String(a.hora_sos || "").slice(0, 5) || "—"}</td>
-                <td style={{ ...td, fontFamily: "Consolas, monospace" }}>{a.numero_sos || "—"}</td>
-                <td style={{ ...td, fontFamily: "Consolas, monospace", fontWeight: 700 }}>{a.veiculo || "—"}</td>
-                <td style={td}>{[a.linha, a.tabela_operacional].filter(Boolean).join(" · ") || "—"}</td>
-                <td style={td}>{pessoa(a.motorista_nome, a.motorista_id)}</td>
-                <td style={td}>{a.reclamacao_motorista || "—"}</td>
-                <td style={td}>
-                  {a.ocorrencia || <span style={{ color: C.suave }}>sem ocorrência ainda</span>}
-                  <div style={{ marginTop: 3 }}><Situacao a={a} /></div>
-                </td>
-              </tr>
-            ))}
-          />
-        </Secao>
-      )}
 
       {avarias.length > 0 && (
         <Secao titulo={`Avarias · ${avarias.length}`}>

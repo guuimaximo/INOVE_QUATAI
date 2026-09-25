@@ -2060,10 +2060,10 @@ CRONOGRAMA = [
     ]),
     ("4ª Semana", "21 a 25/09", [
         ("Imagem Motivacional", "", "21/09", True),
-        ("Min. do Conhecimento", "", "22/09", False),
-        ("Imagem Informativa", "", "23/09", False),
-        ("Podcast “Fala, Motô!”", "", "24/09", False),
-        ("Enquete de Fixação", "", "25/09", False),
+        ("Min. do Conhecimento", "Direção Preventiva: o semáforo fechou? Não precisa correr", "22/09", True),
+        ("Imagem Informativa", "Direção Preventiva: o semáforo fechou? Não precisa correr", "23/09", True),
+        ("Podcast “Fala, Motô!”", "Joel — Manutenção", "24/09", False),
+        ("Enquete de Fixação", "Direção Preventiva: o semáforo fechou? Não precisa correr", "25/09", False),
     ]),
     ("5ª Semana", "28 a 30/09", [
         ("Imagem Motivacional", "", "28/09", False),

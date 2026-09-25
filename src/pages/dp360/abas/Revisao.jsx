@@ -1256,6 +1256,10 @@ const COLUNAS_PONTO_DIARIO = [
   "pede_entrada",
   "pede_saida",
   "requer_alvo_manual",
+  // o início da operação (min): é a prova de que a 1ª batida caída no almoço não é a
+  // entrada (`primeiraBatidaNoAlmoco`). Sem esta coluna a regra não roda — e o teste,
+  // que lia a linha inteira, dizia que rodava (25/09/2026).
+  "operacao_ini_min",
   "fonte_alvo",
   "alvo_confiavel",
   "alvo_entrada",

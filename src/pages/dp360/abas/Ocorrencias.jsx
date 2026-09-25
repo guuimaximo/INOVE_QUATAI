@@ -554,6 +554,10 @@ const COLS_DIARIO =
   // O DIA DO RH (04-ATESTADO MEDICO, 07-FERIAS...): o Transnet não aceita ponto em dia de
   // atestado, e a correção precisa saber disso antes de mandar o robô (`atestadoDoDia`).
   "te_descricao_dia,tipo_dia," +
+  // a view diz que a entrada FALTA? É o que liga a entrada pelo Citatti e o almoço batido
+  // de quem não bateu a entrada (`entradaPeloCitatti`, porta `saneiaDiaDoPonto`) — as
+  // mesmas regras da Revisão, que já pedia estas colunas (25/09/2026).
+  "pede_entrada,operacao_ini_min," +
   // O ALVO PUBLICADO PELA REVISÃO — é ele que a correção lança, e ele já vem com a
   // ponta batida preservada ("só a ponta errada muda"). `*_ref` é a régua interna da
   // view e serve de reserva; `*_sug` é o último degrau.

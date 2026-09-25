@@ -7,7 +7,7 @@
 // PassagemTurnoDia.jsx) e classe utilitária com variável de tema pode sair errada na foto.
 // Seção sem nada diz "nenhuma" — linha em branco não informa quem lê no WhatsApp.
 import { forwardRef } from "react";
-import { TIPOS_OCORRENCIA, dataPorExtenso } from "./passagemTurno";
+import { TIPOS_OCORRENCIA, dataPorExtenso, emAberto } from "./passagemTurno";
 
 const C = {
   marca: "#0f766e",
@@ -93,6 +93,20 @@ function Chip({ children, cor = C.marca, fundo = C.marcaSuave }) {
   );
 }
 
+function Situacao({ a }) {
+  const aberto = emAberto(a);
+  return (
+    <span
+      style={{
+        display: "inline-block", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 800,
+        color: aberto ? "#92400e" : "#475569", background: aberto ? "#fef3c7" : "#f1f5f9", whiteSpace: "nowrap",
+      }}
+    >
+      {aberto ? "Em aberto" : "Fechado"}
+    </span>
+  );
+}
+
 const pessoa = (nome, chapa) => (
   <>
     <b>{nome || "—"}</b>
@@ -168,7 +182,8 @@ const FechamentoTurnoRelatorio = forwardRef(function FechamentoTurnoRelatorio(
   const interTarde = intercorrencias.filter((i) => i.periodo === "TARDE");
   const cont = ocorrencias?.contagem || {};
   const avarias = ocorrencias?.porTipo?.avaria || [];
-  const semClass = cont.sem_classificacao || 0;
+  const abertos = ocorrencias?.abertos || [];
+  const abertosPorTipo = ocorrencias?.abertosPorTipo || {};
   const gns = frota?.gns || [];
   const faixa = frota?.faixa_amarela || [];
   const data = dataPorExtenso(t.data_referencia);
@@ -210,19 +225,46 @@ const FechamentoTurnoRelatorio = forwardRef(function FechamentoTurnoRelatorio(
       </Secao>
 
       {/* OCORRÊNCIAS DO DIA */}
-      <Secao titulo="Ocorrências do dia" extra={`do módulo de SOS${semClass ? ` · ${semClass} acionamento(s) sem classificação` : ""}`}>
-        <Grade colunas={6}>
+      <Secao titulo="Ocorrências do dia" extra="do módulo de SOS">
+        <Grade colunas={7}>
           {TIPOS_OCORRENCIA.map((o) => (
-            <Tile key={o.id} rotulo={o.label} valor={cont[o.id] ?? 0} cor={o.cor} />
+            <Tile
+              key={o.id} rotulo={o.label} valor={cont[o.id] ?? 0} cor={o.cor}
+              sub={abertosPorTipo[o.id] ? `${abertosPorTipo[o.id]} em aberto` : ""}
+            />
           ))}
           <Tile rotulo="Assalto" valor={t.assalto ?? 0} cor="#991b1b" />
+          <Tile rotulo="Em aberto" valor={abertos.length} cor="#d97706" sub="SOS ainda não fechou" />
         </Grade>
       </Secao>
+
+      {/* O QUE FICOU EM ABERTO: é o que o próximo turno precisa saber primeiro */}
+      {abertos.length > 0 && (
+        <Secao titulo={`Em aberto no SOS · ${abertos.length}`}>
+          <Tabela
+            cabecalho={["Hora", "SOS", "Veículo", "Linha", "Motorista", "Reclamação", "Ocorrência"]}
+            linhas={abertos.map((a) => (
+              <tr key={a.id}>
+                <td style={{ ...td, fontFamily: "Consolas, monospace" }}>{String(a.hora_sos || "").slice(0, 5) || "—"}</td>
+                <td style={{ ...td, fontFamily: "Consolas, monospace" }}>{a.numero_sos || "—"}</td>
+                <td style={{ ...td, fontFamily: "Consolas, monospace", fontWeight: 700 }}>{a.veiculo || "—"}</td>
+                <td style={td}>{[a.linha, a.tabela_operacional].filter(Boolean).join(" · ") || "—"}</td>
+                <td style={td}>{pessoa(a.motorista_nome, a.motorista_id)}</td>
+                <td style={td}>{a.reclamacao_motorista || "—"}</td>
+                <td style={td}>
+                  {a.ocorrencia || <span style={{ color: C.suave }}>sem ocorrência ainda</span>}
+                  <div style={{ marginTop: 3 }}><Situacao a={a} /></div>
+                </td>
+              </tr>
+            ))}
+          />
+        </Secao>
+      )}
 
       {avarias.length > 0 && (
         <Secao titulo={`Avarias · ${avarias.length}`}>
           <Tabela
-            cabecalho={["Hora", "SOS", "Veículo", "Linha", "Motorista", "O que houve"]}
+            cabecalho={["Hora", "SOS", "Veículo", "Linha", "Motorista", "O que houve", "Situação"]}
             linhas={avarias.map((a) => (
               <tr key={a.id}>
                 <td style={{ ...td, fontFamily: "Consolas, monospace" }}>{String(a.hora_sos || "").slice(0, 5) || "—"}</td>
@@ -234,6 +276,7 @@ const FechamentoTurnoRelatorio = forwardRef(function FechamentoTurnoRelatorio(
                   {a.reclamacao_motorista || "—"}
                   {a.problema_encontrado ? <div style={{ color: C.suave, fontSize: 12 }}>Manutenção: {a.problema_encontrado}</div> : null}
                 </td>
+                <td style={td}><Situacao a={a} /></td>
               </tr>
             ))}
           />

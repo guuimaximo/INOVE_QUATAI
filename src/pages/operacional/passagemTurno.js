@@ -121,6 +121,15 @@ export function tipoDaOcorrencia(ocorrencia) {
   return TIPOS_OCORRENCIA.find((t) => t.valores.includes(o))?.id || "sem_classificacao";
 }
 
+/* EM ABERTO É O QUE O SOS AINDA NÃO FECHOU (dono, 25/09/2026: "se não tiver fechado
+   ainda, precisa aparecer em aberto"). O status do acionamento é Aberto, Em Andamento ou
+   Fechado, e a `ocorrencia` só é preenchida no fechamento — os 15 acionamentos "sem
+   classificação" de setembro estavam TODOS Abertos. Então: tudo que não está Fechado é
+   em aberto, tenha ou não ocorrência. */
+export function emAberto(acionamento) {
+  return String(acionamento?.status ?? "").trim().toLowerCase() !== "fechado";
+}
+
 export async function lerOcorrenciasDoDia(dia) {
   const { data, error } = await supabase
     .from("sos_acionamentos")
@@ -132,7 +141,11 @@ export async function lerOcorrenciasDoDia(dia) {
   TIPOS_OCORRENCIA.forEach((t) => { porTipo[t.id] = []; });
   (data || []).forEach((a) => porTipo[tipoDaOcorrencia(a.ocorrencia)].push(a));
   const contagem = Object.fromEntries(Object.entries(porTipo).map(([k, v]) => [k, v.length]));
-  return { porTipo, contagem, total: (data || []).length };
+  const abertos = (data || []).filter(emAberto);
+  contagem.em_aberto = abertos.length;
+  // quantos de cada tipo ainda estão abertos (ex.: SOS "Em Andamento")
+  const abertosPorTipo = Object.fromEntries(Object.entries(porTipo).map(([k, v]) => [k, v.filter(emAberto).length]));
+  return { porTipo, contagem, abertos, abertosPorTipo, total: (data || []).length };
 }
 
 /* ── A FROTA PARADA, DO PCM DO DIA ─────────────────────────────────────────────

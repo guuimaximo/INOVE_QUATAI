@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Lock, MapPin, RefreshCw, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Lock, MapPin, RefreshCw, X } from "lucide-react";
 import AbaShell from "./AbaShell";
 import TabelaDP from "../TabelaDP";
 // O POP-UP DO DIA NAO MORA MAIS AQUI. Ele e o `CartaoDoDia`, compartilhado com a
@@ -2691,6 +2691,8 @@ export default function Revisao() {
     ...(viradas.size ? [["VIRADA", "🌙 VIRADA"]] : []),
   ];
 
+  const iData = datas.indexOf(data);
+
   return (
     <AbaShell
       resumo="Cartão, fontes e decisão de ajuste. A régua é da view do Athena — esta tela só exibe o que já foi calculado."
@@ -2706,17 +2708,38 @@ export default function Revisao() {
             ))}
           </select>
 
-          <select value={data} onChange={(e) => setData(e.target.value)}>
-            {datas.length ? (
-              datas.map((d) => (
-                <option key={d} value={d}>
-                  {fmtData(d)}
-                </option>
-              ))
-            ) : (
-              <option value="">sem datas</option>
-            )}
-          </select>
+          {/* AS SETAS DA DATA, IGUAL ÀS FOLGAS (25/09/2026). Dono: "igual ao da Folgas com as
+              setas do lado para ir trocando a data" — e a lista continua no meio. `datas` vem
+              da mais nova para a mais antiga: ‹ é o dia anterior, › o seguinte. Na data mais
+              antiga carregada, ‹ busca mais datas (o mesmo "+ datas anteriores"). */}
+          <div className="dp-weeknav">
+            <button
+              type="button"
+              title={iData >= datas.length - 1 ? "Carregar datas anteriores" : "Dia anterior"}
+              disabled={iData < 0 || carregandoDatas}
+              onClick={() =>
+                iData >= datas.length - 1
+                  ? setLotesDatas((n) => n + PAGINAS_POR_LOTE)
+                  : setData(datas[iData + 1])
+              }
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <select value={data} onChange={(e) => setData(e.target.value)}>
+              {datas.length ? (
+                datas.map((d) => (
+                  <option key={d} value={d}>
+                    {fmtData(d)}
+                  </option>
+                ))
+              ) : (
+                <option value="">sem datas</option>
+              )}
+            </select>
+            <button type="button" title="Dia seguinte" disabled={iData <= 0} onClick={() => setData(datas[iData - 1])}>
+              <ChevronRight size={15} />
+            </button>
+          </div>
 
           <button
             type="button"

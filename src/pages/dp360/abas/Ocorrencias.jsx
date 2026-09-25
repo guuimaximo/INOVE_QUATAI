@@ -162,6 +162,12 @@ const MODO_EXECUTAR = "executar decisoes";
  * da fila só o que foi provado resolvido. É o contrário do fechamento otimista.
  */
 const MODO_CANCELAR = "cancelar pedidos";
+/* O PEDIDO POSTERIOR (25/09/2026) — ver `gravarPosterior`. O estado dele mora em
+   `ponto_caso.cancelado_motivo`, coluna de texto que o robô `cancelar pedidos` já escreve:
+   a tela grava "…a recusar: <ids>" e o robô troca por "…recusado no Transnet …" quando
+   termina. Sem coluna nova, e sem mexer no aceite do dia. */
+const MARCA_POSTERIOR = "Pedido posterior";
+const MARCA_POSTERIOR_A_RECUSAR = "Pedido posterior a recusar:";
 const MODO_CONFERIR = "conferir (so leitura)";
 
 // O terceiro modo do robô, "capturar a grade", NÃO tem botão aqui: a
@@ -255,6 +261,7 @@ const SIT = {
   corrigido: { rotulo: "🔧 corrigido", cor: "ok" },
   exec_pendente: { rotulo: "⏳ aceito · aguardando bot", cor: "neutro" },
   recusa_exec_pendente: { rotulo: "⏳ recusado · aguardando bot", cor: "neutro" },
+  posterior_exec: { rotulo: "⏳ recusa de pedido posterior · aguardando bot", cor: "neutro" },
   ponto_fechado: { rotulo: "🔒 ponto fechado no Transnet", cor: "erro" },
   recusado: { rotulo: "✗ recusado", cor: "erro" },
   recusado_lote: { rotulo: "🗑 cancelado · recusado no Transnet", cor: "neutro" },
@@ -1485,7 +1492,30 @@ function montarRegistros(base) {
       .filter(Boolean);
     const abertos = grupo.length - fechadosNoTransnet.length;
 
-    const situacao = situacaoDoCaso(veredito, ciclo, temAviso);
+    /* O PEDIDO POSTERIOR (25/09/2026). O dia já foi decidido E executado pelo robô, e o
+       colaborador abriu pedido NOVO depois. O check da ferramenta leu a grade do Transnet ao
+       vivo: 112 pedidos assim, pendentes em 67 dias — e nenhum em lista nenhuma, porque a
+       situação do dia era "executado/corrigido". Pendente lá, qualquer um efetua e desfaz o
+       que foi lançado. Só se RECUSA (main.py:2222 `recusar_posterior`): o robô confere o dia
+       contra o PRIMEIRO cartão congelado, e um aceite novo seria relançado por cima. Se ele
+       tem razão, o caminho é o Real. Conta só pedido que ninguém julgou (fora do ajuste_ids). */
+    const julgadas = new Set(
+      txt(caso.ajuste_ids).split(",").map((x) => x.trim().slice(2)).filter(Boolean),
+    );
+    const diaExecutado = Boolean(txt(caso.conferido_em)) && Boolean(decisaoJaTomada(caso));
+    const posteriores = diaExecutado
+      ? grupo
+          .filter((o) => !["EFETUADO", "RECUSADO"].includes(txt(o.situacao_ajuste).toUpperCase()))
+          .map((o) => txt(o.id_ocorrencia))
+          .filter((id) => id && !julgadas.has(id))
+      : [];
+    // recusa posterior JÁ GRAVADA e ainda não executada pelo robô (ver `gravarPosterior`)
+    const recusaPosteriorPendente = txt(caso.cancelado_motivo).startsWith(MARCA_POSTERIOR_A_RECUSAR);
+    const situacao = posteriores.length
+      ? "posterior"
+      : recusaPosteriorPendente
+        ? "posterior_exec"
+        : situacaoDoCaso(veredito, ciclo, temAviso);
     const rot = rotuloCaso(caso.origem, caso.tipo);
 
     // os DOIS cartões da tela — o `slotsHoje` foi montado acima, antes do julgamento
@@ -1678,6 +1708,8 @@ function montarRegistros(base) {
       desfecho,
       abertosNoTransnet: abertos,
       fechadosNoTransnet,
+      posteriores,
+      recusaPosteriorPendente,
       situacao,
       situacaoAviso,
       temAviso,
@@ -1766,7 +1798,8 @@ const EIXOS_CONF = [
   ["PENDENTE", "Aguardam a minha decisão"],
   ["TODOS", "Incluir as que o robô ainda não executou"],
 ];
-const porEixoStatus = (eixo) => (r) => (eixo === "TODOS" ? true : !r.decJa);
+const porEixoStatus = (eixo) => (r) =>
+  eixo === "TODOS" ? true : !r.decJa || (r.posteriores || []).length > 0;
 
 /**
  * A ÚNICA função que diz QUE LINHAS uma aba tem.
@@ -1791,15 +1824,20 @@ function linhasDaAba(registros, porta, aba) {
      desfaz o primeiro. Os 60 precisam de outro caminho — pela JANELA e pela existencia do
      cartao, nao por "o Transnet resolveu". A trava do BOTAO continua removida: quem chega
      nesta lista da veredito. */
+  // PEDIDO POSTERIOR: volta para a caixa de entrada DA SUA PORTA, seja qual for o desfecho
+  const temPosterior = (r) => (r.posteriores || []).length > 0;
   if (aba === "conf")
     return base.filter(
       (r) =>
-        ["conf_certo", "conf_errado", "conf", "recusado"].includes(r.situacao) &&
-        !resolvidoNoTransnet(r),
+        temPosterior(r) ||
+        (["conf_certo", "conf_errado", "conf", "recusado"].includes(r.situacao) &&
+          !resolvidoNoTransnet(r)),
     );
   // app.js:2883 — caixa de entrada de "Meus avisos": só o que MONITORA, e nunca o desfecho.
   if (aba === "aguard")
-    return base.filter((r) => r.monitora && !SIT_DISC.includes(r.situacaoAviso) && !jaTratado(r));
+    return base.filter(
+      (r) => temPosterior(r) || (r.monitora && !SIT_DISC.includes(r.situacaoAviso) && !jaTratado(r)),
+    );
   // a outra lista da mesma porta: aviso que só informa e não pede ação.
   if (aba === "coment") return base.filter((r) => !r.monitora);
   // CANCELAMENTO É DA PORTA, como todas as outras abas. Ela filtrava `registros` cru, então
@@ -1810,7 +1848,7 @@ function linhasDaAba(registros, porta, aba) {
     );
   const cfg = {
     ok: ["ok"],
-    exec: ["exec_pendente", "recusa_exec_pendente"],
+    exec: ["exec_pendente", "recusa_exec_pendente", "posterior_exec"],
     fechado: ["ponto_fechado"],
     // app.js:3315 — advertência e correção são vistas do MESMO caso: uma aba só.
     disc: ["advertido", "corrigido"],
@@ -2039,6 +2077,28 @@ async function gravarMarcacao(
   // Sem aceite não há cartão a prometer: recusa não congela `depois`.
   const depois = ace.length ? txt(cartaoDoMontador) : "";
   return gravaContrato(reg, [...ace, ...rej], reg.antesTexto, depois);
+}
+
+/* ══ O PEDIDO POSTERIOR (25/09/2026) ═════════════════════════════════════════════
+ * O dia já foi decidido e executado; o pedido chegou depois e só se recusa. A gravação NÃO
+ * toca no dia: `aceite`, `conferido_em`, correção e contrato ficam como estão. Rodando a
+ * `gravarMarcacao` de sempre com os dados do FERNANDO 30061069 20/09, ela gravava
+ * `aceite: rejeitado` num dia corrigido e congelava cartão nos pedidos recusados.
+ *   · `ajuste_ids` ganha os `R:` novos ao lado dos antigos (a PC lê "letra:id" e segue igual);
+ *   · `cancelado_motivo` guarda "…a recusar: <ids>" — é o que põe o caso na Fila de
+ *     lançamento, e o robô `cancelar pedidos` troca pelo desfecho quando termina. */
+async function gravarPosterior(reg, rejeitar) {
+  const rej = (rejeitar || []).map(txt).filter(Boolean);
+  if (!rej.length) throw new Error("Nenhuma recusa marcada.");
+  const antes = txt(reg.caso?.ajuste_ids).split(",").map((x) => x.trim()).filter(Boolean);
+  const novas = rej.map((i) => `R:${i}`).filter((x) => !antes.includes(x));
+  await gravarNoBanco("ponto_caso", {
+    ...chaveDoCaso(reg),
+    ajuste_ids: [...antes, ...novas].join(","),
+    cancelado_motivo: `${MARCA_POSTERIOR_A_RECUSAR} ${rej.join(",")}`,
+    atualizado_em: agoraISOLocal(),
+  });
+  return "";
 }
 
 /* A PROMOÇÃO SEPARADA (main.py:9649 `aplicar_marcados`) SAIU DAQUI em 10/09/2026: com o
@@ -2378,6 +2438,12 @@ function motivoSemDecisao(reg, { soRecusa = false } = {}) {
    * ficou faltando nestas duas clausulas. Medido no lake: 18 dias ja decididos tem
    * ocorrencia PENDENTE aberta DEPOIS da decisao. Dia sem pedido aberto continua travado —
    * os sete acabados seguem sem veredito, que e o certo. */
+  /* PEDIDO POSTERIOR (25/09/2026): dia já executado com pedido novo — decide-se só o novo,
+     e só recusando (ver `posteriores` em `montarRegistros`). */
+  if ((reg?.posteriores || []).length)
+    return soRecusa
+      ? ""
+      : "dia já executado: pedido posterior só se recusa — se ele tem razão, crave o Real no Cartão do dia";
   const temPedidoAberto = Number(reg?.abertosNoTransnet || 0) > 0;
   if (reg.decJa && !temPedidoAberto) return "já decidido";
   /* JA FEITO NO TRANSNET NAO DISPENSA O VEREDITO (24/09/2026).
@@ -2854,7 +2920,7 @@ const PILL = { ok: "ok", erro: "danger", alerta: "warn", neutro: "mute", accent:
 const LINHA_SIT = {
   conf_certo: "row-ok", conf_errado: "row-sem", conf: "row-sug",
   ok: "row-ok", advertido: "row-sem", corrigido: "row-ok",
-  exec_pendente: "row-sug", recusa_exec_pendente: "row-sug",
+  exec_pendente: "row-sug", recusa_exec_pendente: "row-sug", posterior_exec: "row-sug",
   ponto_fechado: "row-sem", recusado: "row-sem", recusado_lote: "", aguardando: "row-sug",
   comunicado: "", posterior: "row-sug", ajustou: "row-ok",
   ajustou_certo: "row-ok", ajustou_errado: "row-sem", ajustou_julgar: "row-sug",
@@ -3450,7 +3516,7 @@ function pilulaDoVeredito(it) {
  * respondia, e o dia ficava marcado pela metade. Aqui toda ocorrência sai aceita ou
  * recusada — e o botão do rodapé fica travado enquanto sobrar uma sem resposta.
  */
-function ItemAcao({ item, marca, aoMarcar, travado, motivo, fechadas }) {
+function ItemAcao({ item, marca, aoMarcar, travado, motivo, fechadas, soRecusa = false }) {
   const p = pilulaDoVeredito(item);
   const detalhe = [
     item.ponta ? `ponta: ${item.ponta}` : "",
@@ -3479,9 +3545,20 @@ function ItemAcao({ item, marca, aoMarcar, travado, motivo, fechadas }) {
           <label
             key={v}
             className={`oc-dec-cb ${cls}${marca === v ? " on" : ""}${travado ? " off" : ""}`}
-            title={travado ? motivo || "decisão já gravada" : undefined}
+            title={
+              travado
+                ? motivo || "decisão já gravada"
+                : soRecusa && v === "A"
+                  ? "dia já executado: pedido posterior só se recusa — se ele tem razão, crave o Real no Cartão do dia"
+                  : undefined
+            }
           >
-            <input type="radio" disabled={travado} checked={marca === v} onChange={() => aoMarcar(v)} />
+            <input
+              type="radio"
+              disabled={travado || (soRecusa && v === "A")}
+              checked={marca === v}
+              onChange={() => aoMarcar(v)}
+            />
             {rot}
           </label>
         ))}
@@ -4518,6 +4595,7 @@ function Detalhe({
   gravando,
   aoMarcar,
   aoRecusarECorrigir,
+  aoGravarPosterior,
   aoAbrirCartao,
   abrindoCartao,
   erroCartao,
@@ -4532,13 +4610,16 @@ function Detalhe({
    * botão do rodapé fica travado enquanto sobrar ocorrência sem resposta. */
   const inicial = useMemo(() => {
     const gravadas = marcasGravadas(reg);
+    const novosIds = new Set(reg?.posteriores || []);
     const m = {};
     (reg?.acoes || []).forEach((it, i) => {
       const jaMarcada = (it.ids || []).map((id) => gravadas.get(txt(id))).find(Boolean);
-      m[i] = jaMarcada || (it.ok === true ? "A" : it.ok === false ? "R" : "");
+      // pedido POSTERIOR nasce "recusar": num dia já executado é a única saída
+      const novo = (it.ids || []).some((id) => novosIds.has(txt(id)));
+      m[i] = novo ? "R" : jaMarcada || (it.ok === true ? "A" : it.ok === false ? "R" : "");
     });
     return m;
-  }, [reg?.acoes, reg?.ciclo]);
+  }, [reg?.acoes, reg?.ciclo, reg?.posteriores]);
   const [marcas, setMarcas] = useState(inicial);
   useEffect(() => setMarcas(inicial), [inicial]);
 
@@ -4584,28 +4665,48 @@ function Detalhe({
   );
 
   if (!reg || !v) return null;
-  const travado = Boolean(reg.decJa) || gravando;
+  // PEDIDO POSTERIOR: o dia já executado se reabre SÓ para os pedidos novos
+  const novos = new Set(reg.posteriores || []);
+  const posterior = novos.size > 0;
+  const ehNovo = (it) => (it?.ids || []).some((id) => novos.has(txt(id)));
+  const travado = (Boolean(reg.decJa) && !posterior) || gravando;
   // a trava de gravar é a de MARCAR (as quatro de `motivoSemDecisao`), nunca a do dia
   // inteiro: o dia MISTO e o dia com a simulação bloqueada são exatamente os que só se
   // resolvem por ocorrência.
   // as cópias que o Transnet já fechou — a marca ✓ da lista de ocorrências
   const fechadasNoTransnet = new Set(reg.fechadosNoTransnet || []);
   const idsMarcados = (letra) =>
-    (reg.acoes || []).flatMap((it, i) => (marcaDaOcorrencia(reg, marcas, i) === letra ? it.ids : []));
+    (reg.acoes || []).flatMap((it, i) => {
+      if (marcaDaOcorrencia(reg, marcas, i) !== letra) return [];
+      // no pedido posterior só as ocorrências NOVAS contam — as antigas já foram julgadas
+      return posterior ? (it.ids || []).filter((id) => novos.has(txt(id))) : it.ids;
+    });
   const aceitarIds = idsMarcados("A");
   const rejeitarIds = idsMarcados("R");
   // veredito só de recusa passa no dia já corrigido; com qualquer aceite, não
   const travaMarcar = motivoSemDecisao(reg, { soRecusa: !aceitarIds.length && rejeitarIds.length > 0 });
-  const semResposta = v.contagem.sem;
+  const semResposta = posterior
+    ? (reg.acoes || []).filter((it, i) => ehNovo(it) && !marcaDaOcorrencia(reg, marcas, i)).length
+    : v.contagem.sem;
   /* RECUSAR E CORRIGIR ASSIM: tudo recusado e o cartão mexido à mão. Mexer no cartão e
    * recusar tudo só faz sentido se o cartão for para algum lugar — e o lugar é o Real
    * manual. Quem só quer recusar limpa o que mexeu (↺ limpar) e o botão volta a ser o de
    * sempre. */
-  const corrigeAssim = v.contagem.R > 0 && v.contagem.A === 0 && !semResposta && Boolean(v.aMao?.tocou);
+  const corrigeAssim =
+    !posterior && v.contagem.R > 0 && v.contagem.A === 0 && !semResposta && Boolean(v.aMao?.tocou);
   const realDoCartao = corrigeAssim
     ? camposParaRealManual(v, { almocoTravado: Boolean(reg.almocoTravado) })
     : null;
-  const motivoBotao = reg.decJa
+  /* OPÇÃO B (dono, 24/09/2026): sem cartão que feche NÃO se aceita. Antes a tela avisava
+     "o cartão não fecha" e deixava gravar: 11 aceites ficaram sem cartão, e o robô voltava
+     com "não deu para comparar". Agora o caminho é cravar o Real (que libera) ou recusar. */
+  const semCartao =
+    !posterior && aceitarIds.length > 0 && !v.fecha
+      ? `o cartão não fecha${
+          v.faltando?.length ? ` — falta ${v.faltando.join(" e ")}` : v.problema ? ` — ${v.problema}` : ""
+        }: sem cartão não se aceita. Crave o Real (no Cartão do dia ou nos campos à mão) ou recuse`
+      : "";
+  const motivoBotao = reg.decJa && !posterior
     ? `decisão já gravada: ${reg.decJa.aceito ? "aceito" : "recusado"} em ${reg.decJa.quando}`
     : travaMarcar
       ? travaMarcar
@@ -4613,9 +4714,13 @@ function Detalhe({
         ? "não há pedido neste dia para julgar — este dia segue para a correção, na tela principal"
         : semResposta
           ? `falta responder ${semResposta} ocorrência(s): cada uma sai aceita ou recusada`
-          : realDoCartao?.erro
-            ? `o cartão montado não vira Real manual: ${realDoCartao.erro} — ajuste, ou ↺ limpar para só recusar`
-            : "";
+          : posterior && !rejeitarIds.length
+            ? "marque recusar nos pedidos novos"
+            : semCartao
+              ? semCartao
+              : realDoCartao?.erro
+                ? `o cartão montado não vira Real manual: ${realDoCartao.erro} — ajuste, ou ↺ limpar para só recusar`
+                : "";
 
   return (
     /* MODAL, como na ferramenta (app.js:638 monta em `modal-root`). O cabeçalho fica fixo e
@@ -4690,7 +4795,14 @@ function Detalhe({
                   julgado e ainda não foi corrigido. O que estava errado era a janela, que
                   montava o veredito com "aceitar" marcado e escrevia "o dia fica aceito" num
                   dia recusado por ele em 24/08 e já respondido pelo Transnet. */}
-              {fraseDoDiaDecidido(reg) ? (
+              {posterior ? (
+                <div className="oc-vd-motivo" style={{ margin: "8px 0 0" }}>
+                  ⏱ <b>Pedido posterior</b> — este dia já foi decidido e executado
+                  {fraseDoDiaDecidido(reg) ? ` (${fraseDoDiaDecidido(reg)})` : ""}. {novos.size} pedido(s)
+                  chegaram depois e continuam pendentes no Transnet: <b>só se recusam</b>, e o ponto lançado
+                  não muda. Se ele tem razão, crave o Real no Cartão do dia.
+                </div>
+              ) : fraseDoDiaDecidido(reg) ? (
                 <div className="oc-vd-motivo" style={{ margin: "8px 0 0" }}>
                   ✅ <b>Este dia já foi decidido</b> — {fraseDoDiaDecidido(reg)}. Não há veredito a
                   dar aqui; o que falta é a correção, e ela sai na tela principal.
@@ -4709,8 +4821,15 @@ function Detalhe({
                         key={`${it.tipo}-${it.hora}-${i}`}
                         item={it}
                         marca={marcaDaOcorrencia(reg, marcas, i)}
-                        travado={travado || trancada}
-                        motivo={trancada ? MOTIVO_MIOLO : ""}
+                        travado={travado || trancada || (posterior && !ehNovo(it))}
+                        motivo={
+                          trancada
+                            ? MOTIVO_MIOLO
+                            : posterior && !ehNovo(it)
+                              ? "julgado antes — aqui só se decidem os pedidos novos"
+                              : ""
+                        }
+                        soRecusa={posterior && ehNovo(it)}
                         fechadas={fechadasNoTransnet}
                         aoMarcar={(x) => setMarcas((m) => ({ ...m, [i]: x }))}
                       />
@@ -4868,6 +4987,19 @@ function Detalhe({
                 ✎ Recusar ({v.contagem.R}) e corrigir o ponto assim
               </BotaoAcao>
             ) : (
+              posterior ? (
+                <BotaoAcao
+                  tom="erro"
+                  disabled={Boolean(motivoBotao) || !rejeitarIds.length}
+                  titulo={
+                    motivoBotao ||
+                    "Grava a recusa dos pedidos novos (R: em ajuste_ids) sem mexer no dia. O caso vai para a Fila de lançamento, e de lá o robô recusa no Transnet."
+                  }
+                  onClick={() => aoGravarPosterior(reg, rejeitarIds)}
+                >
+                  Recusar {rejeitarIds.length} pedido(s) novo(s)
+                </BotaoAcao>
+              ) : (
               <BotaoAcao
                 tom={v.dia === "recusado" ? "erro" : "ok"}
                 disabled={Boolean(motivoBotao) || (!aceitarIds.length && !rejeitarIds.length)}
@@ -4881,9 +5013,12 @@ function Detalhe({
                     vai gravado são os ids (PAULO MARCOS 03/09: 2 linhas, 3 ocorrências). */}
                 Gravar veredito ({aceitarIds.length} aceitar / {rejeitarIds.length} recusar)
               </BotaoAcao>
+              )
             )}
             <span style={MINI}>
-              {v.dia === "recusado" ? (
+              {posterior ? (
+                <>o dia <b>continua como está</b> — já foi executado</>
+              ) : v.dia === "recusado" ? (
                 <>o dia fica <b>recusado</b></>
               ) : v.dia === "aceito" ? (
                 <>o dia fica <b>aceito</b></>
@@ -5296,6 +5431,27 @@ export default function Ocorrencias() {
     [executarGravacao],
   );
 
+  /* O VEREDITO DO PEDIDO POSTERIOR (25/09/2026) — ver `gravarPosterior`. Grava só a recusa
+     dos pedidos novos; o dia não muda. O disparo é na Fila de lançamento, como todo o resto. */
+  const aoGravarPosterior = useCallback(
+    async (reg, rejeitarIds) => {
+      if (!rejeitarIds?.length) { setRecado("Nenhuma recusa marcada."); return; }
+      if (!await perguntar(
+        `RECUSAR ${rejeitarIds.length} PEDIDO(S) POSTERIOR(ES) de ${reg.nome} · ${reg.dataBR}.\n\n` +
+          `Ocorrências: ${rejeitarIds.join(", ")}\n\n` +
+          "O dia já foi decidido e executado. Estes pedidos chegaram depois: a recusa serve para eles " +
+          "não ficarem pendentes na grade do Transnet, onde qualquer um pode efetuar e desfazer o que já " +
+          "foi lançado. O dia NÃO muda — a decisão, o ponto lançado e a correção continuam como estão.\n\n" +
+          "Nada vai ao Transnet agora: o caso cai na FILA DE LANÇAMENTO, e de lá o robô recusa.",
+      )) return;
+      const gravou = await executarGravacao(`Recusa posterior gravada (${reg.nome} · ${reg.dataBR})`, () =>
+        gravarPosterior(reg, rejeitarIds),
+      );
+      if (gravou) setAberto(null);
+    },
+    [executarGravacao],
+  );
+
   /* ── RECUSAR E CORRIGIR ASSIM (o botão do rodapé quando tudo é recusa e o cartão foi
    * mexido à mão). A confirmação diz o cartão e os DOIS passos que ainda faltam: nada disto
    * vai ao Transnet no clique. */
@@ -5610,10 +5766,82 @@ export default function Ocorrencias() {
    * e uma linha travada recusa o lote inteiro em vez de sair calada. */
   /* O painel do lote. Ele é do DISPARO, não da grade: some quando o DP fecha, e o
      que sobra é o recado de uma linha no topo e o aviso do robô na barra. */
+  /* A RECUSA DO PEDIDO POSTERIOR NO TRANSNET (25/09/2026). O mesmo robô do cancelamento
+     (`cancelar pedidos`: lê a grade AO VIVO e recusa só o que ainda estiver pendente), com
+     `posterior: true` em cada caso — aí ele NÃO fecha o dia como cancelado: o dia já foi
+     decidido e executado, e continua assim. Ele só anota o desfecho em `cancelado_motivo`. */
+  const aoRecusarPosteriores = useCallback(
+    async (lista) => {
+      const bruto = casosDeRegistros(lista);
+      if (!bruto) {
+        setRecado("Sem crachá+dia para escopar o robô — disparo cancelado. Escopo vazio faria o workflow rodar a fila inteira.");
+        return;
+      }
+      const casos = JSON.stringify(JSON.parse(bruto).map((c) => ({ ...c, posterior: true })));
+      const nomes =
+        lista.slice(0, 12).map((r) => `· ${r.nome} ${r.dataBR}`).join("\n") +
+        (lista.length > 12 ? `\n… e mais ${lista.length - 12}` : "");
+      if (!await perguntar(
+        `RECUSAR NO TRANSNET os pedidos posteriores — ${lista.length} crachá+dia.\n\n${nomes}\n\n` +
+          "São pedidos que chegaram DEPOIS de o dia ter sido decidido e executado. O robô abre a grade " +
+          "AO VIVO e recusa só os que ainda estiverem pendentes. O dia NÃO muda: a decisão, o ponto " +
+          "lançado e a correção continuam como estão.\n" +
+          `Robô: ajustes · modo "${MODO_CANCELAR}" · casos = ${lista.length} crachá+dia (só estes), como posteriores.`,
+      )) return;
+      setDisparando(true);
+      setRecado("");
+      try {
+        const r = await dispararRoboDP360("ajustes", { modo: MODO_CANCELAR, casos, confirmar: "true" });
+        setRecado(`Recusa dos pedidos posteriores disparada — ${lista.length} crachá+dia. Acompanhe no quadro.`);
+        setSelIds([]);
+        acompanharLote({
+          runId: r?.execucao?.run_id || null,
+          painel: r?.painel || "",
+          robo: "ajustes",
+          tipo: "cancelar",
+          aoParcial: () => atualizarSilencioso(),
+          ensaio: false,
+          aba,
+          casos: casosDoPainel(lista),
+          aoTerminar: (fim, conta) => {
+            atualizarSilencioso();
+            if (!conta) return;
+            const sobrou = conta.faltaram.length;
+            setRecado(
+              soParouDeOlhar(fim)
+                ? "⏳ O robô AINDA ESTÁ RODANDO — parei de acompanhar depois do limite."
+                : (sobrou ? "⚠ " : "✅ ") +
+                    `Recusa dos pedidos posteriores encerrou — ${conta.feitos.length} de ${lista.length} dia(s) sem pendência` +
+                    (sobrou ? `, ${sobrou} ainda com pedido pendente` : "") + ".",
+            );
+          },
+        });
+      } catch (e) {
+        setRecado(`Falhou: ${e?.message || "não foi possível disparar o robô."}`);
+      } finally {
+        setDisparando(false);
+      }
+    },
+    [atualizarSilencioso, aba],
+  );
+
   const aoExecutarLote = useCallback(
     async (regs) => {
       const lista = (regs || []).filter(Boolean);
       if (!lista.length) { setRecado("Marque as linhas que o robô deve executar."); return; }
+      // RECUSA DE PEDIDO POSTERIOR vai por outro robô (`cancelar pedidos`, ver acima)
+      const posteriores = lista.filter((r) => r.situacao === "posterior_exec");
+      if (posteriores.length) {
+        if (posteriores.length !== lista.length) {
+          setRecado(
+            `Marque separado: ${posteriores.length} recusa(s) de pedido posterior vão por outro robô ` +
+              `("${MODO_CANCELAR}"). Execute um grupo, depois o outro.`,
+          );
+          return;
+        }
+        await aoRecusarPosteriores(lista);
+        return;
+      }
       const bloqueados = lista.map((r) => ({ r, motivo: motivoSemExecucao(r) })).filter((x) => x.motivo);
       if (bloqueados.length) {
         setRecado(
@@ -5722,7 +5950,7 @@ export default function Ocorrencias() {
         setDisparando(false);
       }
     },
-    [atualizarSilencioso, aba],
+    [atualizarSilencioso, aba, aoRecusarPosteriores],
   );
 
   /* ── CONFERÊNCIA: lê o cartão ao vivo, NÃO mexe no Transnet ────────────────
@@ -7039,6 +7267,7 @@ export default function Ocorrencias() {
           gravando={gravando || disparando}
           aoMarcar={aoMarcar}
           aoRecusarECorrigir={aoRecusarECorrigir}
+          aoGravarPosterior={aoGravarPosterior}
           aoAbrirCartao={abrirCartaoDoDia}
           abrindoCartao={abrindoCartao}
           erroCartao={erroCartao}

@@ -585,6 +585,8 @@ const DESFECHO_CASO = {
   // recusar pedido (modo `cancelar pedidos`): o bot marca aceite=cancelado só no dia cuja
   // recusa inteira confirmou — o resto fica em A decidir, de propósito
   cancelado: { icone: "✅", tom: "ok", texto: "recusado no Transnet · foi para Cancelados" },
+  // pedido POSTERIOR (dia já executado): o robô recusa e anota — o dia não muda de lugar
+  posteriorFeito: { icone: "✅", tom: "ok", texto: "pedido posterior recusado no Transnet · o dia continua como estava" },
   mantido: { icone: "⏳", tom: "warn", texto: "continua em A decidir — nem tudo foi recusado" },
   // robôs que não deixam marca por caso no nosso banco: só o desfecho do run é verdade
   enviado: { icone: "✅", tom: "ok", texto: "o robô terminou" },
@@ -620,10 +622,16 @@ const TIPOS = {
   // robô `comunicado`: um arquivo com todo mundo; quem foi barrado aparece com o motivo
   comunicado: { rodando: "📣 Enviando os comunicados no Transnet", feito: "comunicado(s) enviado(s)" },
 };
-const FEITO = new Set(["conferido", "cancelado", "enviado", "corrigido", "comunicado"]);
+const FEITO = new Set(["conferido", "cancelado", "posteriorFeito", "enviado", "corrigido", "comunicado"]);
 
 function desfechoDoCaso(caso, tipo = "executar") {
   if (tipo === "cancelar") {
+    /* PEDIDO POSTERIOR (25/09/2026): no dia já executado o robô NÃO fecha o caso como
+       cancelado — ele troca o "Pedido posterior a recusar: …" que a tela gravou pelo
+       desfecho ("…recusado no Transnet…" ou "…nada pendente…"). */
+    const motivo = txt(caso?.cancelado_motivo);
+    if (motivo.startsWith("Pedido posterior") && !motivo.startsWith("Pedido posterior a recusar:"))
+      return "posteriorFeito";
     return txt(caso?.aceite).toLowerCase() === "cancelado" || txt(caso?.cancelado_em) ? "cancelado" : "mantido";
   }
   if (!caso) return "pendente";
@@ -643,7 +651,7 @@ function desfechoDoCaso(caso, tipo = "executar") {
    — e é isso que a assinatura responde. */
 function assinaturaDoCaso(c) {
   if (!c) return "";
-  return [c.aceite, c.conferido_em, c.cancelado_em, c.correcao_status, c.conf_veredito, c.atualizado_em]
+  return [c.aceite, c.conferido_em, c.cancelado_em, c.cancelado_motivo, c.correcao_status, c.conf_veredito, c.atualizado_em]
     .map(txt)
     .join("|");
 }
@@ -653,7 +661,7 @@ function assinaturaDoCaso(c) {
 const TERMINAL = {
   executar: new Set(["conferido", "ponto_fechado", "divergente", "sem_base"]),
   conferir: new Set(["conferido", "ponto_fechado", "divergente", "sem_base"]),
-  cancelar: new Set(["cancelado"]),
+  cancelar: new Set(["cancelado", "posteriorFeito"]),
 };
 /** Os casos que o robô já gravou: estado final E assinatura diferente da foto de partida. */
 function casosQueTerminaram(partida, atual, terminais) {
@@ -683,7 +691,7 @@ async function conferidosDepoisDoRobo(casos_do_lote, tipo = "executar") {
     // seria uma consulta por linha do lote.
     casos = await lerDP360("ponto_caso", {
       colunas:
-        "cracha,date_ref,conferido_em,usuario,correcao_status,conf_veredito,aceite,cancelado_em,atualizado_em",
+        "cracha,date_ref,conferido_em,usuario,correcao_status,conf_veredito,aceite,cancelado_em,cancelado_motivo,atualizado_em",
       filtros: { cracha: `in.(${crachas.join(",")})`, date_ref: `in.(${dias.join(",")})` },
       limite: 2000,
     });

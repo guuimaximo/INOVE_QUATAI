@@ -590,10 +590,10 @@ const ALMOCO_MAX = 120;
  *
  * Batida so fala do turno em que ela esta. Sem saber onde o turno comeca e acaba, a regra
  * nao tem o que comparar e nao mexe. */
-function paradaBatida(mins, jornadaIni, jornadaFim) {
-  if (mins.length < 4 || jornadaIni == null || jornadaFim == null || jornadaFim <= jornadaIni) return null;
+function paradaBatida(mins, jornadaIni, jornadaFim, desde = 1) {
+  if (mins.length < desde * 2 + 2 || jornadaIni == null || jornadaFim == null || jornadaFim <= jornadaIni) return null;
   let melhor = null;
-  for (let i = 1; i < mins.length - 1; i += 2) {   // o intervalo fica entre PARES de batidas
+  for (let i = desde; i < mins.length - 1; i += 2) {   // o intervalo fica entre PARES de batidas
     let ini = mins[i];
     let fim = mins[i + 1];
     // A VIRADA: num turno que passa da meia-noite a jornada vem em 24+ ("26:01") e a batida
@@ -618,7 +618,16 @@ function intervaloBatidoManda(linha) {
   // as pontas da jornada DESTE dia — e por elas que se sabe se a parada e daqui
   const jIni = hm2min(linha.entrada_sug) ?? hm2min(linha.alvo_entrada) ?? hm2min(linha.entrada);
   const jFim = hm2min(linha.saida_sug) ?? hm2min(linha.alvo_saida) ?? hm2min(linha.saida);
-  const parada = paradaBatida(batidasDaLinha(linha), jIni, jFim);
+  /* QUEM NAO BATEU A ENTRADA COMECA O CARTAO PELO ALMOCO (25/09/2026). O par do
+     intervalo e contado a partir da 2a batida porque a 1a seria a entrada. JOAO CAETANO
+     3202677 23/09 nao bateu a entrada (a view pede): `12:43 | 13:13 | 16:05 | 16:06` e a
+     parada dele e 12:43-13:13 — a mesma que o Citatti mediu (12:43-13:19). Contando da 2a,
+     a regra achava 13:13-16:05 (2h52, nao e refeicao) e a matriz ficava com 09:29-09:59,
+     tres horas antes do almoco que ele bateu. Sem a entrada, o par comeca na 1a batida; se
+     ali nao houver parada, vale a contagem de sempre. */
+  const mins = batidasDaLinha(linha);
+  const parada = (txt(linha.pede_entrada) === "true" && paradaBatida(mins, jIni, jFim, 0))
+    || paradaBatida(mins, jIni, jFim);
   if (!parada) return linha;
   const sugIni = hm2min(linha.almoco_saida_sug);
   if (sugIni == null || Math.abs(sugIni - parada.ini) <= ALMOCO_MIN) return linha;

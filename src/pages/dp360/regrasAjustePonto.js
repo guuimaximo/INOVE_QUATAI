@@ -51,7 +51,7 @@
 import { cra8, chaveDia, ehPontoInvertido, ehVerdadeiro, fmtHora, sugBloqueio, temSugestaoUtil } from "./CartaoDoDia";
 // Aritmética de relógio é do MOTOR, nunca escrita à mão: `hm2min` aceita "1420"
 // (o que a tela do Cartão de Ponto devolve) e `min2hm` preserva a notação 24+.
-import { hm2min, min2hm } from "./regrasPonto";
+import { CONSTANTES, hm2min, min2hm } from "./regrasPonto";
 import { atestadoDoDia } from "./diaNoTransnet";
 
 const txt = (v) => String(v ?? "").trim();
@@ -141,6 +141,9 @@ const FRASES = {
     ilegivel: "horário ilegível na sugestão — não dá para montar as quatro batidas",
     naoCabe: (a1, a2, ent, sai) =>
       `o almoço ${a1}–${a2} não cabe entre a entrada ${ent} e a saída ${sai} do alvo`,
+    semAlmoco: (jornada) =>
+      `a sugestão sai sem almoço numa jornada de ${jornada} — acima de 6 h o intervalo é ` +
+      "obrigatório; crave o almoço e as pontas no Real",
   },
   digitado: {
     semPonta: (falta) =>
@@ -304,7 +307,20 @@ export function avaliarAjustePonto(linha, { caso = null, digitado = null, bloque
     // quatro pontas saem do mesmo alvo), mas o Real manual do DP sobrescreve só
     // as PONTAS — cravar uma saída às 14:00 num dia cuja volta do almoço é 15:00
     // faria o robô escrever volta DEPOIS da saída. Mesma checagem da Refeição.
-    if (mAlmFim > mSaida) return fora(frase.naoCabe(almIni, almFim, entrada, saida));
+    // PERÍODO DE ZERO MINUTO TAMBÉM NÃO CABE (25/09/2026). ADESIO 03601898 14/08 saía
+    // `03:47 | 12:54 | 13:24 | 13:24` — volta do almoço e saída no mesmo minuto — e a linha
+    // era amarela. Almoço colado na entrada ou na saída não é cartão, é conta errada.
+    if (mAlmFim >= mSaida || mAlmIni <= mEntrada) return fora(frase.naoCabe(almIni, almFim, entrada, saida));
+  } else if (origem === "view" && !txt(linha?.rm_entrada) && !txt(linha?.rm_saida)
+             && mSaida - mEntrada > CONSTANTES.JORNADA_EXIGE_ALMOCO) {
+    // CARTÃO SEM ALMOÇO NUMA JORNADA QUE EXIGE ALMOÇO NÃO SAI DA NOSSA SUGESTÃO (25/09/2026).
+    // RICARDO 30061193 11/09 bateu `E13:51 | S16:27 | E16:40 | S20:42 | E21:12 | S21:13` —
+    // tem intervalo. A view sugeriu saída 29:52 (15h12), a porta apagou a sugestão
+    // impossível e a proteção da batida refez as pontas com as batidas, SEM o miolo: a linha
+    // ficava AMARELA e o robô gravaria 00:00 no almoço, apagando o intervalo que ele bateu.
+    // Acima de 6 h o intervalo é obrigatório (`JORNADA_EXIGE_ALMOCO`, a régua que o dono
+    // manteve em 23/09). Só vale para a NOSSA sugestão: com Real cravado, o cartão é do DP.
+    return fora(frase.semAlmoco(min2hm(mSaida - mEntrada)));
   }
 
   const alvo = [
@@ -385,6 +401,54 @@ function marcasDoCartao(linha) {
 }
 
 /**
+ * A BATIDA SÓ PROTEGE A PONTA SE ELA PODE SER A PONTA (25/09/2026).
+ *
+ * JOAO CAETANO 3202677 23/09 bateu `E12:43 | S13:13 | E16:05 | S16:06`. A view disse FALTA
+ * ENTRADA (a operação começou 05:06) e sugeriu entrada 03:32 com almoço 09:29–09:59. A
+ * proteção da batida viu a primeira marca `E12:43`, mais tarde que a sugestão, e a pôs de
+ * entrada: a tela ficou com entrada 12:43, almoço 09:29 ANTES da entrada, jornada de 2h53
+ * num dia de 10h46 de operação — e o aviso pedia a ele "ajuste da ENTRADA para 12:43", um
+ * horário que ele JÁ tinha batido. Dono: "não tem lógica uma sugestão dessa".
+ *
+ * A marca `E`/`S` é posição (a importação alterna), não prova de ponta. A batida só é a
+ * ponta quando a view NÃO diz que aquela ponta falta (`pede_entrada`/`pede_saida`) e, na
+ * entrada, quando ela vem ANTES do almoço (`primeiraBatidaNoAlmoco`).
+ */
+function pontaBatida(linha, qual) {
+  const marcas = marcasDoCartao(linha);
+  if (marcas.length < 2) return null;
+  if (qual === "entrada") {
+    if (ehVerdadeiro(linha?.pede_entrada) || primeiraBatidaNoAlmoco(linha)) return null;
+    return marcas[0].tipo === "E" ? fmtHora(marcas[0].hora) : null;
+  }
+  if (ehVerdadeiro(linha?.pede_saida)) return null;
+  const ultima = marcas[marcas.length - 1];
+  return ultima.tipo === "S" ? fmtHora(ultima.hora) : null;
+}
+
+/**
+ * A PRIMEIRA BATIDA CAI NO ALMOÇO OU DEPOIS DELE, E A OPERAÇÃO JÁ TINHA COMEÇADO: ela não
+ * é a entrada, e a entrada FALTA. MARCO 30061029 22/09 bateu `E20:39 | S21:09 | E23:56 |
+ * S24:13` com a operação desde 12:30; o `20:39` é a saída do almoço dele. A proteção o pôs
+ * de entrada e a linha ficou AMARELA com uma manhã de zero minuto (entrada 20:39, almoço
+ * 20:39). JULIO 30060639 12/09 bateu `E10:06` com a operação desde 07:55 e o almoço 10:01.
+ *
+ * A OPERAÇÃO É A PROVA, e sem ela a regra não mexe. Sem ela, o almoço colado na primeira
+ * batida pode ser erro do ALMOÇO, não falta de entrada: interno sem alvo (MAURILIO
+ * 30061181 14/08, `E13:07 | S14:00 | …`, almoço sugerido 13:07) chegou mesmo às 13:07.
+ */
+function primeiraBatidaNoAlmoco(linha) {
+  const primeira = marcasDoCartao(linha)[0];
+  const h = hm2min(primeira?.hora);
+  let ai = hm2min(linha?.almoco_saida_sug);
+  let op = Number.parseInt(txt(linha?.operacao_ini_min), 10);
+  if (primeira?.tipo !== "E" || h == null || ai == null || !Number.isFinite(op)) return false;
+  while (ai < h - 720) ai += 1440; // almoço "01:30" de quem entrou 22:00
+  while (op > h + 720) op -= 1440;
+  return h >= ai && op <= h - 30;
+}
+
+/**
  * A ENTRADA QUE VAI PARA O TRANSNET É A QUE A PESSOA BATEU.
  *
  * Mesma regra da saída e pelo mesmo motivo — a régua da view aplica −10 min na entrada
@@ -408,9 +472,7 @@ export function entradaDoLancamento(linha) {
   // MEDIDO: 738 dias tem Real cravado; a batida engolia a ENTRADA em 77 deles.
   const cravado = fmtHora(linha?.rm_entrada);
   if (cravado) return cravado;
-  const marcas = marcasDoCartao(linha);
-  const primeira = marcas[0];
-  const batida = marcas.length >= 2 && primeira?.tipo === "E" ? fmtHora(primeira.hora) : null;
+  const batida = pontaBatida(linha, "entrada");
   const sugerida = fmtHora(linha?.entrada_sug);
   if (!batida) return sugerida;
   if (!sugerida) return batida;
@@ -432,7 +494,6 @@ export function saidaDoLancamento(linha) {
   // engolia a SAIDA cravada em 170 dos 738 dias com Real.
   const cravado = fmtHora(linha?.rm_saida);
   if (cravado) return cravado;
-  const marcas = marcasDoCartao(linha);
 
   // NÃO HÁ TRAVA DE TAPA-BURACO AQUI, e isso é escolha.
   //
@@ -445,8 +506,7 @@ export function saidaDoLancamento(linha) {
   // `E10:25 | S10:26` de FALTA_SAIDA a sugestão (14:34) é MAIS TARDE e vence sozinha; no
   // do EVERALDO a sugestão (23:22) é mais cedo e a batida vence. Uma regra a menos, o
   // mesmo resultado — e sem eu ter que adivinhar qual das duas marcas é a de gente.
-  const ultima = marcas[marcas.length - 1];
-  const batida = marcas.length >= 2 && ultima?.tipo === "S" ? fmtHora(ultima.hora) : null;
+  const batida = pontaBatida(linha, "saida");
   const sugerida = fmtHora(linha?.saida_sug);
   if (!batida) return sugerida;
   if (!sugerida) return batida;
@@ -485,9 +545,17 @@ export function aplicarPontasBatidas(linha) {
   const saiVelha = fmtHora(linha?.saida_sug);
   const mudouEnt = entNova && entNova !== entVelha;
   const mudouSai = saiNova && saiNova !== saiVelha;
-  if (!mudouEnt && !mudouSai) return linha;
+  /* A ENTRADA QUE FALTA VIRA PEDIDO (25/09/2026). Se a primeira batida cai no almoço, a
+     pessoa não bateu a entrada — e o dono é claro: "falta entrada sempre manda comunicado".
+     Sem isto, JULIO e MARCO ficavam AMARELOS e o robô lançava uma entrada que eles não
+     bateram (07:40 e 12:20), sem aviso nenhum. Com isto, ficam azuis e o aviso pede a hora. */
+  // (o dia de alvo manual já pede pelas pontas que o DP cravou — `marcacaoAusente`)
+  const faltaEntrada = !ehVerdadeiro(linha?.pede_entrada) && !ehVerdadeiro(linha?.requer_alvo_manual)
+    && marcasDoCartao(linha).length >= 2 && primeiraBatidaNoAlmoco(linha);
+  if (!mudouEnt && !mudouSai && !faltaEntrada) return linha;
 
   const out = { ...linha };
+  if (faltaEntrada) out.pede_entrada = "true";
   if (mudouEnt) {
     out.entrada_sug = entNova;
     out.entrada_protegida_de = entVelha || "";

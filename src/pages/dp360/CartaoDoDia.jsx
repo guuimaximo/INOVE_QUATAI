@@ -363,8 +363,15 @@ export function marcacaoAusente(r) {
     // Jornada inválida/suspeita só entra no comunicado depois de o DP cravar a
     // jornada: aí os campos definidos dizem quais pontas serão pedidas.
     const manual = ehVerdadeiro(r.requer_alvo_manual);
-    const rmEnt = String(r.rm_entrada ?? "").trim();
-    const rmSai = String(r.rm_saida ?? "").trim();
+    /* PONTA CRAVADA IGUAL À BATIDA NÃO É PEDIDO (25/09/2026). No dia sem operação o DP crava
+       o Real para CONFIRMAR o cartão — ANTONIO 30002462 23/08 bateu `03:31 | 06:40 | 07:40 |
+       10:50` e o Real é esse mesmo — e a linha ia para o aviso "ajuste os horários de ENTRADA
+       E SAÍDA para 03:31 e 10:50": pedir a alguém o horário que ele já bateu. Eram 21 dias
+       assim em 60. Só se pede a ponta cravada que NÃO está nas batidas dele. */
+    const batidas = new Set((String(r.todas_batidas ?? "").match(/\d{1,2}:\d{2}/g) || []).map(fmtHora));
+    const naoBatida = (v) => (fmtHora(v) && !batidas.has(fmtHora(v)) ? fmtHora(v) : "");
+    const rmEnt = naoBatida(r.rm_entrada);
+    const rmSai = naoBatida(r.rm_saida);
     if (manual && rmEnt && rmSai) return "ENTRADA E SAÍDA";
     if (manual && rmEnt) return "ENTRADA";
     if (manual && rmSai) return "SAÍDA";

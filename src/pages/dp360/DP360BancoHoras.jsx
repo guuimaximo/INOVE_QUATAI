@@ -55,13 +55,23 @@
 // Quem quiser a base inteira — inclusive desligados — abre o modo "Por mes", que ai
 // sim varre tudo: de proposito, uma vez so, e guardado ate o Recarregar.
 //
+// AS ABAS (25/09/2026). Dono: "o banco de horas está muito travado — precisamos colocar
+// abas: Resumo, mês, setor". Era uma tela só e ela abria no mês que ainda está chegando
+// (out/26: 21 linhas zeradas), então o que se via primeiro era um quadro vazio.
+//   · RESUMO — as placas (com a folha fechada, a receber, devendo, bruto), a curva mês a
+//     mês e os maiores saldos. Sai da JANELA (12 competências), que já era lida para as
+//     placas — nenhuma ida a mais à base.
+//   · MÊS — a tela de antes (colaboradores de uma competência, ou mês a mês), com setas.
+//     Abre no mês COMPLETO mais recente, não no que ainda está chegando.
+//   · SETOR — soma por área. A base não traz setor: ele sai da FUNÇÃO (`SETORES`).
+//
 // MODO "POR MES": uma linha por competencia (pessoas, HE apurada, HE paga, debito,
 // banco pago, R$ pago, movimento e o acumulado corrido) — o `meses` do
 // `get_banco_horas`. E a curva do passivo: "a HE apurada subiu e o passivo esta
 // crescendo?" sem abrir 33 competencias uma a uma no seletor.
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Download, RefreshCw, Search, X } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Download, RefreshCw, Search, X } from "lucide-react";
 import { AuthContext } from "../../context/AuthContext";
 import { useAccessGovernance } from "../../context/AccessContext";
 import { canUserAccessPath } from "../../utils/access";
@@ -116,12 +126,13 @@ const COLUNAS_EXTRATO = [
 const JANELA_ABERTAS = 12;
 const MAX_PAGINAS_JANELA = 12; // teto de seguranca: ~2x a janela de hoje
 
-// So o necessario para a proporcao apurado/pago (a regra de `abertas`) e para o
-// saldo por pessoa. Nome, funcao e valores em R$ NAO entram: esta leitura existe
-// para uma conta agregada, e dado de folha que nao vai a tela nao precisa descer.
+// A proporcao apurado/pago (a regra de `abertas`), o saldo por pessoa e — desde as
+// abas (25/09/2026) — o Resumo e o Setor: por isso vem nome, funcao (de onde sai o
+// setor), movimento e debito. Valores em R$ continuam de fora: nenhuma das duas abas
+// mostra dinheiro, e dado de folha que nao vai a tela nao precisa descer.
 const COLUNAS_JANELA = [
-  "cracha", "situacao", "competencia",
-  "he_apurada_h", "he_paga_h", "banco_pago_h", "saldo_acumulado_h",
+  "cracha", "colaborador", "funcao", "situacao", "competencia",
+  "he_apurada_h", "he_paga_h", "debito_h", "banco_pago_h", "movimento_h", "saldo_acumulado_h",
 ].join(",");
 
 // Modo "Por mes": varre as 33 competencias (12 paginas). `saldo_acumulado_h` nao
@@ -145,6 +156,46 @@ const SITUACOES = [
 ];
 
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+const ABAS = [
+  { id: "resumo", label: "Resumo" },
+  { id: "mes", label: "Mês" },
+  { id: "setor", label: "Setor" },
+];
+
+/* ── o SETOR sai da FUNÇÃO (25/09/2026) ────────────────────────────────────────
+   A `banco_horas` não traz setor, o cadastro da 046 (`funcionarios` do lake) também não,
+   e o organograma do INOVE cobre 312 pessoas com quase todas em OPERACAO. A função é o
+   que toda linha tem. A PRIMEIRA regra que casa decide — por isso "planejamento" vem
+   antes de "manutenção" (o ANALISTA DE PLANEJAMENTO E CONTROLE DE MANUTENCAO é do
+   planejamento). O que nenhuma regra reconhece cai em "Outros" e aparece com a função
+   na aba Setor, para a regra ser completada — nunca some.
+   Medido em set/26 (365 ativos e afastados, 55 funções): todas casam. */
+const SETORES = [
+  { id: "motoristas", nome: "Operação · Motoristas", re: /^MOTORISTA/ },
+  {
+    id: "trafego",
+    nome: "Operação · Tráfego",
+    re: /FISCAL|CONTROLADOR DE TRAFEGO|CONTROLE OPERACIONAL|INSTRUTOR|APONTADOR|COORDENADOR OPERACIONAL|ANALISTA DE OPERAC|AUXILIAR DE VIAGEM|CATRAQUEIRO/,
+  },
+  { id: "planejamento", nome: "Planejamento e Controle", re: /ALMOXARIF|COMPRADOR|PLANEJAMENTO|ANALISTA DE DADOS/ },
+  {
+    id: "manutencao",
+    nome: "Manutenção",
+    re: /MECANIC|MANUTENC|LANTERNEIR|LUBRIFICADOR|PINTOR|ELETRICISTA|BORRACHEIR|FROTA|LAVADOR|ABASTECEDOR|MANOBRISTA|GARAGEM/,
+  },
+  {
+    id: "administrativo",
+    nome: "Administrativo",
+    re: /ADMINISTRATIV|\bRH\b|RECURSOS HUMANOS|TESOUREIR|FINANCEIR|CAIXA|VENDAS|MALOTE|OFFICE BOY|FAXINEIR|SEGURANCA DO TRABALHO|APRENDIZ/,
+  },
+];
+const SETOR_OUTROS = { id: "outros", nome: "Outros" };
+
+function setorDaFuncao(funcao) {
+  const f = String(funcao ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  return SETORES.find((s) => s.re.test(f)) || SETOR_OUTROS;
+}
 
 /* ── numeros ─────────────────────────────────────────────────────────────────
    O importador grava numero como texto e as vezes com virgula decimal — o
@@ -267,6 +318,118 @@ function saldosDaJanela(linhas, abertas) {
     fechado: fechada.size ? somar(fechada) : null,
     pessoasFechado: fechada.size,
   };
+}
+
+/* UMA LINHA POR PESSOA, para o Resumo e o Setor. Sai da MESMA base e da mesma regra das
+   placas (`saldosDaJanela`): o saldo que decide é o acumulado da competência FECHADA
+   mais nova dela — a soma destes `saldo` é, por construção, a placa "com a folha
+   fechada". HE apurada e paga são a soma da janela. Quem não tem mês fechado na janela
+   (entrou agora) fica com saldo nulo e não entra em "a receber" nem em "devendo". */
+function pessoasDaBase(linhas, abertas) {
+  const mapa = new Map();
+  linhas.forEach((l) => {
+    if (!l.cracha || !l.competencia) return;
+    let p = mapa.get(l.cracha);
+    if (!p) {
+      p = { cracha: l.cracha, ultima: null, fechada: null, apurada: 0, paga: 0 };
+      mapa.set(l.cracha, p);
+    }
+    if (!p.ultima || l.competencia > p.ultima.competencia) p.ultima = l;
+    if (!abertas.has(l.competencia) && (!p.fechada || l.competencia > p.fechada.competencia)) p.fechada = l;
+    p.apurada += l.apurada;
+    p.paga += l.paga + l.bancoH;
+  });
+  return [...mapa.values()].map((p) => {
+    const u = p.ultima;
+    const setor = setorDaFuncao(u.funcao);
+    return {
+      cracha: p.cracha,
+      nome: u.nome,
+      funcao: u.funcao,
+      situacao: u.situacao,
+      competencia: u.competencia,
+      setor: setor.id,
+      setorNome: setor.nome,
+      saldo: p.fechada ? p.fechada.acumulado : null,
+      bruto: u.acumulado,
+      apurada: p.apurada,
+      paga: p.paga,
+    };
+  });
+}
+
+/* Competências AINDA SEM MOVIMENTO: a linha da pessoa nasce antes de o mês ter hora
+   apurada. Medido em 25/09/2026: set/26 tinha 329 linhas e só 4 com hora; out/26, 21
+   linhas e nenhuma — contra ~325 com movimento em cada mês de jan a ago. Contar LINHAS
+   não pega o set/26; conta-se quem tem hora (apurada, paga ou movimento). Menos da metade
+   do maior mês da janela = ainda sem movimento. Sobre todas as linhas, antes da situação. */
+function competenciasParciais(linhas) {
+  const n = new Map();
+  linhas.forEach((l) => {
+    if (!l.competencia) return;
+    const comHora = l.apurada || l.paga || l.bancoH || l.movimento ? 1 : 0;
+    n.set(l.competencia, (n.get(l.competencia) || 0) + comHora);
+  });
+  const maior = Math.max(0, ...n.values());
+  return new Set([...n.entries()].filter(([, q]) => q < maior * 0.5).map(([c]) => c));
+}
+
+/* O MÊS A MÊS DO RESUMO. Por competência: HE apurada, HE paga (paga + banco pago) e o
+   SALDO ao fim do mês — o último acumulado de cada pessoa até ali, somado (quem não tem
+   linha no mês segue com o saldo que tinha, como o afastado longo). Mês parcial fica de
+   fora: a barra quase zerada pareceria queda. */
+function serieMensal(linhas, parciais) {
+  const porComp = new Map();
+  linhas.forEach((l) => {
+    if (!l.competencia) return;
+    if (!porComp.has(l.competencia)) porComp.set(l.competencia, []);
+    porComp.get(l.competencia).push(l);
+  });
+  const ultimo = new Map();
+  const saida = [];
+  [...porComp.keys()].sort().forEach((c) => {
+    const doMes = porComp.get(c);
+    let apurada = 0;
+    let paga = 0;
+    doMes.forEach((l) => {
+      apurada += l.apurada;
+      paga += l.paga + l.bancoH;
+      ultimo.set(l.cracha, l.acumulado);
+    });
+    if (parciais.has(c)) return;
+    let saldo = 0;
+    ultimo.forEach((v) => { saldo += v; });
+    saida.push({ competencia: c, pessoas: doMes.length, apurada, paga, saldo });
+  });
+  return saida.slice(-JANELA_ABERTAS);
+}
+
+/* Soma por setor, na ordem de `SETORES` ("Outros" por último, só se existir). */
+function resumoPorSetor(pessoas) {
+  const mapa = new Map();
+  [...SETORES, SETOR_OUTROS].forEach((s) => mapa.set(s.id, {
+    id: s.id, nome: s.nome, pessoas: [], receberN: 0, receberH: 0, devendoN: 0, devendoH: 0,
+    saldo: 0, apurada: 0, paga: 0, funcoes: new Map(),
+  }));
+  pessoas.forEach((p) => {
+    const s = mapa.get(p.setor);
+    s.pessoas.push(p);
+    const v = p.saldo ?? 0;
+    if (v >= 1) { s.receberN += 1; s.receberH += v; }
+    if (v <= -1) { s.devendoN += 1; s.devendoH += v; }
+    s.saldo += v;
+    s.apurada += p.apurada;
+    s.paga += p.paga;
+    const f = p.funcao || "—";
+    s.funcoes.set(f, (s.funcoes.get(f) || 0) + 1);
+  });
+  return [...mapa.values()]
+    .filter((s) => s.pessoas.length)
+    .map((s) => ({
+      ...s,
+      pessoas: [...s.pessoas].sort((a, b) => (b.saldo ?? 0) - (a.saldo ?? 0)),
+      funcoes: [...s.funcoes.entries()].sort((a, b) => b[1] - a[1]),
+    }));
 }
 
 /* Uma linha por competencia (o `meses` do `get_banco_horas`): a curva do passivo.
@@ -443,6 +606,11 @@ export default function DP360BancoHoras() {
   const [situacao, setSituacao] = useState("abertos");
   const [busca, setBusca] = useState("");
   const [modo, setModo] = useState("pessoa"); // "pessoa" | "mes"
+  const [aba, setAba] = useState("resumo"); // "resumo" | "mes" | "setor"
+  const [setorAberto, setSetorAberto] = useState("");
+  // O mês que a PESSOA escolheu não é mais trocado pela escolha automática (o mês
+  // completo mais recente, que só se sabe depois de a janela chegar).
+  const escolheuComp = useRef(false);
 
   const [linhas, setLinhas] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -590,6 +758,30 @@ export default function DP360BancoHoras() {
     return () => { ativo = false; };
   }, [podeAcessar, comp, formatoLongo, recarga]);
 
+  const escolherComp = useCallback((c) => {
+    if (!c) return;
+    escolheuComp.current = true;
+    setComp(c);
+  }, []);
+
+  const abrirPessoa = useCallback((p) => setPessoaSel({ cracha: p.cracha, nome: p.nome }), []);
+
+  // Competências que ainda estão chegando (ver `competenciasParciais`).
+  const parciais = useMemo(() => competenciasParciais(janela.linhas), [janela.linhas]);
+
+  /* O MÊS DE ABERTURA É O COMPLETO MAIS RECENTE (25/09/2026). O seletor abria na
+     competência mais nova da base — out/26, 21 pessoas zeradas — e a de antes (set/26)
+     também não tinha hora ainda. Assim que a janela diz qual está completa, é ela que abre; se a
+     pessoa já escolheu um mês, fica o dela. */
+  useEffect(() => {
+    if (escolheuComp.current || !janela.linhas.length) return;
+    const completas = [...new Set(janela.linhas.map((l) => l.competencia))]
+      .filter((c) => c && !parciais.has(c))
+      .sort();
+    const alvo = completas[completas.length - 1];
+    if (alvo && competencias.includes(alvo)) setComp(alvo);
+  }, [janela.linhas, parciais, competencias]);
+
   /* ── extrato da pessoa (o `get_banco_horas_pessoa` do original) ── */
   useEffect(() => {
     const cracha = pessoaSel?.cracha;
@@ -678,6 +870,57 @@ export default function DP360BancoHoras() {
     const base = (meses.linhas.length ? meses.linhas : janela.linhas).filter(naSituacao);
     return saldosDaJanela(base, abertas);
   }, [meses.linhas, janela.linhas, naSituacao, abertas]);
+
+  // Resumo e Setor: uma linha por pessoa, da MESMA base das placas.
+  const pessoas = useMemo(() => {
+    const base = (meses.linhas.length ? meses.linhas : janela.linhas).filter(naSituacao);
+    return pessoasDaBase(base, abertas);
+  }, [meses.linhas, janela.linhas, naSituacao, abertas]);
+
+  const quadro = useMemo(() => {
+    let receberN = 0; let receberH = 0; let devendoN = 0; let devendoH = 0;
+    pessoas.forEach((p) => {
+      const v = p.saldo ?? 0;
+      if (v >= 1) { receberN += 1; receberH += v; }
+      if (v <= -1) { devendoN += 1; devendoH += v; }
+    });
+    return { receberN, receberH, devendoN, devendoH };
+  }, [pessoas]);
+
+  const topReceber = useMemo(
+    () => pessoas.filter((p) => (p.saldo ?? 0) >= 1).sort((a, b) => b.saldo - a.saldo).slice(0, 8),
+    [pessoas],
+  );
+  const topDevendo = useMemo(
+    () => pessoas.filter((p) => (p.saldo ?? 0) <= -1).sort((a, b) => a.saldo - b.saldo).slice(0, 8),
+    [pessoas],
+  );
+
+  const serie = useMemo(
+    () => serieMensal((meses.linhas.length ? meses.linhas : janela.linhas).filter(naSituacao), parciais),
+    [meses.linhas, janela.linhas, naSituacao, parciais],
+  );
+  const serieParciais = useMemo(() => [...parciais].sort().map(rotuloComp).join(", "), [parciais]);
+
+  const setores = useMemo(() => resumoPorSetor(pessoas), [pessoas]);
+
+  // Na aba Setor a busca filtra as PESSOAS; setor sem ninguém na busca sai da lista, e
+  // os números do setor passam a ser os de quem sobrou.
+  const setoresVisiveis = useMemo(() => {
+    const q = normalizar(busca);
+    return setores
+      .map((s) => {
+        const visiveis = q
+          ? s.pessoas.filter((p) => normalizar(p.nome).includes(q)
+            || normalizar(p.cracha).includes(q)
+            || normalizar(p.funcao).includes(q))
+          : s.pessoas;
+        if (!q) return { ...s, visiveis };
+        const r = resumoPorSetor(visiveis)[0];
+        return r ? { ...r, visiveis } : { ...s, visiveis };
+      })
+      .filter((s) => s.visiveis.length);
+  }, [setores, busca]);
 
   /* Filtro que inclui desligado + janela = numero sabidamente incompleto (medido:
      531 dos 838, −2.154 h contra −3.150 h reais). Numero errado numa placa de
@@ -871,7 +1114,10 @@ export default function DP360BancoHoras() {
     );
   }
 
-  const totalColunas = 12;
+  const totalColunas = 13;
+  const iComp = competencias.indexOf(comp);
+  const carregandoPlacas = janela.carregando && !placas.pessoas;
+  const semNumero = Boolean(janela.erro) || placasIncompletas;
   const porMes = modo === "mes";
   const exportaveis = porMes ? linhasMes.length : visiveis.length;
   const carregandoTabela = porMes ? meses.carregando : carregando;
@@ -880,7 +1126,7 @@ export default function DP360BancoHoras() {
   return (
     <div className="dp360 -m-4 sm:-m-6">
       {caixaPergunta}
-      <div className="dp-topbar">
+      <div className="dp-topbar bh-topbar">
         <div className="dp-brand">
           <div className="dp-brand-mark">DP</div>
           <div>
@@ -888,88 +1134,89 @@ export default function DP360BancoHoras() {
             <div className="dp-brand-sub">DP360 · apurado no ponto menos o pago na folha</div>
           </div>
         </div>
-        <nav className="dp-tabs" aria-label="Voltar para a DP360">
-          <Link to="/dp360" className="dp-tab">← DP360</Link>
+        {/* AS ABAS (dono, 25/09/2026: "o banco de horas está muito travado — precisamos
+            colocar abas: Resumo, mês, setor"). Era uma tela só — duas placas, uma
+            competência e uma tabela — e ela abria no mês que ainda está chegando
+            (21 linhas zeradas). O Resumo responde "quanto e com quem"; o Mês é a tela
+            de antes; o Setor soma por área. */}
+        <nav className="dp-tabs" aria-label="Abas do banco de horas">
+          {ABAS.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              className={`dp-tab ${aba === a.id ? "is-active" : ""}`}
+              aria-pressed={aba === a.id}
+              onClick={() => setAba(a.id)}
+            >
+              {a.label}
+            </button>
+          ))}
+          <Link to="/dp360" className="dp-tab" style={{ marginLeft: "auto" }}>← DP360</Link>
         </nav>
       </div>
 
-      {/* As duas placas do original: o passivo da unidade HOJE, com e sem os meses
-          que a folha ainda não pagou. Não obedecem ao seletor de competência nem à
-          busca de propósito — é o número de "quanto a empresa deve", e ele não pode
-          mudar porque alguém foi olhar agosto ou digitou um nome. */}
-      <div className="bh-placas">
-        <div className={`bh-placa ${janela.erro || placasIncompletas ? "mute" : classeSinal(placas.fechado ?? 0)}`}>
-          <div className="n">
-            {janela.erro || placasIncompletas ? "—"
-              : (janela.carregando && !placas.pessoas ? "…"
-                : (placas.fechado == null ? "—" : emHoras(placas.fechado)))}
-          </div>
-          <div className="l">
-            Saldo <b>com a folha fechada</b>
-            <br />
-            {janela.erro ? <span className="dp-pill danger">{janela.erro}</span>
-              : placasIncompletas
-                ? <>quem saiu não cabe na janela de {JANELA_ABERTAS} meses — abra <b>📅 Por mês</b> para varrer a base inteira</>
-                : (placas.fechado == null
-                  ? `nenhuma competência fechada nas ${JANELA_ABERTAS} mais recentes`
-                  : <><b>{placas.pessoasFechado}</b> colaborador(es) · é este o número para decidir</>)}
-          </div>
-        </div>
-        {/* Só fica em tom de aviso quando há de fato mês sem folha: pintar de âmbar
-            um número idêntico ao de cima ensinaria a ignorar a cor. */}
-        <div className={`bh-placa ${placasIncompletas || !rotuloAbertas ? "mute" : "aberto"}`}>
-          <div className="n">
-            {janela.erro || placasIncompletas ? "—"
-              : (janela.carregando && !placas.pessoas ? "…" : emHoras(placas.bruto))}
-          </div>
-          <div className="l">
-            Saldo bruto, incluindo
-            <br />
-            {placasIncompletas
-              ? <span className="dp-faint">mesma janela, mesmo limite</span>
-              : rotuloAbertas
-                ? <><b>{rotuloAbertas}</b> sem folha paga</>
-                : <span className="dp-faint">nenhum mês sem folha · {placas.pessoas} colaborador(es)</span>}
-          </div>
-        </div>
-      </div>
-
       <div className="dp-viewbar">
-        <span className="bh-modos" role="group" aria-label="Modo de exibição">
-          <button
-            type="button"
-            className={`dp-chip-f ${porMes ? "" : "on"}`}
-            aria-pressed={!porMes}
-            onClick={() => setModo("pessoa")}
-          >
-            👤 Por colaborador
-          </button>
-          <button
-            type="button"
-            className={`dp-chip-f ${porMes ? "on" : ""}`}
-            aria-pressed={porMes}
-            onClick={() => setModo("mes")}
-            title="Uma linha por competência: HE apurada, HE paga e a curva do passivo. Varre as competências todas (12 idas à base) na primeira vez."
-          >
-            📅 Por mês
-          </button>
-        </span>
+        {aba === "mes" && (
+          <span className="bh-modos" role="group" aria-label="Modo de exibição">
+            <button
+              type="button"
+              className={`dp-chip-f ${porMes ? "" : "on"}`}
+              aria-pressed={!porMes}
+              onClick={() => setModo("pessoa")}
+            >
+              👤 Colaboradores do mês
+            </button>
+            <button
+              type="button"
+              className={`dp-chip-f ${porMes ? "on" : ""}`}
+              aria-pressed={porMes}
+              onClick={() => setModo("mes")}
+              title="Uma linha por competência: HE apurada, HE paga e a curva do passivo. Varre as competências todas (12 idas à base) na primeira vez."
+            >
+              📅 Mês a mês
+            </button>
+          </span>
+        )}
 
-        <label>
-          <span className="dp-muted" style={{ marginRight: 6 }}>Competência</span>
-          <select
-            value={comp}
-            onChange={(e) => setComp(e.target.value)}
-            aria-label="Competência"
-            disabled={porMes}
-            title={porMes ? "No modo por mês aparecem todas as competências." : undefined}
-          >
-            {competencias.map((c) => (
-              <option key={c} value={c}>{rotuloComp(c)}</option>
-            ))}
-            <option value="todas">Todas (varre a base)</option>
-          </select>
-        </label>
+        {aba === "mes" && (
+          <label>
+            <span className="dp-muted" style={{ marginRight: 6 }}>Competência</span>
+            {/* as setas, iguais às da Revisão: `competencias` vem da mais nova para a
+                mais antiga — ‹ é o mês anterior, › o seguinte */}
+            <span className="dp-weeknav">
+              <button
+                type="button"
+                title="Mês anterior"
+                disabled={porMes || iComp < 0 || iComp >= competencias.length - 1}
+                onClick={() => escolherComp(competencias[iComp + 1])}
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <select
+                value={comp}
+                onChange={(e) => escolherComp(e.target.value)}
+                aria-label="Competência"
+                disabled={porMes}
+                title={porMes ? "No mês a mês aparecem todas as competências." : undefined}
+              >
+                {competencias.map((c) => (
+                  <option key={c} value={c}>
+                    {rotuloComp(c)}{parciais.has(c) ? " · sem movimento ainda" : ""}
+                  </option>
+                ))}
+                <option value="todas">Todas (varre a base)</option>
+              </select>
+              <button
+                type="button"
+                title="Mês seguinte"
+                disabled={porMes || iComp <= 0}
+                onClick={() => escolherComp(competencias[iComp - 1])}
+              >
+                <ChevronRight size={15} />
+              </button>
+            </span>
+          </label>
+        )}
 
         <label>
           <span className="dp-muted" style={{ marginRight: 6 }}>Situação</span>
@@ -984,16 +1231,18 @@ export default function DP360BancoHoras() {
           </select>
         </label>
 
-        <span className="dp-busca">
-          <Search size={14} />
-          <input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Nome, crachá ou função"
-            aria-label="Buscar colaborador"
-            disabled={porMes}
-          />
-        </span>
+        {aba !== "resumo" && (
+          <span className="dp-busca">
+            <Search size={14} />
+            <input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Nome, crachá ou função"
+              aria-label="Buscar colaborador"
+              disabled={aba === "mes" && porMes}
+            />
+          </span>
+        )}
 
         <button
           type="button"
@@ -1008,25 +1257,251 @@ export default function DP360BancoHoras() {
           Recarregar
         </button>
 
-        <button
-          type="button"
-          className="dp-btn"
-          onClick={exportar}
-          disabled={carregandoTabela || exportando || !exportaveis}
-          title="Baixa as linhas em tela (hora extra e R$). Fica registrado quem exportou."
-        >
-          <Download size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
-          {exportando ? "Registrando…" : "Exportar CSV"}
-        </button>
+        {aba === "mes" && (
+          <button
+            type="button"
+            className="dp-btn"
+            onClick={exportar}
+            disabled={carregandoTabela || exportando || !exportaveis}
+            title="Baixa as linhas em tela (hora extra e R$). Fica registrado quem exportou."
+          >
+            <Download size={13} style={{ verticalAlign: "-2px", marginRight: 5 }} />
+            {exportando ? "Registrando…" : "Exportar CSV"}
+          </button>
+        )}
       </div>
 
-      {avisoExport && (
+      {avisoExport && aba === "mes" && (
         <div className="dp-resumo">
           <span className={`dp-pill ${avisoExport.tom}`}>{avisoExport.texto}</span>
         </div>
       )}
 
-      {erroTabela ? (
+      {/* ═══ RESUMO ══════════════════════════════════════════════════════════ */}
+      {aba === "resumo" && (
+        <>
+          {/* As placas do original, agora em quatro: o passivo da unidade HOJE, com a
+              folha fechada, quem tem a receber, quem deve, e o bruto com os meses que a
+              folha ainda não pagou. Não obedecem ao mês nem à busca — é o número de
+              "quanto a empresa deve", e ele não muda porque alguém foi olhar agosto. */}
+          <div className="bh-grade">
+            <div className={`bh-placa ${semNumero ? "mute" : classeSinal(placas.fechado ?? 0)}`}>
+              <div className="n">
+                {semNumero ? "—" : (carregandoPlacas ? "…" : (placas.fechado == null ? "—" : emHoras(placas.fechado)))}
+              </div>
+              <div className="l">
+                Saldo <b>com a folha fechada</b>
+                <br />
+                {janela.erro ? <span className="dp-pill danger">{janela.erro}</span>
+                  : placasIncompletas
+                    ? <>quem saiu não cabe na janela de {JANELA_ABERTAS} meses — abra <b>Mês → 📅 Mês a mês</b> para varrer a base inteira</>
+                    : (placas.fechado == null
+                      ? `nenhuma competência fechada nas ${JANELA_ABERTAS} mais recentes`
+                      : <><b>{placas.pessoasFechado}</b> colaborador(es) · é este o número para decidir</>)}
+              </div>
+            </div>
+            <div className={`bh-placa ${semNumero ? "mute" : "ok"}`}>
+              <div className="n">{semNumero ? "—" : (carregandoPlacas ? "…" : emHoras(quadro.receberH))}</div>
+              <div className="l">
+                <b>A receber</b> (a empresa deve)
+                <br />
+                <b>{quadro.receberN}</b> colaborador(es) com saldo de 1 h ou mais
+              </div>
+            </div>
+            <div className={`bh-placa ${semNumero ? "mute" : "danger"}`}>
+              <div className="n">{semNumero ? "—" : (carregandoPlacas ? "…" : emHoras(quadro.devendoH))}</div>
+              <div className="l">
+                <b>Devendo</b> (deve horas à empresa)
+                <br />
+                <b>{quadro.devendoN}</b> colaborador(es) com saldo de −1 h ou menos
+              </div>
+            </div>
+            {/* Só fica em tom de aviso quando há de fato mês sem folha: pintar de âmbar
+                um número idêntico ao de cima ensinaria a ignorar a cor. */}
+            <div className={`bh-placa ${semNumero || !rotuloAbertas ? "mute" : "aberto"}`}>
+              <div className="n">{semNumero ? "—" : (carregandoPlacas ? "…" : emHoras(placas.bruto))}</div>
+              <div className="l">
+                Saldo bruto, incluindo
+                <br />
+                {placasIncompletas
+                  ? <span className="dp-faint">mesma janela, mesmo limite</span>
+                  : rotuloAbertas
+                    ? <><b>{rotuloAbertas}</b> sem folha paga</>
+                    : <span className="dp-faint">nenhum mês sem folha · {placas.pessoas} colaborador(es)</span>}
+              </div>
+            </div>
+          </div>
+
+          <div className="bh-duas">
+            <section className="dp-card bh-secao">
+              <h4>
+                Mês a mês
+                <span className="dp-faint" style={{ fontWeight: 400 }}>
+                  últimos {serie.length} · clique num mês para abrir
+                </span>
+              </h4>
+              <SerieMensal serie={serie} abertas={abertas} onAbrir={(c) => { escolherComp(c); setModo("pessoa"); setAba("mes"); }} />
+              {serieParciais && (
+                <div className="dp-faint" style={{ fontSize: 11, marginTop: 6 }}>
+                  {serieParciais} ainda sem movimento (o mês não fechou) — fora do gráfico.
+                </div>
+              )}
+            </section>
+
+            <section className="dp-card bh-secao">
+              <h4>
+                Por setor
+                <button type="button" className="dp-link" onClick={() => setAba("setor")}>ver tudo →</button>
+              </h4>
+              <div className="bh-rolagem">
+              <table className="dp-tabela bh-mini">
+                <thead>
+                  <tr>
+                    <th>Setor</th>
+                    <th>Pessoas</th>
+                    <th>A receber</th>
+                    <th>Devendo</th>
+                    <th>Saldo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {setores.map((s) => (
+                    <tr key={s.id} className="bh-clicavel" onClick={() => { setSetorAberto(s.id); setAba("setor"); }}>
+                      <td><b>{s.nome}</b></td>
+                      <td className="dp-num">{s.pessoas.length}</td>
+                      <td className="dp-num dp-mono" style={{ color: "var(--dp-ok-ink)" }}>{s.receberN ? emHoras(s.receberH) : "—"}</td>
+                      <td className="dp-num dp-mono" style={{ color: "var(--dp-danger-ink)" }}>{s.devendoN ? emHoras(s.devendoH) : "—"}</td>
+                      <td className="dp-num">
+                        <span className={`dp-pill ${classeSinal(s.saldo)} dp-mono`}>{emHoras(s.saldo)}</span>
+                      </td>
+                    </tr>
+                  ))}
+                  {!setores.length && (
+                    <tr><td colSpan={5} className="dp-faint" style={{ textAlign: "center" }}>{carregandoPlacas ? "Carregando…" : "Sem colaboradores nesta situação."}</td></tr>
+                  )}
+                </tbody>
+              </table>
+              </div>
+            </section>
+          </div>
+
+          <div className="bh-duas">
+            <section className="dp-card bh-secao">
+              <h4>
+                Maiores saldos a receber
+                <span className="dp-faint" style={{ fontWeight: 400 }}>com a folha fechada</span>
+              </h4>
+              <ListaPessoas pessoas={topReceber} vazio="Ninguém com saldo a receber." onAbrir={abrirPessoa} />
+            </section>
+            <section className="dp-card bh-secao">
+              <h4>
+                Maiores débitos
+                <span className="dp-faint" style={{ fontWeight: 400 }}>com a folha fechada</span>
+              </h4>
+              <ListaPessoas pessoas={topDevendo} vazio="Ninguém devendo horas." onAbrir={abrirPessoa} />
+            </section>
+          </div>
+
+          {!janela.erro && !janela.carregando && (
+            <div className="dp-resumo dp-faint">
+              {meses.linhas.length
+                ? `Números conferidos nas ${competencias.length} competências da base.`
+                : `Números conferidos nas ${JANELA_ABERTAS} competências mais recentes${
+                  janela.de ? ` (desde ${rotuloComp(janela.de)})` : ""
+                } — alcança todo ativo e afastado. Clique num nome para o extrato mês a mês.`}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ═══ SETOR ═══════════════════════════════════════════════════════════ */}
+      {aba === "setor" && (
+        <>
+          <div className="dp-resumo">
+            <b>{setoresVisiveis.length}</b> setor(es) · <b>{setoresVisiveis.reduce((n, s) => n + s.visiveis.length, 0)}</b> colaborador(es)
+            {" · saldo com a folha fechada, HE dos últimos "}{JANELA_ABERTAS}{" meses. Clique num setor para abrir; num nome, para o extrato."}
+          </div>
+          <div className="dp-resumo dp-faint">
+            O setor sai da <b>função</b> — a base do banco de horas não traz setor. Função que
+            nenhuma regra reconhece cai em “Outros”, com o nome dela, para a regra ser completada.
+          </div>
+          {janela.erro ? (
+            <div className="dp-resumo"><span className="dp-pill danger">{janela.erro}</span></div>
+          ) : carregandoPlacas ? (
+            <div className="dp-tabela-wrap"><div className="dp-vazio">Carregando o banco de horas…</div></div>
+          ) : (
+            <div className="dp-tabela-wrap">
+              <table className="dp-tabela">
+                <thead>
+                  <tr>
+                    <th>Setor</th>
+                    <th>Pessoas</th>
+                    <th>A receber</th>
+                    <th>Devendo</th>
+                    <th>Saldo (folha fechada)</th>
+                    <th>HE apurada ({JANELA_ABERTAS}m)</th>
+                    <th>HE paga ({JANELA_ABERTAS}m)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {setoresVisiveis.map((s) => {
+                    const aberto = setorAberto === s.id || Boolean(busca.trim());
+                    return (
+                      <Fragment key={s.id}>
+                      <tr
+                        className={`bh-setor ${aberto ? "aberto" : ""}`}
+                        onClick={() => setSetorAberto(setorAberto === s.id ? "" : s.id)}
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setSetorAberto(setorAberto === s.id ? "" : s.id);
+                          }
+                        }}
+                      >
+                        <td><b>{aberto ? "▾" : "▸"} {s.nome}</b></td>
+                        <td className="dp-num">{s.visiveis.length}</td>
+                        <td className="dp-num dp-mono" style={{ color: "var(--dp-ok-ink)" }}>
+                          {s.receberN ? `${emHoras(s.receberH)} · ${s.receberN}` : "—"}
+                        </td>
+                        <td className="dp-num dp-mono" style={{ color: "var(--dp-danger-ink)" }}>
+                          {s.devendoN ? `${emHoras(s.devendoH)} · ${s.devendoN}` : "—"}
+                        </td>
+                        <td className="dp-num">
+                          <span className={`dp-pill ${classeSinal(s.saldo)} dp-mono`}>{emHoras(s.saldo)}</span>
+                        </td>
+                        <td className="dp-num">{umaCasa(s.apurada)}</td>
+                        <td className="dp-num">{umaCasa(s.paga)}</td>
+                      </tr>
+                      {aberto && (
+                        <tr className="bh-setor-det">
+                          <td colSpan={7}>
+                            <div className="dp-faint" style={{ fontSize: 11.5, marginBottom: 6 }}>
+                              Funções: {s.funcoes.map(([f, n]) => `${f} (${n})`).join(" · ")}
+                            </div>
+                            <TabelaPessoas pessoas={s.visiveis} onAbrir={abrirPessoa} />
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
+                    );
+                  })}
+                  {!setoresVisiveis.length && (
+                    <tr>
+                      <td colSpan={7} className="dp-faint" style={{ textAlign: "center", padding: "22px" }}>
+                        {busca.trim() ? "Ninguém com essa busca." : "Sem colaboradores nesta situação."}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ═══ MÊS (a tela de antes) ═════════════════════════════════════════════ */}
+      {aba === "mes" && (erroTabela ? (
         <div className="dp-resumo"><span className="dp-pill danger">{erroTabela}</span></div>
       ) : porMes ? (
         <div className="dp-resumo">
@@ -1052,9 +1527,19 @@ export default function DP360BancoHoras() {
           <b className="dp-num dp-mono">R$ {emReais(resumo.reais)}</b>
           {". Clique numa linha para o extrato mês a mês."}
         </div>
+      ))}
+
+      {aba === "mes" && !erroTabela && !porMes && parciais.has(comp) && (
+        <div className="dp-resumo">
+          <span className="dp-pill warn">⚠ {rotuloComp(comp)} ainda sem movimento</span>{" "}
+          <span className="dp-muted">
+            quase ninguém tem hora apurada neste mês (ele ainda não fechou) — use a seta ‹ para
+            o último mês completo.
+          </span>
+        </div>
       )}
 
-      {!erroTabela && avisoAbertas && (
+      {aba === "mes" && !erroTabela && avisoAbertas && (
         <div className="dp-resumo">
           <span className="dp-pill warn">⚠ {avisoAbertas} sem folha paga</span>{" "}
           <span className="dp-muted">
@@ -1064,27 +1549,14 @@ export default function DP360BancoHoras() {
         </div>
       )}
 
-      {!erroTabela && !porMes && foraDoPadrao > 0 && situacao !== "todos" && (
+      {aba === "mes" && !erroTabela && !porMes && foraDoPadrao > 0 && situacao !== "todos" && (
         <div className="dp-resumo dp-faint">
           {foraDoPadrao} linha(s) com situação fora do padrão ficaram de fora — use
           “Todas as situações” para vê-las.
         </div>
       )}
 
-      {/* De onde saem `abertas` e as placas — dito em voz alta, porque a resposta
-          depende do alcance: a janela pega os meses que podem estar sem folha, a
-          varredura do modo "por mês" cobre a base inteira. */}
-      {!janela.erro && !janela.carregando && (
-        <div className="dp-resumo dp-faint">
-          {meses.linhas.length
-            ? `“Sem folha paga” e as placas do topo conferidas nas ${competencias.length} competências da base.`
-            : `“Sem folha paga” e as placas do topo conferidas nas ${JANELA_ABERTAS} competências mais recentes${
-              janela.de ? ` (desde ${rotuloComp(janela.de)})` : ""
-            } — alcança todo ativo e afastado. Para incluir quem saiu, abra “📅 Por mês”, que varre a base inteira.`}
-        </div>
-      )}
-
-      {carregandoTabela ? (
+      {aba === "mes" && (carregandoTabela ? (
         <div className="dp-tabela-wrap">
           <div className="dp-vazio">
             {porMes
@@ -1093,9 +1565,9 @@ export default function DP360BancoHoras() {
           </div>
         </div>
       ) : porMes ? (
-        /* Modo "Por mês": a curva do passivo. O acumulado é a soma corrida do
-           movimento do recorte escolhido — é ele que responde "o passivo está
-           crescendo?" sem abrir 33 competências uma a uma. */
+        /* Mês a mês: a curva do passivo. O acumulado é a soma corrida do movimento do
+           recorte escolhido — é ele que responde "o passivo está crescendo?" sem abrir
+           33 competências uma a uma. */
         <div className="dp-tabela-wrap">
           <table className="dp-tabela">
             <thead>
@@ -1113,7 +1585,12 @@ export default function DP360BancoHoras() {
             </thead>
             <tbody>
               {linhasMes.map((m) => (
-                <tr key={m.competencia} className={abertas.has(m.competencia) ? "bh-mes-aberto" : undefined}>
+                <tr
+                  key={m.competencia}
+                  className={`bh-clicavel ${abertas.has(m.competencia) ? "bh-mes-aberto" : ""}`}
+                  onClick={() => { escolherComp(m.competencia); setModo("pessoa"); }}
+                  title="Abrir os colaboradores deste mês"
+                >
                   <td>
                     <b>{rotuloComp(m.competencia)}</b>
                     {abertas.has(m.competencia) && (
@@ -1152,6 +1629,7 @@ export default function DP360BancoHoras() {
                 <th>Colaborador</th>
                 <th>Crachá</th>
                 <th>Função</th>
+                <th>Setor</th>
                 <th>Situação</th>
                 <th>Competência</th>
                 <th>HE apurada</th>
@@ -1167,11 +1645,11 @@ export default function DP360BancoHoras() {
               {visiveis.map((l) => (
                 <tr
                   key={`${l.cracha}|${l.competencia}`}
-                  onClick={() => setPessoaSel({ cracha: l.cracha, nome: l.nome })}
+                  onClick={() => abrirPessoa(l)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      setPessoaSel({ cracha: l.cracha, nome: l.nome });
+                      abrirPessoa(l);
                     }
                   }}
                   tabIndex={0}
@@ -1180,6 +1658,7 @@ export default function DP360BancoHoras() {
                   <td><b>{l.nome || "—"}</b></td>
                   <td className="dp-num dp-mono">{l.cracha || "—"}</td>
                   <td>{l.funcao || "—"}</td>
+                  <td className="dp-muted">{setorDaFuncao(l.funcao).nome}</td>
                   <td>
                     <span className={`dp-pill ${normalizar(l.situacao) === "ativo" ? "mute" : "accent"}`}>
                       {l.situacao || "—"}
@@ -1222,7 +1701,7 @@ export default function DP360BancoHoras() {
             </tbody>
           </table>
         </div>
-      )}
+      ))}
 
       {pessoaSel && (
         <div
@@ -1242,6 +1721,104 @@ export default function DP360BancoHoras() {
         </div>
       )}
     </div>
+  );
+}
+
+/* A CURVA DO RESUMO: por mês, HE apurada (âmbar) e HE paga (verde) lado a lado, e o
+   saldo ao fim do mês embaixo. Barras em CSS, como a série diária do Resumo da DP360 —
+   sem biblioteca de gráfico para uma dúzia de colunas. Clicar abre o mês na aba Mês. */
+function SerieMensal({ serie, abertas, onAbrir }) {
+  if (!serie.length) return <div className="dp-vazio">Sem competências na janela.</div>;
+  const teto = Math.max(1, ...serie.map((m) => Math.max(m.apurada, m.paga)));
+  const somaAp = serie.reduce((s, m) => s + m.apurada, 0);
+  const somaPg = serie.reduce((s, m) => s + m.paga, 0);
+  return (
+    <div>
+      <div className="bh-legenda">
+        <span><i className="ap" /> HE apurada <b className="dp-num">{umaCasa(somaAp)} h</b></span>
+        <span><i className="pg" /> HE paga <b className="dp-num">{umaCasa(somaPg)} h</b></span>
+        <span className="dp-faint">embaixo: o saldo ao fim do mês</span>
+      </div>
+      <div className="bh-serie">
+        {serie.map((m) => {
+          const aberto = abertas.has(m.competencia);
+          return (
+            <button
+              key={m.competencia}
+              type="button"
+              className={`col ${aberto ? "aberto" : ""}`}
+              onClick={() => onAbrir(m.competencia)}
+              title={`${rotuloComp(m.competencia)} — HE apurada ${umaCasa(m.apurada)} h · HE paga ${umaCasa(m.paga)} h · saldo ${emHoras(m.saldo)}${aberto ? " · sem folha paga" : ""}`}
+            >
+              <span className="barras">
+                <i className="ap" style={{ height: `${(m.apurada / teto) * 100}%` }} />
+                <i className="pg" style={{ height: `${(m.paga / teto) * 100}%` }} />
+              </span>
+              <span className="rot">{rotuloComp(m.competencia)}</span>
+              <span className="sal" style={{ color: corSinal(m.saldo) }}>{emHoras(m.saldo)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* Lista curta de pessoas (os maiores saldos do Resumo). */
+function ListaPessoas({ pessoas, vazio, onAbrir }) {
+  if (!pessoas.length) return <div className="dp-faint" style={{ fontSize: 12.5 }}>{vazio}</div>;
+  return (
+    <ul className="bh-lista">
+      {pessoas.map((p) => (
+        <li key={p.cracha}>
+          <button type="button" onClick={() => onAbrir(p)}>
+            <span>
+              <b>{p.nome || "—"}</b>
+              <span className="sub"> · {p.funcao || "—"} · {p.setorNome}</span>
+            </span>
+            <span className={`dp-pill ${classeSinal(p.saldo ?? 0)} dp-mono`}>{emHoras(p.saldo)}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/* As pessoas de um setor (aba Setor, linha aberta). */
+function TabelaPessoas({ pessoas, onAbrir }) {
+  return (
+    <table className="dp-tabela bh-mini">
+      <thead>
+        <tr>
+          <th>Colaborador</th>
+          <th>Crachá</th>
+          <th>Função</th>
+          <th>Situação</th>
+          <th>HE apurada ({JANELA_ABERTAS}m)</th>
+          <th>HE paga ({JANELA_ABERTAS}m)</th>
+          <th>Saldo (folha fechada)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {pessoas.map((p) => (
+          <tr key={p.cracha} className="bh-clicavel" onClick={() => onAbrir(p)}>
+            <td><b>{p.nome || "—"}</b></td>
+            <td className="dp-num dp-mono">{p.cracha}</td>
+            <td>{p.funcao || "—"}</td>
+            <td>
+              <span className={`dp-pill ${normalizar(p.situacao) === "ativo" ? "mute" : "accent"}`}>
+                {p.situacao || "—"}
+              </span>
+            </td>
+            <td className="dp-num">{umaCasa(p.apurada)}</td>
+            <td className="dp-num">{umaCasa(p.paga)}</td>
+            <td className="dp-num">
+              <span className={`dp-pill ${classeSinal(p.saldo ?? 0)} dp-mono`}>{emHoras(p.saldo)}</span>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

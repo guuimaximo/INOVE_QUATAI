@@ -1975,6 +1975,108 @@
    número dela é o que está inflando o acumulado das linhas seguintes. */
 .dp360 tr.bh-mes-aberto > td { background: var(--dp-warn-bg); }
 
+/* ── as abas do Banco de Horas (25/09/2026): Resumo, Mês, Setor ── */
+.dp360 .bh-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  padding: 12px 20px 4px;
+}
+.dp360 .bh-grade .bh-placa { min-width: 0; }
+.dp360 .bh-duas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 10px;
+  padding: 8px 20px;
+}
+.dp360 .bh-secao { min-width: 0; }
+.dp360 .bh-secao h4 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.dp360 .bh-secao h4 .dp-link,
+.dp360 .bh-secao h4 button {
+  border: 0;
+  background: none;
+  color: var(--dp-accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.dp360 .bh-legenda { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; font-size: 11.5px; color: var(--dp-muted); }
+.dp360 .bh-legenda i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+.dp360 .bh-legenda .ap,
+.dp360 .bh-serie .ap { background: var(--dp-warn-ink); }
+.dp360 .bh-legenda .pg,
+.dp360 .bh-serie .pg { background: var(--dp-ok-ink); }
+.dp360 .bh-serie { display: flex; align-items: stretch; gap: 6px; height: 170px; }
+.dp360 .bh-serie .col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.dp360 .bh-serie .col:hover { background: var(--dp-surface-2); }
+.dp360 .bh-serie .barras { flex: 1; width: 100%; display: flex; align-items: flex-end; gap: 2px; padding: 0 2px; }
+.dp360 .bh-serie .barras i { flex: 1; min-height: 1px; border-radius: 3px 3px 0 0; }
+.dp360 .bh-serie .rot { font-size: 10.5px; color: var(--dp-muted); white-space: nowrap; }
+.dp360 .bh-serie .col.aberto .rot { color: var(--dp-warn-ink); font-weight: 700; }
+.dp360 .bh-serie .sal { font-size: 10px; font-family: var(--dp-mono); white-space: nowrap; }
+.dp360 .bh-lista { list-style: none; margin: 0; padding: 0; }
+.dp360 .bh-lista li + li { border-top: 1px solid var(--dp-border); }
+.dp360 .bh-lista button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--dp-ink);
+  text-align: left;
+  cursor: pointer;
+}
+.dp360 .bh-lista button:hover { background: var(--dp-surface-2); }
+.dp360 .bh-lista .sub { color: var(--dp-muted); font-size: 11px; }
+.dp360 .bh-mini { font-size: 12.5px; }
+.dp360 .bh-rolagem { overflow-x: auto; }
+.dp360 tr.bh-clicavel { cursor: pointer; }
+.dp360 tr.bh-setor { cursor: pointer; }
+.dp360 tr.bh-setor.aberto > td { background: var(--dp-accent-soft); }
+.dp360 tr.bh-setor-det > td {
+  background: var(--dp-surface-2);
+  padding: 10px 14px 14px;
+  /* a célula da grade é nowrap: sem isto a linha das funções esticava a tabela do setor
+     para 2.600 px e empurrava as colunas de saldo para fora da tela */
+  white-space: normal;
+}
+@media (max-width: 640px) {
+  /* no celular a marca ocupa a barra inteira e as abas sumiam (largura zero) */
+  .dp360 .bh-topbar { flex-wrap: wrap; }
+  .dp360 .bh-topbar .dp-tabs { flex: 1 1 100%; }
+  .dp360 .bh-grade { padding: 12px 12px 4px; }
+  .dp360 .bh-duas { grid-template-columns: 1fr; padding: 8px 12px; }
+  .dp360 .bh-serie .sal { display: none; }
+}
+
 /* ═══ FOLGAS · o ponto sugerido do dia e o histórico do bot (prefixo `fg-`) ════
  * Porte de `.dedit`/`.hin` (app/ui/styles.css do DP360 desktop, usadas pelo
  * `editorSug`) e do pop-up `abreHistBot`. Os dois blocos vivem DENTRO do painel

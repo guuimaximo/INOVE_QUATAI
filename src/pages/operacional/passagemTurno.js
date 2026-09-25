@@ -173,17 +173,54 @@ export async function lerFrotaParadaDoDia(dia) {
   };
 }
 
-/* Reservas manhã/tarde: o Controle de Reservas do dia, pela hora de entrada (antes do
-   meio-dia = manhã). Só uma SUGESTÃO para o plantão — reserva de verdade é quem ficou à
-   disposição, e isso o plantão confirma. */
-export async function lerReservasDoDia(dia) {
-  const { data, error } = await supabase.from("reservas_motoristas").select("hora_entrada").eq("data_referencia", dia);
+/* ── AS RESERVAS DO DIA, DO CONTROLE DE RESERVAS ──────────────────────────────────
+   Uma leitura serve para duas coisas: os números "Reservas manhã/tarde" (só uma SUGESTÃO
+   para o plantão, que confirma) e a lista de quem FICOU NA RESERVA. O período é pela hora
+   de entrada: antes do meio-dia é manhã (as reservas da tarde entram 12:30 ou depois). */
+export async function lerReservistasDoDia(dia) {
+  const { data, error } = await supabase
+    .from("reservas_motoristas")
+    .select("id, funcionario_cracha, funcionario_nome, hora_entrada, hora_saida, cobertura, observacao")
+    .eq("data_referencia", dia)
+    .order("hora_entrada", { ascending: true });
   if (error) throw error;
-  const horas = (data || []).map((r) => String(r.hora_entrada ?? "").slice(0, 5));
+  return (data || []).map((r) => {
+    const entrada = String(r.hora_entrada ?? "").slice(0, 5);
+    return {
+      id: r.id,
+      chapa: normChapa(r.funcionario_cracha),
+      nome: String(r.funcionario_nome ?? "").trim(),
+      entrada,
+      saida: String(r.hora_saida ?? "").slice(0, 5),
+      periodo: entrada ? (entrada < "12:00" ? "MANHA" : "TARDE") : "",
+      cobertura: String(r.cobertura ?? "").trim(),
+      observacao: String(r.observacao ?? "").trim(),
+    };
+  });
+}
+
+export function contarReservas(lista) {
   return {
-    reservas_manha: horas.filter((h) => h && h < "12:00").length,
-    reservas_tarde: horas.filter((h) => h && h >= "12:00").length,
+    reservas_manha: (lista || []).filter((r) => r.periodo === "MANHA").length,
+    reservas_tarde: (lista || []).filter((r) => r.periodo === "TARDE").length,
   };
+}
+
+/* QUEM SUBSTITUIU (dono, 25/09/2026: "os motoristas que ficarem em reserva e não
+   substituírem não aparecem — puxa do Controle de Reservas"). Quem substituiu já aparecia
+   nas faltas, como substituto; quem ficou à disposição sem assumir nada sumia do fechamento.
+   Substituir é assumir uma TABELA, e no Controle de Reservas ela vai no campo "Onde/o que
+   cobriu": medido em 25/09/2026, 116 dos 118 preenchidos são tabela ("19TR.5A", "04TR 08A",
+   "19VP3A", "34TR"). Os outros dois são texto — "Ajudou em 2 SOS.", "Reserva de apoio no
+   terminal tereza" — e o campo vazio (48) é quem ficou na garagem: esses NÃO substituíram.
+   Também conta quem o plantão lançou como substituto de uma falta do dia, mesmo sem a
+   tabela no Controle. */
+const TABELA_NA_COBERTURA = /\d{1,2}\s*(TR|VP)/i;
+
+export function reservaSubstituiu(reserva, faltas = []) {
+  if (TABELA_NA_COBERTURA.test(String(reserva?.cobertura ?? ""))) return true;
+  const chapa = normChapa(reserva?.chapa);
+  return !!chapa && (faltas || []).some((f) => normChapa(f.substituto_chapa) === chapa);
 }
 
 /* O retrato que o turno guarda (a lista dos dias lê daqui, sem ler SOS e PCM de novo). */

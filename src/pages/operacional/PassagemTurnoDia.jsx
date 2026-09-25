@@ -12,15 +12,15 @@ import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import {
   FaArrowLeft, FaChevronLeft, FaChevronRight, FaDownload, FaFileImage, FaFilePdf,
-  FaPlus, FaSyncAlt, FaTrashAlt, FaUserTimes, FaClipboardList, FaDatabase, FaLock,
+  FaPlus, FaSyncAlt, FaTrashAlt, FaUserTimes, FaClipboardList, FaDatabase, FaLock, FaUserClock,
 } from "react-icons/fa";
 import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
 import FechamentoTurnoRelatorio from "./FechamentoTurnoRelatorio";
 import {
   PERIODOS, TABELA_FALTAS, TABELA_INTERCORRENCIAS, TABELA_TURNOS,
-  TIPOS_OCORRENCIA, chapasNoTexto, emAberto, dataPorExtenso, isoLocal, lerFrotaParadaDoDia, lerMotoristas,
-  lerOcorrenciasDoDia, lerReservasDoDia, normChapa, podeEditarDia, quemEsta, retratoDoSistema, somaDias,
+  TIPOS_OCORRENCIA, chapasNoTexto, contarReservas, emAberto, dataPorExtenso, isoLocal, lerFrotaParadaDoDia, lerMotoristas,
+  lerOcorrenciasDoDia, lerReservistasDoDia, normChapa, podeEditarDia, quemEsta, reservaSubstituiu, retratoDoSistema, somaDias,
   veiculoNoTexto,
 } from "./passagemTurno";
 
@@ -61,6 +61,7 @@ export default function PassagemTurnoDia() {
   const [inter, setInter] = useState([]);
   const [motoristas, setMotoristas] = useState(new Map());
   const [sistema, setSistema] = useState({}); // reservas sugeridas pelo Controle de Reservas
+  const [reservistas, setReservistas] = useState(null); // { lista, erro } do Controle de Reservas
   const [ocorrencias, setOcorrencias] = useState(null); // do módulo de SOS
   const [frota, setFrota] = useState(null); // GNS e faixa amarela do PCM do dia
   const [tipoAberto, setTipoAberto] = useState("avaria");
@@ -101,7 +102,10 @@ export default function PassagemTurnoDia() {
     lerMotoristas().then(setMotoristas).catch(() => setMotoristas(new Map()));
   }, []);
   useEffect(() => {
-    lerReservasDoDia(dia).then(setSistema).catch(() => setSistema({}));
+    setReservistas(null);
+    lerReservistasDoDia(dia)
+      .then((lista) => { setReservistas({ lista, erro: false }); setSistema(contarReservas(lista)); })
+      .catch(() => { setReservistas({ lista: [], erro: true }); setSistema({}); });
     setOcorrencias(null);
     setFrota(null);
     lerOcorrenciasDoDia(dia).then(setOcorrencias).catch(() => setOcorrencias({ porTipo: {}, contagem: {}, total: 0, erro: true }));
@@ -163,8 +167,10 @@ export default function PassagemTurnoDia() {
   };
 
   const puxarReservas = async () => {
-    const atual = await lerReservasDoDia(dia).catch(() => null);
-    if (!atual) { mostrar("Não foi possível ler o Controle de Reservas."); return; }
+    const lista = await lerReservistasDoDia(dia).catch(() => null);
+    if (!lista) { mostrar("Não foi possível ler o Controle de Reservas."); return; }
+    setReservistas({ lista, erro: false });
+    const atual = contarReservas(lista);
     setSistema(atual);
     await salvarCampos(atual);
   };
@@ -328,6 +334,8 @@ export default function PassagemTurnoDia() {
   const faltasPor = (p) => faltas.filter((f) => f.periodo === p);
   const listaDoTipo = (id) => ocorrencias?.porTipo?.[id] || [];
   const interPor = (p) => inter.filter((i) => i.periodo === p);
+  // quem ficou à disposição e não assumiu tabela nenhuma (regra em `reservaSubstituiu`)
+  const ficaramNaReserva = (reservistas?.lista || []).filter((r) => !reservaSubstituiu(r, faltas));
   const hoje = isoLocal();
 
   return (
@@ -632,6 +640,45 @@ export default function PassagemTurnoDia() {
               ))}
             </section>
 
+            {/* FICARAM NA RESERVA (do Controle de Reservas) */}
+            <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+                <h2 className="font-black text-slate-800 inline-flex items-center gap-2"><FaUserClock /> Ficaram na reserva</h2>
+                <span className="text-xs text-slate-500">automático, do Controle de Reservas · quem não substituiu ninguém</span>
+              </div>
+              {!reservistas ? (
+                <div className="text-sm text-slate-400">Lendo o Controle de Reservas…</div>
+              ) : reservistas.erro ? (
+                <div className="text-sm text-red-600 font-semibold">Não foi possível ler o Controle de Reservas.</div>
+              ) : !reservistas.lista.length ? (
+                <div className="text-sm text-slate-400">Nenhuma reserva lançada no Controle de Reservas neste dia.</div>
+              ) : !ficaramNaReserva.length ? (
+                <div className="text-sm text-slate-400">As {reservistas.lista.length} reservas do dia assumiram tabela.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-slate-500">
+                        <th className="py-1 pr-2">Período</th><th className="pr-2">Motorista</th><th className="pr-2">Chapa</th>
+                        <th className="pr-2">Horário</th><th className="pr-2">Observação</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ficaramNaReserva.map((r) => (
+                        <tr key={r.id} className="border-t border-slate-100 align-top">
+                          <td className="py-1.5 pr-2">{PERIODOS.find((p) => p.id === r.periodo)?.label || "—"}</td>
+                          <td className="pr-2 font-bold text-slate-800">{r.nome || nomeDe(r.chapa) || "—"}</td>
+                          <td className="pr-2 font-mono">{r.chapa || "—"}</td>
+                          <td className="pr-2 font-mono whitespace-nowrap">{r.entrada || "—"} – {r.saida || "—"}</td>
+                          <td className="pr-2 text-slate-600">{[r.cobertura, r.observacao].filter(Boolean).join(" · ") || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
             {/* INTERCORRÊNCIAS */}
             <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
               <h2 className="font-black text-slate-800 mb-1">Intercorrências</h2>
@@ -755,6 +802,8 @@ export default function PassagemTurnoDia() {
                 ref={relatorioRef}
                 turno={{ ...(turno || {}), data_referencia: dia }}
                 faltas={faltas}
+                ficaramNaReserva={ficaramNaReserva}
+                reservasNoDia={reservistas && !reservistas.erro ? reservistas.lista.length : null}
                 intercorrencias={inter}
                 ocorrencias={ocorrencias}
                 frota={frota}

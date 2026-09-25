@@ -1,7 +1,8 @@
 // O FECHAMENTO DE TURNO que vira PNG e PDF (25/09/2026). Dono, sobre a primeira versão
 // (cópia da planilha verde): "o layout não precisa ser exatamente esse — pensa em algo mais
 // bonito". Aqui é um relatório de cartões: números do turno, ocorrências do dia (do SOS,
-// com as avarias linha a linha), frota parada (do PCM), faltas e intercorrências.
+// com as avarias linha a linha), frota parada (do PCM), faltas, quem ficou na reserva (do
+// Controle de Reservas) e intercorrências.
 //
 // Estilo INLINE com cores fixas, de propósito: o bloco é fotografado (ver `fotografar` em
 // PassagemTurnoDia.jsx) e classe utilitária com variável de tema pode sair errada na foto.
@@ -171,7 +172,7 @@ function ListaIntercorrencias({ titulo, itens, nomeDe }) {
 }
 
 const FechamentoTurnoRelatorio = forwardRef(function FechamentoTurnoRelatorio(
-  { turno, faltas, intercorrencias, ocorrencias, frota, nomeDe = () => "" },
+  { turno, faltas, ficaramNaReserva = [], reservasNoDia = null, intercorrencias, ocorrencias, frota, nomeDe = () => "" },
   ref,
 ) {
   const t = turno || {};
@@ -280,6 +281,29 @@ const FechamentoTurnoRelatorio = forwardRef(function FechamentoTurnoRelatorio(
           <TabelaFaltas titulo="Manhã" faltas={faltasManha} nomeDe={nomeDe} />
           <TabelaFaltas titulo="Tarde" faltas={faltasTarde} nomeDe={nomeDe} />
         </Grade>
+      </Secao>
+
+      {/* FICARAM NA RESERVA: quem substituiu já está nas faltas; aqui vai quem não assumiu nada */}
+      <Secao titulo={`Ficaram na reserva · ${ficaramNaReserva.length}`} extra="do Controle de Reservas · não substituíram">
+        {!ficaramNaReserva.length ? (
+          <Vazio
+            texto={reservasNoDia === null ? "Controle de Reservas não lido."
+              : reservasNoDia === 0 ? "Nenhuma reserva lançada no Controle de Reservas."
+                : "Nenhuma — todas as reservas do dia assumiram tabela."}
+          />
+        ) : (
+          <Tabela
+            cabecalho={["Período", "Motorista", "Horário", "Observação"]}
+            linhas={ficaramNaReserva.map((r) => (
+              <tr key={r.id}>
+                <td style={td}>{r.periodo === "MANHA" ? "Manhã" : r.periodo === "TARDE" ? "Tarde" : "—"}</td>
+                <td style={td}>{pessoa(r.nome || nomeDe(r.chapa), r.chapa)}</td>
+                <td style={{ ...td, fontFamily: "Consolas, monospace", whiteSpace: "nowrap" }}>{r.entrada || "—"} – {r.saida || "—"}</td>
+                <td style={td}>{[r.cobertura, r.observacao].filter(Boolean).join(" · ") || <span style={{ color: C.suave }}>—</span>}</td>
+              </tr>
+            ))}
+          />
+        )}
       </Secao>
 
       {/* INTERCORRÊNCIAS */}

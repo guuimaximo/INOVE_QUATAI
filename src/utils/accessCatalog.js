@@ -96,7 +96,9 @@ export const APP_ACCESS_PAGES = [
   { key: "pessoas_funcionarios", label: "Funcionarios", category: "Pessoas", path: "/funcionarios", patterns: ["/funcionarios"] },
   { key: "pessoas_ferias", label: "Ferias", category: "Pessoas", path: "/ferias", patterns: ["/ferias"] },
   { key: "pessoas_atestados", label: "Atestados", category: "Pessoas", path: "/atestados", patterns: ["/atestados"] },
-  { key: "pessoas_reservas", label: "Controle de Reservas", category: "Pessoas", path: "/reservas", patterns: ["/reservas"] },
+  // No menu Operacional desde 25/09/2026; a chave segue "pessoas_reservas" porque é ela que
+  // está gravada no acesso de cada usuário e perfil — renomear tiraria a tela de quem já vê.
+  { key: "pessoas_reservas", label: "Controle de Reservas", category: "Operacional", path: "/reservas", patterns: ["/reservas"] },
   { key: "pessoas_organograma", label: "Organograma", category: "Pessoas", path: "/organograma", patterns: ["/organograma", "/organograma-canvas", "/organograma-manutencao"] },
   { key: "pessoas_vagas", label: "Vagas", category: "Pessoas", path: "/vagas", patterns: ["/vagas"] },
   { key: "config_niveis", label: "Configuracoes Niveis", category: "Configuracoes", path: "/niveis-acesso", patterns: ["/niveis-acesso"] },

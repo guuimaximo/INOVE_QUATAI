@@ -200,19 +200,20 @@ export default function Sidebar() {
           { path: "/funcionarios", label: "Funcionários", icon: <FaIdBadge /> },
           { path: "/ferias", label: "Ferias", icon: <FaCalendarAlt /> },
           { path: "/atestados", label: "Atestados", icon: <FaFileMedical /> },
-          { path: "/reservas", label: "Controle de Reservas", icon: <FaUserClock /> },
           { path: "/organograma", label: "Organograma", icon: <FaSitemap /> },
           { path: "/vagas", label: "Vagas", icon: <FaBriefcase /> },
         ],
       },
 
       // O fechamento do plantão (25/09/2026). Grupo próprio: o módulo Operacional vai
-      // crescer além da Passagem de Turno.
+      // crescer além da Passagem de Turno. O Controle de Reservas veio de Pessoas (dono,
+      // 25/09/2026) — o endereço /reservas ficou o mesmo, para não quebrar acesso nem atalho.
       operacional: {
         label: "Operacional",
         icon: <FaExchangeAlt />,
         tabs: [
           { path: "/operacional/passagem-turno", label: "Passagem de Turno", icon: <FaClipboardList /> },
+          { path: "/reservas", label: "Controle de Reservas", icon: <FaUserClock /> },
         ],
       },
 
@@ -359,7 +360,7 @@ export default function Sidebar() {
   useEffect(() => {
     const path = location.pathname;
     if (path.startsWith("/pcm")) setPcmOpen(true);
-    if (path.startsWith("/operacional")) setOperacionalOpen(true);
+    if (path.startsWith("/operacional") || path.startsWith("/reservas")) setOperacionalOpen(true);
     if (path.startsWith("/dp360")) setDp360Open(true);
     if (path.startsWith("/monitoramento") || path.startsWith("/guard-")) setGuardOpen(true);
     if (path.startsWith("/desempenho") || path.startsWith("/diesel")) setDesempenhoDieselOpen(true);
@@ -373,7 +374,7 @@ export default function Sidebar() {
     if (path.startsWith("/embarcados")) setEmbarcadosOpen(true);
     if (path.startsWith("/estrutura-fisica")) setEstruturaFisicaOpen(true);
     if (path.startsWith("/suprimentos")) setSuprimentosOpen(true);
-    if (path.startsWith("/funcionarios") || path.startsWith("/organograma") || path.startsWith("/atestados") || path.startsWith("/reservas")) setPessoasOpen(true);
+    if (path.startsWith("/funcionarios") || path.startsWith("/organograma") || path.startsWith("/atestados")) setPessoasOpen(true);
     if (path.startsWith("/usuarios") || path.startsWith("/niveis-acesso") || path.startsWith("/controle-dados")) setConfigOpen(true);
   }, [location.pathname]);
 

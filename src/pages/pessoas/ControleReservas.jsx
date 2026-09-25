@@ -220,7 +220,7 @@ function ReservaModal({ open, onClose, onSave, saving, motoristas, editar }) {
       <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-start justify-between border-b border-slate-200 bg-white/80 px-6 py-4">
           <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-blue-600">Pessoas · Controle de Reservas</div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-blue-600">Operacional · Controle de Reservas</div>
             <div className="mt-1 text-xl font-black text-slate-900">{editar ? "Editar reserva" : "Nova reserva"}</div>
             <div className="text-sm text-slate-500">Motorista de reserva à disposição da empresa no dia.</div>
           </div>

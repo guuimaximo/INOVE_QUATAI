@@ -65,3 +65,16 @@ Mande o **PDF** ao usuário para revisão. Se ele pedir ajustes, repita do ponto
 - 3 projetos Supabase (secrets já no repo): INOVE, BCNT, Base_transnet.
 - **Pendências conhecidas:** página de Aderência (regra em revisão) e alguns textos de
   "Considerações" que ainda citam meses fixos — não são bloqueantes.
+
+## PASSO 5 (opcional) — PAINEL INTERATIVO
+
+Cada run também publica `painel_dados.enc.json` no artefato: o dado linha a linha de todos os
+motoristas, **cifrado** (este repositório é público). Para montar o painel HTML (clica no
+motorista → dia a dia; clica na linha → motoristas), na máquina do Guilherme:
+
+    python "C:\Users\Guilh\Repositorios\Flash Report - Diesel\painel\montar_painel.py"
+
+Ele baixa o artefato do último run da `main`, decifra com a chave privada
+(`%USERPROFILE%\.flash-painel\painel_priv.pem`, que NÃO está no GitHub) e grava
+`Painel Diesel - AAAA-MM-DD.html`. A chave pública (`painel_pub.pem`) fica no repositório.
+Nunca commite o HTML do painel nem o JSON decifrado.

@@ -750,48 +750,157 @@ function BlocoAlmoco({ titulo, ini, fim, travado, tom }) {
   );
 }
 
-/* ---------- o que o PLANTÃO registrou (Operacional · Passagem de Turno) ---------- */
+/* ---------- o que a PASSAGEM DE TURNO tem sobre ele (Operacional) ---------- */
 /**
- * A falta e as intercorrências que o plantão lançou para ESTA chapa neste dia (25/09/2026).
- * Dono: "intercorrências têm que gravar a chapa do motorista, porque o DP360 vai precisar
- * trazer a observação" — ex.: "30060914 trouxe o veículo 222214 para a garagem porque o
- * 30060916 passou mal" é subsídio para a análise do ponto dos DOIS. Só aparece quando há
- * algo; sem tabela ou sem permissão, `lerPlantaoDoMotorista` devolve vazio.
+ * Dono, 25/09/2026: "todas as observações da passagem de turno do motorista precisam
+ * aparecer no DP360 — encaixa nesse pop-up". Primeiro virou um quadro embaixo da linha do
+ * tempo, e o dono vetou: "quando mandar a mensagem vai jogar para baixo — coloca lá em
+ * cima um botão". Então é um BOTÃO no cabeçalho, ao lado do status, que abre a lista POR
+ * CIMA do cartão (como as viagens). O botão existe sempre: com o número de registros
+ * quando há o que ver; apagado, com o motivo no title, quando não há — "não houve
+ * passagem no dia" e "a passagem não cita esta chapa" são coisas diferentes.
+ *
+ * A ordem é a do dia: a falta (dele, ou a que ele cobriu), depois intercorrências e SOS
+ * pela hora, e por fim as linhas das observações e dos malotes que citam a chapa.
+ * Leitura em `lerPlantaoDoMotorista`; sem tabela ou sem permissão, volta vazio.
  */
-function BlocoPlantao({ plantao, cracha }) {
-  const faltas = plantao?.faltas || [];
-  const inter = plantao?.intercorrencias || [];
-  if (!faltas.length && !inter.length) return null;
-  const eu = normChapa(cracha);
-  const periodo = (p) => (p === "MANHA" ? "manhã" : "tarde");
+const PERIODO_PT = { MANHA: "manhã", TARDE: "tarde" };
+
+// a chapa DELE no texto do plantão, em destaque ("30060914 trouxe o carro porque o 30060916…")
+function marcarChapa(texto, eu) {
+  const partes = String(texto ?? "").split(/((?<![\d.])\d{7,8}(?![\d.]))/);
+  return partes.map((p, i) =>
+    i % 2 && normChapa(p) === eu ? <b key={i} className="pt-eu">{p}</b> : p,
+  );
+}
+
+function itensDoPlantao(plantao, eu) {
+  if (!plantao) return [];
+  const pessoa = (nome, chapa) => [nome, chapa].filter(Boolean).join(" · ");
+  const faltas = (plantao.faltas || []).map((f) =>
+    normChapa(f.chapa) === eu
+      ? {
+        id: `f${f.id}`, classe: "pt-falta", rotulo: "Falta", quando: PERIODO_PT[f.periodo] || "",
+        texto: `Faltou${f.linha ? ` · linha ${f.linha}` : ""}.`,
+        detalhe: f.substituto_chapa || f.substituto_nome
+          ? `Substituído por ${pessoa(f.substituto_nome, f.substituto_chapa)}${f.substituto_linha ? ` · ${f.substituto_linha}` : ""}`
+          : "Sem substituto lançado.",
+        por: f.criado_por,
+      }
+      : {
+        id: `s${f.id}`, classe: "pt-subst", rotulo: "Substituiu", quando: PERIODO_PT[f.periodo] || "",
+        texto: `Cobriu a falta de ${pessoa(f.operador, f.chapa)}.`,
+        detalhe: f.substituto_linha || f.linha ? `Linha ${f.substituto_linha || f.linha}` : "",
+        por: f.criado_por,
+      });
+  const doDia = [
+    ...(plantao.intercorrencias || []).map((i) => {
+      const outros = (i.chapas || []).filter((c) => c !== eu);
+      return {
+        id: `i${i.id}`, classe: "pt-inter", rotulo: "Intercorrência", hora: String(i.hora || "").slice(0, 5),
+        quando: [PERIODO_PT[i.periodo], String(i.hora || "").slice(0, 5)].filter(Boolean).join(" · "),
+        veiculo: i.veiculo, texto: marcarChapa(i.texto, eu),
+        detalhe: outros.length
+          ? `Também citado: ${outros.map((c) => pessoa(plantao.nomes?.[c], c)).join("; ")}`
+          : "",
+        por: i.criado_por,
+      };
+    }),
+    ...(plantao.sos || []).map((a) => {
+      const aberto = String(a.status ?? "").trim().toLowerCase() === "aberto" || !a.ocorrencia;
+      return {
+        id: `o${a.id}`, classe: "pt-sos", rotulo: `SOS ${a.numero_sos || ""}`.trim(), hora: String(a.hora_sos || "").slice(0, 5),
+        quando: String(a.hora_sos || "").slice(0, 5), veiculo: a.veiculo,
+        selo: aberto ? "em aberto" : String(a.ocorrencia || "").toLowerCase(),
+        texto: a.reclamacao_motorista || "—",
+        detalhe: [
+          [a.linha, a.tabela_operacional].filter(Boolean).join(" · "),
+          a.problema_encontrado ? `Manutenção: ${a.problema_encontrado}` : "",
+        ].filter(Boolean).join(" — "),
+      };
+    }),
+  ].sort((a, b) => (a.hora || "99").localeCompare(b.hora || "99"));
+  const anotacoes = (plantao.anotacoes || []).map((n, k) => ({
+    id: `a${k}`, classe: "pt-anot", rotulo: n.tipo === "malote" ? "Malote" : "Observação do turno",
+    texto: marcarChapa(n.texto, eu),
+  }));
+  return [...faltas, ...doDia, ...anotacoes];
+}
+
+// por que o botão está apagado (vai no title dele)
+function semPlantao(plantao, dia) {
+  if (plantao === null) return "Lendo a passagem de turno…";
+  return plantao.temTurno
+    ? `A passagem de turno de ${fmtData(dia)} não cita esta chapa.`
+    : `Não houve passagem de turno lançada em ${fmtData(dia)}.`;
+}
+
+function BotaoPlantao({ plantao, cracha, dia, aoAbrir }) {
+  const n = itensDoPlantao(plantao, normChapa(cracha)).length;
+  if (!n) return <BotaoSemAlvo titulo={semPlantao(plantao, dia)}>📋 Passagem de turno</BotaoSemAlvo>;
   return (
-    <section className="dp-card" style={{ margin: "0 0 10px", borderLeft: "4px solid #12908e" }}>
-      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>📋 Plantão · passagem de turno</div>
-      {faltas.map((f) => (
-        <div key={f.id} style={{ fontSize: 12.5, marginBottom: 4 }}>
-          {normChapa(f.chapa) === eu ? (
-            <>
-              <b>Falta</b> ({periodo(f.periodo)}){f.linha ? ` · linha ${f.linha}` : ""}
-              {f.substituto_nome || f.substituto_chapa
-                ? ` · substituído por ${[f.substituto_nome, f.substituto_chapa].filter(Boolean).join(" ")}`
-                : ""}
-            </>
+    <button
+      type="button"
+      className="dp-btn pt-botao"
+      onClick={aoAbrir}
+      title="O que o plantão registrou sobre ele neste dia: falta, substituição, intercorrências, SOS e observações"
+    >
+      📋 Passagem de turno <b className="pt-conta">{n}</b>
+    </button>
+  );
+}
+
+function ModalPlantao({ plantao, cracha, nome, dia, aoFechar }) {
+  useEffect(() => {
+    const escapa = (e) => {
+      if (e.key === "Escape") {
+        e.stopPropagation(); // fecha SÓ este; o cartão de trás continua aberto
+        aoFechar();
+      }
+    };
+    document.addEventListener("keydown", escapa, true);
+    return () => document.removeEventListener("keydown", escapa, true);
+  }, [aoFechar]);
+  const itens = itensDoPlantao(plantao, normChapa(cracha));
+  return (
+    <div className="rv-overlay rv-overlay-alto" onClick={(e) => e.target === e.currentTarget && aoFechar()}>
+      <div className="rv-box dp-card" style={{ maxWidth: 640, padding: 0 }}>
+        <header className="rv-head">
+          <div className="min-w-0">
+            <b style={{ fontSize: 14 }}>📋 Passagem de turno</b>
+            <div className="dp-muted" style={{ fontSize: 12, marginTop: 2 }}>
+              <b style={{ color: "var(--dp-ink)" }}>{nome || "—"}</b>
+              <span className="dp-num"> · crachá {cracha} · {fmtData(dia)}</span>
+              <span> · o que o plantão registrou sobre ele</span>
+            </div>
+          </div>
+          <button type="button" onClick={aoFechar} className="dp-btn" aria-label="Fechar">
+            <X size={14} />
+          </button>
+        </header>
+        <div className="rv-corpo rv-corpo-pad">
+          {!itens.length ? (
+            <p className="dp-muted pt-vazio">{semPlantao(plantao, dia)}</p>
           ) : (
-            <>
-              <b>Substituiu</b> {[f.operador, f.chapa].filter(Boolean).join(" ")} ({periodo(f.periodo)})
-              {f.substituto_linha || f.linha ? ` · linha ${f.substituto_linha || f.linha}` : ""}
-            </>
+            <ul className="pt-lista">
+              {itens.map((it) => (
+                <li key={it.id} className={`pt-item ${it.classe}`}>
+                  <div className="pt-cab">
+                    <span className="pt-tag">{it.rotulo}</span>
+                    {it.quando && <span className="pt-quando dp-num">{it.quando}</span>}
+                    {it.veiculo && <span className="pt-veic dp-mono">🚌 {it.veiculo}</span>}
+                    {it.selo && <span className="pt-selo">{it.selo}</span>}
+                  </div>
+                  <div className="pt-texto">{it.texto}</div>
+                  {it.detalhe && <div className="pt-det dp-muted">{it.detalhe}</div>}
+                  {it.por && <div className="pt-por dp-faint">lançado por {it.por}</div>}
+                </li>
+              ))}
+            </ul>
           )}
-          <span className="dp-faint"> · lançado por {f.criado_por || "—"}</span>
         </div>
-      ))}
-      {inter.map((i) => (
-        <div key={i.id} style={{ fontSize: 12.5, marginBottom: 4 }}>
-          <b>Intercorrência</b> ({periodo(i.periodo)}{i.hora ? ` ${i.hora}` : ""}): {i.texto}
-          <span className="dp-faint"> · {i.criado_por || "—"}</span>
-        </div>
-      ))}
-    </section>
+      </div>
+    </div>
   );
 }
 
@@ -1844,6 +1953,7 @@ export default function CartaoDoDia({
   // O PLANTÃO (Passagem de Turno): leitura própria, fora do Promise.all das fontes do
   // ponto — ela vem de outra base (a do INOVE) e não pode atrasar nem derrubar o cartão.
   const [plantao, setPlantao] = useState(null);
+  const [verPlantao, setVerPlantao] = useState(false);
   useEffect(() => {
     let ativo = true;
     setPlantao(null);
@@ -2078,11 +2188,11 @@ export default function CartaoDoDia({
     const escapa = (e) => {
       // Com um pop-up aberto por cima (viagens ou pedido de exclusão), o Esc fecha SÓ
       // ele — quem trata é o próprio — senão os dois sumiriam de uma vez.
-      if (e.key === "Escape" && !verViagens && !verDesfecho && !pedirExclusao && !perguntando.current) aoFechar();
+      if (e.key === "Escape" && !verViagens && !verDesfecho && !verPlantao && !pedirExclusao && !perguntando.current) aoFechar();
     };
     document.addEventListener("keydown", escapa);
     return () => document.removeEventListener("keydown", escapa);
-  }, [aoFechar, verViagens, pedirExclusao]);
+  }, [aoFechar, verViagens, verDesfecho, verPlantao, pedirExclusao]);
 
   const iv = extra.intervalo || {};
   const gpsEfetivo = gps || extra.gps;
@@ -2603,6 +2713,8 @@ export default function CartaoDoDia({
               titulo="O gestor lançou reserva para este dia no Controle de Reservas — a anotação está no cartão."
             />
           )}
+          {/* a PASSAGEM DE TURNO abre por cima (dono: "coloca lá em cima um botão") */}
+          <BotaoPlantao plantao={plantao} cracha={cracha} dia={dia} aoAbrir={() => setVerPlantao(true)} />
           {/* CORRIGIDO e CONFERIDO tomam o lugar do status da régua (dono, 16/09/2026: "o
               status sai de REVISAR e vira CORRIGIDO"). O status de antes fica no title. */}
           {statusSelo ||
@@ -2639,7 +2751,6 @@ export default function CartaoDoDia({
               INTEIRO (muda a operação real, a gordura e a régua do GPS) e o dono
               reclamou justamente que ela "não estava vindo do controle de reserva". */}
           <BlocoReserva reserva={extra.reserva} />
-          <BlocoPlantao plantao={plantao} cracha={cracha} />
 
           {/* A SEMANA vem ANTES das colunas, e antes de qualquer número do dia: ela é o
               contexto que decide se o dia sequer devia ter ponto. Enfiada numa coluna,
@@ -3262,6 +3373,18 @@ export default function CartaoDoDia({
           do tempo e quer ver COMO FICOU sem perder o caso de vista. */}
       {verDesfecho && (
         <ComoFicouOPonto linha={linha} caso={caso} aoFechar={() => setVerDesfecho(false)} />
+      )}
+
+      {/* A PASSAGEM DE TURNO também abre por cima: o DP lê o que o plantão contou sem
+          perder de vista o cartão que está analisando. */}
+      {verPlantao && (
+        <ModalPlantao
+          plantao={plantao}
+          cracha={cracha}
+          nome={linha.nm_funcionario || ""}
+          dia={dia}
+          aoFechar={() => setVerPlantao(false)}
+        />
       )}
 
       {/* O pedido de exclusão também abre POR CIMA: quem vai mandar apagar uma batida

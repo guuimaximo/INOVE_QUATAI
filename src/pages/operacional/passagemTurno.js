@@ -266,15 +266,33 @@ export function retratoDoSistema(ocorrencias, frota) {
 }
 
 /* ── PARA O DP360 ────────────────────────────────────────────────────────────────
-   O que o plantão registrou sobre UM motorista num dia: as faltas (dele, ou em que ele
-   foi o substituto) e as intercorrências que citam a chapa dele. Degrada calado: sem
-   tabela ou sem permissão, devolve vazio e o cartão do ponto segue. */
+   TUDO o que a passagem de turno tem sobre UM motorista num dia (dono, 25/09/2026:
+   "todas as observações da passagem de turno do motorista precisam aparecer no DP360"):
+     · faltas    — a dele, ou a de alguém que ele substituiu;
+     · intercorrências que citam a chapa dele (e os nomes dos outros citados);
+     · anotações — as linhas das "Observações do turno" e dos "Malotes" que citam a chapa;
+     · sos       — os acionamentos do SOS com ele no dia (as ocorrências que o fechamento
+                   mostra; etiqueta excluída não conta).
+   `temTurno` diz se houve passagem lançada no dia — "nada sobre ele" e "não houve
+   passagem" são coisas diferentes para quem analisa o ponto. Degrada calado: sem tabela
+   ou sem permissão, cada parte volta vazia e o cartão do ponto segue. */
+const PLANTAO_VAZIO = { temTurno: false, faltas: [], intercorrencias: [], anotacoes: [], sos: [], nomes: {} };
+
+function linhasQueCitam(texto, chapa) {
+  return String(texto ?? "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && chapasNoTexto(l).includes(chapa));
+}
+
 export async function lerPlantaoDoMotorista(cracha, dia) {
   const chapa = normChapa(cracha);
   const d = String(dia ?? "").slice(0, 10);
-  if (!chapa || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return { faltas: [], intercorrencias: [] };
+  if (!chapa || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return PLANTAO_VAZIO;
+  const dados = (r) => (r.status === "fulfilled" && !r.value?.error ? r.value.data : null);
   try {
-    const [faltas, inter] = await Promise.all([
+    const [turno, faltas, inter, sos] = await Promise.allSettled([
+      supabase.from(TABELA_TURNOS).select("id, observacoes, malotes").eq("data_referencia", d).maybeSingle(),
       supabase
         .from(TABELA_FALTAS)
         .select("id, periodo, chapa, operador, linha, substituto_chapa, substituto_nome, substituto_linha, observacao, criado_por, criado_em")
@@ -285,13 +303,41 @@ export async function lerPlantaoDoMotorista(cracha, dia) {
         .select("id, periodo, hora, veiculo, texto, chapas, criado_por, criado_em")
         .eq("data_referencia", d)
         .contains("chapas", [chapa])
-        .order("criado_em", { ascending: true }),
+        .order("hora", { ascending: true, nullsFirst: true }),
+      // o SOS guarda a chapa com ou sem o zero da frente ("03602042" e "3602042")
+      supabase
+        .from("sos_acionamentos")
+        .select(COLUNAS_SOS)
+        .eq("data_sos", d)
+        .in("motorista_id", [chapa, `0${chapa}`])
+        .neq("status", "EXCLUIDA")
+        .order("hora_sos", { ascending: true }),
     ]);
+    const t = dados(turno);
+    const intercorrencias = dados(inter) || [];
+    const anotacoes = t
+      ? [
+        ...linhasQueCitam(t.observacoes, chapa).map((texto) => ({ tipo: "observacao", texto })),
+        ...linhasQueCitam(t.malotes, chapa).map((texto) => ({ tipo: "malote", texto })),
+      ]
+      : [];
+    // os nomes dos OUTROS motoristas citados nas intercorrências (quem analisa o ponto
+    // quer saber quem é o "30060916" do texto sem abrir outra tela)
+    const outros = [...new Set(intercorrencias.flatMap((i) => i.chapas || []))].filter((c) => c && c !== chapa);
+    const nomes = {};
+    if (outros.length) {
+      const r = await supabase.from("motoristas").select("chapa, nome").in("chapa", outros.flatMap((c) => [c, `0${c}`]));
+      (r.data || []).forEach((m) => { nomes[normChapa(m.chapa)] = String(m.nome ?? "").trim(); });
+    }
     return {
-      faltas: faltas.error ? [] : faltas.data || [],
-      intercorrencias: inter.error ? [] : inter.data || [],
+      temTurno: !!t,
+      faltas: dados(faltas) || [],
+      intercorrencias,
+      anotacoes,
+      sos: dados(sos) || [],
+      nomes,
     };
   } catch {
-    return { faltas: [], intercorrencias: [] };
+    return PLANTAO_VAZIO;
   }
 }

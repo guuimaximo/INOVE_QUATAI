@@ -4,6 +4,7 @@ import { supabase } from "../../supabase";
 import { AuthContext } from "../../context/AuthContext";
 import DateRangePopover from "../../components/DateRangePopover";
 import { HistoricoSOS, autorDoPasso } from "./sosAutoria";
+import { autorizarGestor } from "../../utils/autorizacaoGestor";
 import {
   FaSearch,
   FaEye,
@@ -114,6 +115,7 @@ function StatusTag({ status }) {
   if (s === "ABERTO") return <span className="bg-rose-100 text-rose-700 border border-rose-200 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">AG. OPERAÇÃO</span>;
   if (s === "EM ANDAMENTO") return <span className="bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">AG. MANUTENÇÃO</span>;
   if (s === "FECHADO") return <span className="bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">FECHADO</span>;
+  if (s === "EXCLUIDA") return <span className="bg-slate-800 text-white border border-slate-800 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">EXCLUÍDA</span>;
   return <span className="bg-slate-100 text-slate-500 border border-slate-200 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">{s || "—"}</span>;
 }
 
@@ -192,27 +194,118 @@ function LoginModal({ onConfirm, onCancel, title = "Acesso Restrito" }) {
   );
 }
 
+/* --- EXCLUIR ETIQUETA (25/09/2026) ---
+   Dono: "gestor pode apagar uma etiqueta de intervenção — ele coloca o login e a senha, e
+   ela não simplesmente apaga: fica como EXCLUÍDA, ele tem que falar o porquê e fica
+   gravado; não fica nos indicadores e aparece só na Central". Antes o botão era só do
+   Administrador e APAGAVA a linha. Agora qualquer um abre a janela, mas quem autoriza é um
+   Gestor/Administrador com login e senha, e a gravação sai COM A SESSÃO DELE: o gatilho
+   `sos_trava_exclusao` (migration 202609251900) recusa quem não é gestor, exige o motivo e
+   carimba quem e quando a partir do próprio login. */
+function ExcluirEtiquetaModal({ sos, onCancel, onExcluida }) {
+  const [motivo, setMotivo] = useState("");
+  const [login, setLogin] = useState("");
+  const [senha, setSenha] = useState("");
+  const [gravando, setGravando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  async function excluir(e) {
+    e?.preventDefault();
+    if (motivo.trim().length < 10) {
+      setErro("Escreva o motivo da exclusão (pelo menos 10 letras).");
+      return;
+    }
+    setGravando(true);
+    setErro("");
+    try {
+      const { resultado } = await autorizarGestor(login, senha, {
+        comoGestor: async (cliente) => {
+          const { data, error } = await cliente
+            .from("sos_acionamentos")
+            .update({ status: "EXCLUIDA", exclusao_motivo: motivo.trim() })
+            .eq("id", sos.id)
+            .select("id, status, excluida_em, excluida_por_nome, exclusao_motivo")
+            .single();
+          if (error) throw new Error(error.message);
+          return data;
+        },
+      });
+      onExcluida?.(resultado);
+    } catch (falha) {
+      setErro(falha?.message || "Não foi possível excluir a etiqueta.");
+      setGravando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm z-[60] p-4">
+      <form onSubmit={excluir} className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex flex-col items-center mb-4">
+          <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mb-3">
+            <FaTrash size={18} />
+          </div>
+          <h2 className="text-xl font-black text-slate-800 text-center">
+            Excluir etiqueta {sos?.numero_sos ? `SOS #${sos.numero_sos}` : ""}
+          </h2>
+          <p className="text-xs text-slate-500 text-center mt-1">
+            A etiqueta não é apagada: fica como <b>EXCLUÍDA</b>, com o motivo e quem autorizou. Sai dos
+            indicadores, do fechamento e do tratamento, e continua aparecendo aqui na Central.
+          </p>
+        </div>
+        <label className="block">
+          <span className="text-xs font-bold text-slate-600">Motivo da exclusão</span>
+          <textarea
+            rows={3}
+            autoFocus
+            className="mt-1 w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-200 outline-none text-sm"
+            placeholder="Ex.: etiqueta aberta em duplicidade com o SOS #1234"
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+          />
+        </label>
+        <div className="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
+          <div className="text-xs font-black text-slate-600 mb-2 flex items-center gap-2"><FaLock /> Autorização do gestor</div>
+          <div className="space-y-2">
+            <input
+              type="text"
+              placeholder="Login do gestor"
+              autoComplete="off"
+              className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-200 outline-none text-sm"
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+            />
+            <input
+              type="password"
+              placeholder="Senha"
+              autoComplete="new-password"
+              className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-200 outline-none text-sm"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+            />
+          </div>
+        </div>
+        {erro && <div className="mt-3 text-sm font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">{erro}</div>}
+        <div className="flex justify-end gap-2 mt-5">
+          <button type="button" onClick={onCancel} className="px-4 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition">
+            Cancelar
+          </button>
+          <button type="submit" disabled={gravando} className="px-4 py-2.5 bg-rose-600 text-white font-bold rounded-xl hover:bg-rose-700 transition shadow-md disabled:opacity-60">
+            {gravando ? "Conferindo…" : "Excluir etiqueta"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 /* --- Modal de Detalhes do SOS --- */
 function DetalheSOSModal({ sos, onClose, onAtualizar }) {
   const { user } = useContext(AuthContext) || {};
-  const isAdmin = String(user?.nivel || "").trim().toLowerCase() === "administrador";
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState({});
   const [loginModalOpen, setLoginModalOpen] = useState(false);
-
-  async function excluirSOS() {
-    if (!isAdmin || !sos?.id) return;
-    const label = sos?.numero_sos ? `SOS #${sos.numero_sos}` : "esta etiqueta de SOS";
-    if (!window.confirm(`Excluir ${label}? Esta acao nao pode ser desfeita.`)) return;
-    const { error } = await supabase.from("sos_acionamentos").delete().eq("id", sos.id);
-    if (error) {
-      console.error("Erro ao excluir SOS:", error);
-      window.alert(`Nao foi possivel excluir: ${error.message || error}`);
-      return;
-    }
-    onClose?.();
-    onAtualizar?.(true);
-  }
+  const [excluirAberto, setExcluirAberto] = useState(false);
+  const excluida = String(sos?.status || "").toUpperCase().trim() === "EXCLUIDA";
   
   const [historicoPrev, setHistoricoPrev] = useState(null);
   const [historicoInsp, setHistoricoInsp] = useState(null);
@@ -415,7 +508,7 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
             </div>
           </div>
           <div className="relative flex items-center gap-2">
-            {!editMode ? (
+            {excluida ? null : !editMode ? (
               <button onClick={solicitarLogin} className="bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-200 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition active:scale-95">
                 <FaEdit /> Editar
               </button>
@@ -424,11 +517,11 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
                 <FaSave /> Salvar
               </button>
             )}
-            {isAdmin && (
+            {!excluida && !editMode && (
               <button
-                onClick={excluirSOS}
+                onClick={() => setExcluirAberto(true)}
                 className="bg-rose-100 text-rose-700 hover:bg-rose-200 border border-rose-200 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition active:scale-95"
-                title="Excluir etiqueta (Administrador)"
+                title="Excluir etiqueta — precisa do login e da senha de um gestor"
               >
                 <FaTrash /> Excluir etiqueta
               </button>
@@ -442,6 +535,19 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
         {/* Scrollable Content */}
         <div className="p-6 space-y-6 overflow-y-auto bg-slate-50/50 flex-1">
           
+          {excluida && (
+            <div className="rounded-xl border border-slate-300 bg-slate-800 text-white p-4">
+              <div className="text-xs font-black uppercase tracking-wider opacity-80">Etiqueta excluída</div>
+              <div className="mt-1 text-sm">
+                Por <b>{sos.excluida_por_nome || "—"}</b>
+                {sos.excluida_em ? ` em ${new Date(sos.excluida_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}` : ""}
+                {sos.status_antes_exclusao ? ` · estava ${sos.status_antes_exclusao}` : ""}
+              </div>
+              <div className="mt-1 text-sm"><span className="opacity-80">Motivo:</span> {sos.exclusao_motivo || "—"}</div>
+              <div className="mt-2 text-[11px] opacity-70">Fora dos indicadores, do fechamento e do tratamento.</div>
+            </div>
+          )}
+
           <HistoricoSOS sos={formData} />
 
           {/* Seção 1: Dados da Ocorrência */}
@@ -602,6 +708,18 @@ function DetalheSOSModal({ sos, onClose, onAtualizar }) {
           onCancel={() => setLoginModalOpen(false)}
         />
       )}
+      {excluirAberto && (
+        <ExcluirEtiquetaModal
+          sos={sos}
+          onCancel={() => setExcluirAberto(false)}
+          onExcluida={() => {
+            setExcluirAberto(false);
+            alert("Etiqueta excluída ✅ — fica na Central com o motivo, fora dos indicadores.");
+            onAtualizar?.(true);
+            onClose?.();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -623,6 +741,8 @@ export default function SOSCentral() {
 
   const [mesRef, setMesRef] = useState("");
   const [ocorrenciaFiltro, setOcorrenciaFiltro] = useState("");
+  // o card EXCLUÍDAS filtra só as excluídas; nos outros cards elas não contam
+  const [soExcluidas, setSoExcluidas] = useState(false);
 
   const [sortBy, setSortBy] = useState(DATE_FIELD);
   const [sortAsc, setSortAsc] = useState(false);
@@ -644,6 +764,7 @@ export default function SOSCentral() {
     if (ocorrenciaFiltro) {
       query = query.ilike("ocorrencia", ocorrenciaFiltro);
     }
+    if (soExcluidas) query = query.eq("status", "EXCLUIDA");
 
     query = query.order(sortBy, { ascending: sortAsc, nullsFirst: false });
 
@@ -689,7 +810,7 @@ export default function SOSCentral() {
   useEffect(() => {
     carregarSOS(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataInicio, dataFim, mesRef, sortBy, sortAsc, ocorrenciaFiltro]);
+  }, [dataInicio, dataFim, mesRef, sortBy, sortAsc, ocorrenciaFiltro, soExcluidas]);
 
   const filtrados = useMemo(() => {
     const termo = busca.toLowerCase().trim();
@@ -706,13 +827,17 @@ export default function SOSCentral() {
     });
   }, [busca, sosList]);
 
+  // Etiqueta EXCLUÍDA não conta em card nenhum de ocorrência (dono: "não fica nos
+  // indicadores") — ela só aparece na lista e no card dela.
   const counts = useMemo(() => {
     const obj = {};
+    const validas = filtrados.filter((item) => String(item.status || "").toUpperCase().trim() !== "EXCLUIDA");
     OCORRENCIAS_CARDS.forEach((key) => {
-      obj[key] = filtrados.filter(
+      obj[key] = validas.filter(
         (item) => String(item.ocorrencia || "").toUpperCase().trim() === key
       ).length;
     });
+    obj.EXCLUIDAS = filtrados.length - validas.length;
     return obj;
   }, [filtrados]);
 
@@ -735,6 +860,7 @@ export default function SOSCentral() {
   }
 
   function handleCardClick(card) {
+    setSoExcluidas(false);
     setOcorrenciaFiltro((prev) => (prev === card ? "" : card));
   }
 
@@ -751,17 +877,24 @@ export default function SOSCentral() {
       </div>
 
       {/* Cards de Resumo */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
         {OCORRENCIAS_CARDS.map((key) => (
           <CardResumo
             key={key}
             titulo={key}
             valor={counts[key] || 0}
             cor={cores[key]}
-            ativo={ocorrenciaFiltro === key}
+            ativo={ocorrenciaFiltro === key && !soExcluidas}
             onClick={() => handleCardClick(key)}
           />
         ))}
+        <CardResumo
+          titulo="EXCLUÍDAS"
+          valor={soExcluidas ? filtrados.length : counts.EXCLUIDAS || 0}
+          cor="bg-white text-slate-700 border border-slate-300"
+          ativo={soExcluidas}
+          onClick={() => { setOcorrenciaFiltro(""); setSoExcluidas((v) => !v); }}
+        />
       </div>
 
       {/* Filtros */}
@@ -879,11 +1012,13 @@ export default function SOSCentral() {
                 filtrados.map((s, idx) => {
                   const st = String(s.status || "").toUpperCase().trim();
                   const isPendente = st === "ABERTO" || st === "EM ANDAMENTO";
+                  const isExcluida = st === "EXCLUIDA";
 
                   return (
                     <tr
                       key={s.id}
-                      className={`transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} ${isPendente ? "hover:bg-rose-50/50" : "hover:bg-blue-50/50"}`}
+                      className={`transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} ${isPendente ? "hover:bg-rose-50/50" : "hover:bg-blue-50/50"} ${isExcluida ? "opacity-60" : ""}`}
+                      title={isExcluida ? `Excluída por ${s.excluida_por_nome || "—"}: ${s.exclusao_motivo || ""}` : undefined}
                     >
                       <td className="px-6 py-4 font-black text-slate-700">#{s.numero_sos}</td>
                       <td className="px-6 py-4 font-bold text-slate-600">{formatDateBR(pickBestDate(s))}</td>

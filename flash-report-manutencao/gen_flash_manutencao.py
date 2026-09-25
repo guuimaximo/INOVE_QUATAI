@@ -357,15 +357,18 @@ def fetch_all_table_period(
 
     while True:
         end = offset + REPORT_PAGE_SIZE - 1
-        resp = (
+        q = (
             sb.table(table_name)
             .select(select_fields)
             .gte(date_field, str(start_date))
             .lte(date_field, str(end_date))
-            .order(date_field, desc=False)
-            .range(offset, end)
-            .execute()
         )
+        # Etiqueta de SOS EXCLUIDA (25/09/2026: o gestor exclui na Central, com motivo) nao
+        # e intervencao: nao entra em MKBF, contagem, reincidencia nem etiqueta em aberto.
+        # Um lugar so, porque os dois flash (diario e mensal) leem o SOS por aqui.
+        if table_name == "sos_acionamentos":
+            q = q.neq("status", "EXCLUIDA")
+        resp = q.order(date_field, desc=False).range(offset, end).execute()
         rows = resp.data or []
         all_rows.extend(rows)
 

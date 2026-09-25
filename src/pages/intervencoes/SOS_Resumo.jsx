@@ -746,7 +746,8 @@ export default function SOSCentral() {
   const [page, setPage] = useState(0);
 
   function buildQuery() {
-    let query = supabase.from("sos_acionamentos").select("*");
+    // etiqueta EXCLUÍDA não entra em indicador nenhum (25/09/2026)
+    let query = supabase.from("sos_acionamentos").select("*").neq("status", "EXCLUIDA");
     if (mesRef) {
       const { start, end } = monthRange(mesRef);
       if (start) query = query.gte(DATE_FIELD, start);

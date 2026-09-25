@@ -136,6 +136,7 @@ export async function lerOcorrenciasDoDia(dia) {
     .from("sos_acionamentos")
     .select(COLUNAS_SOS)
     .eq("data_sos", dia)
+    .neq("status", "EXCLUIDA") // etiqueta excluída na Central não é ocorrência do dia
     .order("hora_sos", { ascending: true });
   if (error) throw error;
   const porTipo = { sem_classificacao: [] };

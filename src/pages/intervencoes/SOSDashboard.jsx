@@ -143,6 +143,7 @@ async function fetchAllPeriodo({ dataInicio, dataFim }) {
     const { data, error } = await supabase
       .from("sos_acionamentos")
       .select("*")
+      .neq("status", "EXCLUIDA") // etiqueta excluída não é indicador (25/09/2026)
       .gte("data_sos", dataInicio)
       .lte("data_sos", dataFim)
       .order("data_sos", { ascending: true })
@@ -356,6 +357,7 @@ export default function SOSDashboard() {
         const { data: periodoData, error: periodoErr } = await supabase
           .from("sos_acionamentos")
           .select("id, data_sos, ocorrencia")
+          .neq("status", "EXCLUIDA")
           .gte("data_sos", dataInicio)
           .lte("data_sos", dataFim);
 
@@ -384,6 +386,7 @@ export default function SOSDashboard() {
           .select(
             "id, numero_sos, data_sos, hora_sos, veiculo, motorista_nome, linha, reclamacao_motorista, ocorrencia, status"
           )
+          .neq("status", "EXCLUIDA")
           .eq("data_sos", hoje)
           .order("hora_sos", { ascending: true });
 

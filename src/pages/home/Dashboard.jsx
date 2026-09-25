@@ -708,6 +708,7 @@ export default function Dashboard() {
             supabase
               .from("sos_acionamentos")
               .select("id, data_sos, ocorrencia")
+              .neq("status", "EXCLUIDA") // etiqueta excluída não é indicador
               .gte("data_sos", start)
               .lte("data_sos", end),
             "data_sos"

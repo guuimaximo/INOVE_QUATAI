@@ -26,8 +26,14 @@ export function ehGestorParaCima(nivel) {
 /**
  * Confere o login e a senha de quem autoriza. Devolve `{ id, nome, login, nivel }` de quem
  * autorizou, ou lança um Error com a frase para a tela.
+ *
+ * `comoGestor` (opcional, 25/09/2026): uma função que recebe o cliente JÁ LOGADO COMO O
+ * GESTOR e grava com a sessão dele — quando o banco precisa saber quem autorizou (a
+ * exclusão de etiqueta de SOS é travada por gatilho, que só aceita Gestor/Administrador e
+ * carimba o autor pelo login). O que ela devolver vem em `resultado`; se ela lançar, o erro
+ * sobe e nada é dado como autorizado.
  */
-export async function autorizarGestor(login, senha) {
+export async function autorizarGestor(login, senha, { comoGestor } = {}) {
   const identificador = txt(login);
   if (!identificador || !senha) throw new Error("Informe o login e a senha de quem autoriza.");
 
@@ -72,10 +78,18 @@ export async function autorizarGestor(login, senha) {
     if (msg.includes("confirm")) throw new Error("O e-mail deste usuário ainda não foi confirmado.");
     throw new Error(`Não deu para conferir a senha: ${erroSenha.message}`);
   }
+  let resultado;
   try {
-    await avulso.auth.signOut({ scope: "local" });
-  } catch {
-    // a conferência já passou; encerrar a sessão avulsa é arrumação
+    if (comoGestor) resultado = await comoGestor(avulso);
+  } finally {
+    try {
+      await avulso.auth.signOut({ scope: "local" });
+    } catch {
+      // a conferência já passou; encerrar a sessão avulsa é arrumação
+    }
   }
-  return { id: pessoa.id, nome: txt(pessoa.nome) || txt(pessoa.login), login: txt(pessoa.login), nivel: txt(pessoa.nivel) };
+  return {
+    id: pessoa.id, nome: txt(pessoa.nome) || txt(pessoa.login), login: txt(pessoa.login), nivel: txt(pessoa.nivel),
+    resultado,
+  };
 }

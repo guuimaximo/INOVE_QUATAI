@@ -284,6 +284,27 @@ function referenciaGps(d) {
 const temContratoView = (r) =>
   r.acao_sugerida != null || r.fonte_alvo != null || r.alvo_confiavel != null || r.requer_alvo_manual != null;
 
+/* O ALMOÇO É O QUE ELE REALMENTE PAROU, ATÉ O MÁXIMO DA JORNADA (dono, 25/09/2026: "não é
+   mínimo — é quanto ele realmente tirou"; "o máximo está certo: de 4 a 6 h, 15 min; acima
+   de 6 h, 30 min"). Quando nenhuma parada do dia chega ao que a matriz pede, a view escolhe
+   a MAIOR (`fonte_almoco = MATRIZ_PARADO_MAIOR`), já sugere a duração que ele de fato teve
+   — a regra do DP de 03/09, "abaixo de 27 min, lança o que ele teve" — e marca
+   `almoco_confiavel = false` como SINALIZAÇÃO. A trava lia a sinalização como "sem base" e
+   prendia o dia: 217 dias de 01/08 a 25/09, todos em REVISAR (NOEL 30015277 18/09 parou
+   8 min, 17:32–17:40, e a linha ficava vermelha). A parada real É a base. Valem também as
+   outras duas fontes que são FATO e que carregavam a mesma marca:
+     · INTERVALO_BATIDO — a porta (`intervaloBatidoManda`) trocou a matriz pelo intervalo que
+       ele BATEU no cartão, e o `almoco_confiavel = false` falava da matriz que saiu (25 dias);
+     · MODULO_REFEICAO — a refeição que o DP já lançou no passo da Refeição (3 dias).
+   Continua travado o almoço sem base nenhuma e o que vem sem as duas pontas. O máximo não
+   muda: acima dele a view já lança só os 15/30. */
+const FONTES_DO_ALMOCO_REAL = new Set(["MATRIZ_PARADO_MAIOR", "INTERVALO_BATIDO", "MODULO_REFEICAO"]);
+
+export const almocoDaParadaReal = (r) =>
+  FONTES_DO_ALMOCO_REAL.has(String(r?.fonte_almoco ?? "").trim().toUpperCase()) &&
+  !!fmtHora(r?.almoco_saida_sug) &&
+  !!fmtHora(r?.almoco_volta_sug);
+
 /**
  * Porte de main.py `_sug_bloqueio`: devolve o MOTIVO pelo qual a sugestão do dia
  * NÃO pode ser usada, ou "" se pode. Nada é recalculado — só lido dos campos.
@@ -302,7 +323,7 @@ export function sugBloqueio(r) {
     }
     // `almoco_manual_dp` é o escape do Real cravado, igual ao `alvo_manual_dp` acima: a
     // base que faltava é a mão do DP, e ela chega pelo overlay `aplicarRealManual`.
-    if (acao === "LANCAR_ALMOCO_AUTOMATICO" && !r.almoco_manual_dp && !ehVerdadeiro(r.almoco_confiavel))
+    if (acao === "LANCAR_ALMOCO_AUTOMATICO" && !r.almoco_manual_dp && !almocoDaParadaReal(r) && !ehVerdadeiro(r.almoco_confiavel))
       return r.jornada_manual_dp
         ? "almoço sem base confiável — a entrada e a saída estão definidas; crave também a saída e a volta do almoço"
         : r.alvo_manual_dp

@@ -99,47 +99,92 @@ export async function lerMotoristas() {
   return mapa;
 }
 
-/* ── O QUE O SISTEMA JÁ SABE DO DIA ─────────────────────────────────────────────
-   Dono: "boa parte, como SOS e GNS, nós já temos". A tela oferece "puxar do sistema" e o
-   plantão confirma — o número gravado é o do fechamento, não uma consulta viva.
-   · SOS / Troca / Avaria: `sos_acionamentos` do dia pela `ocorrencia` (medido em
-     setembro: SEGUIU VIAGEM, RECOLHEU, SOS, TROCA, AVARIA e vazio). Troca e Avaria têm
-     linha própria no fechamento; o resto é SOS.
-   · GNS / Faixa amarela: os carros do PCM do dia nessas categorias, que ainda não saíram
-     (o retrato do momento em que o plantão puxa — por isso o botão, e não conta viva).
-   · Reservas manhã/tarde: o Controle de Reservas do dia, pela hora de entrada (antes do
-     meio-dia = manhã). */
-export async function numerosDoSistema(dia) {
-  const out = {};
-  const [sos, pcm, reservas] = await Promise.all([
-    supabase.from("sos_acionamentos").select("ocorrencia").eq("data_sos", dia),
-    supabase.from("pcm_diario").select("id").eq("data_referencia", dia).maybeSingle(),
-    supabase.from("reservas_motoristas").select("hora_entrada").eq("data_referencia", dia),
-  ]);
-  if (!sos.error) {
-    const tipos = (sos.data || []).map((r) => String(r.ocorrencia ?? "").trim().toUpperCase());
-    out.troca = tipos.filter((t) => t === "TROCA").length;
-    out.avaria = tipos.filter((t) => t === "AVARIA").length;
-    out.sos = tipos.length - out.troca - out.avaria;
+/* ── AS OCORRÊNCIAS DO DIA, DO MÓDULO DE SOS (25/09/2026) ──────────────────────
+   Dono: "vamos colocar as ocorrências do dia: SOS, avaria, troca, recolha, seguiu viagem,
+   assalto — se tiver avarias, traz quais foram, linha a linha". As cinco primeiras são a
+   `ocorrencia` do acionamento em `sos_acionamentos` (medido em setembro: SOS 54, AVARIA
+   17, TROCA 22, RECOLHEU 56, SEGUIU VIAGEM 126 e 15 sem classificação). Acionamento sem
+   classificação aparece à parte — não some, nem vira SOS. Assalto não tem módulo: é
+   digitado no turno. */
+export const TIPOS_OCORRENCIA = [
+  { id: "sos", label: "SOS", valores: ["SOS"], cor: "#dc2626" },
+  { id: "avaria", label: "Avaria", valores: ["AVARIA"], cor: "#ea580c" },
+  { id: "troca", label: "Troca", valores: ["TROCA"], cor: "#d97706" },
+  { id: "recolha", label: "Recolha", valores: ["RECOLHEU", "RECOLHA"], cor: "#475569" },
+  { id: "seguiu_viagem", label: "Seguiu viagem", valores: ["SEGUIU VIAGEM"], cor: "#059669" },
+];
+
+const COLUNAS_SOS = "id, numero_sos, data_sos, hora_sos, veiculo, linha, tabela_operacional, motorista_id, motorista_nome, reclamacao_motorista, problema_encontrado, local_ocorrencia, ocorrencia, status";
+
+export function tipoDaOcorrencia(ocorrencia) {
+  const o = String(ocorrencia ?? "").trim().toUpperCase();
+  return TIPOS_OCORRENCIA.find((t) => t.valores.includes(o))?.id || "sem_classificacao";
+}
+
+export async function lerOcorrenciasDoDia(dia) {
+  const { data, error } = await supabase
+    .from("sos_acionamentos")
+    .select(COLUNAS_SOS)
+    .eq("data_sos", dia)
+    .order("hora_sos", { ascending: true });
+  if (error) throw error;
+  const porTipo = { sem_classificacao: [] };
+  TIPOS_OCORRENCIA.forEach((t) => { porTipo[t.id] = []; });
+  (data || []).forEach((a) => porTipo[tipoDaOcorrencia(a.ocorrencia)].push(a));
+  const contagem = Object.fromEntries(Object.entries(porTipo).map(([k, v]) => [k, v.length]));
+  return { porTipo, contagem, total: (data || []).length };
+}
+
+/* ── A FROTA PARADA, DO PCM DO DIA ─────────────────────────────────────────────
+   Dono: "GNS pega do PCM, faixa amarela também". Os carros do PCM do dia nessas duas
+   categorias que ainda não saíram (`data_saida` nulo) — o retrato que o painel do PCM
+   mostra. Vem com o prefixo e a descrição, para o fechamento dizer QUAIS carros. */
+export async function lerFrotaParadaDoDia(dia) {
+  const vazio = { gns: [], faixa_amarela: [], temPcm: false };
+  const pcm = await supabase.from("pcm_diario").select("id").eq("data_referencia", dia).maybeSingle();
+  if (pcm.error) throw pcm.error;
+  if (!pcm.data?.id) return vazio;
+  const { data, error } = await supabase
+    .from("veiculos_pcm")
+    .select("frota, descricao, setor, categoria, data_entrada")
+    .eq("pcm_id", pcm.data.id)
+    .is("data_saida", null)
+    .in("categoria", ["GNS", "FAIXA_AMARELA"])
+    .order("frota", { ascending: true });
+  if (error) throw error;
+  const lista = data || [];
+  return {
+    gns: lista.filter((v) => String(v.categoria).toUpperCase() === "GNS"),
+    faixa_amarela: lista.filter((v) => String(v.categoria).toUpperCase() === "FAIXA_AMARELA"),
+    temPcm: true,
+  };
+}
+
+/* Reservas manhã/tarde: o Controle de Reservas do dia, pela hora de entrada (antes do
+   meio-dia = manhã). Só uma SUGESTÃO para o plantão — reserva de verdade é quem ficou à
+   disposição, e isso o plantão confirma. */
+export async function lerReservasDoDia(dia) {
+  const { data, error } = await supabase.from("reservas_motoristas").select("hora_entrada").eq("data_referencia", dia);
+  if (error) throw error;
+  const horas = (data || []).map((r) => String(r.hora_entrada ?? "").slice(0, 5));
+  return {
+    reservas_manha: horas.filter((h) => h && h < "12:00").length,
+    reservas_tarde: horas.filter((h) => h && h >= "12:00").length,
+  };
+}
+
+/* O retrato que o turno guarda (a lista dos dias lê daqui, sem ler SOS e PCM de novo). */
+export function retratoDoSistema(ocorrencias, frota) {
+  const r = {};
+  if (ocorrencias) {
+    TIPOS_OCORRENCIA.forEach((t) => { r[t.id] = ocorrencias.contagem[t.id] || 0; });
+    r.sem_classificacao = ocorrencias.contagem.sem_classificacao || 0;
   }
-  if (!pcm.error && pcm.data?.id) {
-    const { data, error } = await supabase
-      .from("veiculos_pcm")
-      .select("categoria")
-      .eq("pcm_id", pcm.data.id)
-      .is("data_saida", null); // os que ESTÃO parados agora, como no painel do PCM
-    if (!error) {
-      const cats = (data || []).map((v) => String(v.categoria ?? "").toUpperCase());
-      out.gns = cats.filter((c) => c === "GNS").length;
-      out.faixa_amarela = cats.filter((c) => c === "FAIXA_AMARELA").length;
-    }
+  if (frota?.temPcm) {
+    r.gns = frota.gns.length;
+    r.faixa_amarela = frota.faixa_amarela.length;
   }
-  if (!reservas.error) {
-    const horas = (reservas.data || []).map((r) => String(r.hora_entrada ?? "").slice(0, 5));
-    out.reservas_manha = horas.filter((h) => h && h < "12:00").length;
-    out.reservas_tarde = horas.filter((h) => h && h >= "12:00").length;
-  }
-  return out;
+  return r;
 }
 
 /* ── PARA O DP360 ────────────────────────────────────────────────────────────────

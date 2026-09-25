@@ -19,26 +19,19 @@ import { AuthContext } from "../../context/AuthContext";
 import FechamentoTurnoRelatorio from "./FechamentoTurnoRelatorio";
 import {
   PERIODOS, TABELA_FALTAS, TABELA_INTERCORRENCIAS, TABELA_TURNOS,
-  chapasNoTexto, dataPorExtenso, isoLocal, lerMotoristas, normChapa, numerosDoSistema,
-  podeEditarDia, quemEsta, somaDias, veiculoNoTexto,
+  TIPOS_OCORRENCIA, chapasNoTexto, dataPorExtenso, isoLocal, lerFrotaParadaDoDia, lerMotoristas,
+  lerOcorrenciasDoDia, lerReservasDoDia, normChapa, podeEditarDia, quemEsta, retratoDoSistema, somaDias,
+  veiculoNoTexto,
 } from "./passagemTurno";
 
-/* Os números do turno, na ordem da folha. `sistema` = tem "puxar do sistema". */
+/* O que o plantão DIGITA. O resto vem sozinho (dono, 25/09/2026): as ocorrências do dia
+   do módulo de SOS, GNS e faixa amarela do PCM. `sistema` = o Controle de Reservas sugere. */
 const CAMPOS = [
-  { grupo: "Manhã", campos: [
+  { grupo: "Operação", campos: [
     { id: "carros_programados", label: "Carros programados" },
-    { id: "gns", label: "GNS", sistema: true },
     { id: "po_programado", label: "P.O programado" },
-    { id: "faixa_amarela", label: "Faixa amarela", sistema: true },
     { id: "reservas_manha", label: "Reservas manhã", sistema: true },
-  ] },
-  { grupo: "Tarde", campos: [
     { id: "reservas_tarde", label: "Reservas tarde", sistema: true },
-  ] },
-  { grupo: "Outros", campos: [
-    { id: "sos", label: "SOS", sistema: true },
-    { id: "troca", label: "Troca", sistema: true },
-    { id: "avaria", label: "Avaria", sistema: true },
     { id: "assalto", label: "Assalto" },
   ] },
 ];
@@ -67,7 +60,10 @@ export default function PassagemTurnoDia() {
   const [faltas, setFaltas] = useState([]);
   const [inter, setInter] = useState([]);
   const [motoristas, setMotoristas] = useState(new Map());
-  const [sistema, setSistema] = useState({});
+  const [sistema, setSistema] = useState({}); // reservas sugeridas pelo Controle de Reservas
+  const [ocorrencias, setOcorrencias] = useState(null); // do módulo de SOS
+  const [frota, setFrota] = useState(null); // GNS e faixa amarela do PCM do dia
+  const [tipoAberto, setTipoAberto] = useState("avaria");
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
@@ -105,7 +101,11 @@ export default function PassagemTurnoDia() {
     lerMotoristas().then(setMotoristas).catch(() => setMotoristas(new Map()));
   }, []);
   useEffect(() => {
-    numerosDoSistema(dia).then(setSistema).catch(() => setSistema({}));
+    lerReservasDoDia(dia).then(setSistema).catch(() => setSistema({}));
+    setOcorrencias(null);
+    setFrota(null);
+    lerOcorrenciasDoDia(dia).then(setOcorrencias).catch(() => setOcorrencias({ porTipo: {}, contagem: {}, total: 0, erro: true }));
+    lerFrotaParadaDoDia(dia).then(setFrota).catch(() => setFrota({ gns: [], faixa_amarela: [], temPcm: false, erro: true }));
   }, [dia]);
 
   const nomeDe = useCallback((chapa) => motoristas.get(normChapa(chapa))?.nome || "", [motoristas]);
@@ -162,19 +162,24 @@ export default function PassagemTurnoDia() {
     salvarCampos({ [id]: valor });
   };
 
-  const puxarDoSistema = async () => {
-    const atual = await numerosDoSistema(dia).catch(() => ({}));
+  const puxarReservas = async () => {
+    const atual = await lerReservasDoDia(dia).catch(() => null);
+    if (!atual) { mostrar("Não foi possível ler o Controle de Reservas."); return; }
     setSistema(atual);
-    const patch = {};
-    CAMPOS.flatMap((g) => g.campos).filter((c) => c.sistema).forEach((c) => {
-      if (atual[c.id] !== undefined) patch[c.id] = atual[c.id];
-    });
-    if (!Object.keys(patch).length) {
-      mostrar("O sistema não tem números deste dia.");
-      return;
-    }
-    await salvarCampos(patch);
+    await salvarCampos(atual);
   };
+
+  /* O RETRATO DO SISTEMA NO TURNO. Ocorrências e frota parada são lidas ao vivo (é o que a
+     tela e o PNG mostram); o turno guarda os números para a lista dos dias não ter de ler
+     SOS e PCM de cada dia. Grava só o que mudou, e só enquanto o dia é editável. */
+  useEffect(() => {
+    if (!turno?.id || !editavel || !ocorrencias || !frota || ocorrencias.erro || frota.erro) return;
+    const r = retratoDoSistema(ocorrencias, frota);
+    const mudou = Object.fromEntries(Object.entries(r).filter(([k, v]) => (turno[k] ?? null) !== v));
+    if (!Object.keys(mudou).length) return;
+    supabase.from(TABELA_TURNOS).update(mudou).eq("id", turno.id).select("*").single()
+      .then(({ data }) => { if (data) setTurno(data); });
+  }, [turno, editavel, ocorrencias, frota]);
 
   /* ── faltas ── */
   const [novaFalta, setNovaFalta] = useState({ periodo: periodoDaHora(), chapa: "", linha: "", substituto_chapa: "", substituto_linha: "" });
@@ -390,9 +395,9 @@ export default function PassagemTurnoDia() {
                 </div>
               </div>
               {editavel && (
-                <button type="button" onClick={puxarDoSistema}
+                <button type="button" onClick={puxarReservas}
                   className="mb-3 px-3 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-sm font-bold inline-flex items-center gap-2 hover:bg-blue-100">
-                  <FaDatabase /> Puxar do sistema (SOS, troca, avaria, GNS, faixa amarela, reservas)
+                  <FaDatabase /> Puxar reservas do Controle de Reservas
                 </button>
               )}
               <div className="space-y-3">
@@ -434,6 +439,100 @@ export default function PassagemTurnoDia() {
                   Substituições: {faltas.filter((f) => f.substituto_chapa || f.substituto_nome).length}
                 </span>
               </div>
+            </section>
+
+            {/* OCORRÊNCIAS DO DIA (do SOS) */}
+            <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+                <h2 className="font-black text-slate-800">Ocorrências do dia</h2>
+                <span className="text-xs text-slate-500">automático, do módulo de SOS · clique para ver a lista</span>
+              </div>
+              {!ocorrencias ? (
+                <div className="text-sm text-slate-400">Lendo o SOS…</div>
+              ) : ocorrencias.erro ? (
+                <div className="text-sm text-red-600 font-semibold">Não foi possível ler o SOS deste dia.</div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                    {TIPOS_OCORRENCIA.map((o) => (
+                      <button key={o.id} type="button" onClick={() => setTipoAberto(tipoAberto === o.id ? "" : o.id)}
+                        className={`text-left rounded-xl border p-2 transition ${tipoAberto === o.id ? "border-slate-800 bg-slate-50" : "border-slate-200 hover:bg-slate-50"}`}
+                        style={{ borderTop: `4px solid ${o.cor}` }}>
+                        <div className="text-[11px] font-bold uppercase text-slate-500">{o.label}</div>
+                        <div className="text-2xl font-black text-slate-800">{ocorrencias.contagem[o.id] || 0}</div>
+                      </button>
+                    ))}
+                    <div className="rounded-xl border border-slate-200 p-2" style={{ borderTop: "4px solid #991b1b" }}>
+                      <div className="text-[11px] font-bold uppercase text-slate-500">Assalto</div>
+                      <div className="text-2xl font-black text-slate-800">{turno?.assalto ?? 0}</div>
+                      <div className="text-[10px] text-slate-400">digitado acima</div>
+                    </div>
+                  </div>
+                  {ocorrencias.contagem.sem_classificacao > 0 && (
+                    <button type="button" onClick={() => setTipoAberto(tipoAberto === "sem_classificacao" ? "" : "sem_classificacao")}
+                      className="mt-2 text-xs font-bold text-amber-700 underline">
+                      {ocorrencias.contagem.sem_classificacao} acionamento(s) sem classificação no SOS
+                    </button>
+                  )}
+                  {tipoAberto && (ocorrencias.porTipo[tipoAberto] || []).length > 0 && (
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs text-slate-500">
+                            <th className="py-1 pr-2">Hora</th><th className="pr-2">SOS</th><th className="pr-2">Veículo</th>
+                            <th className="pr-2">Linha</th><th className="pr-2">Motorista</th><th className="pr-2">O que houve</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ocorrencias.porTipo[tipoAberto].map((a) => (
+                            <tr key={a.id} className="border-t border-slate-100 align-top">
+                              <td className="py-1.5 pr-2 font-mono">{String(a.hora_sos || "").slice(0, 5) || "—"}</td>
+                              <td className="pr-2 font-mono">{a.numero_sos || "—"}</td>
+                              <td className="pr-2 font-mono font-bold">{a.veiculo || "—"}</td>
+                              <td className="pr-2">{[a.linha, a.tabela_operacional].filter(Boolean).join(" · ") || "—"}</td>
+                              <td className="pr-2">{a.motorista_nome || "—"} <span className="font-mono text-slate-500">{a.motorista_id || ""}</span></td>
+                              <td className="pr-2">
+                                {a.reclamacao_motorista || "—"}
+                                {a.problema_encontrado ? <div className="text-xs text-slate-500">Manutenção: {a.problema_encontrado}</div> : null}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {tipoAberto && !(ocorrencias.porTipo[tipoAberto] || []).length && (
+                    <div className="mt-2 text-sm text-slate-400">Nenhuma ocorrência deste tipo no dia.</div>
+                  )}
+                </>
+              )}
+            </section>
+
+            {/* FROTA PARADA (do PCM) */}
+            <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+                <h2 className="font-black text-slate-800">Frota parada</h2>
+                <span className="text-xs text-slate-500">
+                  {!frota ? "lendo o PCM…" : frota.erro ? "não foi possível ler o PCM" : frota.temPcm ? "automático, do PCM do dia" : "sem PCM aberto neste dia"}
+                </span>
+              </div>
+              {frota && !frota.erro && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[
+                    ["GNS", frota.gns, "bg-red-50 text-red-700 border-red-200"],
+                    ["Faixa amarela", frota.faixa_amarela, "bg-amber-50 text-amber-700 border-amber-200"],
+                  ].map(([rot, lista, cls]) => (
+                    <div key={rot} className="rounded-xl border border-slate-200 p-3">
+                      <div className="text-xs font-black uppercase text-slate-600 mb-2">{rot} · {lista.length}</div>
+                      <div className="flex flex-wrap gap-1">
+                        {lista.length ? lista.map((v, n) => (
+                          <span key={`${v.frota}-${n}`} title={v.descricao || ""} className={`px-2 py-0.5 rounded-full border text-xs font-bold font-mono ${cls}`}>{v.frota}</span>
+                        )) : <span className="text-sm text-slate-400">Nenhum carro.</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
 
             {/* FALTAS */}
@@ -651,6 +750,9 @@ export default function PassagemTurnoDia() {
                 turno={{ ...(turno || {}), data_referencia: dia }}
                 faltas={faltas}
                 intercorrencias={inter}
+                ocorrencias={ocorrencias}
+                frota={frota}
+                nomeDe={nomeDe}
               />
             </div>
           </section>

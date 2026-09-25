@@ -21,7 +21,7 @@ export default function PassagemTurnoInicio() {
       try {
         const { data, error } = await supabase
           .from(TABELA_TURNOS)
-          .select("id, data_referencia, carros_programados, gns, sos, troca, avaria, assalto, criado_por, atualizado_por, atualizado_em")
+          .select("id, data_referencia, carros_programados, gns, faixa_amarela, sos, avaria, troca, recolha, seguiu_viagem, assalto, criado_por, atualizado_por, atualizado_em")
           .order("data_referencia", { ascending: false })
           .limit(120);
         if (error) throw error;
@@ -101,10 +101,10 @@ export default function PassagemTurnoInicio() {
                 <tr className="text-left text-xs text-slate-500 border-b border-slate-200">
                   <th className="py-2 pr-3">Dia</th>
                   <th className="pr-3">Carros programados</th>
-                  <th className="pr-3">GNS</th>
+                  <th className="pr-3">GNS · Faixa amarela</th>
                   <th className="pr-3">Faltas</th>
                   <th className="pr-3">Intercorrências</th>
-                  <th className="pr-3">SOS · Troca · Avaria · Assalto</th>
+                  <th className="pr-3" title="SOS · Avaria · Troca · Recolha · Seguiu viagem · Assalto">Ocorrências (SOS · Av · Tr · Rec · SV · Ass)</th>
                   <th className="pr-3">Última alteração</th>
                 </tr>
               </thead>
@@ -120,10 +120,10 @@ export default function PassagemTurnoInicio() {
                         <div className="text-xs text-slate-500 capitalize">{dataPorExtenso(d.data_referencia).split(",")[0]}</div>
                       </td>
                       <td className="pr-3 font-bold">{d.carros_programados ?? "—"}</td>
-                      <td className="pr-3">{d.gns ?? "—"}</td>
+                      <td className="pr-3">{d.gns ?? "—"} · {d.faixa_amarela ?? "—"}</td>
                       <td className="pr-3">{c.faltas}</td>
                       <td className="pr-3">{c.inter}</td>
-                      <td className="pr-3 font-mono">{[d.sos, d.troca, d.avaria, d.assalto].map((v) => v ?? "—").join(" · ")}</td>
+                      <td className="pr-3 font-mono">{[d.sos, d.avaria, d.troca, d.recolha, d.seguiu_viagem, d.assalto].map((v) => v ?? "—").join(" · ")}</td>
                       <td className="pr-3 text-xs text-slate-500">
                         {d.atualizado_por || d.criado_por || "—"}
                         {d.atualizado_em ? ` · ${new Date(d.atualizado_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}` : ""}

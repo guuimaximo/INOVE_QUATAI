@@ -45,16 +45,34 @@ def _chapa(ch):
     return c[:-2] if c.endswith(".0") else c
 
 
+# Chaves que saem em qualquer nivel: GPS do instrutor (dado de localizacao de pessoa, e
+# pesado) e caminhos/ids internos que ja estao nas URLs.
+_FORA_FUNDO = {"localizacao", "localizacao_inicio", "localizacao_fim", "intervencao_localizacao",
+               "latitude", "longitude", "precisao", "pdf_path", "html_path", "batch_id",
+               "sessao_referencia", "rota_pings", "device"}
+
+
+def _conserta(s):
+    """Textos gravados duas vezes em UTF-8 ("IntervenÃ§Ã£o") voltam ao normal."""
+    if "Ã" in s or "Â" in s:
+        try:
+            return s.encode("latin-1").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            return s
+    return s
+
+
 def _enxuga(v):
-    """Arredonda floats (3 casas) e abrevia URLs do storage, recursivamente."""
+    """Arredonda floats (3 casas), abrevia URLs do storage e tira GPS, recursivamente."""
     if isinstance(v, float):
         return round(v, 3)
     if isinstance(v, str):
+        v = _conserta(v)
         return v.replace(_STORAGE, "§/") if _STORAGE in v else v
     if isinstance(v, list):
         return [_enxuga(x) for x in v]
     if isinstance(v, dict):
-        return {k: _enxuga(x) for k, x in v.items()}
+        return {k: _enxuga(x) for k, x in v.items() if k not in _FORA_FUNDO}
     return v
 
 

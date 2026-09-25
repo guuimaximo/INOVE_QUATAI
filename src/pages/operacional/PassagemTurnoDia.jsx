@@ -601,7 +601,7 @@ export default function PassagemTurnoDia() {
                   <div className="col-span-2 sm:col-span-6 text-xs text-slate-500 min-h-[16px]">
                     {normChapa(novaFalta.chapa) && (nomeDe(novaFalta.chapa)
                       ? <>Faltou: <b className="text-slate-700">{nomeDe(novaFalta.chapa)}</b></>
-                      : <span className="text-amber-700 font-bold">chapa {normChapa(novaFalta.chapa)} não está no cadastro de motoristas — confira</span>)}
+                      : <span className="text-amber-700 font-bold">chapa {normChapa(novaFalta.chapa)} não está no cadastro de funcionários — confira</span>)}
                     {normChapa(novaFalta.substituto_chapa) && (
                       <> · Substituto: <b className="text-slate-700">{nomeDe(novaFalta.substituto_chapa) || "não encontrado no cadastro"}</b></>
                     )}

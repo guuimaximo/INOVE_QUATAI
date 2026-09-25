@@ -85,8 +85,9 @@ function Chip({ children, cor = C.marca, fundo = C.marcaSuave }) {
   return (
     <span
       style={{
+        // nowrap: na foto (PNG/PDF) o selo quebrava o nome numa linha e a chapa na outra
         display: "inline-block", padding: "3px 9px", borderRadius: 999, fontSize: 12, fontWeight: 700,
-        color: cor, background: fundo, border: `1px solid ${cor}33`, margin: "0 6px 6px 0",
+        color: cor, background: fundo, border: `1px solid ${cor}33`, margin: "0 6px 6px 0", whiteSpace: "nowrap",
       }}
     >
       {children}
@@ -108,12 +109,17 @@ function Situacao({ a }) {
   );
 }
 
-const pessoa = (nome, chapa) => (
-  <>
-    <b>{nome || "—"}</b>
-    {chapa ? <span style={{ color: C.suave, fontFamily: "Consolas, monospace", marginLeft: 6 }}>{chapa}</span> : null}
-  </>
-);
+// sem nome (chapa fora do cadastro de funcionários), a chapa sozinha — "—" antes dela parecia
+// que não havia motorista
+const pessoa = (nome, chapa) =>
+  nome ? (
+    <>
+      <b>{nome}</b>
+      {chapa ? <span style={{ color: C.suave, fontFamily: "Consolas, monospace", marginLeft: 6 }}>{chapa}</span> : null}
+    </>
+  ) : (
+    <b style={{ fontFamily: "Consolas, monospace" }}>{chapa || "—"}</b>
+  );
 
 function TabelaFaltas({ titulo, faltas, nomeDe }) {
   return (
@@ -160,7 +166,7 @@ function ListaIntercorrencias({ titulo, itens, nomeDe }) {
               </div>
               {(i.chapas || []).length > 0 && (
                 <div style={{ marginTop: 6 }}>
-                  {(i.chapas || []).map((c) => <Chip key={c}>{nomeDe(c) || "?"} · {c}</Chip>)}
+                  {(i.chapas || []).map((c) => <Chip key={c}>{nomeDe(c) ? `${nomeDe(c)} · ${c}` : c}</Chip>)}
                 </div>
               )}
             </div>

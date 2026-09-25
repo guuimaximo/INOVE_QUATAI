@@ -14,6 +14,7 @@
 // do dia do DP360 lê `lerPlantaoDoMotorista` por chapa e dia.
 import { useEffect, useState } from "react";
 import { supabase } from "../../supabase";
+import { lerDP360, lerTudoDP360 } from "../../services/dp360Api";
 
 export const TABELA_TURNOS = "operacional_turnos";
 export const TABELA_FALTAS = "operacional_faltas";
@@ -114,17 +115,39 @@ export function quemEsta(user) {
   return String(user?.nome || user?.nome_completo || user?.login || user?.email || "").trim() || "—";
 }
 
-/* O cadastro de motoristas do INOVE (`motoristas`: chapa, nome, cargo — 377 em
-   25/09/2026). Uma leitura por tela; o mapa é por chapa normalizada. */
-export async function lerMotoristas() {
-  const { data, error } = await supabase.from("motoristas").select("chapa, nome, cargo");
-  if (error) throw error;
+/* OS NOMES VÊM DO CADASTRO DE FUNCIONÁRIOS — o mesmo de Pessoas, Controle de Reservas, SOS,
+   Checklists e Diesel (`utils/funcionariosBCNT.js`: tabela `funcionarios` da base de
+   importação, pelo gateway). Nasceu lendo a tabela `motoristas` do INOVE, que parou em
+   abril de 2026: em 25/09 faltavam nela 30 motoristas ativos, todos contratados desde 13/04,
+   e o fechamento de 24/09 saiu com chapa sem nome (dono: "ajusta para pegar da tabela onde
+   todos pegam"). Vem a base inteira — ativo, afastado e inativo — para o nome aparecer
+   também no dia antigo de quem já saiu; chapa repetida fica com o registro ativo. */
+const PESO_STATUS = { ativo: 0, afastado: 1 };
+const pesoDoStatus = (s) => PESO_STATUS[String(s ?? "").trim().toLowerCase()] ?? 2;
+
+function nomesPorChapa(linhas) {
   const mapa = new Map();
-  for (const m of data || []) {
-    const c = normChapa(m.chapa);
-    if (c) mapa.set(c, { chapa: c, nome: String(m.nome ?? "").trim(), cargo: String(m.cargo ?? "").trim() });
+  for (const l of linhas || []) {
+    const c = normChapa(l.nr_cracha);
+    if (!c) continue;
+    const peso = pesoDoStatus(l.status);
+    if (mapa.has(c) && mapa.get(c).peso <= peso) continue;
+    mapa.set(c, { chapa: c, nome: String(l.nm_funcionario ?? "").trim(), cargo: String(l.nm_funcao ?? "").trim(), peso });
   }
   return mapa;
+}
+
+/* A MESMA TABELA do `linhasDoCadastro`, mas lida direto: a base inteira passa de 1000
+   linhas (1.468 em 25/09/2026) e vem em duas páginas, e a ordem por NOME dele não é estável
+   entre páginas — dois homônimos na virada podiam sumir ou repetir. `id_funcionario` é
+   único. */
+export async function lerMotoristas() {
+  return nomesPorChapa(
+    await lerTudoDP360("funcionarios", {
+      colunas: "id_funcionario,nr_cracha,nm_funcionario,nm_funcao,status",
+      ordem: "id_funcionario.asc",
+    }),
+  );
 }
 
 /* ── AS OCORRÊNCIAS DO DIA, DO MÓDULO DE SOS (25/09/2026) ──────────────────────
@@ -324,10 +347,15 @@ export async function lerPlantaoDoMotorista(cracha, dia) {
     // os nomes dos OUTROS motoristas citados nas intercorrências (quem analisa o ponto
     // quer saber quem é o "30060916" do texto sem abrir outra tela)
     const outros = [...new Set(intercorrencias.flatMap((i) => i.chapas || []))].filter((c) => c && c !== chapa);
+    // (o cadastro guarda a chapa com ou sem o zero da frente: "03602042")
     const nomes = {};
     if (outros.length) {
-      const r = await supabase.from("motoristas").select("chapa, nome").in("chapa", outros.flatMap((c) => [c, `0${c}`]));
-      (r.data || []).forEach((m) => { nomes[normChapa(m.chapa)] = String(m.nome ?? "").trim(); });
+      const linhas = await lerDP360("funcionarios", {
+        colunas: "nr_cracha,nm_funcionario,status",
+        filtros: { nr_cracha: `in.(${outros.flatMap((c) => [c, `0${c}`]).join(",")})` },
+        limite: 100,
+      }).catch(() => []);
+      nomesPorChapa(linhas).forEach((m, c) => { nomes[c] = m.nome; });
     }
     return {
       temTurno: !!t,

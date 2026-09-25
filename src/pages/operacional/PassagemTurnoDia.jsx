@@ -21,7 +21,7 @@ import {
   PERIODOS, TABELA_FALTAS, TABELA_INTERCORRENCIAS, TABELA_TURNOS,
   TIPOS_OCORRENCIA, chapasNoTexto, contarReservas, emAberto, dataPorExtenso, isoLocal, lerFrotaParadaDoDia, lerMotoristas,
   lerOcorrenciasDoDia, lerReservistasDoDia, normChapa, podeEditarDia, quemEsta, reservaSubstituiu, retratoDoSistema, somaDias,
-  veiculoNoTexto,
+  dataBR, situacaoDoDia, useRelogio, veiculoNoTexto,
 } from "./passagemTurno";
 
 /* O que o plantão DIGITA. O resto vem sozinho (dono, 25/09/2026): as ocorrências do dia
@@ -53,7 +53,9 @@ export default function PassagemTurnoDia() {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
   const dia = /^\d{4}-\d{2}-\d{2}$/.test(String(dataParam || "")) ? dataParam : isoLocal();
-  const editavel = podeEditarDia(dia, user);
+  const agora = useRelogio();
+  const situacao = situacaoDoDia(dia, agora);
+  const editavel = podeEditarDia(dia, user, agora);
   const eu = quemEsta(user);
 
   const [turno, setTurno] = useState(null);
@@ -336,7 +338,8 @@ export default function PassagemTurnoDia() {
   const interPor = (p) => inter.filter((i) => i.periodo === p);
   // quem ficou à disposição e não assumiu tabela nenhuma (regra em `reservaSubstituiu`)
   const ficaramNaReserva = (reservistas?.lista || []).filter((r) => !reservaSubstituiu(r, faltas));
-  const hoje = isoLocal();
+  const hoje = isoLocal(new Date(agora));
+  const prazo = `10h de ${dataBR(somaDias(dia, 1)).slice(0, 5)}`;
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 space-y-4">
@@ -373,9 +376,20 @@ export default function PassagemTurnoDia() {
             </button>
           </div>
         </div>
-        {!editavel && (
+        {situacao === "aberto" && (
+          <div className="mt-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-semibold px-3 py-2 inline-flex items-center gap-2">
+            Aberto para lançamento até as {prazo}. Depois fica somente para leitura.
+          </div>
+        )}
+        {situacao === "fechado" && (
           <div className="mt-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm font-semibold px-3 py-2 inline-flex items-center gap-2">
-            <FaLock /> Dia fechado para edição (vale até as 10h do dia seguinte, como no PCM). Só o Administrador altera.
+            <FaLock /> Somente leitura: o dia ficou aberto até as {prazo}.
+            {editavel ? " Você altera por ser Administrador." : " Só o Administrador altera."}
+          </div>
+        )}
+        {situacao === "futuro" && (
+          <div className="mt-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-sm font-semibold px-3 py-2 inline-flex items-center gap-2">
+            <FaLock /> Este dia ainda não começou: abre para lançamento à 00:00 de {dataBR(dia).slice(0, 5)}.
           </div>
         )}
         {erro && <div className="mt-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-semibold px-3 py-2">{erro}</div>}

@@ -2,9 +2,11 @@
 // um botão para o dia de hoje e o histórico, cada dia com o resumo do que foi lançado.
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaCalendarAlt, FaPlay, FaSearch, FaExchangeAlt } from "react-icons/fa";
+import { FaCalendarAlt, FaPlay, FaSearch, FaExchangeAlt, FaLock } from "react-icons/fa";
 import { supabase } from "../../supabase";
-import { TABELA_FALTAS, TABELA_INTERCORRENCIAS, TABELA_TURNOS, dataBR, dataPorExtenso, isoLocal } from "./passagemTurno";
+import {
+  TABELA_FALTAS, TABELA_INTERCORRENCIAS, TABELA_TURNOS, dataBR, dataPorExtenso, isoLocal, situacaoDoDia, somaDias, useRelogio,
+} from "./passagemTurno";
 
 export default function PassagemTurnoInicio() {
   const navigate = useNavigate();
@@ -13,7 +15,10 @@ export default function PassagemTurnoInicio() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [busca, setBusca] = useState("");
-  const hoje = isoLocal();
+  // o relógio vira o dia à 00:00 com a tela aberta: o botão passa a abrir o dia novo
+  const agora = useRelogio();
+  const hoje = isoLocal(new Date(agora));
+  const abrirDia = (d) => navigate(`/operacional/passagem-turno/${d}`);
 
   useEffect(() => {
     let ativo = true;
@@ -69,7 +74,7 @@ export default function PassagemTurnoInicio() {
           </div>
           <button
             type="button"
-            onClick={() => navigate(`/operacional/passagem-turno/${hoje}`)}
+            onClick={() => abrirDia(hoje)}
             className="px-5 py-3 rounded-xl bg-teal-700 text-white font-black inline-flex items-center gap-2 hover:bg-teal-600 shadow-sm"
           >
             <FaPlay /> {temHoje ? "Continuar o turno de hoje" : "Abrir o turno de hoje"}
@@ -111,13 +116,32 @@ export default function PassagemTurnoInicio() {
               <tbody>
                 {visiveis.map((d) => {
                   const c = contagem[d.data_referencia] || { faltas: 0, inter: 0 };
+                  const aberto = situacaoDoDia(d.data_referencia, agora) === "aberto";
                   return (
-                    <tr key={d.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    // a linha inteira abre o dia (dono, 25/09/2026); o link da data segue para
+                    // abrir em outra aba, e o clique nele não navega duas vezes
+                    <tr
+                      key={d.id}
+                      tabIndex={0}
+                      title={`Abrir a passagem de ${dataBR(d.data_referencia)}`}
+                      className="border-b border-slate-100 hover:bg-teal-50/60 cursor-pointer focus:outline-none focus:bg-teal-50/60"
+                      onClick={(e) => { if (!e.target.closest("a")) abrirDia(d.data_referencia); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") abrirDia(d.data_referencia); }}
+                    >
                       <td className="py-2 pr-3">
                         <Link to={`/operacional/passagem-turno/${d.data_referencia}`} className="font-bold text-blue-700 inline-flex items-center gap-2">
                           <FaCalendarAlt /> {dataBR(d.data_referencia)}
                         </Link>
                         <div className="text-xs text-slate-500 capitalize">{dataPorExtenso(d.data_referencia).split(",")[0]}</div>
+                        {aberto ? (
+                          <div className="mt-0.5 inline-block px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold">
+                            Aberto até 10h de {dataBR(somaDias(d.data_referencia, 1)).slice(0, 5)}
+                          </div>
+                        ) : (
+                          <div className="mt-0.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-bold">
+                            <FaLock /> Somente leitura
+                          </div>
+                        )}
                       </td>
                       <td className="pr-3 font-bold">{d.carros_programados ?? "—"}</td>
                       <td className="pr-3">{d.gns ?? "—"} · {d.faixa_amarela ?? "—"}</td>

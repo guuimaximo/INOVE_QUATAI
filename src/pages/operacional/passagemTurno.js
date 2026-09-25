@@ -12,6 +12,7 @@
 // "30060914 trouxe o veículo 222214 para a garagem porque o 30060916 passou mal" — é
 // informação de DOIS motoristas, e ela subsidia a análise do ponto dos dois. O cartão
 // do dia do DP360 lê `lerPlantaoDoMotorista` por chapa e dia.
+import { useEffect, useState } from "react";
 import { supabase } from "../../supabase";
 
 export const TABELA_TURNOS = "operacional_turnos";
@@ -70,16 +71,43 @@ export function dataPorExtenso(iso) {
   });
 }
 
-/* A MESMA JANELA DE EDIÇÃO DO PCM (`canEditPCM`): o dia se edita até as 10h do dia
-   seguinte — o plantão da noite ainda fecha o que ficou. Depois disso, só Administrador
-   (o DP pode precisar corrigir uma chapa dias depois, na análise do ponto). */
-export function podeEditarDia(dataIso, user) {
-  if (String(user?.nivel ?? "").trim() === "Administrador") return true;
-  const s = String(dataIso ?? "").slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
-  const limite = new Date(`${s}T10:00:00`);
+/* A JANELA DO DIA (dono, 25/09/2026: "a passagem do dia 25/09 fica disponível até as 10h
+   do dia 26/09, e a partir da 00:00 já pode abrir o dia novo 26/09"). A mesma do PCM
+   (`canEditPCM`): o plantão da noite ainda fecha o que ficou. Três situações:
+     · futuro  — o dia ainda não começou (só abre à 00:00 dele);
+     · aberto  — da 00:00 do dia até as 10h do dia seguinte;
+     · fechado — depois disso, somente leitura. Só o Administrador altera (o DP pode
+                 precisar corrigir uma chapa dias depois, na análise do ponto).
+   `agora` vem do relógio da tela, para ela travar e virar o dia sem recarregar. */
+export function prazoDoDia(dataIso) {
+  const limite = new Date(`${String(dataIso ?? "").slice(0, 10)}T10:00:00`);
   limite.setDate(limite.getDate() + 1);
-  return Date.now() <= limite.getTime();
+  return limite;
+}
+
+export function situacaoDoDia(dataIso, agora = Date.now()) {
+  const s = String(dataIso ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return "fechado";
+  if (s > isoLocal(new Date(agora))) return "futuro";
+  return agora <= prazoDoDia(s).getTime() ? "aberto" : "fechado";
+}
+
+export function podeEditarDia(dataIso, user, agora = Date.now()) {
+  const situacao = situacaoDoDia(dataIso, agora);
+  if (situacao === "futuro") return false;
+  return situacao === "aberto" || String(user?.nivel ?? "").trim() === "Administrador";
+}
+
+/* O relógio da tela: o plantão deixa a Passagem aberta a noite toda. Sem ele, o botão do
+   dia novo não aparecia à 00:00 e o dia seguia editável depois das 10h até alguém
+   recarregar a página. */
+export function useRelogio(intervaloMs = 30000) {
+  const [agora, setAgora] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setAgora(Date.now()), intervaloMs);
+    return () => window.clearInterval(t);
+  }, [intervaloMs]);
+  return agora;
 }
 
 export function quemEsta(user) {

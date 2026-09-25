@@ -84,5 +84,6 @@ jobs:
             flash-report-diesel/*.pdf
             flash-report-diesel/*.png
             flash-report-diesel/dados_flash.json
+            flash-report-diesel/painel_dados.enc.json
           if-no-files-found: ignore
           retention-days: 14

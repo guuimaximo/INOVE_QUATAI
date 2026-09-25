@@ -2288,3 +2288,11 @@ _dados["_PERIODO"] = PERIODO
 (OUT / "dados_flash.json").write_text(
     _json.dumps(_dados, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
 print("dados_flash.json gerado.")
+
+# Painel interativo: dado linha a linha de todos os motoristas, CIFRADO (o repo e publico).
+# Falha aqui nao pode derrubar o PDF, que ja foi gerado acima.
+try:
+    import gen_painel
+    gen_painel.exportar(gfd, OUT)
+except Exception as _e:
+    print(f"[painel] nao gerado ({_e}).")

@@ -2293,6 +2293,6 @@ print("dados_flash.json gerado.")
 # Falha aqui nao pode derrubar o PDF, que ja foi gerado acima.
 try:
     import gen_painel
-    gen_painel.exportar(gfd, OUT)
+    gen_painel.exportar(gfd, OUT, extra={"cronograma": CRONOGRAMA})
 except Exception as _e:
     print(f"[painel] nao gerado ({_e}).")

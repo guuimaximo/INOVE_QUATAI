@@ -74,7 +74,7 @@ import {
 import { supabase } from "../../../supabase";
 import { usePergunta } from "../Perguntar";
 import PainelVirada from "../PainelVirada";
-import { sequenciaDaVirada, somaUmDia } from "../diaNoTransnet";
+import { entradaPeloCitatti, sequenciaDaVirada, somaUmDia } from "../diaNoTransnet";
 import { runIncerto } from "../esperarRobo";
 /* =============================================================================
    Revisão (Passo 2) — porte da tela do DP360 (Sistemas/PONTO: app/ui/app.js
@@ -1278,6 +1278,10 @@ const COLUNAS_PONTO_DIARIO = [
 // reserva": a ANOTAÇÃO do gestor (observação, cobertura, horário, quem lançou) ficava
 // para trás. Agora vem o registro inteiro, num Map por crachá|dia — a grade continua
 // só perguntando "tem reserva?" e o cartão mostra o que foi anotado.
+// A entrada pelo Citatti (`entradaPeloCitatti`) só precisa destas: o Citatti, a
+// bilhetagem e a operação real, que quando existe manda e desliga a troca.
+const COLUNAS_CITATTI = "cracha,data_ref,real_inicio,op_inicio,val_inicio";
+
 const COLUNAS_GORDURA_GPS = [
   "cracha",
   "data_ref",
@@ -1837,8 +1841,15 @@ export default function Revisao() {
         filtros: { date_ref: `eq.${data}`, passo: "eq.2" },
         ordem: "importado_em.desc",
       }).catch(() => []),
+      // o Citatti do dia: a entrada que saiu da bilhetagem fora da curva volta para ele
+      // (`entradaPeloCitatti`). Sem a gordura a grade carrega igual, só sem essa troca.
+      lerTudoDP360("ponto_gordura", {
+        colunas: COLUNAS_CITATTI,
+        filtros: { data_ref: `eq.${data}` },
+        ordem: "cracha.asc",
+      }).catch(() => []),
     ])
-      .then(([diario, reaisManuais, listaCasos, listaLancados]) => {
+      .then(([diario, reaisManuais, listaCasos, listaLancados, gorduraDia]) => {
         if (!ativo) return;
         const mapaRm = {};
         for (const rm of reaisManuais) mapaRm[chaveDia(rm.cracha, rm.date_ref)] = rm;
@@ -1855,9 +1866,18 @@ export default function Revisao() {
         // As duas camadas, nesta ordem: o Real manual do DP manda sobre a view, e a
         // proteção da saída batida entra DEPOIS — sobre o que o DP cravou ela não mexe,
         // porque aí a saída já é decisão de gente, não sugestão da view.
+        // E, antes das duas, a entrada pelo Citatti quando a bilhetagem está fora da curva:
+        // é correção da SUGESTÃO da view, então vem por baixo do Real.
+        const mapaCitatti = {};
+        for (const g of gorduraDia || []) mapaCitatti[cra8(g.cracha)] = g;
         setLinhas(
           diario.map((l) =>
-            aplicarPontasBatidas(aplicarRealManual(l, mapaRm[chaveDia(l.cracha, l.date_ref)])),
+            aplicarPontasBatidas(
+              aplicarRealManual(
+                entradaPeloCitatti(l, mapaCitatti[cra8(l.cracha)]),
+                mapaRm[chaveDia(l.cracha, l.date_ref)],
+              ),
+            ),
           ),
         );
       })
@@ -2179,17 +2199,24 @@ export default function Revisao() {
     const cr = String(cracha ?? "").trim();
     const variantes = [...new Set([cr, cr.replace(/^0+/, ""), cra8(cr)].filter(Boolean))].join(",");
     const filtros = { cracha: `in.(${variantes})`, date_ref: `eq.${dia}` };
-    const [diario, reaisManuais, listaCasos] = await Promise.all([
+    const [diario, reaisManuais, listaCasos, gordura] = await Promise.all([
       lerDP360("ponto_diario", { colunas: COLUNAS_PONTO_DIARIO, filtros, limite: 5 }),
       lerDP360("ponto_real_manual", { filtros, limite: 5 }),
       lerDP360("ponto_caso", { filtros, limite: 5 }),
+      lerDP360("ponto_gordura", {
+        colunas: COLUNAS_CITATTI,
+        filtros: { cracha: filtros.cracha, data_ref: `eq.${dia}` },
+        limite: 5,
+      }).catch(() => []),
     ]);
     const chave = chaveDia(cr, dia);
     const rm = reaisManuais?.[0] || null;
     const caso = listaCasos?.[0] || null;
     // a MESMA dupla de camadas da carga do dia — senão a linha relida volta com a
     // saída crua da view e a grade passa a mostrar dois números diferentes na mesma tela
-    const nova = diario?.[0] ? aplicarPontasBatidas(aplicarRealManual(diario[0], rm)) : null;
+    const nova = diario?.[0]
+      ? aplicarPontasBatidas(aplicarRealManual(entradaPeloCitatti(diario[0], gordura?.[0]), rm))
+      : null;
 
     setCasos((mapa) => {
       const novo = { ...mapa };

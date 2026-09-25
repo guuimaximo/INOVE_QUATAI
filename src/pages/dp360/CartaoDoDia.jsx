@@ -18,7 +18,7 @@ import {
   prepararComunicado,
   variaveisPendentes,
 } from "./comunicadoTransnet";
-import { fimDoTurnoNoDiaSeguinte, somaUmDia } from "./diaNoTransnet";
+import { entradaPeloCitatti, fimDoTurnoNoDiaSeguinte, somaUmDia } from "./diaNoTransnet";
 import {
   CONSTANTES,
   almocoDaRefeicao,
@@ -1728,7 +1728,7 @@ export function ComoFicouOPonto({ linha, caso, aoFechar }) {
 }
 
 export default function CartaoDoDia({
-  linha,
+  linha: linhaDaTela,
   caso,
   gps, // resumo do GPS já calculado pela tela (a Revisão calcula o dia inteiro)
   gpsAuto = false, // sem `gps` pronto, o cartão lê ponto_gps/gps_carro deste crachá×dia
@@ -1783,12 +1783,16 @@ export default function CartaoDoDia({
   const [erroSemana, setErroSemana] = useState("");
   const [pedirExclusao, setPedirExclusao] = useState(false);
 
-  const dia = String(linha.date_ref ?? "").slice(0, 10);
-  const cracha = linha.cracha;
+  const dia = String(linhaDaTela.date_ref ?? "").slice(0, 10);
+  const cracha = linhaDaTela.cracha;
   // A tela mandou a gordura já tratada? Então é ela que vale — a Gordura aplica as
   // QUATRO CAMADAS (`regrasGordura`) antes de exibir, e o pop-up não pode mostrar a
   // linha crua: a "Operação real" sairia diferente da que está na grade atrás dele.
   const g = gorduraDaTela || extra.gordura || {};
+  // A ENTRADA PELO CITATTI (25/09/2026): a Revisão já manda a linha trocada; quem abre o
+  // cartão de outra tela manda a linha da view, e aqui ela recebe a mesma troca com a
+  // gordura que o cartão leu. Idempotente: na linha já trocada, nada muda.
+  const linha = useMemo(() => entradaPeloCitatti(linhaDaTela, g), [linhaDaTela, g]);
   const semGpsProprio = !gpsAuto || !!gps;
 
   useEffect(() => {

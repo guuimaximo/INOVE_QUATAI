@@ -14,7 +14,7 @@
 //
 // SEM React e SEM rede: a Revisão, as Ocorrências e o Histórico leem a MESMA regra.
 // Extensão `.js` explícita nos imports para o Node conseguir testar este arquivo.
-import { hm2min, min2hm } from "./regrasPonto.js";
+import { CONSTANTES, hm2min, min2hm } from "./regrasPonto.js";
 
 const txt = (v) => String(v ?? "").trim();
 const dois = (n) => String(n).padStart(2, "0");
@@ -755,6 +755,58 @@ function semAlmocoDeMentira(linha) {
   if (travado) { novo.almoco_travado = ""; porques.push("almoco de matriz nao tranca o DP"); }
   if (vaiPedirSaida) { novo.pede_saida = "true"; porques.push("sem saida batida, o cartao volta a pedir a saida"); }
   novo.__porque = porques.join(" e ");
+  return novo;
+}
+
+/* ═══ A BILHETAGEM FORA DA CURVA NAO DITA A ENTRADA (25/09/2026) ═════════════
+ * JOAO CAETANO 3202677 23/09: a view pos a entrada em 03:32 — a bilhetagem (03:42) menos
+ * a tolerancia —, com o Citatti comecando a operacao as 05:06 e a escala as 05:00. O
+ * pop-up ja marcava essa bilhetagem como "fora da curva" (mais de DELTA_FONTE do Citatti).
+ * Dono: "usa o Citatti 04:56".
+ *
+ * A REGRA, SO NO DIA EM QUE A ENTRADA FALTA (`pede_entrada` — o aviso vai pedir a hora):
+ * sem operacao REAL apurada (`real_inicio`), se a bilhetagem e o Citatti
+ * discordam por mais de DELTA_FONTE e a entrada da view saiu da bilhetagem, a entrada
+ * passa a sair do Citatti, com a mesma tolerancia (-TOL_ENTRADA_MIN). So a ENTRADA: foi o
+ * que o dono decidiu, e e a ponta que o pop-up marca. O `refPonta` (a regua do veredito,
+ * CANON main.py:7902, "a referencia continua sendo a bilhetagem") fica como esta — ele so
+ * entra quando o caso nao tem alvo nem sugestao.
+ *
+ * POR QUE SO QUANDO FALTA: quem BATEU a entrada tem a batida como entrada. Aplicada em todo
+ * dia, a troca punha a sugestao DEPOIS da batida e a protecao (`entradaDoLancamento`, "a
+ * sugestao mais tarde vence") cortava minutos de quem bateu — IVAGNO 30060991 31/07 bateu
+ * 13:17 e o robo lancaria 13:26. Medido antes de subir.
+ *
+ * Precisa da linha de `ponto_gordura` do dia (a `ponto_diario` nao traz o Citatti), por
+ * isso nao mora na porta `saneiaDiaDoPonto`: quem tem as duas chama — a Revisao na carga
+ * do dia, as Ocorrencias na montagem do caso, o pop-up com a gordura que ele le.
+ * Idempotente: aplicada, a entrada deixa de bater com a bilhetagem e nada mais muda.
+ */
+export function entradaPeloCitatti(linha, gordura) {
+  if (!linha || !gordura || txt(linha.pede_entrada) !== "true" || txt(gordura.real_inicio)) return linha;
+  const citatti = hm2min(gordura.op_inicio);
+  const bilhetagem = hm2min(gordura.val_inicio);
+  if (citatti == null || bilhetagem == null) return linha;
+  const dif = Math.abs(citatti - bilhetagem);
+  // ate DELTA_FONTE as fontes concordam; acima de 12 h e a virada, nao discordancia
+  if (dif <= CONSTANTES.DELTA_FONTE || dif > 720) return linha;
+  const daBilhetagem = bilhetagem - CONSTANTES.TOL_ENTRADA_MIN;
+  const peloCitatti = citatti - CONSTANTES.TOL_ENTRADA_MIN;
+  if (daBilhetagem < 0 || peloCitatti < 0) return linha;
+  const campos = ["entrada_sug", "alvo_entrada"].filter((c) => hm2min(linha[c]) === daBilhetagem);
+  if (!campos.length) return linha;
+  const novo = { ...linha };
+  for (const c of campos) novo[c] = min2hm(peloCitatti);
+  // a jornada exibida sai das MESMAS pontas exibidas
+  const e = hm2min(novo.entrada_sug);
+  const s = hm2min(novo.saida_sug);
+  const a1 = hm2min(novo.almoco_saida_sug);
+  const a2 = hm2min(novo.almoco_volta_sug);
+  if (e != null && s != null && s > e) {
+    novo.duracao_total_sug = min2hm(s - e - (a1 != null && a2 != null && a2 > a1 ? a2 - a1 : 0));
+  }
+  const porque = `entrada pelo Citatti (${txt(gordura.op_inicio)}), nao pela bilhetagem fora da curva (${txt(gordura.val_inicio)})`;
+  novo.sug_saneada = [txt(linha.sug_saneada), porque].filter(Boolean).join(" · ");
   return novo;
 }
 

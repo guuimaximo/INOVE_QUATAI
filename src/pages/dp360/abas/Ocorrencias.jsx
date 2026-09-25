@@ -106,6 +106,7 @@ import {
   casoParaORobo,
   desenrolaSlots,
   ehRecusaSemMotivo,
+  entradaPeloCitatti,
   fimNoDiaSeguinte,
   somaUmDia,
 } from "../diaNoTransnet";
@@ -1276,9 +1277,11 @@ function montarRegistros(base) {
        tapa-buraco. Chamar de novo era no-op — e era tambem a armadilha: quem copiasse esta
        tela para outra aba copiaria a lembranca, e quem nao copiasse ficava com o defeito
        (foi o que houve com a Revisao). */
-    const cp = mapaDiario.get(k) || {};
-    const temLinhaDoDia = mapaDiario.has(k);
     const g = mapaGordura.get(k) || {};
+    // a entrada que a view tirou da bilhetagem fora da curva vem pelo Citatti — a mesma
+    // troca da Revisão, para o caso e a grade não mostrarem dois alvos (25/09/2026)
+    const cp = entradaPeloCitatti(mapaDiario.get(k), g) || {};
+    const temLinhaDoDia = mapaDiario.has(k);
     const rm = mapaReal.get(k) || {};
     /* E O ALMOÇO INVENTADO TAMBÉM SAI DO ALVO CONGELADO (21/09/2026). Tirar da linha do dia
        não bastou: o alvo que o aviso congelou no CASO guarda a mesma matriz, e o pop-up

@@ -130,14 +130,24 @@ export const alvoQuatroSlots = (caso) =>
  * 13:43 · 20:03 · 20:33 · 23:32 — e o Real manual do DP crava a entrada em 14:10, que entra
  * por cima (é o topo da cascata da régua).
  *
- * Slot que ninguém publicou fica com o que está no cartão de hoje — nada se inventa. */
+ * Slot que ninguém publicou fica com o que está no cartão de hoje — nada se inventa.
+ *
+ * A RÉGUA DA GORDURA NÃO É DEGRAU DESTA ESCADA (24/09/2026). `alvo_entrada_ref`/`alvo_saida_ref`
+ * estavam aqui entre o publicado e a sugestão, e a ferramenta original diz com todas as
+ * letras o que eles são: "Referência crua da operação já com a tolerância. É a régua usada no
+ * cálculo da gordura, NÃO o cartão final sugerido" (main.py:6955) — o alvo dela é
+ * `alvo_entrada or entrada_sug`, sem a régua. O efeito aqui: justamente no dia em que a
+ * Revisão SE RECUSOU a publicar alvo (JORNADA_SUSPEITA, `requer_alvo_manual`), o pop-up
+ * mostrava a régua como "do alvo — o que a correção vai lançar". FERNANDO 30061069 20/09
+ * bateu 11:55 e o cartão dizia 12:20. Medido: 11 entradas e 23 saídas no pop-up de
+ * ocorrências; nenhuma chegou a ser congelada ou lançada. A gordura continua lendo a régua. */
 export function alvoPublicado(cp, rm, slotsHoje) {
   const hoje = slotsHoje || ["", "", "", ""];
   const cascata = [
-    [rm?.entrada, cp?.alvo_entrada, cp?.alvo_entrada_ref, cp?.entrada_sug],
+    [rm?.entrada, cp?.alvo_entrada, cp?.entrada_sug],
     [rm?.alm_saida, cp?.alvo_saida_almoco, cp?.almoco_saida_sug],
     [rm?.alm_volta, cp?.alvo_volta_almoco, cp?.almoco_volta_sug],
-    [rm?.saida, cp?.alvo_saida, cp?.alvo_saida_ref, cp?.saida_sug],
+    [rm?.saida, cp?.alvo_saida, cp?.saida_sug],
   ];
   const slots = cascata.map((degraus, i) => {
     for (const v of degraus) {

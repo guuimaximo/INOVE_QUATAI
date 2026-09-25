@@ -20,6 +20,12 @@
 
 /** montador.py:14 — as constantes são as DELE, não as do simulador (que usa 27 min). */
 export const MAX_ALMOCO = 120;
+/* TETO DE JORNADA DO CARTÃO (24/09/2026). Sem ele o `validaCartao` aceitava 24 h: o HELDER
+   30008251 10/09 pediu "alterar 19:07 → 04:32" (a entrada virou a hora da saída), o DP aceitou
+   `04:32 → 28:31` com o pop-up dizendo que fechava, e o Transnet marcou ❌. É o MESMO teto do
+   robô (`_cartao_possivel`, 20 h). Medido antes de virar trava: não reprova nenhum dos 25.156
+   dias fechados como OK na base (o maior é 19h02 — com 18 h já cairiam 2 dias bons). */
+export const MAX_JORNADA_CARTAO = 20 * 60;
 const MIN_ALMOCO = 20;
 const TOL_COLADA = 6;
 /**
@@ -113,5 +119,8 @@ export function validaCartao(mins, cat) {
     const d = ms[2] - ms[1];
     if (d < pisoAlmoco(c) || d > MAX_ALMOCO) return `almoço de ${d} min`;
   }
+  const jornada = ms.length >= 2 ? ms[ms.length - 1] - ms[0] : 0;
+  if (jornada > MAX_JORNADA_CARTAO)
+    return `jornada de ${Math.floor(jornada / 60)}h${String(jornada % 60).padStart(2, "0")} — acima de 20 h, não é cartão`;
   return "";
 }

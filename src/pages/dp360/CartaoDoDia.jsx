@@ -33,6 +33,7 @@ import {
   removeFantasmas,
   simulaCartao,
 } from "./regrasPonto";
+import { MAX_JORNADA_CARTAO } from "./regrasMontador";
 
 /* =============================================================================
    CartaoDoDia — O POP-UP DE ANÁLISE DE UM CRACHÁ × DIA. UM SÓ, PARA AS DUAS TELAS.
@@ -80,7 +81,10 @@ const {
   TOL_SAIDA_MIN, // 8  — minutos DEPOIS do fim da operação (main.py:118)
   SUG_JORNADA_MAX_MIN, // 780 — acima disso não é jornada, é defeito (main.py:2745)
   DELTA_FONTE, // 20 — margem de concordância entre fontes (CANON 6.5)
+  ALM_FAIXAS, // [[360,30],[240,15]] — jornada acima de 4 h já exige intervalo (main.py:6007)
 } = CONSTANTES;
+// a menor jornada que já exige almoço: até aqui o dia fecha em 2 sem ferir regra de jornada
+const JORNADA_SEM_ALMOCO_MAX = Math.min(...ALM_FAIXAS.map((f) => f[0]));
 
 // Bilhetagem "fora da curva" na entrada é o mesmo conceito do CANON: as duas fontes
 // deixaram de concordar. Mesma margem, uma constante só.
@@ -286,7 +290,8 @@ const temContratoView = (r) =>
 export function sugBloqueio(r) {
   if (temContratoView(r)) {
     const acao = String(r.acao_sugerida ?? "").trim().toUpperCase();
-    if (acao === "AJUSTAR_MANUAL") return "ponto invertido exige decisão manual do DP";
+    // Real com as QUATRO pontas cravadas é a decisão manual que esta trava pede
+    if (acao === "AJUSTAR_MANUAL" && !r.real_completo) return "ponto invertido exige decisão manual do DP";
     if (!r.alvo_manual_dp && !ehVerdadeiro(r.alvo_confiavel)) {
       // POSSIVEL_RESERVA tem motivo próprio: o dia não está bloqueado por dado
       // ruim — ele bateu no horário da escala e a operação apareceu horas depois.
@@ -297,10 +302,20 @@ export function sugBloqueio(r) {
     // `almoco_manual_dp` é o escape do Real cravado, igual ao `alvo_manual_dp` acima: a
     // base que faltava é a mão do DP, e ela chega pelo overlay `aplicarRealManual`.
     if (acao === "LANCAR_ALMOCO_AUTOMATICO" && !r.almoco_manual_dp && !ehVerdadeiro(r.almoco_confiavel))
-      return "almoço sem base confiável";
+      return r.jornada_manual_dp
+        ? "almoço sem base confiável — a entrada e a saída estão definidas; crave também a saída e a volta do almoço"
+        : r.alvo_manual_dp
+          ? "almoço sem base confiável — crave também a saída e a volta do almoço no Real"
+          : "almoço sem base confiável";
   }
+  if (r.almoco_nao_cabe)
+    return `o almoço sugerido ${r.almoco_nao_cabe} não cabe na janela que você cravou (${fmtHora(r.entrada_sug)}–${fmtHora(r.saida_sug)}) — crave a saída e a volta do almoço dentro dela`;
   const e = hm2min(r.entrada_sug);
   const s = hm2min(r.saida_sug);
+  // REAL PELA METADE NÃO CALA (24/09/2026): o DP cravou uma ponta, a outra não existe em
+  // lugar nenhum, e a tela ficava muda — ele não sabia o que faltava cravar.
+  if ((e == null) !== (s == null) && r.alvo_manual_dp)
+    return `o Real tem só a ${e == null ? "saída" : "entrada"} — falta cravar a ${e == null ? "entrada" : "saída"}`;
   if (e == null || s == null) return "";
   const bruta = jornadaEntreMin(e, s); // virada de meia-noite é do motor
   const a1 = hm2min(r.almoco_saida_sug);
@@ -308,8 +323,21 @@ export function sugBloqueio(r) {
   const alm = a1 != null && a2 != null ? Math.max(0, a2 - a1) : 0;
   const liq = bruta - alm;
   if (liq <= 0) return "sugestão com jornada zero ou negativa";
-  if (liq > SUG_JORNADA_MAX_MIN)
-    return `sugestão daria ${Math.floor(liq / 60)}h${String(liq % 60).padStart(2, "0")} de jornada — acima do limite de 13h`;
+  // A JANELA É DO DP: o teto é o do CARTÃO (20 h), não o da sugestão (ver `aplicarRealManual`)
+  if (r.jornada_manual_dp) {
+    if (bruta > MAX_JORNADA_CARTAO)
+      return `jornada de ${Math.floor(bruta / 60)}h${String(bruta % 60).padStart(2, "0")} — acima de 20 h, não é cartão`;
+    return "";
+  }
+  if (liq > SUG_JORNADA_MAX_MIN) {
+    const dur = `${Math.floor(liq / 60)}h${String(liq % 60).padStart(2, "0")}`;
+    // com Real parcial, a OUTRA ponta veio da sugestão (não da batida): é ela que falta cravar
+    if (r.alvo_manual_dp) {
+      const falta = String(r.rm_entrada ?? "").trim() ? "saída" : "entrada";
+      return `sugestão daria ${dur} de jornada — acima do limite de 13h; a ${falta} veio da sugestão, crave a ${falta} no Real`;
+    }
+    return `sugestão daria ${dur} de jornada — acima do limite de 13h`;
+  }
   return "";
 }
 
@@ -405,6 +433,57 @@ export function aplicarRealManual(linha, rm) {
     out.almoco_manual_dp = true;
     out.almoco_confiavel = "true";
     out.fonte_almoco = "DP_MANUAL";
+  }
+  out.real_completo = Boolean(rm.entrada && rm.alm_saida && rm.alm_volta && rm.saida);
+  /* A JANELA DO DP (24/09/2026 — dono: "se eu colocar o Real tem que liberar"). Quando a
+     entrada e a saída do dia são do DP (cravadas) ou dele mesmo (a batida), e pelo menos uma
+     foi cravada, a janela é decisão do DP — e duas travas feitas para a SUGESTÃO automática
+     deixam de valer contra ela:
+       · o teto de 13 h (main.py:2745: "acima disso não é jornada, é defeito") existe para a
+         sugestão não inventar dia longo. GENIVAL 30060654 26/08 cravou exatamente o que
+         bateu, 03:30 → 20:59, e seguia travado. Vale o teto do CARTÃO, 20 h;
+       · o almoço automático que não cabe na janela: sai se a janela não exige almoço, e
+         senão o dia trava DIZENDO o que cravar. GABRIEL 30060990 20/09 cravou 01:10 → 07:30
+         e a sugestão tinha almoço 07:20–07:31, que termina depois da saída. Almoço CRAVADO
+         nunca sai.
+     Medido nos 201 dias com Real cravado que não estão OK: 155 já liberavam, estas regras
+     liberam os que o DP de fato definiu, e nenhum dos 155 volta a travar. */
+  const daBatida = (sug, batida) => hm2min(sug) != null && hm2min(sug) === hm2min(batida);
+  const entDoDp = Boolean(rm.entrada) || daBatida(linha?.entrada_sug, linha?.entrada);
+  const saiDoDp = Boolean(rm.saida) || daBatida(linha?.saida_sug, linha?.saida);
+  if ((rm.entrada || rm.saida) && entDoDp && saiDoDp) {
+    out.jornada_manual_dp = true;
+    const e = hm2min(out.entrada_sug);
+    let s = hm2min(out.saida_sug);
+    if (!(rm.alm_saida && rm.alm_volta) && e != null && s != null) {
+      while (s <= e) s += 1440;
+      const naJanela = (h) => {
+        let v = hm2min(h);
+        if (v == null) return null;
+        while (v < e) v += 1440;
+        return v;
+      };
+      const a1 = naJanela(out.almoco_saida_sug);
+      const a2 = naJanela(out.almoco_volta_sug);
+      const cabe = a1 != null && a2 != null && e < a1 && a1 < a2 && a2 < s;
+      if ((a1 != null || a2 != null) && !cabe) {
+        /* A REGRA DE JORNADA MANDA (dono: "o que precisa é as regras de jornada"). Tirar o
+           almoço só quando a janela NÃO exige almoço (ALM_FAIXAS: até 4 h) — ALDO 30060645
+           29/07, 17:37 → 19:21. Acima disso, sumir com o almoço seria inventar um dia sem
+           intervalo que o DP não decidiu (DONIZETE 30060710 14/09 ficaria com 11h10 direto):
+           o dia trava dizendo o que cravar. Antes ele ficava AMARELO na Revisão e o
+           lançamento recusava depois ("o almoço não cabe") — a tela liberava e não liberava. */
+        if (s - e <= JORNADA_SEM_ALMOCO_MAX) {
+          out.almoco_saida_sug = "";
+          out.almoco_volta_sug = "";
+          out.alvo_saida_almoco = "";
+          out.alvo_volta_almoco = "";
+          out.almoco_manual_dp = true; // não há almoço a lançar: a janela do DP não exige nem comporta
+        } else {
+          out.almoco_nao_cabe = `${fmtHora(linha?.almoco_saida_sug) || "—"}–${fmtHora(linha?.almoco_volta_sug) || "—"}`;
+        }
+      }
+    }
   }
   return out;
 }
@@ -566,11 +645,16 @@ const ESTILO_INPUT_TRAVADO = {
 
 function AvisoTrava({ motivo }) {
   if (!motivo) return null;
+  // o motivo que já diz o que fazer (crave…, atestado, o Transnet já mudou) não ganha a
+  // frase genérica — em dia de atestado "crave o Real" é conselho errado
+  const jaOrienta = /crave|cravar|atestado|transnet/i.test(motivo);
   return (
     <div className="dp-card">
       <span className="dp-pill warn">⚠ sugestão bloqueada</span>{" "}
       <span className="dp-muted">
-        {motivo}. Não dá para avisar nem lançar; o DP precisa cravar o Real na mão.
+        {jaOrienta
+          ? `${motivo}. Não dá para avisar nem lançar.`
+          : `${motivo}. Não dá para avisar nem lançar; o DP precisa cravar o Real na mão.`}
       </span>
     </div>
   );
@@ -1655,6 +1739,10 @@ export default function CartaoDoDia({
   blocoLateral, // bloco extra no topo da coluna 2
   acoesRodape, // botões de decisão da tela
   rodapeInfo, // frase do rodapé
+  /* A trava que a TELA já calculou para esta linha (a Revisão junta o portão da sugestão
+     e a régua do lançamento). Com ela, o aviso do pop-up é o mesmo da grade; sem ela, o
+     pop-up calcula o portão sozinho, como sempre. */
+  bloqueioDaTela,
 }) {
   const [extra, setExtra] = useState({
     gordura: null,
@@ -1931,7 +2019,7 @@ export default function CartaoDoDia({
 
   const iv = extra.intervalo || {};
   const gpsEfetivo = gps || extra.gps;
-  const bloqueio = sugBloqueio(linha);
+  const bloqueio = bloqueioDaTela ?? sugBloqueio(linha);
   const travado = ehVerdadeiro(linha.almoco_travado);
 
   /* ---- formulário do Real manual ---- */

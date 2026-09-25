@@ -68,6 +68,7 @@ import {
   csvDoAjustePonto,
   ddmmaaaa,
   montarLoteAjuste,
+  travaDaLinha,
 } from "../regrasAjustePonto";
 
 import { supabase } from "../../../supabase";
@@ -2043,11 +2044,17 @@ export default function Revisao() {
 
   // `sugBloqueio` roda uma vez por linha (e não uma vez por célula): a grade tem
   // ~30 colunas e o dia inteiro de motoristas, então repetir custava 12k chamadas.
+  /* A COR É O VEREDITO DO LANÇAMENTO (25/09/2026): `travaDaLinha` junta o portão da
+     sugestão e a régua do lançamento. A tela liberava e o lançamento travava — a queixa do
+     dono desde o JOSE MARCOS. A grade, as células SUG e o pop-up leem daqui. */
   const bloqueios = useMemo(() => {
     const m = {};
-    for (const l of linhas) m[chaveDia(l.cracha, l.date_ref)] = sugBloqueio(l);
+    for (const l of linhas) {
+      const k = chaveDia(l.cracha, l.date_ref);
+      m[k] = travaDaLinha(l, casos[k]);
+    }
     return m;
-  }, [linhas]);
+  }, [linhas, casos]);
 
   /* 🌙 QUEM É CASO DE VIRADA NESTE DIA (`casoDaVirada`, diaNoTransnet.js): a linha é o
      "dia certo" (a saída dela ficou amanhã) ou o "dia seguinte" (ela começa com a saída de
@@ -2882,6 +2889,7 @@ export default function Revisao() {
         <CartaoDoDia
           linha={aberta}
           caso={casos[chaveDia(aberta.cracha, aberta.date_ref)]}
+          bloqueioDaTela={bloqueios[chaveDia(aberta.cracha, aberta.date_ref)]}
           gps={gpsPorCracha[cra8(aberta.cracha)]}
           /* AJUSTADO no lugar do REVISAR, e o caminho para saber O QUÊ. Sem o botão o
              selo diria "está resolvido" e pararia aí — e a primeira pergunta de quem lê

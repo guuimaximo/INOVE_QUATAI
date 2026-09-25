@@ -48,7 +48,7 @@
 // sai da view.
 // ============================================================================
 
-import { cra8, chaveDia, ehPontoInvertido, ehVerdadeiro, fmtHora, sugBloqueio } from "./CartaoDoDia";
+import { cra8, chaveDia, ehPontoInvertido, ehVerdadeiro, fmtHora, sugBloqueio, temSugestaoUtil } from "./CartaoDoDia";
 // Aritmética de relógio é do MOTOR, nunca escrita à mão: `hm2min` aceita "1420"
 // (o que a tela do Cartão de Ponto devolve) e `min2hm` preserva a notação 24+.
 import { hm2min, min2hm } from "./regrasPonto";
@@ -196,7 +196,8 @@ export function avaliarAjustePonto(linha, { caso = null, digitado = null, bloque
   //    skip: `acao_sugerida == AJUSTAR_MANUAL` ou `motivo == PONTO_INVERTIDO`).
   //    Cartão rotacionado é defeito de posição das batidas — quem decide o que
   //    fazer é o DP, linha a linha, na Revisão.
-  if (ehPontoInvertido(linha)) return fora(MOTIVO_INVERTIDO);
+  //    O Real com as QUATRO pontas cravadas É essa decisão, linha a linha (24/09/2026).
+  if (ehPontoInvertido(linha) && !linha?.real_completo) return fora(MOTIVO_INVERTIDO);
 
   // 1b) DIA COM ATESTADO MÉDICO NÃO RECEBE PONTO (RICARDO 30060898 31/08, 16/09/2026): o
   //     Transnet recusa e só responde "Existem erros...", que não diz nada a ninguém. A
@@ -506,6 +507,22 @@ export function aplicarPontasBatidas(linha) {
     out.duracao_total_sug = min2hm(sai - ent - almoco);
   }
   return out;
+}
+
+/**
+ * A TRAVA DA LINHA NA REVISÃO (25/09/2026) — o portão da sugestão e, se ele passar, a régua
+ * do lançamento, chamada como `montarLoteAjuste` chama. É ela que pinta a linha, marca as
+ * células SUG e abre o aviso do pop-up: amarelo passa a querer dizer "o lançamento sai".
+ * O check da ferramenta achou 48 linhas amarelas, no filtro padrão, que o lançamento
+ * recusava (29 em dia de atestado, 12 com o pedido aceito já tendo mudado o cartão, 7 com
+ * o almoço fora da janela). Ponto invertido fica de fora: ele é âmbar por ser diagnóstico.
+ * UMA função, para a tela e para o check — conta repetida em dois lugares diverge.
+ */
+export function travaDaLinha(linha, caso) {
+  const b = sugBloqueio(linha);
+  if (b || !temSugestaoUtil(linha, "") || ehPontoInvertido(linha)) return b;
+  const v = avaliarAjustePonto(linha, { caso: caso || null, bloqueio: "", origem: "view" });
+  return v?.csv ? "" : v?.motivo || "";
 }
 
 export function montarLoteAjuste(linhas, casos, bloqueios, lancamentos) {

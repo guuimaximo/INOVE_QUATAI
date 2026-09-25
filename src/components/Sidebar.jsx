@@ -106,6 +106,7 @@ const FAROL_URL = "https://faroldemetas.onrender.com/?from=inove";
 export default function Sidebar() {
   const location = useLocation();
   const [pcmOpen, setPcmOpen] = useState(false);
+  const [operacionalOpen, setOperacionalOpen] = useState(false);
   const [dp360Open, setDp360Open] = useState(false);
   const [guardOpen, setGuardOpen] = useState(false);
   const [desempenhoDieselOpen, setDesempenhoDieselOpen] = useState(false);
@@ -202,6 +203,16 @@ export default function Sidebar() {
           { path: "/reservas", label: "Controle de Reservas", icon: <FaUserClock /> },
           { path: "/organograma", label: "Organograma", icon: <FaSitemap /> },
           { path: "/vagas", label: "Vagas", icon: <FaBriefcase /> },
+        ],
+      },
+
+      // O fechamento do plantão (25/09/2026). Grupo próprio: o módulo Operacional vai
+      // crescer além da Passagem de Turno.
+      operacional: {
+        label: "Operacional",
+        icon: <FaExchangeAlt />,
+        tabs: [
+          { path: "/operacional/passagem-turno", label: "Passagem de Turno", icon: <FaClipboardList /> },
         ],
       },
 
@@ -348,6 +359,7 @@ export default function Sidebar() {
   useEffect(() => {
     const path = location.pathname;
     if (path.startsWith("/pcm")) setPcmOpen(true);
+    if (path.startsWith("/operacional")) setOperacionalOpen(true);
     if (path.startsWith("/dp360")) setDp360Open(true);
     if (path.startsWith("/monitoramento") || path.startsWith("/guard-")) setGuardOpen(true);
     if (path.startsWith("/desempenho") || path.startsWith("/diesel")) setDesempenhoDieselOpen(true);
@@ -382,6 +394,7 @@ export default function Sidebar() {
   const showDP360 = links.dp360.tabs.some((t) => canSee(t.path));
   const showGuard = links.guard.tabs.some((t) => canSee(t.path));
   const showPCM = links.pcm.tabs.some((t) => canSee(t.path));
+  const showOperacional = links.operacional.tabs.some((t) => canSee(t.path));
   const showEmbarcados = links.embarcados.tabs.some((t) => canSee(t.path));
   const showDesempenhoDiesel = links.desempenhoDiesel.tabs.some((t) => canSee(t.path));
   const showEstoqueDiesel = links.estoqueDiesel.tabs.some((t) => canSee(t.path));
@@ -499,6 +512,35 @@ export default function Sidebar() {
             {pessoasOpen && (
               <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
                 {links.pessoas.tabs.map((t) =>
+                  canSee(t.path) ? (
+                    <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
+                      {t.icon}
+                      <span className="whitespace-nowrap">{t.label}</span>
+                    </NavLink>
+                  ) : null
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {showOperacional && (
+          <>
+            <button
+              onClick={() => setOperacionalOpen(!operacionalOpen)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg mb-2 text-sm font-medium hover:bg-blue-600"
+              type="button"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                {links.operacional.icon}
+                <span className="whitespace-nowrap truncate">{links.operacional.label}</span>
+              </div>
+              {operacionalOpen ? <FaChevronDown size={14} /> : <FaChevronRight size={14} />}
+            </button>
+
+            {operacionalOpen && (
+              <div className="pl-4 border-l-2 border-blue-500 ml-3 mb-2">
+                {links.operacional.tabs.map((t) =>
                   canSee(t.path) ? (
                     <NavLink key={t.path} to={t.path} className={subNavLinkClass}>
                       {t.icon}

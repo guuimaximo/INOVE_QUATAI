@@ -51,6 +51,8 @@ export const APP_ACCESS_PAGES = [
   { key: "pcm_troca_pneus", label: "PCM Pneus · Lançamentos (troca, auditoria, estoque)", category: "PCM", path: "/pcm-troca-pneus", patterns: ["/pcm-troca-pneus"] },
   { key: "pcm_controle_fichas", label: "PCM Controle de Fichas", category: "PCM", path: "/pcm-controle-fichas", patterns: ["/pcm-controle-fichas"] },
   { key: "pcm_controle_pneus", label: "PCM Pneus · Conferência TransNet", category: "PCM", path: "/pcm-controle-pneus", patterns: ["/pcm-controle-pneus"] },
+  // O fechamento do plantão (25/09/2026): a lista dos dias e o dia, uma permissão só.
+  { key: "operacional_passagem_turno", label: "Operacional · Passagem de Turno", category: "Operacional", path: "/operacional/passagem-turno", patterns: ["/operacional/passagem-turno", "/operacional/passagem-turno/:data"] },
 
   { key: "checklists_central", label: "Checklists Central", category: "Checklists", path: "/checklists", patterns: ["/checklists"] },
   { key: "checklists_painel_sr", label: "Painel SR", category: "Checklists", path: "/checklists/painel-sr", patterns: ["/checklists/painel-sr"] },
@@ -169,7 +171,7 @@ export const DEFAULT_LEVEL_PROFILES = [
     nome: "CCO",
     descricao: "Operacao e atendimento SOS.",
     ativo: true,
-    paginas: ["inicio_rapido", "tratativas_solicitacao", "sac_lancamento", "sac_central", "acidentes_lancamento", "acidentes_central", "sos_solicitacao", "sos_fechamento", "sos_dashboard", "km_rodado", "embarcados_reparos"],
+    paginas: ["inicio_rapido", "tratativas_solicitacao", "sac_lancamento", "sac_central", "acidentes_lancamento", "acidentes_central", "sos_solicitacao", "sos_fechamento", "sos_dashboard", "km_rodado", "embarcados_reparos", "operacional_passagem_turno"],
     farol_liberado: false,
   },
   {

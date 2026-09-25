@@ -81,6 +81,8 @@ const PCM_PreventivasPlano = lazy(() => import("./pages/pcm/PCM_PreventivasPlano
 // Troca e Controle de pneus: uma página só (PCMPneus), aberta pelas duas rotas.
 const PCMPneus = lazy(() => import("./pages/pcm/PCMPneus"));
 const PCMControleFichas = lazy(() => import("./pages/pcm/PCMControleFichas"));
+const PassagemTurnoInicio = lazy(() => import("./pages/operacional/PassagemTurnoInicio"));
+const PassagemTurnoDia = lazy(() => import("./pages/operacional/PassagemTurnoDia"));
 
 const Usuarios = lazy(() => import("./pages/configuracoes/Usuarios"));
 const NiveisAcesso = lazy(() => import("./pages/configuracoes/NiveisAcesso"));
@@ -309,6 +311,8 @@ export default function App() {
 
               {/* PCM */}
               <Route path="/pcm-inicio" element={<PCMInicio />} />
+              <Route path="/operacional/passagem-turno" element={<PassagemTurnoInicio />} />
+              <Route path="/operacional/passagem-turno/:data" element={<PassagemTurnoDia />} />
               <Route path="/pcm-resumo" element={<PCMResumo />} />
               <Route path="/pcm-diario/:id" element={<PCMDiario />} />
               {/* Lançamentos viraram uma aba de Preventivas; o link antigo continua valendo. */}

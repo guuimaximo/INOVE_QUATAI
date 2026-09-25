@@ -19,6 +19,7 @@ import {
   variaveisPendentes,
 } from "./comunicadoTransnet";
 import { entradaPeloCitatti, fimDoTurnoNoDiaSeguinte, somaUmDia } from "./diaNoTransnet";
+import { lerPlantaoDoMotorista, normChapa } from "../operacional/passagemTurno";
 import {
   CONSTANTES,
   almocoDaRefeicao,
@@ -746,6 +747,51 @@ function BlocoAlmoco({ titulo, ini, fim, travado, tom }) {
         {dur != null && dur > 0 && <span className="dp-muted" style={{ marginLeft: 6 }}>{dur} min</span>}
       </div>
     </div>
+  );
+}
+
+/* ---------- o que o PLANTÃO registrou (Operacional · Passagem de Turno) ---------- */
+/**
+ * A falta e as intercorrências que o plantão lançou para ESTA chapa neste dia (25/09/2026).
+ * Dono: "intercorrências têm que gravar a chapa do motorista, porque o DP360 vai precisar
+ * trazer a observação" — ex.: "30060914 trouxe o veículo 222214 para a garagem porque o
+ * 30060916 passou mal" é subsídio para a análise do ponto dos DOIS. Só aparece quando há
+ * algo; sem tabela ou sem permissão, `lerPlantaoDoMotorista` devolve vazio.
+ */
+function BlocoPlantao({ plantao, cracha }) {
+  const faltas = plantao?.faltas || [];
+  const inter = plantao?.intercorrencias || [];
+  if (!faltas.length && !inter.length) return null;
+  const eu = normChapa(cracha);
+  const periodo = (p) => (p === "MANHA" ? "manhã" : "tarde");
+  return (
+    <section className="dp-card" style={{ margin: "0 0 10px", borderLeft: "4px solid #12908e" }}>
+      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>📋 Plantão · passagem de turno</div>
+      {faltas.map((f) => (
+        <div key={f.id} style={{ fontSize: 12.5, marginBottom: 4 }}>
+          {normChapa(f.chapa) === eu ? (
+            <>
+              <b>Falta</b> ({periodo(f.periodo)}){f.linha ? ` · linha ${f.linha}` : ""}
+              {f.substituto_nome || f.substituto_chapa
+                ? ` · substituído por ${[f.substituto_nome, f.substituto_chapa].filter(Boolean).join(" ")}`
+                : ""}
+            </>
+          ) : (
+            <>
+              <b>Substituiu</b> {[f.operador, f.chapa].filter(Boolean).join(" ")} ({periodo(f.periodo)})
+              {f.substituto_linha || f.linha ? ` · linha ${f.substituto_linha || f.linha}` : ""}
+            </>
+          )}
+          <span className="dp-faint"> · lançado por {f.criado_por || "—"}</span>
+        </div>
+      ))}
+      {inter.map((i) => (
+        <div key={i.id} style={{ fontSize: 12.5, marginBottom: 4 }}>
+          <b>Intercorrência</b> ({periodo(i.periodo)}{i.hora ? ` ${i.hora}` : ""}): {i.texto}
+          <span className="dp-faint"> · {i.criado_por || "—"}</span>
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -1795,6 +1841,16 @@ export default function CartaoDoDia({
   const linha = useMemo(() => entradaPeloCitatti(linhaDaTela, g), [linhaDaTela, g]);
   const semGpsProprio = !gpsAuto || !!gps;
 
+  // O PLANTÃO (Passagem de Turno): leitura própria, fora do Promise.all das fontes do
+  // ponto — ela vem de outra base (a do INOVE) e não pode atrasar nem derrubar o cartão.
+  const [plantao, setPlantao] = useState(null);
+  useEffect(() => {
+    let ativo = true;
+    setPlantao(null);
+    lerPlantaoDoMotorista(cracha, dia).then((p) => { if (ativo) setPlantao(p); });
+    return () => { ativo = false; };
+  }, [cracha, dia]);
+
   useEffect(() => {
     let ativo = true;
     const variantes = variantesCracha(cracha).join(",");
@@ -2583,6 +2639,7 @@ export default function CartaoDoDia({
               INTEIRO (muda a operação real, a gordura e a régua do GPS) e o dono
               reclamou justamente que ela "não estava vindo do controle de reserva". */}
           <BlocoReserva reserva={extra.reserva} />
+          <BlocoPlantao plantao={plantao} cracha={cracha} />
 
           {/* A SEMANA vem ANTES das colunas, e antes de qualquer número do dia: ela é o
               contexto que decide se o dia sequer devia ter ponto. Enfiada numa coluna,

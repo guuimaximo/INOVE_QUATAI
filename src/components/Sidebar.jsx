@@ -85,6 +85,7 @@ const PCM_ROUTES = {
   trocaPneus: "/pcm-troca-pneus",
   controleFichas: "/pcm-controle-fichas",
   controlePneus: "/pcm-controle-pneus",
+  passagemTurno: "/pcm-passagem-turno",
 };
 
 const EMBARCADOS_ROUTES = {
@@ -223,6 +224,8 @@ export default function Sidebar() {
         tabs: [
           { path: PCM_ROUTES.resumo, label: "Resumo", icon: <FaChartPie /> },
           { path: PCM_ROUTES.inicio, label: "PCM do dia", icon: <FaPenSquare /> },
+          // o relatório do turno da oficina (27/09/2026), que era um Word
+          { path: PCM_ROUTES.passagemTurno, label: "Passagem de turno", icon: <FaExchangeAlt /> },
           { path: PCM_ROUTES.preventivas, label: "Preventivas", icon: <FaWrench /> },
           // Troca e Controle de pneus viraram uma página só (as duas rotas abrem a
           // mesma tela). Quem só tem a permissão da Troca entra pela rota dela.

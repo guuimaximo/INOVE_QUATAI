@@ -269,8 +269,22 @@ export function avaliarAjustePonto(linha, { caso = null, digitado = null, bloque
   //    foi executada) ou `correcao_final_em` (a correção rodou).
   const correcaoRodou = Boolean(txt(caso?.correcao_final_em));
   const aceiteMexeu = Boolean(txt(caso?.conferido_em)) && txt(caso?.aceite) !== "rejeitado";
-  if (correcaoRodou) return fora(MOTIVO_CORRIGIDO);
-  if (aceiteMexeu) return fora(MOTIVO_ACEITE);
+  /* O REAL CRAVADO DEPOIS MANDA (28/09/2026 — dono: "cravei o real manual mas não virou
+     amarelo"; e a regra dele de 24/09, "se eu colocar o Real tem que liberar"). A trava
+     protege as pontas do NOSSO RETRATO contra um cartão que mudou no Transnet. Quando o DP
+     crava as QUATRO pontas DEPOIS do aceite (ou da correção), quem manda no cartão é a
+     decisão dele, não o retrato: lançar grava exatamente o que ele cravou. JOAO 30021779 e
+     ADRIANO 30060916, 18/09: o pedido aceito era a inserção de 12:50 / 14:25, a batida já
+     estava no cartão que a tela mostra, e o Real das quatro pontas, cravado em 28/09, seguia
+     vermelho. Medido desde 01/08: libera 4 dias de aceite e 1 de correção; os outros 1.478
+     travados seguem travados. Real pela metade não libera. */
+  const realDepois = (quando) => {
+    const rm = Date.parse(txt(linha?.rm_em));
+    const ev = Date.parse(txt(quando));
+    return Boolean(linha?.real_completo) && Number.isFinite(rm) && Number.isFinite(ev) && rm > ev;
+  };
+  if (correcaoRodou && !realDepois(caso.correcao_final_em)) return fora(MOTIVO_CORRIGIDO);
+  if (aceiteMexeu && !realDepois(caso.conferido_em)) return fora(MOTIVO_ACEITE);
 
   // 5) AS DUAS PONTAS (`_fila_correcoes`, teste final: entrada e saída
   //    preenchidas). Lá quem não tinha as duas sumia da contagem; aqui aparece

@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flash Manutenção Interativo</title>
+<style>
+:root{
+  --bg:#f3f7f6; --card:#ffffff; --ink:#123b35; --ink2:#5b716c; --muted:#8a9e9a;
+  --line:#d6e3e0; --soft:#eef4f3; --teal:#0d9488; --teal-d:#0f3d38; --teal-l:#ccfbf1;
+  --head:#0f3d38; --head-ink:#e6fffa; --good:#15803d; --bad:#b91c1c; --warn:#b45309;
+  --bar:#0d9488; --bar2:#a7d8d2; --line2:#b45309; --shadow:0 1px 2px rgba(15,61,56,.06),0 2px 8px rgba(15,61,56,.05);
+  --nav:#0b2f2b; --nav-ink:#b7d9d3; --nav-on:#134e48;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0a1614; --card:#10201d; --ink:#e2efec; --ink2:#9fb8b3; --muted:#6b8580;
+  --line:#23403b; --soft:#152a26; --teal:#2dd4bf; --teal-d:#5eead4; --teal-l:#134e48;
+  --head:#08201d; --head-ink:#ccfbf1; --good:#4ade80; --bad:#f87171; --warn:#fbbf24;
+  --bar:#2dd4bf; --bar2:#1f5f58; --line2:#fbbf24; --shadow:none; --nav:#061513; --nav-ink:#8fb3ad; --nav-on:#134e48;}}
+:root[data-theme="dark"]{
+  --bg:#0a1614; --card:#10201d; --ink:#e2efec; --ink2:#9fb8b3; --muted:#6b8580;
+  --line:#23403b; --soft:#152a26; --teal:#2dd4bf; --teal-d:#5eead4; --teal-l:#134e48;
+  --head:#08201d; --head-ink:#ccfbf1; --good:#4ade80; --bad:#f87171; --warn:#fbbf24;
+  --bar:#2dd4bf; --bar2:#1f5f58; --line2:#fbbf24; --shadow:none; --nav:#061513; --nav-ink:#8fb3ad; --nav-on:#134e48;}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+.app{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
+nav.side{background:var(--nav);color:var(--nav-ink);position:sticky;top:0;height:100vh;overflow:auto;padding:16px 10px 30px}
+nav.side .brand{color:#e6fffa;padding:4px 10px 14px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:8px}
+nav.side .brand .t1{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.7}
+nav.side .brand .t2{font-size:16px;font-weight:700;margin-top:2px}
+nav.side button{display:flex;gap:9px;width:100%;text-align:left;background:none;border:0;padding:7px 10px;border-radius:7px;cursor:pointer;color:var(--nav-ink);font-size:13px;align-items:baseline}
+nav.side button:hover{background:rgba(255,255,255,.06);color:#fff}
+nav.side button.on{background:var(--nav-on);color:#fff;font-weight:600}
+nav.side button .n{font-size:11px;opacity:.6;min-width:18px;font-variant-numeric:tabular-nums}
+.content{min-width:0}
+header.top{background:var(--head);color:var(--head-ink);padding:16px 26px 12px}
+header.top .t1{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.7}
+header.top h1{margin:2px 0 0;font-size:23px;font-weight:700}
+header.top .sub{font-size:12.5px;opacity:.75;margin-top:3px}
+.filters{position:sticky;top:0;z-index:20;background:var(--card);border-bottom:1px solid var(--line);padding:9px 26px;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;box-shadow:var(--shadow)}
+.fgroup{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.flabel{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink2);margin-right:2px}
+select,input[type=search]{background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:6px 10px;color:var(--ink);font:inherit}
+input[type=search]{width:180px}
+.chip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 11px;cursor:pointer;font-size:13px;white-space:nowrap}
+.chip:hover{border-color:var(--teal)}
+.chip.on{background:var(--teal);border-color:var(--teal);color:#fff}
+:root[data-theme="dark"] .chip.on{color:#04201c}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .chip.on{color:#04201c}}
+.toggle{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;user-select:none}
+.toggle input{accent-color:var(--teal);width:16px;height:16px}
+main{max-width:1280px;padding:18px 26px 70px}
+.ptitle{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:0 0 14px;flex-wrap:wrap}
+.ptitle h2{margin:0;font-size:21px;letter-spacing:.02em;text-transform:uppercase;color:var(--teal-d)}
+.ptitle .ps{font-size:12.5px;color:var(--ink2)}
+.ptitle .mes{background:var(--head);color:var(--head-ink);border-radius:8px;padding:6px 12px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+.accent{height:3px;background:linear-gradient(90deg,var(--teal),transparent);border-radius:2px;margin:-6px 0 16px}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}.g5{grid-template-columns:repeat(5,1fr)}
+.g21{grid-template-columns:2fr 1fr}.g12{grid-template-columns:1fr 2fr}
+.mt{margin-top:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);min-width:0}
+.card>h3{margin:0;padding:12px 16px 0;font-size:12.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--teal-d);font-weight:700;display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.card>h3 small{text-transform:none;letter-spacing:0;color:var(--muted);font-weight:400;font-size:12px}
+.card .body{padding:10px 16px 14px}
+.kpi{padding:12px 14px;text-align:left;border:1px solid var(--line);display:block;width:100%}
+button.kpi{cursor:pointer;transition:border-color .15s,transform .15s}
+button.kpi:hover{border-color:var(--teal);transform:translateY(-1px)}
+.kpi .lb{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink2)}
+.kpi .vl{font-size:25px;font-weight:700;margin-top:2px;line-height:1.15}
+.kpi .dt{font-size:12px;color:var(--ink2);margin-top:3px}
+.kpi.big .vl{font-size:36px}
+.up{color:var(--good)} .down{color:var(--bad)} .neutral{color:var(--ink2)} .warn{color:var(--warn)}
+.hint{font-size:11.5px;color:var(--muted);margin-top:6px}
+.cons{border-left:4px solid var(--teal);background:var(--card);border-radius:0 12px 12px 0;padding:12px 16px;margin-top:14px;border-top:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.cons b.t{display:block;font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--teal-d);margin-bottom:4px}
+.cons p{margin:0;line-height:1.55}
+.note{background:var(--soft);border:1px dashed var(--line);border-radius:10px;padding:9px 12px;font-size:12.5px;color:var(--ink2);margin-bottom:14px}
+.status{display:inline-block;padding:3px 10px;border-radius:6px;font-weight:700;font-size:12px;letter-spacing:.06em}
+.status.bad{background:#fee2e2;color:#991b1b}.status.ok{background:#dcfce7;color:#166534}.status.al{background:#fef3c7;color:#92400e}
+.hb{display:flex;flex-direction:column;gap:2px}
+.hb-row{display:grid;grid-template-columns:minmax(80px,40%) 1fr 48px;align-items:center;gap:8px;padding:3px 6px;border-radius:6px;cursor:pointer;border:0;background:none;text-align:left;width:100%}
+.hb-row:hover{background:var(--soft)}
+.hb-row .k{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+.hb-row .track{height:12px;background:var(--soft);border-radius:3px;overflow:hidden}
+.hb-row .fill{display:block;height:100%;background:var(--bar);border-radius:0 3px 3px 0}
+.hb-row .n{text-align:right;font-weight:600;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink2);text-align:left;font-weight:600;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--card)}
+.scroll th{position:sticky;top:0;z-index:1}
+td{padding:6px 8px;border-bottom:1px solid var(--soft);vertical-align:top}
+tr.click{cursor:pointer} tr.click:hover td{background:var(--soft)}
+td.c{cursor:pointer} td.c:hover{background:var(--soft);outline:1px solid var(--teal)}
+td.r,th.r{text-align:right}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--soft);border:1px solid var(--line);white-space:nowrap;color:var(--ink)}
+.tag.RECOLHEU{background:#fee2e2;border-color:#fca5a5;color:#991b1b}
+.tag.SOS{background:#ffedd5;border-color:#fdba74;color:#9a3412}
+.tag.TROCA{background:#fef9c3;border-color:#fde047;color:#854d0e}
+.tag.AVARIA{background:#e0e7ff;border-color:#a5b4fc;color:#3730a3}
+.tag.IMPROCEDENTE{background:#f3e8ff;border-color:#d8b4fe;color:#6b21a8}
+.tag.GNS,.tag.CRITICA{background:#fee2e2;border-color:#fca5a5;color:#991b1b}
+.tag.FAIXA_AMARELA,.tag.ALTA{background:#fef3c7;border-color:#fcd34d;color:#92400e}
+.link{color:var(--teal);font-weight:600;cursor:pointer;background:none;border:0;padding:0}
+.link:hover{text-decoration:underline}
+.scroll{max-height:430px;overflow:auto}
+.tblwrap{overflow-x:auto}
+svg text{fill:var(--ink2);font-size:11px;font-family:inherit}
+.bar-rect{fill:var(--bar);cursor:pointer}
+.bar-rect.dim{fill:var(--bar2)}
+.bar-rect:hover{opacity:.8}
+.axis{stroke:var(--line)}
+.meta-line{stroke:var(--warn);stroke-dasharray:5 4;stroke-width:1.5}
+.ln{fill:none;stroke:var(--line2);stroke-width:2}
+.dot{fill:var(--line2)}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--ink2);margin-top:4px;flex-wrap:wrap}
+.legend i{display:inline-block;width:12px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.heat td.c{text-align:center;font-variant-numeric:tabular-nums}
+.hm{display:grid;grid-template-columns:38px repeat(24,1fr);gap:2px;font-size:10.5px}
+.hm .c{aspect-ratio:1/1;border-radius:3px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;min-height:14px}
+.hm .c:hover{outline:2px solid var(--ink)}
+.hm .lb{color:var(--ink2);display:flex;align-items:center}
+.hm .hh{color:var(--muted);text-align:center}
+.sec-card{padding:13px 15px;cursor:pointer;text-align:left;border:1px solid var(--line);display:flex;flex-direction:column;gap:3px}
+.sec-card:hover{border-color:var(--teal)}
+.sec-card .sn{font-size:10.5px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.sec-card .st{font-weight:600}
+.sec-card .sv{font-size:20px;font-weight:700;color:var(--teal-d)}
+.sec-card .sd{font-size:12px;color:var(--ink2)}
+.opp{border-left:5px solid var(--bad)}
+.opp .big{font-size:44px;font-weight:800;color:var(--bad);line-height:1}
+.acao{background:var(--soft);border-radius:8px;padding:8px 10px;font-size:12.5px;margin-top:8px}
+.overlay{position:fixed;inset:0;background:rgba(4,20,18,.45);z-index:50;opacity:0;pointer-events:none;transition:opacity .2s}
+.overlay.on{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;height:100%;width:min(960px,100%);background:var(--bg);z-index:60;transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.2)}
+.drawer.on{transform:none}
+.dhead{background:var(--head);color:var(--head-ink);padding:13px 18px;display:flex;gap:10px;align-items:flex-start}
+.dhead h3{margin:0;font-size:18px}
+.dhead .dsub{font-size:12.5px;opacity:.8;margin-top:2px}
+.dhead .sp{flex:1}
+.ibtn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:var(--head-ink);border-radius:8px;padding:5px 10px;cursor:pointer;font-size:13px;white-space:nowrap}
+.ibtn:hover{background:rgba(255,255,255,.2)}
+.dbody{overflow:auto;padding:14px 18px 40px;flex:1}
+.dk{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:12px}
+.dk .card{padding:9px 12px}
+.dk .lb{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink2)}
+.dk .vl{font-size:20px;font-weight:700}
+.detail td{background:var(--soft);font-size:12.5px}
+.detail .dl{display:grid;grid-template-columns:140px 1fr;gap:3px 12px}
+.detail .dl b{color:var(--ink2);font-weight:600}
+.scope{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px}
+.empty{color:var(--muted);padding:16px 0;text-align:center}
+.tip{position:fixed;z-index:80;pointer-events:none;background:var(--head);color:var(--head-ink);font-size:12px;padding:6px 9px;border-radius:6px;opacity:0;transition:opacity .1s;max-width:280px}
+.more{margin-top:8px}
+.foot{margin-top:30px;font-size:12px;color:var(--muted)}
+@media (max-width:1180px){.g5{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr}}
+@media (max-width:900px){
+  .app{grid-template-columns:1fr}
+  nav.side{position:sticky;top:0;z-index:30;height:auto;display:flex;overflow-x:auto;padding:6px 8px;gap:2px}
+  nav.side .brand{display:none}
+  nav.side button{width:auto;white-space:nowrap;flex:none}
+  .filters{position:static}
+}
+@media (max-width:760px){
+  header.top,.filters{padding-left:16px;padding-right:16px}
+  main{padding:14px 16px 60px}
+  .g2,.g3,.g21,.g12{grid-template-columns:1fr}.g4,.g5{grid-template-columns:1fr 1fr}
+  input[type=search]{width:100%}
+  .hide-m{display:none}
+  .detail .dl{grid-template-columns:1fr}
+  .hm{grid-template-columns:28px repeat(24,minmax(0,1fr));gap:1px}
+  .hm .c{min-height:0;font-size:0}
+}
+@media print{nav.side,.filters,.overlay,.drawer{display:none}.app{display:block}}
+</style>
+</head>
+<body>
+<div class="app">
+<nav class="side" id="nav"><div class="brand"><div class="t1">Grupo CSC · Quatai</div><div class="t2">Flash Manutenção</div></div></nav>
+<div class="content">
+<header class="top">
+  <div class="t1">Grupo CSC · Quatai · Manutenção · Flash Report interativo</div>
+  <h1 id="hTitle">Flash Report Manutenção</h1>
+  <div class="sub" id="subhead"></div>
+</header>
+<div class="filters">
+  <div class="fgroup"><span class="flabel">Mês</span><select id="fMes"></select></div>
+  <div class="fgroup" id="fCl"><span class="flabel">Cluster</span></div>
+  <label class="toggle" title="Desmarque para incluir 'Seguiu viagem' e registros sem tipo"><input type="checkbox" id="fVal" checked> Só intervenções válidas (MKBF)</label>
+  <div class="fgroup" style="margin-left:auto"><input type="search" id="fBusca" placeholder="Abrir carro… ex.: 222209" list="dlCarros"><datalist id="dlCarros"></datalist></div>
+</div>
+<main id="view"></main>
+</div>
+</div>
+
+<div class="overlay" id="ov"></div>
+<aside class="drawer" id="dr" aria-hidden="true">
+  <div class="dhead"><button class="ibtn" id="dBack" title="Voltar">←</button><div><h3 id="dTitle"></h3><div class="dsub" id="dSub"></div></div><div class="sp"></div><button class="ibtn" id="dCsv">CSV</button><button class="ibtn" id="dClose">Fechar ✕</button></div>
+  <div class="dbody" id="dBody"></div>
+</aside>
+<div class="tip" id="tip"></div>
+
+<script>
+const D = /*__DADOS__*/null;
+/* ======================= utilidades ======================= */
+const MESES=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+const MESES_L=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const DOW=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+const CLS=["C6","C8","C9","C10","C11"];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fInt=v=>Math.round(v||0).toLocaleString("pt-BR");
+const f1=v=>(v||0).toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1});
+const f2=v=>(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+const f3=v=>(v||0).toLocaleString("pt-BR",{minimumFractionDigits:3,maximumFractionDigits:3});
+const fR=v=>"R$ "+fInt(v);
+const pct=(a,b)=>b?a/b*100:0;
+const fData=d=>d?d.slice(8,10)+"/"+d.slice(5,7)+"/"+d.slice(2,4):"";
+const fDH=d=>d?fData(d.slice(0,10))+(d.length>10?" "+d.slice(11,16):""):"";
+const mesLb=m=>MESES[+m.slice(5,7)-1]+"/"+m.slice(2,4);
+const mesLong=m=>MESES_L[+m.slice(5,7)-1]+"/"+m.slice(0,4);
+const addM=(m,k)=>{let y=+m.slice(0,4),mm=+m.slice(5,7)-1+k;y+=Math.floor(mm/12);mm=((mm%12)+12)%12;return y+"-"+String(mm+1).padStart(2,"0")};
+const diasNoMes=m=>new Date(+m.slice(0,4),+m.slice(5,7),0).getDate();
+const diffD=(a,b)=>Math.round((new Date(a+"T12:00")-new Date(b+"T12:00"))/864e5);
+const cnt=(arr,key)=>{const m=new Map();arr.forEach(x=>{const k=typeof key==="function"?key(x):x[key];if(k===undefined||k===null||k==="")return;m.set(k,(m.get(k)||0)+1)});return [...m].sort((a,b)=>b[1]-a[1])};
+const sum=(arr,f)=>arr.reduce((s,x)=>s+(+f(x)||0),0);
+const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+function clusterDe(v){v=String(v||"").toUpperCase().trim();if(v.startsWith("2216"))return"C8";if(v.startsWith("2222"))return"C9";if(v.startsWith("2224"))return"C10";if(v.startsWith("2425"))return"C11";if(v.startsWith("W"))return"C6";return"OUTROS"}
+const HOJE=D.fim;
+
+/* ======================= dados ======================= */
+const I=D.interv;I.forEach(x=>{x.m=x.d.slice(0,7);x.dow=new Date(x.d+"T12:00:00").getDay();x.hr=x.h?+x.h.slice(0,2):null});
+const KMD=new Map();D.km_dia_cl.forEach(([d,cl,km,lt])=>{if(!KMD.has(d))KMD.set(d,{});KMD.get(d)[cl]=[km,lt||0]});
+const KMV=new Map();D.km_mes_v.forEach(([m,v,km,dias])=>KMV.set(m+"|"+v,{km,dias}));
+const ULT_KM=[...KMD.keys()].sort().pop()||"";
+const PLANOS=D.planos.map(([v,p,venc,porKm,kmp,dv])=>({v,p,venc,porKm,kmp,dv,cl:clusterDe(v)}));
+const REG=D.regen.map(([v,mo,dt,dur,rpm,lt,cus])=>({v,mo,dt,d:dt.slice(0,10),m:dt.slice(0,7),dur,rpm,lt,cus,cl:clusterDe(v)}));
+const TROCAS=D.borr.trocas.map(([dt,tipo,v,pos,fr,fc,obs,por,cons])=>({dt,d:dt.slice(0,10),m:dt.slice(0,7),tipo,v,pos,fr,fc,obs,por,cons,cl:clusterDe(v)}));
+const PNEUS=D.borr.pneus.map(([fogo,vida,loc,km,marca,medida,pos,dot])=>({fogo,vida,loc,km,marca,medida,pos,dot}));
+const CTRL=D.borr.ctrl.map(([v,pos,fb,fa,st,em,por])=>({v,pos,fb,fa,st,em,por,cl:clusterDe(v)}));
+const SR=D.sr.map(([id,d,sit,gr,fech,v,obs,func,fim])=>({id,d,m:d.slice(0,7),sit,gr,fech,v,obs,func,fim,cl:clusterDe(v)}));
+const GREG=D.gns.regs.map(([v,cat,setor,desc,obs,ent,prev])=>({v,cat,setor,desc,obs,ent,prev,cl:clusterDe(v)}));
+const GDIAS=D.gns.dias.map(o=>({d:o.d,m:o.d.slice(0,7),u:o.u,c:o.c.map(i=>GREG[i])}));
+const EMB=D.emb_sr.map(([v,tipo,prob,desc,local,prio,st,solic,exec,cri,fech,obs])=>({v,tipo,prob,desc,local,prio,st,solic,exec,cri,d:cri.slice(0,10),m:cri.slice(0,7),fech,obs,cl:clusterDe(v)}));
+const PREV=(()=>{const seen=new Set(),o=[];D.prev_real.forEach(([v,d,tipo,os,fonte])=>{const k=v+"|"+d;if(seen.has(k))return;seen.add(k);o.push({v,d,m:d.slice(0,7),tipo,os,fonte,cl:clusterDe(v)})});return o})();
+const PREVMAP=new Map();PREV.forEach(p=>{if(!PREVMAP.has(p.v))PREVMAP.set(p.v,[]);PREVMAP.get(p.v).push(p)});PREVMAP.forEach(a=>a.sort((x,y)=>x.d.localeCompare(y.d)));
+const MESES_JAN=[...new Set(I.map(x=>x.m).concat([...KMD.keys()].map(d=>d.slice(0,7))))].filter(m=>m>=D.ini.slice(0,7)).sort();
+const EMB_ABERTO=s=>["ABERTA","ABERTO"].includes(s);
+const PCMD=D.pcm_ent||{rows:[],dias:[]};
+const PCM=PCMD.rows.map(([v,setor,cat,os,desc,obs,ent,sai,turno,dref])=>{const d=(ent||dref||"").slice(0,10);return{v,setor,cat,os,desc,obs,ent,sai,turno,dref,d,m:d.slice(0,7),cl:clusterDe(v)}}).filter(x=>x.d);
+const PFUNC=(D.prev_func||[]).map(([d,v,tipo,os,mec,ele,fun,bor])=>({d,m:d.slice(0,7),v,tipo,os,mecanico:mec,eletricista:ele,funilaria:fun,borracharia:bor,cl:clusterDe(v)}));
+/* horas até o fechamento (regra do SOS_Resumo: data+hora do SOS até 23:59:59 do dia de encerramento) */
+const horasFech=x=>{if(!x.fe)return 0;const a=new Date(`${x.d}T${x.h||"00:00"}:00`),b=new Date(`${x.fe}T23:59:59`);const h=(b-a)/36e5;return h>0?h:0};
+const mediaFech=rows=>{const v=rows.map(horasFech).filter(h=>h>0);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0};
+const fH=h=>h>=48?f1(h/24)+" dias":f1(h)+" h";
+
+/* ======================= estado ======================= */
+let hash0="";try{hash0=location.hash}catch(e){}
+const S={mes:lsGet("fm2_mes")||MESES_JAN[MESES_JAN.length-1],cl:"TODOS",val:true,sec:(hash0||"#s00").slice(1)};
+if(S.mes!=="JANELA"&&!MESES_JAN.includes(S.mes))S.mes=MESES_JAN[MESES_JAN.length-1];
+const REF=()=>S.mes==="JANELA"?MESES_JAN[MESES_JAN.length-1]:S.mes;
+const inCl=cl=>S.cl==="TODOS"||cl===S.cl;
+const mesesSel=()=>S.mes==="JANELA"?MESES_JAN.slice():[S.mes];
+const trimestre=()=>S.mes==="JANELA"?MESES_JAN.slice():[addM(S.mes,-2),addM(S.mes,-1),S.mes];
+const semestre=()=>{const r=REF();return [5,4,3,2,1,0].map(k=>addM(r,-k))};
+const baseI=(ms=mesesSel(),{todas=false}={})=>I.filter(x=>ms.includes(x.m)&&inCl(x.cl)&&(todas||!S.val||x.ok));
+const periodoTxt=(ms=mesesSel())=>ms.length===1?mesLong(ms[0]):`${mesLb(ms[0])} a ${mesLb(ms[ms.length-1])}`;
+function kmPeriodo(ms){let km=0,lt=0;const dias=new Set();for(const [d,o] of KMD){if(!ms.includes(d.slice(0,7)))continue;let s=0,l=0;for(const cl in o)if(inCl(cl)){s+=o[cl][0];l+=o[cl][1]}if(s>0){km+=s;lt+=l;dias.add(d)}}return{km,lt,dias}}
+function mkbf(ms,clForce){const sv=S.cl;if(clForce)S.cl=clForce;const {km,lt,dias}=kmPeriodo(ms);const rows=I.filter(x=>ms.includes(x.m)&&inCl(x.cl)&&x.ok&&dias.has(x.d));S.cl=sv;return{km,lt,n:rows.length,mkbf:rows.length?km/rows.length:0,dias,rows}}
+function kmCarro(v,ms){let km=0;for(const m of ms){const o=KMV.get(m+"|"+v);if(o)km+=o.km}return km}
+
+/* ======================= componentes ======================= */
+const tip=$("#tip");
+function showTip(e,html){tip.innerHTML=html;tip.style.opacity=1;tip.style.left=Math.min(e.clientX+14,innerWidth-290)+"px";tip.style.top=(e.clientY+14)+"px"}
+function hideTip(){tip.style.opacity=0}
+function bindTips(root){root.querySelectorAll("[data-tip]").forEach(el=>{el.addEventListener("mousemove",e=>showTip(e,el.dataset.tip));el.addEventListener("mouseleave",hideTip)})}
+function hbars(el,rows,onClick,max=12,fmt=fInt){
+  if(typeof el==="string")el=$(el);if(!el)return;
+  const top=rows.slice(0,max);if(!top.length){el.innerHTML='<div class="empty">Sem dados</div>';return}
+  const mx=Math.max(...top.map(r=>r[1]),1);
+  el.innerHTML='<div class="hb">'+top.map(([k,n],i)=>`<button class="hb-row" data-i="${i}"><span class="k" title="${esc(k)}">${esc(k)}</span><span class="track"><span class="fill" style="width:${(n/mx*100).toFixed(1)}%"></span></span><span class="n num">${fmt(n)}</span></button>`).join("")+"</div>";
+  el.querySelectorAll(".hb-row").forEach(b=>b.onclick=()=>onClick&&onClick(top[+b.dataset.i][0]));
+}
+function vbars(el,items,{h=200,onClick,meta,fmt=fInt,line,lineFmt=fInt,lineMeta}={}){
+  if(typeof el==="string")el=$(el);if(!el)return;
+  if(!items.length){el.innerHTML='<div class="empty">Sem dados</div>';return}
+  const W=Math.max(el.clientWidth||560,260),pl=46,pr=line?46:8,pt=14,pb=26,cw=W-pl-pr,ch=h-pt-pb;
+  const mx=Math.max(...items.map(i=>i.v),meta||0,1)*1.12;
+  const bw=cw/items.length,gap=Math.min(bw*.25,8);
+  const y=v=>pt+ch-(v/mx)*ch;
+  let s=`<svg width="${W}" height="${h}" viewBox="0 0 ${W} ${h}" role="img">`;
+  for(let t=0;t<=4;t++){const v=mx/4*t;s+=`<line class="axis" x1="${pl}" x2="${W-pr}" y1="${y(v)}" y2="${y(v)}" stroke-opacity="${t?0.5:1}"/><text x="${pl-6}" y="${y(v)+4}" text-anchor="end">${fmt(v)}</text>`}
+  const every=Math.ceil(items.length/(cw/36));
+  items.forEach((it,i)=>{const x=pl+i*bw+gap/2,bh=Math.max(ch-(y(it.v)-pt),it.v>0?1.5:0);
+    s+=`<rect class="bar-rect${it.dim?" dim":""}" data-i="${i}" x="${x}" y="${pt+ch-bh}" width="${Math.max(bw-gap,1)}" height="${bh}" rx="2" data-tip="${esc(it.tip||"")}"/>`;
+    if(i%every===0)s+=`<text x="${x+(bw-gap)/2}" y="${h-8}" text-anchor="middle">${esc(it.label)}</text>`});
+  if(meta)s+=`<line class="meta-line" x1="${pl}" x2="${W-pr}" y1="${y(meta)}" y2="${y(meta)}"/><text x="${W-pr-2}" y="${y(meta)-4}" text-anchor="end" style="fill:var(--warn)">meta ${fmt(meta)}</text>`;
+  if(line){const vals=line.filter(v=>v!=null);const lmx=Math.max(...vals,lineMeta||0,1)*1.12;const ly=v=>pt+ch-(v/lmx)*ch;
+    for(let t=0;t<=4;t++){const v=lmx/4*t;s+=`<text x="${W-pr+6}" y="${ly(v)+4}" style="fill:var(--line2)">${lineFmt(v)}</text>`}
+    let pts=[];line.forEach((v,i)=>{if(v==null){if(pts.length>1)s+=`<polyline class="ln" points="${pts.join(" ")}"/>`;pts=[];return}const x=pl+i*bw+bw/2;pts.push(x+","+ly(v));s+=`<circle class="dot" cx="${x}" cy="${ly(v)}" r="2.6"/>`});
+    if(pts.length>1)s+=`<polyline class="ln" points="${pts.join(" ")}"/>`;
+    if(lineMeta)s+=`<line class="meta-line" x1="${pl}" x2="${W-pr}" y1="${ly(lineMeta)}" y2="${ly(lineMeta)}"/>`}
+  el.innerHTML=s+"</svg>";bindTips(el);
+  if(onClick)el.querySelectorAll(".bar-rect").forEach(r=>r.onclick=()=>{hideTip();onClick(items[+r.dataset.i])});
+}
+const kpi=(lb,vl,dt="",{id="",big=false,cls=""}={})=>`<${id?"button":"div"} class="card kpi${big?" big":""}" ${id?`id="${id}"`:""}><div class="lb">${lb}</div><div class="vl num ${cls}">${vl}</div>${dt?`<div class="dt">${dt}</div>`:""}</${id?"button":"div"}>`;
+const card=(t,body,sub="")=>`<div class="card"><h3>${t}${sub?`<small>${sub}</small>`:""}</h3><div class="body">${body}</div></div>`;
+const cons=(t,txt)=>`<div class="cons"><b class="t">Considerações · ${t}</b><p>${txt}</p></div>`;
+const varPct=(a,b,inv)=>{if(!b)return'<span class="neutral">—</span>';const p=(a-b)/b*100;const bom=inv?p<0:p>0;return`<span class="${Math.abs(p)<0.5?"neutral":bom?"up":"down"}">${p>0?"+":""}${f1(p)}%</span>`};
+function on(id,fn){const el=document.getElementById(id);if(el)el.onclick=fn}
+
+function tabela(rows,cols,{limit=80,id,detail}={}){
+  if(!rows.length)return'<div class="empty">Nenhum registro.</div>';
+  const tid=id||"t"+Math.random().toString(36).slice(2,8);
+  const cel=(r,c)=>{const v=typeof c.k==="function"?c.k(r):r[c.k];const txt=c.f?c.f(v,r):esc(v);return `<td class="${c.r?"r num":""} ${c.hm?"hide-m":""}">${c.car&&v?`<button class="link" data-car="${esc(v)}">${esc(v)}</button>`:txt}</td>`};
+  const body=rows.slice(0,limit).map((r,i)=>`<tr class="${detail?"click":""}" data-i="${i}">${cols.map(c=>cel(r,c)).join("")}</tr>`).join("");
+  return `<table id="${tid}"><thead><tr>${cols.map(c=>`<th class="${c.r?"r":""} ${c.hm?"hide-m":""}">${c.t}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`+(rows.length>limit?`<button class="chip more" data-more="${tid}">Mostrar todos (${rows.length})</button>`:"");
+}
+function ligarTab(root,rows,cols,opt={}){
+  root.querySelectorAll("button[data-car]").forEach(b=>b.onclick=e=>{e.stopPropagation();abrirCarro(b.dataset.car)});
+  if(opt.detail)root.querySelectorAll("tbody tr.click").forEach(tr=>tr.onclick=()=>{const nx=tr.nextElementSibling;if(nx&&nx.classList.contains("detail")){nx.remove();return}tr.insertAdjacentHTML("afterend",`<tr class="detail"><td colspan="${cols.length}">${opt.detail(rows[+tr.dataset.i])}</td></tr>`)});
+  root.querySelectorAll("button[data-more]").forEach(b=>b.onclick=()=>{const host=b.parentElement;host.innerHTML=tabela(rows,cols,{...opt,limit:1e9});ligarTab(host,rows,cols,opt)});
+}
+const dl=items=>`<div class="dl">${items.filter(([,v])=>v!==""&&v!=null).map(([k,v])=>`<b>${k}</b><span>${esc(v)}</span>`).join("")}</div>`;
+
+const tagT=v=>`<span class="tag ${esc(v)}">${esc(v)}</span>`;
+const COL_I=[{t:"Data",k:x=>fData(x.d)+" "+x.h},{t:"Carro",k:"v",car:1},{t:"Linha",k:"l"},{t:"Tipo",k:"t",f:tagT},{t:"Defeito",k:"p"},{t:"Setor",k:"se",hm:1},{t:"Status",k:"st",hm:1}];
+const DET_I=r=>dl([["Nº SOS",r.n],["Motorista",r.mo],["Reclamação",r.rc],["Problema encontrado",r.p],["Solução",r.so],["Grupo / setor",[r.gr,r.se].filter(Boolean).join(" · ")],["Controlabilidade",r.ct],["Local",r.lo],["Carro substituto",r.cs],["SR",r.sr],["OS corretiva",r.os],["Embarcado",r.em]]);
+const ordI=rows=>rows.slice().sort((a,b)=>(b.d+b.h).localeCompare(a.d+a.h));
+const COL_REG=[{t:"Início",k:x=>fDH(x.dt)},{t:"Carro",k:"v",car:1},{t:"Duração",k:x=>fInt(x.dur)+" min",r:1},{t:"Litros",k:x=>f1(x.lt),r:1},{t:"Custo",k:x=>fR(x.cus),r:1},{t:"RPM méd.",k:x=>fInt(x.rpm),r:1,hm:1},{t:"Motorista",k:"mo",hm:1}];
+const COL_TR=[{t:"Data",k:x=>fDH(x.dt)},{t:"Carro",k:"v",car:1},{t:"Tipo",k:"tipo"},{t:"Posição",k:"pos",hm:1},{t:"Fogo retirado",k:"fr"},{t:"Fogo colocado",k:"fc"}];
+const DET_TR=r=>dl([["Observações",r.obs],["Registrado por",r.por],["Pneu p/ conserto",r.cons]]);
+const SIT={A:"Atendida",I:"Improcedente",N:"Não atendida"};
+const COL_SR=[{t:"Data",k:x=>fData(x.d)},{t:"SR",k:"id"},{t:"Carro",k:"v",car:1},{t:"Grupo",k:"gr"},{t:"Situação",k:x=>SIT[x.sit]||x.sit},{t:"Idade",k:x=>x.sit==="N"?diffD(HOJE,x.d)+" d":"",r:1},{t:"Descrição",k:x=>(x.obs||"").slice(0,70),hm:1}];
+const DET_SR=r=>dl([["Descrição",r.obs],["Aberta por",r.func],["Fim",fData(r.fim)],["Competência",r.fech?"Fechada no prazo":"Aberta / fora do prazo"]]);
+const COL_G=[{t:"Carro",k:"v",car:1},{t:"Categoria",k:"cat",f:tagT},{t:"Setor",k:"setor"},{t:"Motivo",k:x=>(x.desc||"").slice(0,80)},{t:"Entrada",k:x=>fData(x.ent),hm:1},{t:"Dias",k:"dias",r:1}];
+const DET_G=r=>dl([["Motivo",r.desc],["Observação",r.obs],["Entrada",fData(r.ent)],["Previsão",fData(r.prev)]]);
+const COL_E=[{t:"Aberta em",k:x=>fDH(x.cri)},{t:"Carro",k:"v",car:1},{t:"Tipo",k:"tipo"},{t:"Problema",k:"prob"},{t:"Prioridade",k:"prio",f:tagT},{t:"Status",k:"st"},{t:"Dias",k:x=>EMB_ABERTO(x.st)?diffD(HOJE,x.d):"",r:1}];
+const DET_E=r=>dl([["Descrição",r.desc],["Local",r.local],["Solicitante",r.solic],["Executado por",r.exec],["Fechamento",fDH(r.fech)],["Obs. execução",r.obs]]);
+const COL_P=[{t:"Carro",k:"v",car:1},{t:"Plano",k:"p"},{t:"Vencido há",k:x=>x.porKm?fInt(x.kmp)+" km":fInt(x.dv)+" dias",r:1}];
+const COL_PR=[{t:"Data",k:x=>fData(x.d)},{t:"Carro",k:"v",car:1},{t:"Tipo / plano",k:"tipo"},{t:"OS",k:"os"},{t:"Fonte",k:"fonte",hm:1}];
+
+/* ======================= drawer ======================= */
+const pilha=[];let drawerCsv=null;
+function abrirDrawer(v){pilha.push(v);renderDrawer();$("#dr").classList.add("on");$("#ov").classList.add("on");$("#dr").setAttribute("aria-hidden","false")}
+function fecharDrawer(){pilha.length=0;$("#dr").classList.remove("on");$("#ov").classList.remove("on");$("#dr").setAttribute("aria-hidden","true")}
+$("#dClose").onclick=fecharDrawer;$("#ov").onclick=fecharDrawer;
+document.addEventListener("keydown",e=>{if(e.key==="Escape")fecharDrawer()});
+$("#dBack").onclick=()=>{if(pilha.length>1){pilha.pop();renderDrawer()}else fecharDrawer()};
+function renderDrawer(){const v=pilha[pilha.length-1];$("#dBack").style.visibility=pilha.length>1?"visible":"hidden";drawerCsv=null;v.render($("#dBody"));$("#dTitle").textContent=v.title;$("#dSub").textContent=typeof v.sub==="function"?v.sub():(v.sub||"");$("#dBody").scrollTop=0}
+$("#dCsv").onclick=()=>{if(drawerCsv)baixarCsv(drawerCsv.rows,drawerCsv.cols,pilha[pilha.length-1]?.title||"lista")};
+const dk=items=>`<div class="dk">${items.map(([l,v,c])=>`<div class="card"><div class="lb">${l}</div><div class="vl num ${c||""}">${v}</div></div>`).join("")}</div>`;
+
+function abrirLista(titulo,pred,{sub="",ms=null,todas=false}={}){
+  const v={title:titulo,escopo:"P",sub:()=>sub||periodoTxt(ms||mesesSel()),render(el){
+    const meses=v.escopo==="J"?MESES_JAN:(ms||mesesSel());
+    const rows=ordI(I.filter(x=>meses.includes(x.m)&&inCl(x.cl)&&(todas||!S.val||x.ok)&&pred(x)));
+    drawerCsv={rows,cols:CSV_I};
+    const carros=cnt(rows,"v"),defs=cnt(rows,"p");
+    el.innerHTML=`<div class="scope"><span class="flabel">Escopo</span><button class="chip ${v.escopo==="P"?"on":""}" data-esc="P">${esc(periodoTxt(ms||mesesSel()))}</button><button class="chip ${v.escopo==="J"?"on":""}" data-esc="J">Janela toda (${mesLb(MESES_JAN[0])}–${mesLb(MESES_JAN.at(-1))})</button></div>`+
+      dk([["Intervenções",fInt(rows.length)],["Carros distintos",fInt(carros.length)],["Recolheu / SOS",fInt(rows.filter(x=>x.t==="RECOLHEU"||x.t==="SOS").length)],["Controláveis",rows.length?f1(pct(rows.filter(x=>/^control/i.test(x.ct)).length,rows.length))+"%":"—"]])+
+      `<div class="grid g2" style="margin-bottom:12px">${card("Carros",'<div id="dA"></div>')}${card("Defeitos",'<div id="dB"></div>')}</div>`+
+      card("Intervenções",'<div class="tblwrap" id="dT"></div>',"clique na linha para ver reclamação e solução");
+    el.querySelectorAll("[data-esc]").forEach(b=>b.onclick=()=>{v.escopo=b.dataset.esc;renderDrawer()});
+    hbars(el.querySelector("#dA"),carros,k=>abrirCarro(k),8);
+    hbars(el.querySelector("#dB"),defs,k=>abrirLista(titulo+" · "+k,x=>pred(x)&&x.p===k,{sub,ms,todas}),8);
+    const t=el.querySelector("#dT");t.innerHTML=tabela(rows,COL_I,{limit:60,detail:1});ligarTab(t,rows,COL_I,{detail:DET_I});
+  }};
+  abrirDrawer(v);
+}
+function abrirTabela(titulo,sub,rows,cols,{det,kpis,csv,extra}={}){
+  abrirDrawer({title:titulo,sub,render(el){drawerCsv={rows,cols:csv||cols.map(c=>[c.t,c.k])};
+    el.innerHTML=(kpis?dk(kpis):"")+(extra?extra.html:"")+card(titulo,'<div class="tblwrap" id="dT"></div>',det?"clique na linha para detalhes":"");
+    if(extra&&extra.bind)extra.bind(el);
+    const t=el.querySelector("#dT");t.innerHTML=tabela(rows,cols,{limit:150,detail:!!det});ligarTab(t,rows,cols,{detail:det})}});
+}
+
+/* ======================= prontuário do carro ======================= */
+function abrirCarro(car){
+  car=String(car).trim();
+  const v={title:"Carro "+car,escopo:"J",aba:"I",sub:()=>`${clusterDe(car)} · prontuário completo`,render(el){
+    const meses=v.escopo==="J"?MESES_JAN:mesesSel();
+    const intv=ordI(I.filter(x=>x.v===car&&meses.includes(x.m)&&(!S.val||x.ok)));
+    const km=kmCarro(car,meses),val=intv.filter(x=>x.ok).length;
+    const pv=PLANOS.filter(p=>p.v===car&&p.venc),pr=(PREVMAP.get(car)||[]).filter(p=>meses.includes(p.m)).slice().reverse();
+    const rg=REG.filter(r=>r.v===car&&meses.includes(r.m)).sort((a,b)=>b.dt.localeCompare(a.dt));
+    const sr=SR.filter(r=>r.v===car&&(r.sit==="N"||meses.includes(r.m))).sort((a,b)=>b.d.localeCompare(a.d));
+    const gd=GDIAS.filter(g=>meses.includes(g.m)).map(g=>({d:g.d,r:g.c.find(c=>c.v===car)})).filter(o=>o.r);
+    const tr=TROCAS.filter(t=>t.v===car&&meses.includes(t.m)).sort((a,b)=>b.dt.localeCompare(a.dt));
+    const em=EMB.filter(e=>e.v===car).sort((a,b)=>b.cri.localeCompare(a.cri));
+    const ct=CTRL.filter(c=>c.v===car&&c.st.toUpperCase()!=="OK");
+    const porMes=MESES_JAN.map(m=>{const n=I.filter(x=>x.v===car&&x.m===m&&(!S.val||x.ok)).length;const k=(KMV.get(m+"|"+car)||{}).km||0;return{k:m,label:mesLb(m),v:n,dim:v.escopo==="P"&&!meses.includes(m),tip:`${mesLong(m)}: ${n} intervenções · ${fInt(k)} km${n&&k?" · MKBF "+fInt(k/n):""}`}});
+    const of=PCM.filter(x=>x.v===car&&(meses.includes(x.m)||!x.sai)).sort((a,b)=>(b.ent||b.d).localeCompare(a.ent||a.d));
+    const abas=[["I","Intervenções",intv.length],["O","Oficina",of.length],["P","Preventivas",pv.length+pr.length],["R","Regeneração",rg.length],["S","SR",sr.length],["G","GNS / PCM",gd.length],["T","Pneus",tr.length+ct.length],["E","Embarcados",em.length]];
+    el.innerHTML=`<div class="scope"><span class="flabel">Escopo</span><button class="chip ${v.escopo==="P"?"on":""}" data-esc="P">${esc(periodoTxt())}</button><button class="chip ${v.escopo==="J"?"on":""}" data-esc="J">Janela toda</button></div>`+
+      dk([["Intervenções",fInt(intv.length)],["KM rodado",fInt(km)],["MKBF do carro",val&&km?fInt(km/val):"—"],["Prev. vencidas",pv.length,pv.length?"down":""],["Regenerações",rg.length],["SR abertas",sr.filter(s=>s.sit==="N").length,sr.some(s=>s.sit==="N")?"warn":""],["Dias no PCM",gd.length]])+
+      `<div class="grid g2" style="margin-bottom:12px">${card("Intervenções por mês",'<div id="dM"></div>',"janela toda · clique no mês")}${card("Defeitos do carro",'<div id="dD"></div>')}</div>`+
+      `<div class="tabs">${abas.map(([k,t,n])=>`<button class="chip ${v.aba===k?"on":""}" data-aba="${k}">${t} (${n})</button>`).join("")}</div><div id="dAba"></div>`;
+    el.querySelectorAll("[data-esc]").forEach(b=>b.onclick=()=>{v.escopo=b.dataset.esc;renderDrawer()});
+    el.querySelectorAll("[data-aba]").forEach(b=>b.onclick=()=>{v.aba=b.dataset.aba;renderDrawer()});
+    requestAnimationFrame(()=>vbars(el.querySelector("#dM"),porMes,{h:150,onClick:it=>{S.mes=it.k;syncFiltros();renderSec();v.escopo="P";renderDrawer()}}));
+    hbars(el.querySelector("#dD"),cnt(intv,"p"),k=>abrirLista(`Carro ${car} · ${k}`,x=>x.v===car&&x.p===k,{ms:meses}),8);
+    const A=el.querySelector("#dAba");const put=(t,rows,cols,det,sub)=>{A.innerHTML=card(t,'<div class="tblwrap" id="dT"></div>',sub||"");const h=A.querySelector("#dT");h.innerHTML=tabela(rows,cols,{limit:200,detail:!!det});ligarTab(h,rows,cols,{detail:det});drawerCsv={rows,cols:cols.map(c=>[c.t,c.k])}};
+    if(v.aba==="I"){put("Intervenções",intv,COL_I.filter(c=>c.k!=="v"),DET_I);drawerCsv={rows:intv,cols:CSV_I}}
+    if(v.aba==="P"){A.innerHTML=card("Planos vencidos hoje",'<div id="p1"></div>')+'<div class="mt"></div>'+card("Preventivas realizadas",'<div id="p2"></div>');
+      A.querySelector("#p1").innerHTML=tabela(pv,COL_P.filter(c=>c.k!=="v"));A.querySelector("#p2").innerHTML=tabela(pr,COL_PR.filter(c=>c.k!=="v"))}
+    if(v.aba==="R")put("Eventos de regeneração do DPF",rg,COL_REG.filter(c=>c.k!=="v"));
+    if(v.aba==="S")put("Solicitações de reparo",sr,COL_SR.filter(c=>c.k!=="v"),DET_SR,"abertas + do período");
+    if(v.aba==="G"){const rows=gd.map(o=>({...o.r,d:o.d,dias:diffD(o.d,o.r.ent)})).reverse();put("Sessões do PCM em que o carro estava parado",rows,[{t:"Sessão",k:x=>fData(x.d)},{t:"Categoria",k:"cat",f:tagT},{t:"Setor",k:"setor"},{t:"Motivo",k:x=>(x.desc||"").slice(0,90)},{t:"Dias parado",k:"dias",r:1}],DET_G)}
+    if(v.aba==="T"){A.innerHTML=card("Trocas de pneu",'<div id="p1"></div>')+(ct.length?'<div class="mt"></div>'+card("Divergências no controle central",'<div id="p2"></div>'):"");
+      const h=A.querySelector("#p1");h.innerHTML=tabela(tr,COL_TR.filter(c=>c.k!=="v"),{detail:1});ligarTab(h,tr,COL_TR.filter(c=>c.k!=="v"),{detail:DET_TR});
+      if(ct.length)A.querySelector("#p2").innerHTML=tabela(ct,[{t:"Posição",k:"pos"},{t:"Fogo base",k:"fb"},{t:"Fogo auditado",k:"fa"},{t:"Status",k:"st"},{t:"Auditoria",k:x=>fData(x.em)}])}
+    if(v.aba==="O")put("Entradas na oficina (PCM)",of,[{t:"Entrada",k:x=>fDH(x.ent)||fData(x.d)},{t:"Categoria",k:"cat",f:tagT},{t:"Setor",k:"setor"},{t:"Descrição",k:x=>(x.desc||"").slice(0,70)},{t:"Saída",k:x=>x.sai?fDH(x.sai):"em aberto"}],r=>dl([["Descrição",r.desc],["Motivo",r.obs],["OS",r.os],["Turno",r.turno]]));
+    if(v.aba==="E")put("Solicitações de reparo de embarcados",em,COL_E.filter(c=>c.k!=="v"),DET_E,"todas");
+  }};
+  abrirDrawer(v);
+}
+
+/* ======================= CSV ======================= */
+const CSV_I=[["numero_sos","n"],["data","d"],["hora","h"],["carro","v"],["cluster","cl"],["linha","l"],["tipo","t"],["valida_mkbf","ok"],["status","st"],["setor","se"],["grupo","gr"],["defeito","p"],["reclamacao","rc"],["solucao","so"],["controlabilidade","ct"],["motorista","mo"],["embarcado","em"]];
+function baixarCsv(rows,cols,nome){
+  const q=v=>`"${String(v??"").replace(/"/g,'""').replace(/<[^>]+>/g,"")}"`;
+  const val=(r,k)=>typeof k==="function"?k(r):r[k];
+  const csv="﻿"+cols.map(c=>c[0]).join(";")+"\n"+rows.map(r=>cols.map(c=>q(val(r,c[1]))).join(";")).join("\n");
+  try{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download=String(nome).replace(/[^\w\-]+/g,"_")+".csv";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}catch(e){alert("Este visualizador bloqueia downloads. Abra o arquivo no Chrome/Edge para exportar o CSV.")}
+}
+
+/* ======================= seções ======================= */
+const SECS=[
+ ["s00","Resumo (capa)"],["s01","Intervenções — Mês / MKBF"],["s02","Intervenções — Dia e Projeções"],["s03","Linha, Horário e Cluster"],
+ ["s04","Raio-X de Defeitos"],["s05","Defeitos — Evolução Mensal"],["s05r","Reincidência (≤ 30 dias)"],["s06","Regeneração do DPF"],["s07","Borracharia — Pneus"],
+ ["s08","Intervenções por Motorista"],["s09","Solicitação de Reparo — Aderência"],["s10","Solicitação de Reparo por Grupo"],["s11","Controle de Preventivas"],
+ ["s11r","Revisão × Quebra · Técnicos"],["s12","GNS — Carros Parados"],["s12o","Oficina · Entradas no PCM"],["s13","Embarcados — Câmeras e Vision"],["s14","Embarcados na Operação"],["s15","Oportunidades de Melhoria"],["s16","Base completa de intervenções"]];
+const head=(t,ps,mes)=>`<div class="ptitle"><div><h2>${t}</h2><div class="ps">${ps}</div></div><div class="mes">${mes||periodoTxt()}</div></div><div class="accent"></div>`;
+const V=()=>$("#view");
+
+/* ---------- 00 capa ---------- */
+function calcResumo(){
+  const ms=mesesSel(),mk=mkbf(ms);
+  const planosT=PLANOS.filter(p=>inCl(p.cl)),planosV=planosT.filter(p=>p.venc);
+  const g=gnsMes(ms);
+  return{mk,ader:pct(planosT.length-planosV.length,planosT.length),gns:g.medio,planosV:planosV.length,g};
+}
+function secCapa(){
+  const r=calcResumo(),ms=mesesSel(),rows=baseI();
+  const regen=REG.filter(x=>ms.includes(x.m)&&inCl(x.cl));
+  const tr=TROCAS.filter(x=>ms.includes(x.m)&&inCl(x.cl));
+  const srAb=SR.filter(x=>x.sit==="N"&&inCl(x.cl));
+  const emb=EMB.filter(e=>EMB_ABERTO(e.st)&&e.prio.startsWith("CR")&&inCl(e.cl));
+  const embOp=baseI(ms,{todas:true}).filter(x=>x.em);
+  const def=cnt(rows,"p")[0];
+  const opp=oportunidades();
+  const dd=r.mk.dias.size;
+  const cards=[
+   ["s01","01","Intervenções / MKBF",fInt(r.mk.mkbf),`${fInt(r.mk.n)} intervenções · ${f1(pct(r.mk.mkbf,D.meta_mkbf))}% da meta`],
+   ["s02","02","Dia e projeções",f1(dd?r.mk.n/dd:0)+"/dia",`projeção ${fInt(dd?r.mk.n/dd*diasNoMes(REF()):0)} no mês`],
+   ["s03","03","Linha, horário, cluster",esc(cnt(rows,"l")[0]?.[0]||"—"),"linha com mais intervenções"],
+   ["s04","04","Raio-X de defeitos",esc(def?.[0]||"—"),def?`${def[1]} ocorrências no mês`:""],
+   ["s05","05","Evolução de defeitos",fInt(new Set(rows.map(x=>x.p)).size),"defeitos distintos no mês"],
+   ["s06","06","Regeneração DPF",fInt(regen.length)+" eventos",`${fR(sum(regen,x=>x.cus))} · ${f1(sum(regen,x=>x.lt))} L`],
+   ["s07","07","Borracharia",fInt(tr.length)+" trocas",`estoque TransNet ${fInt(PNEUS.filter(p=>/BORRACHARIA/i.test(p.loc)).length)}`],
+   ["s08","08","Motoristas",fInt(I.filter(x=>x.t==="IMPROCEDENTE"&&x.m.slice(0,4)===REF().slice(0,4)&&inCl(x.cl)).length)+" improc.",`no ano de ${REF().slice(0,4)}`],
+   ["s09","09","SR — aderência",f1(srComp(REF()).pct)+"%",`competência ${mesLb(REF())} · meta ${fInt(D.sr_meta)}%`],
+   ["s10","10","SR por grupo",fInt(srAb.length)+" abertas",`mais antiga ${srAb.length?Math.max(...srAb.map(x=>diffD(HOJE,x.d))):0} dias`],
+   ["s11","11","Preventivas",f1(r.ader)+"%",`${r.planosV} planos vencidos hoje`],
+   ["s12","12","GNS",f1(r.gns),`média dia útil · ${r.g.ult?r.g.ult.c.filter(c=>inCl(c.cl)).length:0} parados na última sessão`],
+   ["s13","13","Embarcados SR",fInt(emb.length)+" críticos",`${EMB.filter(e=>EMB_ABERTO(e.st)&&inCl(e.cl)).length} abertos`],
+   ["s14","14","Embarcados na operação",fInt(embOp.length),`${f1(pct(embOp.length,baseI(ms,{todas:true}).length))}% das intervenções`],
+   ["s15","15","Oportunidades",f1(opp.repPct)+"%",`quebras repetidas ≤7d · ${f1(opp.posPct)}% pós-preventiva`],
+   ...(()=>{const rr=reinc30(rows);const ent=PCM.filter(x=>ms.includes(x.m)&&inCl(x.cl));const ult=rows.filter(x=>x.rd!=null);
+     return[["s05r","R","Reincidência ≤ 30 dias",f1(rr.taxa)+"%",`${rr.vr} carros · ${rr.rt} com o mesmo defeito`],
+      ["s11r","T","Revisão × quebra",f1(pct(ult.filter(x=>x.rd<=15).length,ult.length))+"%","quebras em até 15 dias da revisão"],
+      ["s12o","O","Oficina · PCM",fInt(ent.length)+" entradas",`${f1(pct(ent.filter(x=>x.sai).length,ent.length))}% liberadas · ${PCM.filter(x=>!x.sai&&inCl(x.cl)).length} em aberto`],
+      ["s01","F","Tempo de fechamento",fH(mediaFech(rows)),"média do SOS ao encerramento"]]})()];
+  const ds=[...r.mk.dias].sort();
+  V().innerHTML=head("Flash Report Manutenção",`Dados ao vivo do Supabase · gerado em ${D.gerado_em} · KM consolidado até ${fData(ULT_KM)}`)+
+   `<div class="grid g4">${kpi("MKBF",fInt(r.mk.mkbf),`<span class="${r.mk.mkbf>=D.meta_mkbf?"up":"down"}">${r.mk.mkbf>=D.meta_mkbf?"acima":"abaixo"}</span> da meta ${fInt(D.meta_mkbf)}`,{id:"c1",big:1})}
+    ${kpi("Aderência preventiva",f1(r.ader)+"%",`${r.planosV} planos vencidos hoje`,{id:"c2",big:1})}
+    ${kpi("GNS médio",f1(r.gns),"carros parados por dia útil",{id:"c3",big:1})}
+    ${kpi("Intervenções",fInt(r.mk.n),`válidas no MKBF · ${fData(ds[0]||"")} a ${fData(ds.at(-1)||"")}`,{id:"c4",big:1})}</div>
+   <div style="margin:22px 0 10px" class="flabel">Seções do relatório — clique para abrir</div>
+   <div class="grid g5">${cards.map(([s,n,t,vl,d])=>`<button class="card sec-card" data-go="${s}"><span class="sn">${String(SECS.findIndex(x=>x[0]===s)).padStart(2,"0")}</span><span class="st">${t}</span><span class="sv">${vl}</span><span class="sd">${d}</span></button>`).join("")}</div>`;
+  on("c1",()=>go("s01"));on("c2",()=>go("s11"));on("c3",()=>go("s12"));on("c4",()=>abrirLista("Intervenções que contam no MKBF",x=>x.ok&&r.mk.dias.has(x.d)));
+  V().querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
+}
+
+/* ---------- 01 MKBF ---------- */
+function porTipo(ms){const o={};baseI(ms).forEach(x=>o[x.t]=(o[x.t]||0)+1);return o}
+function sec01(){
+  const ref=REF(),ant=addM(ref,-1),ms=mesesSel(),msA=S.mes==="JANELA"?null:[ant];
+  const a=mkbf(ms),b=msA?mkbf(msA):null;
+  const ader=pct(a.mkbf,D.meta_mkbf);
+  const tA=porTipo(ms),tB=msA?porTipo(msA):{};
+  const tipos=[...new Set(["RECOLHEU","SOS","TROCA","AVARIA","IMPROCEDENTE",...Object.keys(tA),...Object.keys(tB)])].filter(t=>!S.val||!["SEGUIU VIAGEM","SEM TIPO"].includes(t)).sort((x,y)=>(tA[y]||0)-(tA[x]||0));
+  const hist=MESES_JAN.map(m=>{const r=mkbf([m]);return{k:m,label:mesLb(m),v:r.mkbf,dim:!ms.includes(m),tip:`<b>${mesLong(m)}</b><br>MKBF ${fInt(r.mkbf)}<br>${fInt(r.n)} intervenções · ${fInt(r.km)} km`}});
+  const top3=Object.entries(tA).sort((x,y)=>y[1]-x[1]).slice(0,3).map(([k,n])=>`${k} (${n})`).join(", ");
+  const ds=[...a.dias].sort();
+  V().innerHTML=head("Intervenções do mês / MKBF",`Período: ${fData(ds[0]||"")} a ${fData(ds.at(-1)||"")} · só dias com KM consolidado`)+
+  `<div class="grid g21"><div class="card"><h3>Comparativo mensal</h3><div class="body tblwrap"><table><thead><tr><th>Indicador</th>${b?`<th class="r">${mesLong(ant)}</th>`:""}<th class="r">${periodoTxt()}</th>${b?'<th class="r">Var</th>':""}</tr></thead><tbody>
+    <tr class="click" id="r1"><td>Intervenções</td>${b?`<td class="r num">${fInt(b.n)}</td>`:""}<td class="r num"><b>${fInt(a.n)}</b></td>${b?`<td class="r">${varPct(a.n,b.n,true)}</td>`:""}</tr>
+    <tr><td>KM rodado</td>${b?`<td class="r num">${fInt(b.km)}</td>`:""}<td class="r num"><b>${fInt(a.km)}</b></td>${b?`<td class="r">${varPct(a.km,b.km)}</td>`:""}</tr>
+    <tr><td>MKBF</td>${b?`<td class="r num">${fInt(b.mkbf)}</td>`:""}<td class="r num"><b>${fInt(a.mkbf)}</b></td>${b?`<td class="r">${varPct(a.mkbf,b.mkbf)}</td>`:""}</tr>
+    <tr><td>Meta MKBF</td>${b?`<td class="r num">${fInt(D.meta_mkbf)}</td>`:""}<td class="r num">${fInt(D.meta_mkbf)}</td>${b?"<td></td>":""}</tr></tbody></table>
+    <div class="hint">Clique em "Intervenções" para abrir a lista.</div></div></div>
+   <div class="grid">${kpi("Aderência à meta",f1(ader)+"%",`meta de referência ${fInt(D.meta_mkbf)}`,{cls:ader>=100?"up":"down"})}
+     <div class="card kpi"><div class="lb">Status do mês</div><div style="margin-top:8px"><span class="status ${ader>=100?"ok":"bad"}">${ader>=100?"ACIMA":"ABAIXO"}</span></div></div></div></div>
+  <div class="grid g5 mt">${kpi("Intervenções",fInt(a.n),"ocorrências válidas",{id:"k1"})}${kpi("KM rodado",fInt(a.km),`${a.dias.size} dias com KM`)}${kpi("MKBF",fInt(a.mkbf),"KM ÷ intervenções",{id:"k3"})}
+   ${(()=>{const rA=baseI(ms),rB=msA?baseI(msA):[];const fa=mediaFech(rA),fb=mediaFech(rB);return kpi("Tempo médio de fechamento",fH(fa),b?`${varPct(fa,fb,true)} vs ${mesLb(ant)} (${fH(fb)})`:"do SOS ao encerramento",{id:"k4"})})()}
+   ${(()=>{const rA=baseI(ms);const c=rA.filter(x=>/^control/i.test(x.ct)).length;return kpi("Controláveis",f1(pct(c,rA.length))+"%",`${fInt(c)} de ${fInt(rA.length)} · ${fInt(rA.filter(x=>/^n[ãa]o control/i.test(x.ct)).length)} não controláveis`,{id:"k5"})})()}</div>
+  <div class="grid g12 mt">${card("Tipo de ocorrência",`<div class="tblwrap"><table><thead><tr><th>Tipo</th>${b?`<th class="r">${mesLb(ant)}</th>`:""}<th class="r">${S.mes==="JANELA"?"Janela":mesLb(ref)}</th></tr></thead><tbody>${tipos.map(t=>`<tr><td>${tagT(t)}</td>${b?`<td class="r c num" data-t="${esc(t)}" data-m="A">${fInt(tB[t]||0)}</td>`:""}<td class="r c num" data-t="${esc(t)}" data-m="C"><b>${fInt(tA[t]||0)}</b></td></tr>`).join("")}</tbody></table></div><div class="hint">Clique num número para ver as intervenções.</div>`)}
+   ${card("Evolução histórica do MKBF",'<div id="ch1"></div>',`clique num mês · meta ${fInt(D.meta_mkbf)}`)}</div>`+
+  cons("MKBF",`No período ${periodoTxt()}, a operação registrou <b>${fInt(a.n)}</b> intervenções válidas para MKBF, com <b>${fInt(a.km)}</b> km rodados e MKBF de <b>${fInt(a.mkbf)}</b>. ${b?`Na comparação com ${mesLong(ant)}, houve ${a.mkbf>=b.mkbf?"alta":"queda"} no indicador (${varPct(a.mkbf,b.mkbf)}). `:""}A aderência frente à meta de ${fInt(D.meta_mkbf)} ficou em ${f1(ader)}%, ${ader>=100?"acima":"abaixo"} do patamar esperado. Principais ofensores: ${esc(top3)||"—"}.`);
+  vbars("#ch1",hist,{meta:D.meta_mkbf,onClick:it=>{S.mes=it.k;syncFiltros();renderSec()}});
+  const lk=()=>abrirLista("Intervenções do MKBF",x=>x.ok&&a.dias.has(x.d));on("r1",lk);on("k1",lk);on("k3",lk);
+  on("k4",()=>abrirTabela("Tempo de fechamento das intervenções",periodoTxt(),baseI(ms).map(x=>({...x,hf:horasFech(x)})).sort((p,q)=>q.hf-p.hf),[{t:"Data",k:x=>fData(x.d)+" "+x.h},{t:"Carro",k:"v",car:1},{t:"Tipo",k:"t",f:tagT},{t:"Defeito",k:"p"},{t:"Encerrado em",k:x=>fData(x.fe)},{t:"Tempo",k:x=>x.hf?fH(x.hf):"—",r:1},{t:"Status",k:"st",hm:1}],{det:DET_I}));
+  on("k5",()=>abrirLista("Intervenções controláveis",x=>/^control/i.test(x.ct)));
+  V().querySelectorAll("td[data-t]").forEach(td=>td.onclick=()=>{const t=td.dataset.t,mm=td.dataset.m==="A"?[ant]:ms;abrirLista("Tipo: "+t,x=>x.t===t,{ms:mm})});
+}
+
+/* ---------- 02 Dia e projeções ---------- */
+function sec02(){
+  const ref=REF(),ms=mesesSel(),a=mkbf(ms);
+  const dd=a.dias.size,media=dd?a.n/dd:0,metaMes=a.km/D.meta_mkbf,delta=a.n-metaMes;
+  const nd=S.mes==="JANELA"?sum(ms,diasNoMes):diasNoMes(ref);
+  const projI=dd?a.n/dd*nd:a.n,projKm=dd?a.km/dd*nd:a.km,metaProj=projKm/D.meta_mkbf;
+  const dias=[...a.dias].sort();
+  const porDia=new Map(cnt(a.rows,"d"));
+  const items=dias.map(d=>{const n=porDia.get(d)||0,o=KMD.get(d)||{};let km=0;for(const c in o)if(inCl(c))km+=o[c][0];return{k:d,label:S.mes==="JANELA"?fData(d).slice(0,5):d.slice(8),v:n,km,tip:`<b>${DOW[new Date(d+"T12:00").getDay()]} ${fData(d)}</b><br>${n} intervenções · ${fInt(km)} km<br>MKBF do dia ${n?fInt(km/n):"—"}`}});
+  const util=a.rows.filter(x=>x.dow>0&&x.dow<6).length,fds=a.rows.length-util;
+  const st=delta>0?["ALERTA","bad"]:["NO RITMO","ok"];
+  V().innerHTML=head("Intervenções por dia e projeções",`Período: ${fData(dias[0]||"")} a ${fData(dias.at(-1)||"")} · ${dd} dias com KM`)+
+  `<div class="grid g21"><div class="card"><h3>Projeções e metas</h3><div class="body tblwrap"><table><thead><tr><th>Indicador</th><th class="r">Valor</th></tr></thead><tbody>
+    <tr><td>Média de intervenções / dia</td><td class="r num"><b>${f1(media)}</b></td></tr>
+    <tr><td>Meta de intervenções no período (KM ÷ ${fInt(D.meta_mkbf)})</td><td class="r num">${fInt(metaMes)}</td></tr>
+    <tr><td>Desvio (realizado − meta)</td><td class="r num ${delta>0?"down":"up"}">${delta>0?"+":""}${fInt(delta)}</td></tr>
+    <tr><td>Projeção de intervenções no fim do mês</td><td class="r num"><b>${fInt(projI)}</b></td></tr>
+    <tr><td>Projeção de KM no mês</td><td class="r num">${fInt(projKm)}</td></tr>
+    <tr><td>Meta de intervenções no mês projetado</td><td class="r num">${fInt(metaProj)}</td></tr>
+    <tr><td>MKBF projetado</td><td class="r num">${fInt(projI?projKm/projI:0)}</td></tr></tbody></table></div></div>
+   <div class="card kpi"><div class="lb">Status da projeção</div><div style="margin:8px 0"><span class="status ${st[1]}">${st[0]}</span></div><div class="dt">A meta de intervenções é o KM rodado dividido pela meta de MKBF (${fInt(D.meta_mkbf)}). Dias decorridos: ${dd}.</div>
+     <div class="grid g2 mt">${kpi("Dias úteis",fInt(util),"intervenções",{id:"u1"})}${kpi("Fim de semana",fInt(fds),"intervenções",{id:"u2"})}</div></div></div>
+  <div class="mt">${card("Evolução diária — intervenções e MKBF",'<div id="ch2"></div><div class="legend"><span><i style="background:var(--bar)"></i>Intervenções</span><span><i style="background:var(--line2)"></i>MKBF do dia (eixo direito)</span></div>',"clique numa barra para ver o dia")}</div>
+  <div class="grid g2 mt">${card("Por dia da semana",'<div id="dw"></div>')}${card("Dia × hora",'<div id="hm"></div>',"clique numa célula")}</div>`+
+  cons("Análise diária",`No período, a média diária foi de <b>${f2(media)}</b> intervenções/dia, com projeção de <b>${fInt(projI)}</b> no mês — ${projI>metaProj?"<b>acima</b>":"dentro"} da meta de ${fInt(metaProj)} para o KM projetado. A distribuição aponta ${util} quebras em dias úteis e ${fds} aos finais de semana.`);
+  vbars("#ch2",items,{line:items.map(i=>i.v?i.km/i.v:null),lineMeta:D.meta_mkbf,onClick:it=>abrirLista("Dia "+fData(it.k),x=>x.d===it.k,{sub:DOW[new Date(it.k+"T12:00").getDay()]})});
+  on("u1",()=>abrirLista("Intervenções em dias úteis",x=>x.ok&&a.dias.has(x.d)&&x.dow>0&&x.dow<6));on("u2",()=>abrirLista("Intervenções no fim de semana",x=>x.ok&&a.dias.has(x.d)&&(x.dow===0||x.dow===6)));
+  hbars("#dw",[1,2,3,4,5,6,0].map(d=>[DOW[d],a.rows.filter(x=>x.dow===d).length]),k=>{const d=DOW.indexOf(k);abrirLista(k,x=>x.dow===d)},7);
+  heatmap("#hm",baseI(),ms);
+}
+function heatmap(sel,rows,ms){
+  const hm=new Map();let mx=1;rows.forEach(x=>{if(x.hr==null)return;const k=x.dow+"|"+x.hr;hm.set(k,(hm.get(k)||0)+1);mx=Math.max(mx,hm.get(k))});
+  let h='<div class="hm"><div></div>'+Array.from({length:24},(_,i)=>`<div class="hh">${i%3===0?i:""}</div>`).join("");
+  [1,2,3,4,5,6,0].forEach(dw=>{h+=`<div class="lb">${DOW[dw]}</div>`;for(let hr=0;hr<24;hr++){const n=hm.get(dw+"|"+hr)||0,a=n?0.14+0.86*n/mx:0;
+    h+=`<div class="c" data-dw="${dw}" data-hr="${hr}" data-tip="${DOW[dw]} ${hr}h–${hr+1}h: <b>${n}</b>" style="background:${n?`color-mix(in srgb, var(--teal) ${Math.round(a*100)}%, transparent)`:"var(--soft)"};color:${a>.55?"#fff":"var(--ink2)"}">${n||""}</div>`}});
+  const el=$(sel);el.innerHTML=h+"</div>";bindTips(el);
+  el.querySelectorAll(".c").forEach(c=>c.onclick=()=>{hideTip();const dw=+c.dataset.dw,hr=+c.dataset.hr;abrirLista(`${DOW[dw]} · ${hr}h às ${hr+1}h`,x=>x.dow===dw&&x.hr===hr,{ms})});
+}
+
+/* ---------- 03 Linha / horário / cluster ---------- */
+function sec03(){
+  const tri=trimestre(),ref=REF(),rows=baseI(tri),refRows=rows.filter(x=>x.m===ref);
+  const agg=key=>{const m=new Map();rows.forEach(x=>{const k=x[key];if(!m.has(k))m.set(k,{k,tot:0,ref:0});const o=m.get(k);o.tot++;if(x.m===ref)o.ref++});return[...m.values()].sort((a,b)=>b.ref-a.ref||b.tot-a.tot)};
+  const linhas=agg("l").slice(0,14),carros=agg("v").slice(0,10);
+  const antM=addM(ref,-1);linhas.forEach(o=>{o.ant=rows.filter(x=>x.l===o.k&&x.m===antM).length});
+  const horas=Array.from({length:24},(_,h)=>({k:h,label:h+"h",v:rows.filter(x=>x.hr===h).length,ref:refRows.filter(x=>x.hr===h).length}));
+  const clRows=CLS.filter(c=>inCl(c)).map(c=>{const r=mkbf([ref],c);const porM=tri.map(m=>I.filter(x=>x.m===m&&x.cl===c&&(!S.val||x.ok)).length);const frota=new Set(I.filter(x=>x.m===ref&&x.cl===c&&x.ok).map(x=>x.v)).size;return{c,porM,frota,km:r.km,mk:r.mkbf,n:r.n}});
+  const sem=semestre();const evo=CLS.filter(c=>inCl(c)).map(c=>({c,v:sem.map(m=>mkbf([m],c))}));
+  V().innerHTML=head("Análise estratégica — linha, horário, carro e cluster",`Base: ${fInt(rows.length)} intervenções ${S.val?"válidas ":""}no trimestre ${periodoTxt(tri)} · ${fInt(refRows.length)} em ${mesLb(ref)}`,periodoTxt(tri))+
+  `<div class="grid g2">${card("Linhas com mais intervenções",tabela(linhas,[{t:"Linha",k:"k"},{t:mesLb(antM),k:"ant",r:1},{t:mesLb(ref),k:"ref",r:1},{t:"Var",k:x=>varPct(x.ref,x.ant,true),f:v=>v,r:1},{t:"Trimestre",k:"tot",r:1}],{id:"tl"}),"clique na linha")}
+   ${card("Carros com mais intervenções",tabela(carros,[{t:"Carro",k:"k"},{t:"Cluster",k:x=>clusterDe(x.k)},{t:mesLb(ref),k:"ref",r:1},{t:"Trimestre",k:"tot",r:1}],{id:"tc"}),"clique no carro")}</div>
+  <div class="mt">${card("Intervenções por faixa horária",'<div id="ch3"></div><div class="legend"><span><i style="background:var(--bar)"></i>Trimestre</span><span><i style="background:var(--line2)"></i>'+mesLb(ref)+' (eixo direito)</span></div>',"clique numa hora")}</div>
+  <div class="grid g2 mt">${card("Cluster — trimestre e MKBF de "+mesLb(ref),`<div class="tblwrap"><table><thead><tr><th>Cluster</th>${tri.map(m=>`<th class="r">${mesLb(m)}</th>`).join("")}<th class="r">Frota c/ interv.</th><th class="r">Interv./veíc.</th><th class="r">MKBF</th></tr></thead><tbody>${clRows.map(o=>`<tr><td><b>${o.c}</b></td>${o.porM.map((n,i)=>`<td class="r c num" data-c="${o.c}" data-m="${tri[i]}">${n}</td>`).join("")}<td class="r num">${o.frota}</td><td class="r num">${o.frota?f2(o.porM.at(-1)/o.frota):"—"}</td><td class="r num ${o.mk&&o.mk<D.meta_mkbf?"down":"up"}">${o.mk?fInt(o.mk):"—"}</td></tr>`).join("")}</tbody></table></div><div class="hint">Clique num número para ver as intervenções.</div>`)}
+   ${card("Evolução do MKBF por cluster",`<div class="tblwrap"><table class="heat"><thead><tr><th>Cluster</th>${sem.map(m=>`<th class="r">${mesLb(m)}</th>`).join("")}</tr></thead><tbody>${evo.map(o=>`<tr><td><b>${o.c}</b></td>${o.v.map((r,i)=>`<td class="c num" data-c="${o.c}" data-m="${sem[i]}" data-tip="${o.c} ${mesLb(sem[i])}: ${fInt(r.n)} interv. · ${fInt(r.km)} km" style="background:${r.mkbf?`color-mix(in srgb, ${r.mkbf>=D.meta_mkbf?"var(--good)":"var(--bad)"} ${Math.min(45,Math.round(Math.abs(r.mkbf-D.meta_mkbf)/D.meta_mkbf*60)+8)}%, transparent)`:"none"}">${r.mkbf?fInt(r.mkbf):"—"}</td>`).join("")}</tr>`).join("")}</tbody></table></div><div class="hint">Verde = acima da meta ${fInt(D.meta_mkbf)}, vermelho = abaixo.</div>`)}</div>
+  <div class="mt">${card("Mapa dia da semana × hora (trimestre)",'<div id="hm"></div>')}</div>`;
+  $("#tl").querySelectorAll("tbody tr").forEach((tr,i)=>{tr.classList.add("click");tr.onclick=()=>abrirLista("Linha "+linhas[i].k,x=>x.l===linhas[i].k,{ms:tri})});
+  $("#tc").querySelectorAll("tbody tr").forEach((tr,i)=>{tr.classList.add("click");tr.onclick=()=>abrirCarro(carros[i].k)});
+  vbars("#ch3",horas.map(h=>({...h,tip:`${h.k}h: ${h.v} no trimestre · ${h.ref} em ${mesLb(ref)}`})),{line:horas.map(h=>h.ref),onClick:it=>abrirLista(`${it.k}h às ${it.k+1}h`,x=>x.hr===it.k,{ms:tri})});
+  V().querySelectorAll("td[data-c]").forEach(td=>td.onclick=()=>{const c=td.dataset.c,m=td.dataset.m;abrirLista(`Cluster ${c} · ${mesLb(m)}`,x=>x.cl===c,{ms:[m]})});
+  bindTips(V());
+  heatmap("#hm",rows,tri);
+}
+
+/* ---------- 04 Raio-X ---------- */
+function sec04(){
+  const tri=trimestre(),rows=baseI(tri);
+  const tdef=cnt(rows,"p"),tset=cnt(rows,"se"),tvei=cnt(rows,"v");
+  const linhas=cnt(rows,"l").slice(0,5).map(([l,n])=>({l,n,d:cnt(rows.filter(x=>x.l===l),"p")[0]}));
+  const carros=tvei.slice(0,8).map(([v,n])=>{const rs=rows.filter(x=>x.v===v);return{v,n,m:tri.map(m=>rs.filter(x=>x.m===m).length),defs:cnt(rs,"p").slice(0,3),se:cnt(rs,"se")[0]?.[0],l:cnt(rs,"l")[0]?.[0]}});
+  V().innerHTML=head("Raio-X de defeitos e ofensores",`Base: ${fInt(rows.length)} intervenções no trimestre`,periodoTxt(tri))+
+  `<div class="grid g4">${kpi("Total de intervenções",fInt(rows.length),"trimestre",{id:"x1"})}${kpi("Defeito nº 1",`<span style="font-size:17px">${esc(tdef[0]?.[0]||"—")}</span>`,`${tdef[0]?.[1]||0} ocorrências`,{id:"x2"})}${kpi("Setor nº 1",`<span style="font-size:17px">${esc(tset[0]?.[0]||"—")}</span>`,`${tset[0]?.[1]||0} ocorrências`,{id:"x3"})}${kpi("Veículo nº 1",esc(tvei[0]?.[0]||"—"),`${tvei[0]?.[1]||0} intervenções`,{id:"x4"})}</div>
+  <div class="grid g3 mt">${card("Defeitos",'<div id="b1"></div>',"top 15")}${card("Setor de manutenção",'<div id="b2"></div>')}${card("Grupo de manutenção",'<div id="b3"></div>')}</div>
+  <div class="grid g12 mt">${card("Top 5 linhas + maior defeito",`<table><thead><tr><th>Linha</th><th class="r">Interv.</th><th>Maior defeito</th></tr></thead><tbody>${linhas.map((o,i)=>`<tr class="click" data-li="${i}"><td><b>${esc(o.l)}</b></td><td class="r num">${o.n}</td><td>${esc(o.d?.[0]||"")} <span class="neutral">(${o.d?.[1]||0})</span></td></tr>`).join("")}</tbody></table>`)}
+   ${card("Carros ofensores — detalhado",`<div class="tblwrap"><table><thead><tr><th>Carro</th>${tri.map(m=>`<th class="r">${mesLb(m)}</th>`).join("")}<th class="r">Total</th><th>Top defeitos</th><th class="hide-m">Setor</th><th class="hide-m">Linha</th></tr></thead><tbody>${carros.map(o=>`<tr class="click" data-car="${esc(o.v)}"><td><b>${esc(o.v)}</b></td>${o.m.map(n=>`<td class="r num">${n}</td>`).join("")}<td class="r num"><b>${o.n}</b></td><td>${o.defs.map(([k,n])=>`${esc(k)} (${n})`).join(" | ")}</td><td class="hide-m">${esc(o.se||"")}</td><td class="hide-m">${esc(o.l||"")}</td></tr>`).join("")}</tbody></table></div>`,"clique para o prontuário")}</div>`+
+  cons("Defeitos",`No trimestre, o defeito mais recorrente foi <b>${esc(tdef[0]?.[0]||"—")}</b> (${tdef[0]?.[1]||0}), o setor mais demandado foi <b>${esc(tset[0]?.[0]||"—")}</b> e o veículo com mais intervenções foi o <b>${esc(tvei[0]?.[0]||"—")}</b> (${tvei[0]?.[1]||0}).`);
+  hbars("#b1",tdef,k=>abrirLista("Defeito: "+k,x=>x.p===k,{ms:tri}),15);
+  hbars("#b2",tset,k=>abrirLista("Setor: "+k,x=>x.se===k,{ms:tri}),10);
+  hbars("#b3",cnt(rows,"gr"),k=>abrirLista("Grupo: "+k,x=>x.gr===k,{ms:tri}),10);
+  on("x1",()=>abrirLista("Intervenções do trimestre",()=>true,{ms:tri}));on("x2",()=>tdef[0]&&abrirLista("Defeito: "+tdef[0][0],x=>x.p===tdef[0][0],{ms:tri}));on("x3",()=>tset[0]&&abrirLista("Setor: "+tset[0][0],x=>x.se===tset[0][0],{ms:tri}));on("x4",()=>tvei[0]&&abrirCarro(tvei[0][0]));
+  V().querySelectorAll("tr[data-li]").forEach(tr=>tr.onclick=()=>{const l=linhas[+tr.dataset.li].l;abrirLista("Linha "+l,x=>x.l===l,{ms:tri})});
+  V().querySelectorAll("tr[data-car]").forEach(tr=>tr.onclick=()=>abrirCarro(tr.dataset.car));
+}
+
+/* ---------- 05 Evolução de defeitos ---------- */
+let v5lim=15;
+function sec05(){
+  const sem=semestre(),ref=REF();
+  const rows=I.filter(x=>sem.includes(x.m)&&inCl(x.cl)&&(!S.val||x.ok)&&x.p!=="N/D");
+  const mat=new Map();rows.forEach(x=>{if(!mat.has(x.p))mat.set(x.p,Object.fromEntries(sem.map(m=>[m,0])));mat.get(x.p)[x.m]++});
+  const diasRef=ref===HOJE.slice(0,7)?+HOJE.slice(8,10):diasNoMes(ref);
+  const lst=[...mat].map(([p,o])=>{const tot=sum(sem,m=>o[m]);const ant=sem.slice(0,-1);const media=ant.length?sum(ant,m=>o[m]/diasNoMes(m))/ant.length*30:0;const proj=o[ref]/diasRef*30;return{p,o,tot,media,proj,delta:proj-media}}).sort((a,b)=>b.tot-a.tot);
+  const rel=lst.filter(x=>x.tot>=4),alta=rel.slice().sort((a,b)=>b.delta-a.delta)[0],queda=rel.slice().sort((a,b)=>a.delta-b.delta)[0];
+  const mesRows=rows.filter(x=>x.m===ref),top=cnt(mesRows,"p")[0];
+  const show=lst.slice(0,v5lim);const mx=Math.max(1,...show.flatMap(x=>sem.map(m=>x.o[m])));
+  V().innerHTML=head("Defeitos · evolução mensal",`O mesmo defeito mês a mês · base: intervenções ${S.val?"que contam para o MKBF":"(todas)"} · ${periodoTxt(sem)}`,mesLong(ref))+
+  `<div class="grid g4">${kpi("Intervenções no mês",fInt(mesRows.length),mesLb(ref)+(diasRef<diasNoMes(ref)?` · parcial (${diasRef} dias)`:""),{id:"e1"})}${kpi("Defeito nº 1 do mês",`<span style="font-size:17px">${esc(top?.[0]||"—")}</span>`,`${top?.[1]||0} ocorrências`,{id:"e2"})}
+   ${kpi("Maior alta",`<span style="font-size:17px">${esc(alta&&alta.delta>0?alta.p:"—")}</span>`,alta&&alta.delta>0?`ritmo ${f1(alta.proj)}/mês vs média ${f1(alta.media)}`:"",{id:"e3",cls:"down"})}
+   ${kpi("Maior queda",`<span style="font-size:17px">${esc(queda&&queda.delta<0?queda.p:"—")}</span>`,queda&&queda.delta<0?`ritmo ${f1(queda.proj)}/mês vs média ${f1(queda.media)}`:"",{id:"e4",cls:"up"})}</div>
+  <div class="mt">${card("Matriz defeito × mês",`<div class="tblwrap"><table class="heat"><thead><tr><th>Defeito</th>${sem.map(m=>`<th class="r">${mesLb(m)}</th>`).join("")}<th class="r">Total</th><th class="r">Média ant. (30d)</th><th class="r">Ritmo ${mesLb(ref)} (30d)</th><th>Tendência</th></tr></thead><tbody>${show.map((x,i)=>`<tr><td class="c" data-p="${i}"><b>${esc(x.p)}</b></td>${sem.map(m=>`<td class="c num" data-p="${i}" data-m="${m}" style="background:${x.o[m]?`color-mix(in srgb, var(--teal) ${Math.round(10+60*x.o[m]/mx)}%, transparent)`:"none"}">${x.o[m]||""}</td>`).join("")}<td class="r num"><b>${x.tot}</b></td><td class="r num">${f1(x.media)}</td><td class="r num">${f1(x.proj)}</td><td>${x.tot<4?'<span class="neutral">pouca massa</span>':x.delta>0.5?`<span class="down">▲ subindo</span>`:x.delta<-0.5?`<span class="up">▼ cedendo</span>`:'<span class="neutral">estável</span>'}</td></tr>`).join("")}</tbody></table></div>${lst.length>v5lim?`<button class="chip more" id="mais5">Mostrar todos (${lst.length})</button>`:""}<div class="hint">O mês de referência costuma ser parcial: a tendência compara o ritmo diário reprojetado em 30 dias contra a média dos meses anteriores.</div>`,"clique num número ou num defeito")}</div>`+
+  cons("Evolução",`Em ${mesLong(ref)}, o defeito nº 1 é <b>${esc(top?.[0]||"—")}</b> (${top?.[1]||0}). ${alta&&alta.delta>0?`A maior alta é <b>${esc(alta.p)}</b>, com ritmo de ${f1(alta.proj)}/mês contra média de ${f1(alta.media)}. `:""}${queda&&queda.delta<0?`O que mais cedeu foi <b>${esc(queda.p)}</b> (${f1(queda.proj)} vs ${f1(queda.media)}).`:""}`);
+  V().querySelectorAll("td[data-p]").forEach(td=>td.onclick=()=>{const x=show[+td.dataset.p];const m=td.dataset.m;abrirLista("Defeito: "+x.p+(m?" · "+mesLb(m):""),y=>y.p===x.p,{ms:m?[m]:sem})});
+  on("mais5",()=>{v5lim=1e9;sec05()});
+  on("e1",()=>abrirLista("Intervenções de "+mesLb(ref),()=>true,{ms:[ref]}));on("e2",()=>top&&abrirLista("Defeito: "+top[0],x=>x.p===top[0],{ms:[ref]}));
+  on("e3",()=>alta&&abrirLista("Defeito: "+alta.p,x=>x.p===alta.p,{ms:sem}));on("e4",()=>queda&&abrirLista("Defeito: "+queda.p,x=>x.p===queda.p,{ms:sem}));
+}
+
+/* ---------- 06 Regeneração ---------- */
+function sec06(){
+  const ms=mesesSel(),ref=REF(),ev=REG.filter(x=>ms.includes(x.m)&&inCl(x.cl));
+  const custo=sum(ev,x=>x.cus),lt=sum(ev,x=>x.lt),dur=ev.length?sum(ev,x=>x.dur)/ev.length:0;
+  const top=[...ev.reduce((m,x)=>{if(!m.has(x.v))m.set(x.v,{v:x.v,n:0,c:0,d:0,l:0});const o=m.get(x.v);o.n++;o.c+=x.cus||0;o.d+=x.dur||0;o.l+=x.lt||0;return m},new Map()).values()].sort((a,b)=>b.n-a.n||b.c-a.c);
+  const km=kmPeriodo(ms);const kmlCom=km.lt?km.km/km.lt:0,kmlSem=km.lt-lt>0?km.km/(km.lt-lt):0;
+  const ult=ev.map(x=>x.d).sort().pop();
+  const parcial=S.mes!=="JANELA"&&ult&&ult<`${ref}-${String(diasNoMes(ref)).padStart(2,"0")}`;
+  const span=ult?diffD(ult,ref+"-01")+1:0,mediaDia=span?ev.length/span:0;
+  const ant=addM(ref,-1),evAnt=REG.filter(x=>x.m===ant&&inCl(x.cl)).length,mdAnt=evAnt/diasNoMes(ant);
+  const hist=MESES_JAN.map(m=>{const e=REG.filter(x=>x.m===m&&inCl(x.cl));return{k:m,label:mesLb(m),v:sum(e,x=>x.cus),n:e.length,dim:!ms.includes(m),tip:`<b>${mesLong(m)}</b><br>${e.length} eventos · ${fR(sum(e,x=>x.cus))}<br>${f1(sum(e,x=>x.lt))} litros`}});
+  V().innerHTML=head("Regeneração do DPF","Fonte: eventos_regeneracao · consumo e custo de diesel na queima do filtro")+
+  `<div class="grid g5">${kpi("Eventos",fInt(ev.length),`${top.length} veículos`,{id:"g1"})}${kpi("Custo diesel",fR(custo),`${f1(lt)} litros`,{id:"g2"})}${kpi("Duração média",fInt(dur)+" min","por regeneração")}${kpi("Pior veículo",esc(top[0]?.v||"—"),`${top[0]?.n||0} regenerações`,{id:"g4"})}${kpi("Impacto no KM/L",(kmlSem-kmlCom>0?"−":"")+f3(Math.abs(kmlSem-kmlCom)),`${f3(kmlCom)} → ${f3(kmlSem)} sem regen (${f2(pct(kmlSem-kmlCom,kmlSem))}%)`)}</div>
+  ${parcial?`<div class="note mt"><b>Base de leitura — mês parcial.</b> Dados até ${fData(ult)} (${span} de ${diasNoMes(ref)} dias). Em base normalizada: <b>${f2(mediaDia)}</b> evento/dia contra <b>${f2(mdAnt)}</b> em ${mesLb(ant)} (${mediaDia>mdAnt?"acima":"abaixo"}) — projeção de ~${fInt(mediaDia*diasNoMes(ref))} eventos no mês fechado.</div>`:""}
+  <div class="grid g2 mt">${card("Top veículos — regenerações",`<div class="scroll" id="tv"></div>`,"clique no carro")}${card("Custo de regeneração por mês",'<div id="ch6"></div><div class="legend"><span><i style="background:var(--bar)"></i>Custo R$</span><span><i style="background:var(--line2)"></i>Eventos (eixo direito)</span></div>',"clique num mês")}</div>
+  <div class="grid g2 mt">${card("Por dia da semana",'<div id="rw"></div>')}${card("Duração dos eventos",'<div id="rd"></div>')}</div>`+
+  cons("Regeneração",`Em ${periodoTxt()}, foram <b>${fInt(ev.length)}</b> eventos de regeneração do DPF, custo de <b>${fR(custo)}</b> em diesel (${f1(lt)} litros) e duração média de ${fInt(dur)} min, em ${top.length} veículos. ${top[0]?`O <b>${esc(top[0].v)}</b> concentrou o maior volume (${top[0].n}). `:""}Esses litros entram no consumo sem gerar KM útil: ${f2(pct(lt,km.lt))}% do diesel do período, puxando o KM/L de ${f3(kmlSem)} para ${f3(kmlCom)}.`);
+  const tv=$("#tv");const cols=[{t:"Carro",k:"v"},{t:"Eventos",k:"n",r:1},{t:"Custo R$",k:x=>fInt(x.c),r:1},{t:"Litros",k:x=>f1(x.l),r:1},{t:"Duração méd.",k:x=>fInt(x.d/x.n)+" min",r:1}];
+  tv.innerHTML=tabela(top,cols,{limit:30});tv.querySelectorAll("tbody tr").forEach((tr,i)=>{tr.classList.add("click");tr.onclick=()=>abrirTabela("Regenerações · "+top[i].v,periodoTxt(),ev.filter(x=>x.v===top[i].v).sort((a,b)=>b.dt.localeCompare(a.dt)),COL_REG,{kpis:[["Eventos",top[i].n],["Custo",fR(top[i].c)],["Litros",f1(top[i].l)]],extra:{html:`<button class="chip" id="oc" style="margin-bottom:10px">Abrir prontuário do carro</button>`,bind:el=>el.querySelector("#oc").onclick=()=>abrirCarro(top[i].v)}})});
+  vbars("#ch6",hist,{fmt:v=>fInt(v),line:hist.map(h=>h.n),onClick:it=>{S.mes=it.k;syncFiltros();renderSec()}});
+  const lista=()=>ev.slice().sort((a,b)=>b.dt.localeCompare(a.dt));
+  on("g1",()=>abrirTabela("Eventos de regeneração",periodoTxt(),lista(),COL_REG));on("g2",()=>abrirTabela("Eventos de regeneração (maior custo)",periodoTxt(),lista().sort((a,b)=>b.cus-a.cus),COL_REG));on("g4",()=>top[0]&&abrirCarro(top[0].v));
+  hbars("#rw",[1,2,3,4,5,6,0].map(d=>[DOW[d],ev.filter(x=>new Date(x.d+"T12:00").getDay()===d).length]),k=>{const d=DOW.indexOf(k);abrirTabela("Regenerações · "+k,periodoTxt(),ev.filter(x=>new Date(x.d+"T12:00").getDay()===d),COL_REG)},7);
+  const faixas=[["até 15 min",-1,15],["15–30 min",15,30],["30–45 min",30,45],["45–60 min",45,60],["> 60 min",60,1e9]];
+  const inF=(x,a,b)=>(x.dur||0)>a&&(x.dur||0)<=b;
+  hbars("#rd",faixas.map(([k,a,b])=>[k,ev.filter(x=>inF(x,a,b)).length]),k=>{const [,a,b]=faixas.find(f=>f[0]===k);abrirTabela("Regenerações · "+k,periodoTxt(),ev.filter(x=>inF(x,a,b)),COL_REG)},5);
+}
+
+/* ---------- 07 Borracharia ---------- */
+function sec07(){
+  const ref=REF(),ms=mesesSel(),tri=trimestre();
+  const tr=TROCAS.filter(x=>ms.includes(x.m)&&inCl(x.cl)),trT=TROCAS.filter(x=>tri.includes(x.m)&&inCl(x.cl));
+  const est=PNEUS.filter(p=>/BORRACHARIA/i.test(p.loc)),novos=est.filter(p=>p.vida.toUpperCase()==="NOVO");
+  const ctrl=CTRL.filter(c=>inCl(c.cl)),ok=ctrl.filter(c=>c.st.toUpperCase()==="OK"),div=ctrl.filter(c=>c.st.toUpperCase()!=="OK");
+  const anoD=ref.slice(3,4);
+  const coh=PNEUS.filter(p=>p.vida.toUpperCase()==="NOVO").map(p=>{const f=String(p.fogo).padStart(6,"0");return{...p,f,ano:f[0],mc:f.slice(1,3),seq:+f.slice(3)}}).filter(p=>p.ano===anoD&&p.seq<=100&&+p.mc>=1&&+p.mc<=12);
+  const cg=[...new Set(coh.map(p=>p.mc))].sort().map(mc=>{const a=coh.filter(p=>p.mc===mc);return{mc,n:a.length,med:sum(a,p=>p.km)/a.length,max:Math.max(...a.map(p=>p.km||0))}});
+  const hist=MESES_JAN.map(m=>{const n=TROCAS.filter(x=>x.m===m&&inCl(x.cl)).length;return{k:m,label:mesLb(m),v:n,dim:!ms.includes(m),tip:`${mesLong(m)}: ${n} trocas`}});
+  V().innerHTML=head("Borracharia · pneus","Fonte: TransNet (pcm_pneus_transnet_ativos) · trocas (pcm_troca_pneus) · controle central")+
+  `<div class="grid g4">${kpi("Trocas no mês",fInt(tr.length),`${fInt(trT.length)} no trimestre`,{id:"p1"})}${kpi("Estoque",fInt(D.borr.fisico??est.length),D.borr.fisico!=null?`físico · TransNet ${est.length}`:`no TransNet · ${novos.length} novos / ${est.length-novos.length} recap.`,{id:"p2"})}${kpi("Corretos no sistema",f1(pct(ok.length,ctrl.length))+"%",`${fInt(ok.length)} de ${fInt(ctrl.length)} posições`)}${kpi("Divergentes",fInt(div.length),"físico ≠ TransNet",{id:"p4",cls:div.length?"down":""})}</div>
+  <div class="grid g2 mt">${card("Trocas de pneu por mês",'<div id="ch7"></div>',"clique num mês")}${card("Tipo de troca",'<div id="tt"></div>',periodoTxt())}</div>
+  <div class="grid g2 mt">${card("Teste · KM rodado dos pneus novos",`<div class="tblwrap" id="tk"></div><div class="hint">Coorte pelo mês de cadastro no nº de fogo (A MM SSS). Só vida NOVO e sequência ≤ 100.</div>`,"clique numa coorte")}${card("Pneus divergentes · físico ≠ TransNet",'<div class="tblwrap scroll" id="td"></div>')}</div>
+  <div class="grid g2 mt">${card("Carros com mais trocas",'<div id="tcar"></div>',periodoTxt())}${card("Posições com mais trocas",'<div id="tpos"></div>',periodoTxt())}</div>`+
+  cons("Borracharia",`No período foram <b>${fInt(tr.length)}</b> trocas de pneu (${fInt(trT.length)} no trimestre), com estoque de ${est.length} pneus no TransNet (${novos.length} novos e ${est.length-novos.length} recapados). O controle central tem <b>${f1(pct(ok.length,ctrl.length))}%</b> de acuracidade (${ok.length} de ${ctrl.length} posições), com ${div.length} divergências a corrigir.`);
+  vbars("#ch7",hist,{onClick:it=>abrirTabela("Trocas de pneu · "+mesLong(it.k),"",TROCAS.filter(x=>x.m===it.k&&inCl(x.cl)).sort((a,b)=>b.dt.localeCompare(a.dt)),COL_TR,{det:DET_TR})});
+  hbars("#tt",cnt(tr,"tipo"),k=>abrirTabela("Trocas · "+k,periodoTxt(),tr.filter(x=>x.tipo===k),COL_TR,{det:DET_TR}),8);
+  hbars("#tcar",cnt(tr,"v"),k=>abrirCarro(k),8);
+  hbars("#tpos",cnt(tr,"pos"),k=>abrirTabela("Trocas · "+k,periodoTxt(),tr.filter(x=>x.pos===k),COL_TR,{det:DET_TR}),8);
+  const COL_PN=[{t:"Fogo",k:"fogo"},{t:"Vida",k:"vida"},{t:"Localização",k:"loc"},{t:"KM rodado",k:x=>fInt(x.km),r:1},{t:"Marca",k:"marca",hm:1},{t:"Medida",k:"medida",hm:1},{t:"DOT",k:"dot",hm:1}];
+  const tk=$("#tk");tk.innerHTML=tabela(cg,[{t:"Mês cadastro",k:"mc"},{t:"Qtd pneus",k:"n",r:1},{t:"KM médio",k:x=>fInt(x.med),r:1},{t:"KM máx",k:x=>fInt(x.max),r:1}]);
+  tk.querySelectorAll("tbody tr").forEach((r,i)=>{r.classList.add("click");r.onclick=()=>abrirTabela("Pneus novos · coorte "+cg[i].mc,"",coh.filter(p=>p.mc===cg[i].mc).sort((a,b)=>b.km-a.km),COL_PN)});
+  const COL_D=[{t:"Carro",k:"v",car:1},{t:"Posição",k:"pos"},{t:"Fogo base",k:"fb"},{t:"Fogo auditado",k:"fa"},{t:"Status",k:"st"},{t:"Auditoria",k:x=>fData(x.em),hm:1}];
+  const td=$("#td");td.innerHTML=tabela(div,COL_D);ligarTab(td,div,COL_D);
+  on("p1",()=>abrirTabela("Trocas de pneu",periodoTxt(),tr.slice().sort((a,b)=>b.dt.localeCompare(a.dt)),COL_TR,{det:DET_TR}));
+  on("p2",()=>abrirTabela("Estoque na borracharia (TransNet)","posição de hoje",est.slice().sort((a,b)=>a.vida.localeCompare(b.vida)),COL_PN,{kpis:[["Total",est.length],["Novos",novos.length],["Recapados",est.length-novos.length]]}));
+  on("p4",()=>abrirTabela("Pneus divergentes","físico ≠ TransNet",div,COL_D));
+}
+
+/* ---------- 08 Motoristas ---------- */
+function sec08(){
+  const ms=mesesSel(),ano=REF().slice(0,4);
+  const proc=I.filter(x=>ms.includes(x.m)&&inCl(x.cl)&&x.ok&&x.t!=="IMPROCEDENTE"&&x.mo);
+  const imp=I.filter(x=>x.t==="IMPROCEDENTE"&&x.m.slice(0,4)===ano&&inCl(x.cl));
+  const tp=cnt(proc,"mo"),ti=cnt(imp.filter(x=>x.mo),"mo");
+  const mesesAno=Array.from({length:12},(_,i)=>`${ano}-${String(i+1).padStart(2,"0")}`).filter(m=>m<=HOJE.slice(0,7));
+  V().innerHTML=head("Intervenções por motorista",`Procedentes: ${periodoTxt()} · Improcedentes: ${ano}`)+
+  `<div class="grid g3">${kpi("Intervenções procedentes",fInt(proc.length),`${tp.length} motoristas`,{id:"m1"})}${kpi("Improcedentes no ano",fInt(imp.length),ano,{id:"m2"})}${kpi("Motorista nº 1",`<span style="font-size:15px">${esc(tp[0]?.[0]||"—")}</span>`,`${tp[0]?.[1]||0} procedentes`,{id:"m3"})}</div>
+  <div class="grid g2 mt">${card("Motoristas — procedentes",'<div id="mp"></div>',periodoTxt())}${card("Motoristas — improcedentes ("+ano+")",'<div id="mi"></div>')}</div>
+  <div class="mt">${card("Improcedentes por mês — "+ano,'<div id="ch8"></div>',"clique num mês")}</div>
+  <div class="mt">${card("Motoristas por volume de acionamentos",'<div class="tblwrap scroll" id="mv"></div>',periodoTxt()+" · "+(S.val?"válidas":"todas as ocorrências")+" · clique no motorista")}</div>`+
+  cons("Motoristas",`Em ${periodoTxt()}, o motorista com mais intervenções procedentes foi <b>${esc(tp[0]?.[0]||"—")}</b>. No acumulado de ${ano}, foram <b>${imp.length}</b> acionamentos improcedentes${ti[0]?`, concentrados principalmente em <b>${esc(ti[0][0])}</b>`:""}. Improcedentes recorrentes indicam necessidade de reciclagem no uso correto do acionamento de socorro.`);
+  hbars("#mp",tp,k=>abrirLista("Motorista: "+k,x=>x.mo===k&&x.ok&&x.t!=="IMPROCEDENTE"),15);
+  hbars("#mi",ti,k=>abrirLista("Improcedentes: "+k,x=>x.mo===k&&x.t==="IMPROCEDENTE",{ms:mesesAno,todas:true}),15);
+  vbars("#ch8",mesesAno.map(m=>{const n=imp.filter(x=>x.m===m).length;return{k:m,label:mesLb(m),v:n,tip:`${mesLong(m)}: ${n} improcedentes`}}),{onClick:it=>abrirLista("Improcedentes · "+mesLong(it.k),x=>x.t==="IMPROCEDENTE",{ms:[it.k],todas:true})});
+  const vol=cnt(baseI().filter(x=>x.mo),"mo").map(([mo,n])=>{const a=baseI().filter(x=>x.mo===mo);return{mo,n,v:new Set(a.map(x=>x.v)).size,l:new Set(a.map(x=>x.l)).size,t:cnt(a,"t")[0]?.[0],p:cnt(a,"p")[0]?.[0]}});
+  const mv=$("#mv");mv.innerHTML=tabela(vol,[{t:"Motorista",k:"mo"},{t:"Acionamentos",k:"n",r:1},{t:"Veículos",k:"v",r:1},{t:"Linhas",k:"l",r:1},{t:"Tipo mais comum",k:"t",f:tagT,hm:1},{t:"Principal defeito",k:"p"}],{limit:30});
+  const bindMv=()=>mv.querySelectorAll("tbody tr").forEach((tr,i)=>{tr.classList.add("click");tr.onclick=()=>abrirLista("Motorista: "+vol[i].mo,x=>x.mo===vol[i].mo)});bindMv();
+  mv.querySelectorAll("button[data-more]").forEach(b=>b.onclick=()=>{mv.innerHTML=tabela(vol,[{t:"Motorista",k:"mo"},{t:"Acionamentos",k:"n",r:1},{t:"Veículos",k:"v",r:1},{t:"Linhas",k:"l",r:1},{t:"Tipo mais comum",k:"t",f:tagT,hm:1},{t:"Principal defeito",k:"p"}],{limit:1e9});bindMv()});
+  on("m1",()=>abrirLista("Intervenções procedentes",x=>x.ok&&x.t!=="IMPROCEDENTE"&&!!x.mo));on("m2",()=>abrirLista("Improcedentes "+ano,x=>x.t==="IMPROCEDENTE",{ms:mesesAno,todas:true}));on("m3",()=>tp[0]&&abrirLista("Motorista: "+tp[0][0],x=>x.mo===tp[0][0]&&x.ok&&x.t!=="IMPROCEDENTE"));
+}
+
+/* ---------- 09 SR aderência ---------- */
+function srComp(m){const g=SR.filter(x=>x.m===m&&inCl(x.cl));const f=g.filter(x=>x.fech).length;return{n:g.length,f,pct:pct(f,g.length),rows:g}}
+const srSit=m=>{const g=SR.filter(x=>x.m===m&&inCl(x.cl));return{A:g.filter(x=>x.sit==="A").length,I:g.filter(x=>x.sit==="I").length,N:g.filter(x=>x.sit==="N").length,t:g.length}};
+const BUCKETS=[["1-5",0,5],["6-10",6,10],["11-15",11,15],["16-20",16,20],["21-59",21,59],[">60",60,1e9]];
+function abrirSR(t,rows){rows=rows.slice().sort((a,b)=>a.d.localeCompare(b.d));const gr=cnt(rows,"gr"),car=cnt(rows,"v");
+  abrirTabela(t,"",rows,COL_SR,{det:DET_SR,kpis:[["SRs",rows.length],["Não atendidas",rows.filter(x=>x.sit==="N").length],["Fechadas no prazo",rows.filter(x=>x.fech).length],["Carros",car.length]],
+    extra:{html:`<div class="grid g2" style="margin-bottom:12px">${card("Por grupo",'<div id="xa"></div>')}${card("Por carro",'<div id="xb"></div>')}</div>`,bind:el=>{hbars(el.querySelector("#xa"),gr,k=>abrirSR(t+" · "+k,rows.filter(x=>x.gr===k)),8);hbars(el.querySelector("#xb"),car,k=>abrirCarro(k),8)}}})}
+function sec09(){
+  const ref=REF(),ano=ref.slice(0,4),ant=addM(ref,-1);
+  const meses=Array.from({length:12},(_,i)=>`${ano}-${String(i+1).padStart(2,"0")}`).filter(m=>m<=HOJE.slice(0,7)&&SR.some(x=>x.m===m));
+  const comp=meses.map(m=>({m,...srComp(m)}));const cA=srComp(ref);
+  const sA=srSit(ref),sB=srSit(ant);
+  const ab=SR.filter(x=>x.sit==="N"&&inCl(x.cl)).map(x=>({...x,idade:Math.max(0,diffD(HOJE,x.d))}));
+  const bk=BUCKETS.map(([k,a,b])=>{const n=ab.filter(x=>x.idade>=a&&x.idade<=b).length;return{k,label:k,v:n,tip:`${k} dias: ${n} SRs`}});
+  V().innerHTML=head("Solicitação de reparo — aderência","Competência = SR fechada até o dia 3 do mês seguinte · situação A = atendida, I = improcedente, N = não atendida",mesLong(ref))+
+  `<div class="grid g4">${kpi("Aderência "+mesLb(ref),f1(cA.pct)+"%",`${cA.f} de ${cA.n} SRs · meta ${fInt(D.sr_meta)}%`,{id:"q1",cls:cA.pct>=D.sr_meta?"up":"down"})}${kpi("SRs no mês",fInt(sA.t),`${sA.N} não atendidas`,{id:"q2"})}${kpi("Fila de hoje",fInt(ab.length),"não atendidas",{id:"q3",cls:"warn"})}${kpi("Mais antiga",fInt(ab.length?Math.max(...ab.map(x=>x.idade)):0)+" dias","em aberto",{id:"q4"})}</div>
+  <div class="grid g2 mt">${card("Aderência por competência — "+ano,'<div id="ch9"></div><div class="legend"><span><i style="background:var(--bar)"></i>% fechado no prazo</span><span><i style="background:var(--warn)"></i>meta '+fInt(D.sr_meta)+'%</span></div>',"clique num mês")}
+   ${card(`Situação das SRs — ${mesLb(ant)} × ${mesLb(ref)}`,`<table><thead><tr><th>Situação</th><th class="r">${mesLb(ant)}</th><th class="r">${mesLb(ref)}</th></tr></thead><tbody>${["A","I","N"].map(s=>`<tr><td>${SIT[s]}</td><td class="r c num" data-s="${s}" data-m="${ant}">${sB[s]}</td><td class="r c num" data-s="${s}" data-m="${ref}"><b>${sA[s]}</b></td></tr>`).join("")}<tr><td><b>Total</b></td><td class="r num">${sB.t}</td><td class="r num"><b>${sA.t}</b></td></tr></tbody></table><div class="hint">Clique num número para ver as SRs.</div>`)}</div>
+  <div class="grid g2 mt">${card("Envelhecimento das SRs em aberto (dias)",'<div id="ch9b"></div>',"clique numa faixa")}${card("Competência mês a mês",tabela(comp,[{t:"Mês",k:x=>mesLb(x.m)},{t:"SRs",k:"n",r:1},{t:"Fechadas no prazo",k:"f",r:1},{t:"Aderência",k:x=>`<span class="${x.pct>=D.sr_meta?"up":"down"}">${f1(x.pct)}%</span>`,f:v=>v,r:1}],{id:"tcomp"}))}</div>`+
+  cons("SR",`A aderência por competência de ${mesLong(ref)} está em <b>${f1(cA.pct)}%</b> (${cA.f} de ${cA.n}), ${cA.pct>=D.sr_meta?"acima":"abaixo"} da meta de ${fInt(D.sr_meta)}%. Hoje há <b>${ab.length}</b> SRs não atendidas${ab.length?`, a mais antiga com ${Math.max(...ab.map(x=>x.idade))} dias`:""}.`);
+  vbars("#ch9",comp.map(c=>({k:c.m,label:mesLb(c.m),v:c.pct,dim:c.m!==ref,tip:`${mesLong(c.m)}: ${f1(c.pct)}% (${c.f}/${c.n})`})),{meta:D.sr_meta,fmt:v=>fInt(v)+"%",onClick:it=>abrirSR("SRs de "+mesLong(it.k),srComp(it.k).rows)});
+  vbars("#ch9b",bk,{onClick:it=>{const [,a,b]=BUCKETS.find(x=>x[0]===it.k);abrirSR(`SRs em aberto há ${it.k} dias`,ab.filter(x=>x.idade>=a&&x.idade<=b))}});
+  V().querySelectorAll("td[data-s]").forEach(td=>td.onclick=()=>abrirSR(`SRs ${SIT[td.dataset.s]} · ${mesLb(td.dataset.m)}`,SR.filter(x=>x.m===td.dataset.m&&x.sit===td.dataset.s&&inCl(x.cl))));
+  const tc=$("#tcomp");if(tc)tc.querySelectorAll("tbody tr").forEach((tr,i)=>{tr.classList.add("click");tr.onclick=()=>abrirSR("SRs de "+mesLong(comp[i].m),comp[i].rows)});
+  on("q1",()=>abrirSR("SRs de "+mesLong(ref),cA.rows));on("q2",()=>abrirSR("SRs de "+mesLong(ref),cA.rows));on("q3",()=>abrirSR("Fila de SRs não atendidas",ab));on("q4",()=>abrirSR("Fila de SRs não atendidas",ab));
+}
+
+/* ---------- 10 SR por grupo ---------- */
+function sec10(){
+  const tri=trimestre();
+  const ab=SR.filter(x=>x.sit==="N"&&inCl(x.cl)).map(x=>({...x,idade:Math.max(0,diffD(HOJE,x.d))}));
+  const grp=(arr,k)=>[...arr.reduce((m,x)=>{const kk=x[k];if(!kk)return m;if(!m.has(kk))m.set(kk,[]);m.get(kk).push(x);return m},new Map())];
+  const pg=grp(ab,"gr").map(([g,a])=>({g,n:a.length,med:sum(a,x=>x.idade)/a.length,max:Math.max(...a.map(x=>x.idade)),a})).sort((a,b)=>b.n-a.n);
+  const mj=SR.filter(x=>tri.includes(x.m)&&inCl(x.cl));
+  const ad=grp(mj,"gr").map(([g,a])=>({g,n:a.length,f:a.filter(x=>x.fech).length,a})).map(o=>({...o,pct:pct(o.f,o.n)})).filter(o=>o.n>=15).sort((a,b)=>a.pct-b.pct);
+  const pc=grp(ab,"v").map(([v,a])=>({v,n:a.length,max:Math.max(...a.map(x=>x.idade)),g:cnt(a,"gr")[0]?.[0]})).sort((a,b)=>b.n-a.n);
+  V().innerHTML=head("Solicitação de reparo por grupo",`Abertas: hoje · Aderência: trimestre ${periodoTxt(tri)}`,fInt(ab.length)+" abertas")+
+  `<div class="grid g2">${card("O que está aberto por grupo",'<div class="tblwrap" id="ta"></div>',"clique no grupo")}${card("Aderência por grupo (trimestre, ≥15 SRs)",'<div class="tblwrap" id="tb"></div>',"pior primeiro")}</div>
+  <div class="mt">${card("Carros com mais SRs pendentes",'<div class="tblwrap scroll" id="tcp"></div>',"5+ pendentes = prioridade na programação da garagem")}</div>`+
+  cons("SR por grupo",`O grupo com mais SRs abertas é <b>${esc(pg[0]?.g||"—")}</b> (${pg[0]?.n||0}, idade média ${fInt(pg[0]?.med)} dias). ${ad[0]?`A pior aderência no trimestre é de <b>${esc(ad[0].g)}</b> (${f1(ad[0].pct)}%). `:""}${pc.filter(x=>x.n>=5).length} carros têm 5 ou mais SRs pendentes.`);
+  const ta=$("#ta");ta.innerHTML=tabela(pg,[{t:"Grupo",k:"g"},{t:"Abertas",k:"n",r:1},{t:"Idade média",k:x=>fInt(x.med)+" d",r:1},{t:"Mais antiga",k:x=>x.max+" d",r:1}]);
+  ta.querySelectorAll("tbody tr").forEach((tr,i)=>{tr.classList.add("click");tr.onclick=()=>abrirSR("SRs abertas · "+pg[i].g,pg[i].a)});
+  const tb=$("#tb");tb.innerHTML=tabela(ad,[{t:"Grupo",k:"g"},{t:"SRs",k:"n",r:1},{t:"Fechadas",k:"f",r:1},{t:"Aderência",k:x=>`<span class="${x.pct>=D.sr_meta?"up":"down"}">${f1(x.pct)}%</span>`,f:v=>v,r:1}]);
+  tb.querySelectorAll("tbody tr").forEach((tr,i)=>{tr.classList.add("click");tr.onclick=()=>abrirSR("SRs do trimestre · "+ad[i].g,ad[i].a)});
+  const tc=$("#tcp");tc.innerHTML=tabela(pc,[{t:"Carro",k:"v"},{t:"Pendentes",k:x=>x.n>=5?`<b class="down">${x.n}</b>`:x.n,f:v=>v,r:1},{t:"Mais antiga",k:x=>x.max+" d",r:1},{t:"Grupo principal",k:"g"}],{limit:40});
+  const bindPc=()=>tc.querySelectorAll("tbody tr").forEach((tr,i)=>{tr.classList.add("click");tr.onclick=()=>abrirSR("SRs pendentes · carro "+pc[i].v,ab.filter(x=>x.v===pc[i].v))});bindPc();
+  tc.querySelectorAll("button[data-more]").forEach(b=>b.onclick=()=>{tc.innerHTML=tabela(pc,[{t:"Carro",k:"v"},{t:"Pendentes",k:x=>x.n>=5?`<b class="down">${x.n}</b>`:x.n,f:v=>v,r:1},{t:"Mais antiga",k:x=>x.max+" d",r:1},{t:"Grupo principal",k:"g"}],{limit:1e9});bindPc()});
+}
+
+/* ---------- 11 Preventivas ---------- */
+function sec11(){
+  const ms=mesesSel();
+  const pt=PLANOS.filter(p=>inCl(p.cl)),pv=pt.filter(p=>p.venc).sort((a,b)=>(b.porKm?b.kmp:0)-(a.porKm?a.kmp:0));
+  const real=PREV.filter(p=>ms.includes(p.m)&&inCl(p.cl)).sort((a,b)=>b.d.localeCompare(a.d));
+  const hist=MESES_JAN.map(m=>{const n=PREV.filter(p=>p.m===m&&inCl(p.cl)).length;return{k:m,label:mesLb(m),v:n,dim:!ms.includes(m),tip:`${mesLong(m)}: ${n} preventivas`}});
+  V().innerHTML=head("Controle de preventivas",`Data de referência: ${fData(HOJE)} · base ultimo_plano (TransNet), sem Concessionária`)+
+  `<div class="grid g4">${kpi("Acuracidade",f1(pct(pt.length-pv.length,pt.length))+"%","em dia ÷ total",{cls:"up"})}${kpi("Planos ativos",fInt(pt.length),"in-house",{id:"v2"})}${kpi("Em dia",fInt(pt.length-pv.length),"dentro do prazo")}${kpi("Vencidos",fInt(pv.length),`${f1(pct(pv.length,pt.length))}% do total · ${pv.filter(p=>p.porKm).length} km / ${pv.filter(p=>!p.porKm).length} tempo`,{id:"v4",cls:pv.length?"down":""})}</div>
+  <div class="grid g12 mt">${card("Planos vencidos por plano",'<div id="vp"></div>')}${card("Planos vencidos — "+pv.length,'<div class="tblwrap scroll" id="vl"></div>',"clique no carro")}</div>
+  <div class="grid g2 mt">${card("Preventivas realizadas por mês",'<div id="ch11"></div>',"INOVE + OS TransNet · clique num mês")}${card("Realizadas em "+periodoTxt()+" por tipo",'<div id="vt"></div>')}</div>`+
+  cons("Preventivas",`A acuracidade do plano preventivo está em <b>${f1(pct(pt.length-pv.length,pt.length))}%</b> (${fInt(pt.length-pv.length)} de ${fInt(pt.length)} planos ativos em dia). Há <b>${pv.length}</b> planos vencidos${cnt(pv,"p")[0]?`, concentrados em <b>${esc(cnt(pv,"p")[0][0])}</b>`:""}. No período foram registradas ${real.length} preventivas realizadas.`);
+  hbars("#vp",cnt(pv,"p"),k=>abrirTabela("Vencidos · "+k,"posição de hoje",pv.filter(p=>p.p===k),COL_P),12);
+  const vl=$("#vl");vl.innerHTML=tabela(pv,COL_P,{limit:100});ligarTab(vl,pv,COL_P);
+  vbars("#ch11",hist,{onClick:it=>abrirTabela("Preventivas realizadas · "+mesLong(it.k),"",PREV.filter(p=>p.m===it.k&&inCl(p.cl)).sort((a,b)=>b.d.localeCompare(a.d)),COL_PR)});
+  hbars("#vt",cnt(real,"tipo"),k=>abrirTabela("Preventivas · "+k,periodoTxt(),real.filter(p=>p.tipo===k),COL_PR),10);
+  on("v2",()=>abrirTabela("Planos ativos","posição de hoje",pt.slice().sort((a,b)=>a.v.localeCompare(b.v)),[...COL_P.slice(0,2),{t:"Situação",k:x=>x.venc?"VENCIDO":"em dia"},{t:"KM p/ próxima",k:x=>x.porKm?fInt(x.kmp):"",r:1}]));
+  on("v4",()=>abrirTabela("Planos vencidos","posição de hoje",pv,COL_P));
+}
+
+/* ---------- 12 GNS ---------- */
+function gnsMes(ms){const ds=GDIAS.filter(g=>ms.includes(g.m));const g=d=>d.c.filter(c=>c.cat==="GNS"&&inCl(c.cl)).length;const u=ds.filter(d=>d.u);return{ds,u,medio:u.length?sum(u,g)/u.length:0,ult:ds.at(-1),g}}
+function sec12(){
+  const ms=mesesSel(),r=gnsMes(ms),ult=r.ult;
+  const par=ult?ult.c.filter(c=>inCl(c.cl)).map(c=>({...c,dias:diffD(ult.d,c.ent)})).sort((a,b)=>b.dias-a.dias):[];
+  const items=r.ds.map(d=>{const n=r.g(d),fa=d.c.filter(c=>c.cat==="FAIXA_AMARELA"&&inCl(c.cl)).length;return{k:d.d,label:d.d.slice(8),v:n,dim:!d.u,tip:`<b>${DOW[new Date(d.d+"T12:00").getDay()]} ${fData(d.d)}</b>${d.u?"":" (não útil)"}<br>GNS ${n} · faixa amarela ${fa}<br>total parado ${d.c.filter(c=>inCl(c.cl)).length}`}});
+  const hist=MESES_JAN.map(m=>{const x=gnsMes([m]);return{k:m,label:mesLb(m),v:x.medio,dim:!ms.includes(m),tip:`${mesLong(m)}: GNS médio ${f1(x.medio)} (${x.u.length} dias úteis)`}});
+  V().innerHTML=head("GNS · carros parados na manutenção",`Média de dias úteis · sessão mais recente do período: ${ult?fData(ult.d):"—"}`)+
+  `<div class="grid g4">${kpi("GNS médio",f1(r.medio),"média de dia útil")}${kpi("Dias úteis",fInt(r.u.length),"no período")}${kpi("Total parado",fInt(par.length),"sessão mais recente",{id:"n3"})}${kpi("Mais antigo",par[0]?esc(par[0].v):"—",par[0]?`${par[0].dias} dias parado`:"",{id:"n4",cls:"down"})}</div>
+  <div class="grid g2 mt">${card("GNS por dia",'<div id="ch12"></div>',"clique num dia · barras claras = não útil")}${card("GNS médio por mês",'<div id="ch12b"></div>',"clique num mês")}</div>
+  <div class="grid g21 mt">${card("Carros parados — mais antigos",'<div class="tblwrap scroll" id="gp"></div>',"sessão "+(ult?fData(ult.d):""))}<div class="grid">${card("Distribuição por setor",'<div id="gs"></div>')}${card("Por categoria",'<div id="gc"></div>')}</div></div>`+
+  cons("GNS",`O GNS médio de ${periodoTxt()} ficou em <b>${f1(r.medio)}</b> carros/dia útil, em ${r.u.length} dias úteis. Na sessão mais recente, <b>${par.length}</b> veículos estavam parados${par[0]?`, sendo o mais antigo o <b>${esc(par[0].v)}</b> com ${par[0].dias} dias`:""}.`);
+  const abrirDia=d=>{const ds=GDIAS.find(x=>x.d===d);const rows=ds.c.filter(c=>inCl(c.cl)).map(c=>({...c,dias:diffD(d,c.ent)})).sort((a,b)=>(a.cat==="GNS"?0:1)-(b.cat==="GNS"?0:1)||b.dias-a.dias);
+    abrirTabela("PCM · "+fData(d),DOW[new Date(d+"T12:00").getDay()]+(ds.u?"":" · não útil"),rows,COL_G,{det:DET_G,kpis:[["GNS",rows.filter(c=>c.cat==="GNS").length],["Faixa amarela",rows.filter(c=>c.cat==="FAIXA_AMARELA").length],["Pendentes",rows.filter(c=>c.cat==="PENDENTES").length],["Total",rows.length]]})};
+  vbars("#ch12",items,{onClick:it=>abrirDia(it.k)});
+  vbars("#ch12b",hist,{fmt:f1,onClick:it=>{S.mes=it.k;syncFiltros();renderSec()}});
+  const gp=$("#gp");gp.innerHTML=tabela(par,COL_G,{limit:60,detail:1});ligarTab(gp,par,COL_G,{detail:DET_G});
+  hbars("#gs",cnt(par,"setor"),k=>abrirTabela("Parados · "+k,"sessão "+fData(ult.d),par.filter(c=>c.setor===k),COL_G,{det:DET_G}),8);
+  hbars("#gc",cnt(par,"cat"),k=>abrirTabela("Parados · "+k,"sessão "+fData(ult.d),par.filter(c=>c.cat===k),COL_G,{det:DET_G}),8);
+  on("n3",()=>ult&&abrirDia(ult.d));on("n4",()=>par[0]&&abrirCarro(par[0].v));
+}
+
+/* ---------- 13 Embarcados SR ---------- */
+function sec13(){
+  const E=EMB.filter(e=>inCl(e.cl)),ab=E.filter(e=>EMB_ABERTO(e.st)),cr=ab.filter(e=>e.prio.startsWith("CR")).sort((a,b)=>a.cri.localeCompare(b.cri)),co=E.filter(e=>/CONCLU|FINALIZ/.test(e.st));
+  const meses=[...new Set(E.map(e=>e.m))].sort();
+  V().innerHTML=head("Embarcados · câmeras, monitoramento e Vision","Solicitações de reparo de embarcados · posição de hoje",fInt(cr.length)+" críticas em aberto")+
+  `<div class="grid g4">${kpi("Críticas em aberto",fInt(cr.length),"prioridade crítica",{id:"b1",cls:cr.length?"down":""})}${kpi("Abertas",fInt(ab.length),"todas as prioridades",{id:"b2"})}${kpi("Concluídas",fInt(co.length),"",{id:"b3"})}${kpi("Total",fInt(E.length),"solicitações registradas",{id:"b4"})}</div>
+  <div class="grid g2 mt">${card("Solicitações por mês",'<div id="ch13"></div>',"clique num mês")}<div class="grid g2">${card("Por tipo",'<div id="bt"></div>')}${card("Por status",'<div id="bs"></div>')}</div></div>
+  <div class="mt">${card("Críticas em aberto — mais antigas primeiro",'<div class="tblwrap" id="bc"></div>')}</div>
+  <div class="grid g2 mt">${card("Abertas por prioridade",'<div id="bp"></div>')}${card("Carros com mais solicitações",'<div id="bv"></div>')}</div>`+
+  cons("Embarcados",`Há <b>${cr.length}</b> solicitações críticas em aberto${cr[0]?` (a mais antiga, do carro <b>${esc(cr[0].v)}</b>, há ${diffD(HOJE,cr[0].d)} dias)`:""} e ${ab.length} abertas no total. ${co.length} solicitações já foram concluídas.`);
+  const L=(t,rows)=>abrirTabela(t,"",rows.slice().sort((a,b)=>b.cri.localeCompare(a.cri)),COL_E,{det:DET_E});
+  vbars("#ch13",meses.map(m=>{const n=E.filter(e=>e.m===m).length;return{k:m,label:mesLb(m),v:n,tip:`${mesLong(m)}: ${n} solicitações`}}),{onClick:it=>L("Embarcados · "+mesLong(it.k),E.filter(e=>e.m===it.k))});
+  hbars("#bt",cnt(E,"tipo"),k=>L("Embarcados · "+k,E.filter(e=>e.tipo===k)),8);
+  hbars("#bs",cnt(E,"st"),k=>L("Embarcados · "+k,E.filter(e=>e.st===k)),8);
+  hbars("#bp",cnt(ab,"prio"),k=>L("Abertas · "+k,ab.filter(e=>e.prio===k)),6);
+  hbars("#bv",cnt(E,"v"),k=>abrirCarro(k),8);
+  const bc=$("#bc");bc.innerHTML=tabela(cr,COL_E,{detail:1});ligarTab(bc,cr,COL_E,{detail:DET_E});
+  on("b1",()=>L("Críticas em aberto",cr));on("b2",()=>L("Abertas",ab));on("b3",()=>L("Concluídas",co));on("b4",()=>L("Todas",E));
+}
+
+/* ---------- 14 Embarcados na operação ---------- */
+function sec14(){
+  const ms=mesesSel(),todas=baseI(ms,{todas:true}),emb=todas.filter(x=>x.em);
+  const fam=cnt(emb,"em").map(([f,n])=>{const a=emb.filter(x=>x.em===f);return{f,n,s:a.filter(x=>x.t==="SEGUIU VIAGEM").length,r:a.filter(x=>x.t==="RECOLHEU").length,t:a.filter(x=>x.t==="TROCA").length,o:a.filter(x=>!["SEGUIU VIAGEM","RECOLHEU","TROCA"].includes(x.t)).length}});
+  const hist=MESES_JAN.map(m=>{const t=I.filter(x=>x.m===m&&inCl(x.cl)),e=t.filter(x=>x.em);return{k:m,label:mesLb(m),v:e.length,p:pct(e.length,t.length),dim:!ms.includes(m),tip:`${mesLong(m)}: ${e.length} de ${t.length} (${f1(pct(e.length,t.length))}%)`}});
+  const E=(t,f)=>abrirLista(t,x=>!!x.em&&f(x),{todas:true});
+  V().innerHTML=head("Embarcados na operação","Validador, catraca, letreiro, telemetria, GPS e Vision · todas as intervenções (inclui seguiu viagem)")+
+  `<div class="grid g4">${kpi("Intervenções",fInt(emb.length),`${f1(pct(emb.length,todas.length))}% do total (${fInt(todas.length)})`,{id:"o1"})}${kpi("Recolhidos",fInt(emb.filter(x=>x.t==="RECOLHEU").length),"tiraram o carro de operação",{id:"o2",cls:"down"})}${kpi("Seguiu viagem",fInt(emb.filter(x=>x.t==="SEGUIU VIAGEM").length),"não entram no MKBF",{id:"o3"})}${kpi("Família líder",`<span style="font-size:17px">${esc(fam[0]?.f||"—")}</span>`,`${fam[0]?.n||0} intervenções`,{id:"o4"})}</div>
+  <div class="grid g2 mt">${card("Por família e tipo de ocorrência",`<div class="tblwrap"><table><thead><tr><th>Família</th><th class="r">Total</th><th class="r">Seguiu</th><th class="r">Recolheu</th><th class="r">Troca</th><th class="r">Outros</th></tr></thead><tbody>${fam.map((o,i)=>`<tr><td class="c" data-f="${i}"><b>${esc(o.f)}</b></td><td class="r c num" data-f="${i}"><b>${o.n}</b></td><td class="r c num" data-f="${i}" data-t="SEGUIU VIAGEM">${o.s}</td><td class="r c num" data-f="${i}" data-t="RECOLHEU">${o.r}</td><td class="r c num" data-f="${i}" data-t="TROCA">${o.t}</td><td class="r c num" data-f="${i}" data-t="_O">${o.o}</td></tr>`).join("")}</tbody></table></div>`,"clique num número")}
+   ${card("Evolução mensal",'<div id="ch14"></div><div class="legend"><span><i style="background:var(--bar)"></i>Intervenções de embarcados</span><span><i style="background:var(--line2)"></i>% do total (eixo direito)</span></div>',"clique num mês")}</div>
+  <div class="grid g2 mt">${card("Veículos com mais intervenções de embarcados",'<div id="ov"></div>')}${card("Problemas mais frequentes",'<div id="op"></div>')}</div>`+
+  cons("Embarcados na operação",`Em ${periodoTxt()}, os embarcados geraram <b>${fInt(emb.length)}</b> intervenções (${f1(pct(emb.length,todas.length))}% do total), com ${emb.filter(x=>x.t==="RECOLHEU").length} recolhimentos. A família líder é <b>${esc(fam[0]?.f||"—")}</b> (${fam[0]?.n||0}). Telemetria costuma ser "seguiu viagem": não entra no MKBF, mas consome equipe.`);
+  V().querySelectorAll("td[data-f]").forEach(td=>td.onclick=()=>{const o=fam[+td.dataset.f],t=td.dataset.t;E(o.f+(t?" · "+(t==="_O"?"outros":t):""),x=>x.em===o.f&&(!t||(t==="_O"?!["SEGUIU VIAGEM","RECOLHEU","TROCA"].includes(x.t):x.t===t)))});
+  vbars("#ch14",hist,{line:hist.map(h=>h.p),lineFmt:v=>fInt(v)+"%",onClick:it=>{S.mes=it.k;syncFiltros();renderSec()}});
+  hbars("#ov",cnt(emb,"v"),k=>abrirCarro(k),8);
+  hbars("#op",cnt(emb,x=>x.p||"(não informado)"),k=>E("Embarcados · "+k,x=>(x.p||"(não informado)")===k),8);
+  on("o1",()=>E("Intervenções de embarcados",()=>true));on("o2",()=>E("Embarcados · recolheu",x=>x.t==="RECOLHEU"));on("o3",()=>E("Embarcados · seguiu viagem",x=>x.t==="SEGUIU VIAGEM"));on("o4",()=>fam[0]&&E(fam[0].f,x=>x.em===fam[0].f));
+}
+
+/* ---------- 15 Oportunidades ---------- */
+function oportunidades(){
+  const tri=trimestre(),base=I.filter(x=>tri.includes(x.m)&&inCl(x.cl)&&x.ok).sort((a,b)=>(a.d+a.h).localeCompare(b.d+b.h));
+  const rep=[],pos=[];const pc=new Map();base.forEach(x=>{if(!pc.has(x.v))pc.set(x.v,[]);pc.get(x.v).push(x)});
+  for(const [v,a] of pc)for(let i=1;i<a.length;i++){const g=diffD(a[i].d,a[i-1].d);if(g>=0&&g<=7)rep.push({...a[i],gap:g,anterior:a[i-1]})}
+  base.forEach(x=>{const ps=(PREVMAP.get(x.v)||[]).filter(p=>p.d<=x.d);if(!ps.length)return;const p=ps.at(-1);const g=diffD(x.d,p.d);if(g>=0&&g<=15)pos.push({...x,gap:g,prev:p})});
+  const fila=SR.filter(x=>x.sit==="N"&&inCl(x.cl));
+  return{tri,base,rep,pos,fila,repPct:pct(rep.length,base.length),posPct:pct(pos.length,base.length)};
+}
+function sec15(){
+  const o=oportunidades();
+  const pc=[...o.fila.reduce((m,x)=>{if(x.v)m.set(x.v,(m.get(x.v)||0)+1);return m},new Map())].filter(([,n])=>n>=5).sort((a,b)=>b[1]-a[1]);
+  const COL_REP=[{t:"Data",k:x=>fData(x.d)+" "+x.h},{t:"Carro",k:"v",car:1},{t:"Dias desde a anterior",k:"gap",r:1},{t:"Defeito agora",k:"p"},{t:"Defeito anterior",k:x=>x.anterior.p},{t:"Linha",k:"l",hm:1}];
+  const COL_POS=[{t:"Quebra",k:x=>fData(x.d)},{t:"Carro",k:"v",car:1},{t:"Dias após preventiva",k:"gap",r:1},{t:"Preventiva",k:x=>fData(x.prev.d)+" · "+x.prev.tipo},{t:"OS",k:x=>x.prev.os,hm:1},{t:"Defeito",k:"p"}];
+  V().innerHTML=head("Oportunidades de melhoria",`Base: ${fInt(o.base.length)} quebras válidas no trimestre ${periodoTxt(o.tri)}`,periodoTxt(o.tri))+
+  `<div class="note">A maioria das quebras dá sinal antes de acontecer.</div>
+  <div class="grid g2"><div class="card opp"><h3>1 · Carro quebra, volta pra rua e quebra de novo <small>maior oportunidade</small></h3><div class="body"><div class="big">${f1(o.repPct)}%</div><div>das quebras são em carro que já quebrou há menos de 7 dias · <b>${o.rep.length}</b> quebras repetidas</div>
+    <div class="acao">✔ Ação recomendada: carro que retorna em até 7 dias não sai da garagem sem reinspeção por uma segunda pessoa (regra dos 4 olhos).</div><button class="chip more" id="op1">Ver as ${o.rep.length} quebras repetidas</button></div></div>
+   <div class="card opp"><h3>2 · Carro quebra logo depois da preventiva</h3><div class="body"><div class="big">${f1(o.posPct)}%</div><div>das quebras acontecem em até 15 dias após a preventiva · <b>${o.pos.length}</b> quebras</div>
+    <div class="acao">✔ Ação recomendada: toda quebra em até 15 dias pós-preventiva gera revisão da OS da preventiva, usada como insumo de treinamento.</div><button class="chip more" id="op2">Ver as ${o.pos.length} quebras pós-preventiva</button></div></div></div>
+  <div class="grid g2 mt"><div class="card opp" style="border-left-color:var(--warn)"><h3>Atenção imediata · fila de SRs não atendidas</h3><div class="body"><div class="big" style="color:var(--warn)">${fInt(o.fila.length)}</div><div>reclamações aguardando atendimento hoje · ${pc.length} carros com 5+ pendentes</div>
+    <div class="acao">✔ Ação recomendada: triagem diária da fila por veículo; carro com 5+ SRs pendentes entra prioritário na programação da garagem.</div><button class="chip more" id="op3">Ver a fila</button></div></div>
+   ${card("Carros que mais repetem",'<div id="orc"></div>',"quebras repetidas ≤ 7 dias")}</div>
+  <div class="grid g2 mt">${card("Defeitos que mais voltam em ≤ 7 dias",'<div id="ord"></div>')}${card("Defeitos que mais aparecem pós-preventiva",'<div id="opd"></div>')}</div>`;
+  const R=(t,rows)=>abrirTabela(t,periodoTxt(o.tri),rows.slice().sort((a,b)=>b.d.localeCompare(a.d)),COL_REP,{det:DET_I});
+  const P=(t,rows)=>abrirTabela(t,periodoTxt(o.tri),rows.slice().sort((a,b)=>b.d.localeCompare(a.d)),COL_POS,{det:DET_I});
+  on("op1",()=>R("Quebras repetidas em ≤ 7 dias",o.rep));on("op2",()=>P("Quebras até 15 dias após preventiva",o.pos));on("op3",()=>abrirSR("Fila de SRs não atendidas",o.fila));
+  hbars("#orc",cnt(o.rep,"v"),k=>abrirCarro(k),10);
+  hbars("#ord",cnt(o.rep,"p"),k=>R("Repetidas · "+k,o.rep.filter(x=>x.p===k)),10);
+  hbars("#opd",cnt(o.pos,"p"),k=>P("Pós-preventiva · "+k,o.pos.filter(x=>x.p===k)),10);
+}
+
+
+/* ---------- Reincidência ≤30 dias (regras do SOS_Resumo) ---------- */
+function reinc30(rows){
+  const pv=new Map();rows.slice().sort((a,b)=>(a.d+a.h).localeCompare(b.d+b.h)).forEach(x=>{if(!pv.has(x.v))pv.set(x.v,[]);pv.get(x.v).push(x)});
+  const ev=[],det=[];let soma=0,qtd=0;
+  for(const [v,a] of pv){let rv=0,rt=0,rs=0,sv=0,qv=0;
+    for(let i=1;i<a.length;i++){const dd=diffD(a[i].d,a[i-1].d);sv+=dd;qv++;soma+=dd;qtd++;
+      if(dd<=30){rv++;const tec=a[i].p===a[i-1].p&&a[i].p!=="N/D",set=a[i].se===a[i-1].se&&a[i].se!=="N/D";if(tec)rt++;if(set)rs++;ev.push({...a[i],gap:dd,anterior:a[i-1],tec,set})}}
+    det.push({v,cl:clusterDe(v),n:a.length,rv,rt,rs,im:qv?sv/qv:0,dt:cnt(a,"p")[0]?.[0]||"N/D",st:cnt(a,"se")[0]?.[0]||"N/D"})}
+  det.sort((a,b)=>b.rv-a.rv||b.n-a.n);
+  const vr=det.filter(x=>x.rv>0).length;
+  return{ev,det,vc:det.length,vr,taxa:pct(vr,det.length),rv:ev.length,rt:ev.filter(e=>e.tec).length,rs:ev.filter(e=>e.set).length,im:qtd?soma/qtd:0};
+}
+function secReinc(){
+  const ms=mesesSel(),ref=REF(),ant=addM(ref,-1);
+  const r=reinc30(baseI(ms)),rA=S.mes==="JANELA"?null:reinc30(baseI([ant]));
+  const hist=MESES_JAN.map(m=>{const x=reinc30(baseI([m]));return{k:m,label:mesLb(m),v:x.taxa,n:x.vr,dim:!ms.includes(m),tip:`<b>${mesLong(m)}</b><br>taxa ${f1(x.taxa)}% · ${x.vr} de ${x.vc} carros`}});
+  const COL_EV=[{t:"Data",k:x=>fData(x.d)+" "+x.h},{t:"Carro",k:"v",car:1},{t:"Dias desde a anterior",k:"gap",r:1},{t:"Defeito agora",k:"p"},{t:"Defeito anterior",k:x=>x.anterior.p},{t:"Mesmo defeito",k:x=>x.tec?"sim":""},{t:"Mesmo setor",k:x=>x.set?"sim":"",hm:1},{t:"Linha",k:"l",hm:1}];
+  const L=(t,rows)=>abrirTabela(t,periodoTxt(),rows.slice().sort((a,b)=>b.d.localeCompare(a.d)),COL_EV,{det:DET_I});
+  V().innerHTML=head("Reincidência — até 30 dias","Mesmo carro com nova intervenção em até 30 dias · técnica = mesmo defeito · setorial = mesmo setor"+(S.val?" · sem 'seguiu viagem'":""))+
+  `<div class="grid g4">${kpi("Veículos reincidentes",fInt(r.vr),`de ${fInt(r.vc)} carros com intervenção`,{id:"ri1",cls:"down"})}${kpi("Taxa de reincidência",f1(r.taxa)+"%",rA?`${varPct(r.taxa,rA.taxa,true)} vs ${mesLb(ant)} (${f1(rA.taxa)}%)`:"",{id:"ri2"})}${kpi("Reincidências",fInt(r.rv),`${fInt(r.rt)} técnicas · ${fInt(r.rs)} setoriais`,{id:"ri3"})}${kpi("Dias entre intervenções",f1(r.im),"intervalo médio no mesmo carro")}</div>
+  <div class="grid g3 mt">${kpi("Reincidência técnica",fInt(r.rt),"mesmo defeito em ≤ 30 dias",{id:"ri4"})}${kpi("Reincidência setorial",fInt(r.rs),"mesmo setor em ≤ 30 dias",{id:"ri5"})}${kpi("Em até 7 dias",fInt(r.ev.filter(e=>e.gap<=7).length),"voltou em uma semana",{id:"ri6"})}</div>
+  <div class="grid g2 mt">${card("Taxa de reincidência por mês",'<div id="chr"></div><div class="legend"><span><i style="background:var(--bar)"></i>% dos carros com reincidência</span><span><i style="background:var(--line2)"></i>carros reincidentes (eixo direito)</span></div>',"clique num mês")}${card("Linhas com mais reincidência",'<div id="rl"></div>',"clique na linha")}</div>
+  <div class="grid g2 mt">${card("Defeitos que mais reincidem (mesmo defeito)",'<div id="rd"></div>')}${card("Setores que mais reincidem",'<div id="rs"></div>')}</div>
+  <div class="mt">${card("Detalhe por veículo",'<div class="tblwrap scroll" id="rv"></div>',"clique no carro")}</div>`+
+  cons("Reincidência",`Em ${periodoTxt()}, <b>${fInt(r.vr)}</b> de ${fInt(r.vc)} carros (${f1(r.taxa)}%) tiveram nova intervenção em até 30 dias, somando ${fInt(r.rv)} reincidências — ${fInt(r.rt)} com o mesmo defeito. ${r.det[0]&&r.det[0].rv?`O <b>${esc(r.det[0].v)}</b> lidera com ${r.det[0].rv} retornos.`:""} O intervalo médio entre intervenções no mesmo carro é de ${f1(r.im)} dias.`);
+  vbars("#chr",hist,{fmt:v=>fInt(v)+"%",line:hist.map(h=>h.n),onClick:it=>{S.mes=it.k;syncFiltros();renderSec()}});
+  hbars("#rl",cnt(r.ev,"l"),k=>L("Reincidências · linha "+k,r.ev.filter(e=>e.l===k)),10);
+  hbars("#rd",cnt(r.ev.filter(e=>e.tec),"p"),k=>L("Reincidência técnica · "+k,r.ev.filter(e=>e.tec&&e.p===k)),10);
+  hbars("#rs",cnt(r.ev.filter(e=>e.set),"se"),k=>L("Reincidência setorial · "+k,r.ev.filter(e=>e.set&&e.se===k)),10);
+  const cols=[{t:"Carro",k:"v"},{t:"Cluster",k:"cl",hm:1},{t:"Intervenções",k:"n",r:1},{t:"Reinc. veículo",k:"rv",r:1},{t:"Técnica",k:"rt",r:1},{t:"Setorial",k:"rs",r:1},{t:"Intervalo médio",k:x=>x.im?f1(x.im)+" d":"—",r:1},{t:"Defeito top",k:"dt"},{t:"Setor top",k:"st",hm:1}];
+  const tv=$("#rv"),rows=r.det.filter(x=>x.rv>0);const bind=()=>tv.querySelectorAll("tbody tr").forEach((tr,i)=>{tr.classList.add("click");tr.onclick=()=>abrirCarro(rows[i].v)});
+  tv.innerHTML=tabela(rows,cols,{limit:50});bind();tv.querySelectorAll("button[data-more]").forEach(b=>b.onclick=()=>{tv.innerHTML=tabela(rows,cols,{limit:1e9});bind()});
+  on("ri1",()=>L("Todas as reincidências",r.ev));on("ri2",()=>L("Todas as reincidências",r.ev));on("ri3",()=>L("Todas as reincidências",r.ev));
+  on("ri4",()=>L("Reincidência técnica",r.ev.filter(e=>e.tec)));on("ri5",()=>L("Reincidência setorial",r.ev.filter(e=>e.set)));on("ri6",()=>L("Reincidências em até 7 dias",r.ev.filter(e=>e.gap<=7)));
+}
+
+/* ---------- Revisão × quebra · avaliação de técnicos (regras do SOS_Resumo) ---------- */
+const FAIXAS=[["0-7 dias",0,7],["8-15 dias",8,15],["16-30 dias",16,30],["31-60 dias",31,60],["60+ dias",61,1e9]];
+const faixa=v=>v==null?"Sem informação":(FAIXAS.find(([,a,b])=>v>=a&&v<=b)||["60+ dias"])[0];
+const ROLE_LB={mecanico:"Mecânico",eletricista:"Eletricista",funilaria:"Funilaria",borracharia:"Borracharia"};
+function tecnicos(ms,rows){
+  const map=new Map();const get=n=>{if(!map.has(n))map.set(n,{nome:n,fn:"",rev:0,sos:0,prec:0,ds:0,dq:0,ks:0,kq:0,defs:{},lista:[]});return map.get(n)};
+  PFUNC.filter(p=>ms.includes(p.m)).forEach(p=>["mecanico","eletricista","funilaria","borracharia"].forEach(r=>{if(p[r]){const o=get(p[r]);o.rev++;if(!o.fn)o.fn=r}}));
+  rows.forEach(x=>{if(!x.rr)return;const o=get(x.rr);if(!o.fn)o.fn=x.fn;const insp=x.rt==="I";const MK=insp?6000:12000,MD=insp?25:45;
+    const kmOk=x.rk!=null&&x.rk<=MK,dOk=x.rd!=null&&x.rd<=MD;if(!(kmOk||dOk))return;
+    o.sos++;o.lista.push(x);if(dOk){o.ds+=x.rd;o.dq++}if(kmOk){o.ks+=x.rk;o.kq++}
+    if((x.rd!=null&&x.rd<=15)||(kmOk&&x.rk<=3000))o.prec++;o.defs[x.p]=(o.defs[x.p]||0)+1});
+  return[...map.values()].filter(o=>o.rev||o.sos).map(o=>({...o,ef:o.rev?Math.max(0,o.rev-o.sos)/o.rev*100:null,tr:o.sos?o.prec/o.sos*100:0,md:o.dq?o.ds/o.dq:null,mk:o.kq?o.ks/o.kq:null,dt:Object.entries(o.defs).sort((a,b)=>b[1]-a[1])[0]?.[0]||"—"})).sort((a,b)=>b.prec-a.prec||b.sos-a.sos);
+}
+function secRev(){
+  const ms=mesesSel(),rows=baseI(ms);
+  const dp=rows.filter(x=>x.dp>0),di=rows.filter(x=>x.di>0);
+  const ult=rows.filter(x=>x.rd!=null),ate15=ult.filter(x=>x.rd<=15);
+  const porDef=cnt(rows,"p").slice(0,15).map(([p,n])=>{const a=rows.filter(x=>x.p===p);const ap=a.filter(x=>x.dp>0),ai=a.filter(x=>x.di>0);return{p,n,mp:ap.length?sum(ap,x=>x.dp)/ap.length:null,mi:ai.length?sum(ai,x=>x.di)/ai.length:null}});
+  const tec=tecnicos(ms,rows);
+  const COL_RV=[{t:"Data",k:x=>fData(x.d)},{t:"Carro",k:"v",car:1},{t:"Defeito",k:"p"},{t:"Dias pós-prev.",k:x=>x.dp??"—",r:1},{t:"Dias pós-insp.",k:x=>x.di??"—",r:1},{t:"Última revisão",k:x=>x.rt==="I"?"Inspeção":"Preventiva"},{t:"Responsável",k:x=>x.rr||"—",hm:1},{t:"KM desde",k:x=>x.rk!=null?fInt(x.rk):"—",r:1,hm:1}];
+  const L=(t,rs)=>abrirTabela(t,periodoTxt(),rs.slice().sort((a,b)=>b.d.localeCompare(a.d)),COL_RV,{det:DET_I});
+  V().innerHTML=head("Revisão × quebra · avaliação de técnicos","Quanto tempo depois da preventiva (10 mil) e da inspeção (5 mil) o carro quebra · quem fez a última revisão")+
+  `<div class="grid g4">${kpi("Dias após preventiva",dp.length?f1(sum(dp,x=>x.dp)/dp.length):"—",`média · ${dp.length} quebras com preventiva vinculada`,{id:"rv1"})}${kpi("Dias após inspeção",di.length?f1(sum(di,x=>x.di)/di.length):"—",`média · ${di.length} quebras com inspeção vinculada`,{id:"rv2"})}${kpi("Quebra até 15 dias da revisão",f1(pct(ate15.length,ult.length))+"%",`${ate15.length} de ${ult.length} quebras`,{id:"rv3",cls:"down"})}${kpi("Técnicos avaliados",fInt(tec.length),`${fInt(sum(tec,t=>t.prec))} retrabalhos precoces`,{id:"rv4"})}</div>
+  <div class="grid g2 mt">${card("Faixa de dias após a preventiva",'<div id="fp"></div>',"clique numa faixa")}${card("Faixa de dias após a inspeção",'<div id="fi"></div>',"clique numa faixa")}</div>
+  <div class="mt">${card("Defeitos × tempo desde a revisão",'<div class="tblwrap" id="tdf"></div>',"clique no defeito")}</div>
+  <div class="mt">${card("Avaliação de técnicos — SOS atribuídos × retrabalho precoce",`<div class="tblwrap scroll" id="ttc"></div><div class="hint">Responsável = quem fez a última revisão (preventiva ou inspeção, a mais recente) na função do setor da quebra. Conta só quebras dentro do ciclo (inspeção ≤ 25 dias ou ≤ 6 mil km; preventiva ≤ 45 dias ou ≤ 12 mil km). Retrabalho precoce = quebra ≤ 15 dias ou ≤ 3 mil km. Eficácia = (revisões no período − SOS atribuídos) ÷ revisões.</div>`,"clique no técnico")}</div>`+
+  cons("Revisão × quebra",`Em ${periodoTxt()}, as quebras aconteceram em média ${dp.length?f1(sum(dp,x=>x.dp)/dp.length):"—"} dias após a preventiva e ${di.length?f1(sum(di,x=>x.di)/di.length):"—"} dias após a inspeção. <b>${f1(pct(ate15.length,ult.length))}%</b> ocorreram em até 15 dias da última revisão. ${tec[0]&&tec[0].prec?`O maior número de retrabalhos precoces está com <b>${esc(tec[0].nome)}</b> (${tec[0].prec} de ${tec[0].sos} SOS atribuídos).`:""}`);
+  const fx=(k,campo)=>{const o=FAIXAS.map(f=>f[0]).concat("Sem informação").map(f=>[f,rows.filter(x=>faixa(x[campo])===f).length]).filter(r=>r[1]);return o};
+  hbars("#fp",fx("fp","dp"),k=>L("Após preventiva · "+k,rows.filter(x=>faixa(x.dp)===k)),6);
+  hbars("#fi",fx("fi","di"),k=>L("Após inspeção · "+k,rows.filter(x=>faixa(x.di)===k)),6);
+  const tdf=$("#tdf");tdf.innerHTML=tabela(porDef,[{t:"Defeito",k:"p"},{t:"Quebras",k:"n",r:1},{t:"Média dias pós-preventiva",k:x=>x.mp!=null?f1(x.mp):"—",r:1},{t:"Média dias pós-inspeção",k:x=>x.mi!=null?f1(x.mi):"—",r:1}]);
+  tdf.querySelectorAll("tbody tr").forEach((tr,i)=>{tr.classList.add("click");tr.onclick=()=>L("Defeito · "+porDef[i].p,rows.filter(x=>x.p===porDef[i].p))});
+  const colsT=[{t:"Técnico",k:"nome"},{t:"Função",k:x=>ROLE_LB[x.fn]||"—",hm:1},{t:"Revisões no período",k:"rev",r:1},{t:"SOS atribuídos",k:"sos",r:1},{t:"Retrabalho precoce",k:x=>x.prec?`<b class="down">${x.prec}</b>`:"0",f:v=>v,r:1},{t:"Eficácia",k:x=>x.ef==null?"—":f1(x.ef)+"%",r:1},{t:"Taxa retrabalho",k:x=>x.sos?f1(x.tr)+"%":"—",r:1},{t:"Dias até quebrar",k:x=>x.md!=null?f1(x.md):"—",r:1,hm:1},{t:"KM até quebrar",k:x=>x.mk!=null?fInt(x.mk):"—",r:1,hm:1},{t:"Defeito top",k:"dt",hm:1}];
+  const tt=$("#ttc");const bind=()=>tt.querySelectorAll("tbody tr").forEach((tr,i)=>{tr.classList.add("click");tr.onclick=()=>L("SOS atribuídos · "+tec[i].nome,tec[i].lista)});
+  tt.innerHTML=tabela(tec,colsT,{limit:40});bind();tt.querySelectorAll("button[data-more]").forEach(b=>b.onclick=()=>{tt.innerHTML=tabela(tec,colsT,{limit:1e9});bind()});
+  on("rv1",()=>L("Quebras com preventiva vinculada",dp));on("rv2",()=>L("Quebras com inspeção vinculada",di));on("rv3",()=>L("Quebras em até 15 dias da revisão",ate15));on("rv4",()=>$("#ttc").scrollIntoView({behavior:"smooth",block:"center"}));
+}
+
+/* ---------- Oficina · PCM (regras do PCM › Resumo, 1 linha por entrada física) ---------- */
+const AGING=[["0-1",0,1],["2-3",2,3],["4-7",4,7],["8-15",8,15],["16+",16,1e9]];
+function secOficina(){
+  const ms=mesesSel(),ent=PCM.filter(x=>ms.includes(x.m)&&inCl(x.cl));
+  const diasPcm=PCMD.dias.filter(d=>ms.includes(d.slice(0,7))).length;
+  const res=ent.filter(x=>x.sai),gns=ent.filter(x=>x.cat==="GNS");
+  const back=PCM.filter(x=>!x.sai&&inCl(x.cl)).map(x=>({...x,dias:Math.max(0,diffD(HOJE,x.d))}));
+  const backG=back.filter(x=>x.cat==="GNS");
+  const pf=new Map();ent.slice().sort((a,b)=>(a.ent||a.d).localeCompare(b.ent||b.d)).forEach(x=>{if(!pf.has(x.v))pf.set(x.v,[]);pf.get(x.v).push(x)});
+  const reent=[];for(const [v,a] of pf){let r=0;for(let i=1;i<a.length;i++){if(a[i-1].sai&&(a[i].ent||a[i].d)>a[i-1].sai)r++}
+    if(r)reent.push({v,n:a.length,r,dias:sum(a,x=>diffD((x.sai||HOJE).slice(0,10),x.d)),ult:a.at(-1).d,mot:a.map(x=>x.desc).filter(Boolean).slice(-3).join(" | "),a})}
+  reent.sort((a,b)=>b.r-a.r||b.dias-a.dias);
+  const hist=MESES_JAN.map(m=>{const g=PCM.filter(x=>x.m===m&&x.cat==="GNS"&&inCl(x.cl)).length,dd=PCMD.dias.filter(d=>d.startsWith(m)).length;return{k:m,label:mesLb(m),v:dd?g/dd:0,dim:!ms.includes(m),tip:`${mesLong(m)}: ${g} entradas GNS em ${dd} dias de PCM`}});
+  const COL_O=[{t:"Entrada",k:x=>fDH(x.ent)||fData(x.d)},{t:"Carro",k:"v",car:1},{t:"Categoria",k:"cat",f:tagT},{t:"Setor",k:"setor",hm:1},{t:"Defeito / descrição",k:x=>(x.desc||"").slice(0,70)},{t:"Motivo",k:x=>(x.obs||"").slice(0,40),hm:1},{t:"Saída",k:x=>x.sai?fDH(x.sai):"em aberto"},{t:"Turno",k:"turno",hm:1}];
+  const DET_O=r=>dl([["Defeito / descrição",r.desc],["Motivo (observação)",r.obs],["Setor",r.setor],["OS",r.os],["Entrada",fDH(r.ent)||fData(r.d)],["Saída",r.sai?fDH(r.sai):"em aberto"],["Turno",r.turno],["Sessão",fData(r.dref)]]);
+  const L=(t,rs,sub)=>abrirTabela(t,sub||periodoTxt(),rs.slice().sort((a,b)=>(b.ent||b.d).localeCompare(a.ent||a.d)),COL_O,{det:DET_O});
+  V().innerHTML=head("Oficina · entradas no PCM","Cada entrada física do carro na oficina (a virada diária do PCM não duplica) · backlog = carros ainda sem saída")+
+  `<div class="grid g5">${kpi("Entradas",fInt(ent.length),`${diasPcm} dias com PCM`,{id:"of1"})}${kpi("Taxa de resolução",f1(pct(res.length,ent.length))+"%",`${fInt(res.length)} já liberadas`,{id:"of2"})}${kpi("Entradas GNS",fInt(gns.length),`${f1(pct(gns.length,ent.length))}% · ${f2(diasPcm?gns.length/diasPcm:0)}/dia de PCM`,{id:"of3"})}${kpi("Reentradas",fInt(reent.length),"carros liberados que voltaram",{id:"of4",cls:reent.length?"down":""})}${kpi("Backlog hoje",fInt(back.length),`${backG.length} em GNS`,{id:"of5",cls:"warn"})}</div>
+  <div class="grid g3 mt">${card("Aging dos GNS em aberto (dias)",'<div id="ag"></div>',"hoje · clique numa faixa")}${card("Backlog por motivo",'<div id="bm"></div>',"observação do PCM · hoje")}${card("Entradas por turno",'<div id="tu"></div>')}</div>
+  <div class="grid g3 mt">${card("Defeitos que mais entram na oficina",'<div id="od"></div>')}${card("Por setor",'<div id="os"></div>')}${card("Por categoria",'<div id="oc"></div>')}</div>
+  <div class="grid g2 mt">${card("Entradas GNS por dia de PCM — mês a mês",'<div id="chO"></div>',"clique num mês")}${card("Carros que voltaram à oficina",'<div class="tblwrap scroll" id="ore"></div>',"clique no carro")}</div>
+  <div class="note mt">Diferença para a seção GNS: lá o indicador é a <b>média de carros parados em GNS por dia útil</b> (foto de cada sessão); aqui é o <b>fluxo de entradas</b> na oficina.</div>`+
+  cons("Oficina",`Em ${periodoTxt()}, foram <b>${fInt(ent.length)}</b> entradas na oficina, com ${f1(pct(res.length,ent.length))}% já liberadas; ${fInt(gns.length)} entraram em GNS. <b>${reent.length}</b> carros voltaram depois de liberados. Hoje há ${back.length} carros sem saída, ${backG.length} em GNS${backG.length?` (o mais antigo com ${Math.max(...backG.map(x=>x.dias))} dias)`:""}.`);
+  vbars("#ag",AGING.map(([k,a,b])=>{const n=backG.filter(x=>x.dias>=a&&x.dias<=b).length;return{k,label:k,v:n,tip:`${k} dias: ${n} carros`}}),{h:170,onClick:it=>{const [,a,b]=AGING.find(x=>x[0]===it.k);L("GNS em aberto há "+it.k+" dias",backG.filter(x=>x.dias>=a&&x.dias<=b),"hoje")}});
+  hbars("#bm",cnt(back,x=>(x.obs||"Sem classificação").toUpperCase().trim()),k=>L("Backlog · "+k,back.filter(x=>(x.obs||"Sem classificação").toUpperCase().trim()===k),"hoje"),8);
+  hbars("#tu",cnt(ent,x=>x.turno||"Não informado"),k=>L("Entradas · turno "+k,ent.filter(x=>(x.turno||"Não informado")===k)),4);
+  hbars("#od",cnt(ent,x=>(x.desc||"").toUpperCase().trim().slice(0,40)),k=>L("Oficina · "+k,ent.filter(x=>(x.desc||"").toUpperCase().trim().slice(0,40)===k)),8);
+  hbars("#os",cnt(ent,x=>x.setor||"—"),k=>L("Oficina · setor "+k,ent.filter(x=>(x.setor||"—")===k)),8);
+  hbars("#oc",cnt(ent,x=>x.cat||"—"),k=>L("Oficina · "+k,ent.filter(x=>(x.cat||"—")===k)),8);
+  vbars("#chO",hist,{fmt:f1,onClick:it=>{S.mes=it.k;syncFiltros();renderSec()}});
+  const colsR=[{t:"Carro",k:"v"},{t:"Entradas",k:"n",r:1},{t:"Reentradas",k:"r",r:1},{t:"Dias parado",k:"dias",r:1},{t:"Última entrada",k:x=>fData(x.ult)},{t:"Motivos",k:x=>x.mot.slice(0,70),hm:1}];
+  const tr=$("#ore");tr.innerHTML=tabela(reent,colsR,{limit:40});tr.querySelectorAll("tbody tr").forEach((t,i)=>{t.classList.add("click");t.onclick=()=>L("Oficina · carro "+reent[i].v,reent[i].a)});
+  on("of1",()=>L("Entradas na oficina",ent));on("of2",()=>L("Entradas já liberadas",res));on("of3",()=>L("Entradas em GNS",gns));on("of4",()=>tr.scrollIntoView({behavior:"smooth",block:"center"}));on("of5",()=>L("Backlog — carros sem saída",back,"hoje"));
+}
+
+/* ---------- 16 Base completa ---------- */
+function sec16(){
+  V().innerHTML=head("Base completa de intervenções",`${S.val?"Só válidas para MKBF":"Todas as ocorrências"} · busca livre · exportação CSV`)+
+  `<div class="card"><h3><span>Intervenções</span><small><input type="search" id="tBusca" placeholder="Buscar carro, linha, defeito, motorista…" style="width:280px"> <button class="chip" id="btnCsv">Exportar CSV</button></small></h3><div class="body tblwrap" id="tbAll"></div></div>`;
+  const draw=()=>{const q=$("#tBusca").value.trim().toLowerCase();const rows=ordI(baseI().filter(x=>!q||[x.v,x.l,x.p,x.mo,x.se,x.t,x.rc,x.so,x.n].join(" ").toLowerCase().includes(q)));
+    const el=$("#tbAll");el.innerHTML=`<div class="hint" style="margin:0 0 6px">${fInt(rows.length)} registros</div>`+tabela(rows,COL_I,{limit:60,detail:1});ligarTab(el,rows,COL_I,{detail:DET_I});$("#btnCsv").onclick=()=>baixarCsv(rows,CSV_I,"intervencoes_"+S.mes)};
+  let tq;$("#tBusca").oninput=()=>{clearTimeout(tq);tq=setTimeout(draw,200)};draw();
+}
+
+/* ======================= navegação ======================= */
+const RENDER={s00:secCapa,s01:sec01,s02:sec02,s03:sec03,s04:sec04,s05:sec05,s06:sec06,s07:sec07,s08:sec08,s09:sec09,s10:sec10,s11:sec11,s12:sec12,s13:sec13,s14:sec14,s15:sec15,s16:sec16,s05r:secReinc,s11r:secRev,s12o:secOficina};
+$("#nav").insertAdjacentHTML("beforeend",SECS.map(([k,t],i)=>`<button data-sec="${k}"><span class="n">${k==="s00"?"◆":k==="s16"?"≡":String(i).padStart(2,"0")}</span><span>${t}</span></button>`).join(""));
+$("#nav").querySelectorAll("button").forEach(b=>b.onclick=()=>go(b.dataset.sec));
+function go(s){S.sec=s;try{history.replaceState(null,"","#"+s)}catch(e){/* visualizador isolado (sandbox) bloqueia history */}renderSec();try{scrollTo({top:0})}catch(e){}}
+function renderSec(){
+  if(!RENDER[S.sec])S.sec="s00";lsSet("fm2_mes",S.mes);
+  $("#nav").querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.sec===S.sec));
+  $("#hTitle").textContent=SECS.find(s=>s[0]===S.sec)[1];
+  $("#subhead").textContent=`${periodoTxt()} · ${S.cl==="TODOS"?"todos os clusters":"cluster "+S.cl} · dados ao vivo do Supabase, gerado em ${D.gerado_em}`;
+  try{RENDER[S.sec]()}catch(e){console.error(e);V().innerHTML=`<div class="note">Erro ao montar esta seção: ${esc(e.message)}</div>`}
+  V().insertAdjacentHTML("beforeend",`<div class="foot">Janela de dados: ${fData(D.ini)} a ${fData(D.fim)} · MKBF = KM TransNet ÷ intervenções válidas (exclui "seguiu viagem"), só dias com KM consolidado · meta ${fInt(D.meta_mkbf)}.</div>`);
+}
+function syncFiltros(){$("#fMes").value=S.mes;document.querySelectorAll("#fCl .chip").forEach(c=>c.classList.toggle("on",c.dataset.cl===S.cl));$("#fVal").checked=S.val}
+$("#fMes").innerHTML=MESES_JAN.slice().reverse().map(m=>`<option value="${m}">${mesLong(m)}${m===HOJE.slice(0,7)?" (parcial)":""}</option>`).join("")+`<option value="JANELA">Janela toda (${MESES_JAN.length} meses)</option>`;
+$("#fCl").insertAdjacentHTML("beforeend",["TODOS",...CLS].map(c=>`<button class="chip" data-cl="${c}">${c==="TODOS"?"Todos":c}</button>`).join(""));
+$("#fCl").querySelectorAll(".chip").forEach(c=>c.onclick=()=>{S.cl=c.dataset.cl;syncFiltros();renderSec()});
+$("#fMes").onchange=e=>{S.mes=e.target.value;renderSec()};
+$("#fVal").onchange=e=>{S.val=e.target.checked;renderSec()};
+$("#dlCarros").innerHTML=[...new Set(I.map(x=>x.v).concat(PLANOS.map(p=>p.v)))].sort().map(v=>`<option value="${esc(v)}">`).join("");
+const abrirBusca=e=>{const v=e.target.value.trim();if(v){abrirCarro(v);e.target.value=""}};
+$("#fBusca").addEventListener("change",abrirBusca);$("#fBusca").addEventListener("keydown",e=>{if(e.key==="Enter")abrirBusca(e)});
+addEventListener("hashchange",()=>{let s="";try{s=location.hash.slice(1)}catch(e){}if(s!==S.sec&&RENDER[s]){S.sec=s;renderSec()}});
+let rz,lw=innerWidth;addEventListener("resize",()=>{if(Math.abs(innerWidth-lw)<40)return;lw=innerWidth;clearTimeout(rz);rz=setTimeout(renderSec,200)});
+syncFiltros();renderSec();
+</script>
+</body>
+</html>

@@ -60,6 +60,8 @@ const SOSTratamento = lazy(() => import("./pages/intervencoes/SOSTratamento"));
 const SOSCentral = lazy(() => import("./pages/intervencoes/SOSCentral"));
 const SOSDashboard = lazy(() => import("./pages/intervencoes/SOSDashboard"));
 const SOS_Resumo = lazy(() => import("./pages/intervencoes/SOS_Resumo"));
+// Flash Report Manutenção interativo (HTML gerado pelo bot 2x/dia) — 28/09/2026
+const FlashManutencao = lazy(() => import("./pages/intervencoes/FlashManutencao"));
 const KMRodado = lazy(() => import("./pages/intervencoes/KMRodado"));
 
 const MonitoramentoCentral = lazy(() => import("./pages/monitoramento/MonitoramentoCentral"));
@@ -316,6 +318,7 @@ export default function App() {
               <Route path="/operacional/passagem-turno" element={<PassagemTurnoInicio />} />
               <Route path="/operacional/passagem-turno/:data" element={<PassagemTurnoDia />} />
               <Route path="/pcm-resumo" element={<PCMResumo />} />
+              <Route path="/pcm-flash" element={<FlashManutencao />} />
               <Route path="/pcm-diario/:id" element={<PCMDiario />} />
               <Route path="/pcm-passagem-turno" element={<PCMPassagemInicio />} />
               <Route path="/pcm-passagem-turno/:data/:turno" element={<PCMPassagemDia />} />
@@ -419,6 +422,7 @@ export default function App() {
               <Route path="/sos-central" element={<SOSCentral />} />
               <Route path="/sos-dashboard" element={<SOSDashboard />} />
               <Route path="/sos-resumo" element={<SOS_Resumo />} />
+              <Route path="/sos-flash" element={<FlashManutencao />} />
               <Route path="/km-rodado" element={<KMRodado />} />
 
               {/* Configurações */}

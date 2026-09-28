@@ -41,11 +41,11 @@ export const APP_ACCESS_PAGES = [
   { key: "sos_tratamento", label: "SOS Manutencao", category: "Intervencoes", path: "/sos-tratamento", patterns: ["/sos-tratamento"] },
   { key: "sos_central", label: "SOS Central", category: "Intervencoes", path: "/sos-central", patterns: ["/sos-central"] },
   { key: "sos_dashboard", label: "SOS Dashboard", category: "Intervencoes", path: "/sos-dashboard", patterns: ["/sos-dashboard"] },
-  { key: "sos_resumo", label: "SOS Resumo", category: "Intervencoes", path: "/sos-resumo", patterns: ["/sos-resumo"] },
+  { key: "sos_resumo", label: "SOS Resumo", category: "Intervencoes", path: "/sos-resumo", patterns: ["/sos-resumo", "/sos-flash"] },
   { key: "km_rodado", label: "KM Rodado", category: "Intervencoes", path: "/km-rodado", patterns: ["/km-rodado"] },
 
   { key: "pcm_inicio", label: "PCM Inicio", category: "PCM", path: "/pcm-inicio", patterns: ["/pcm-inicio"] },
-  { key: "pcm_resumo", label: "PCM Resumo", category: "PCM", path: "/pcm-resumo", patterns: ["/pcm-resumo"] },
+  { key: "pcm_resumo", label: "PCM Resumo", category: "PCM", path: "/pcm-resumo", patterns: ["/pcm-resumo", "/pcm-flash"] },
   { key: "pcm_diario", label: "PCM Diario", category: "PCM", path: "/pcm-diario/:id", patterns: ["/pcm-diario/:id"] },
   { key: "pcm_passagem_turno", label: "PCM Passagem de turno da manutenção", category: "PCM", path: "/pcm-passagem-turno", patterns: ["/pcm-passagem-turno", "/pcm-passagem-turno/:data/:turno"] },
   { key: "pcm_preventivas", label: "PCM Preventivas · Lançamentos", category: "PCM", path: "/pcm-preventivas", patterns: ["/pcm-preventivas"] },

@@ -27,6 +27,7 @@ import {
   FaSearch,
   FaRobot,
   FaChartPie,
+  FaBolt,
   FaMicrochip,
   FaExchangeAlt,
   FaBuilding,
@@ -78,6 +79,7 @@ const ESTOQUE_DIESEL_ROUTES = {
 
 const PCM_ROUTES = {
   resumo: "/pcm-resumo",
+  flash: "/pcm-flash",
   inicio: "/pcm-inicio",
   diario: "/pcm-diario",
   // Os lançamentos (/pcm-preventivas) viraram uma aba de Preventivas.
@@ -222,6 +224,7 @@ export default function Sidebar() {
         label: "PCM",
         icon: <FaClipboardList />,
         tabs: [
+          { path: PCM_ROUTES.flash, label: "Flash Report", icon: <FaBolt /> },
           { path: PCM_ROUTES.resumo, label: "Resumo", icon: <FaChartPie /> },
           { path: PCM_ROUTES.inicio, label: "PCM do dia", icon: <FaPenSquare /> },
           // o relatório do turno da oficina (27/09/2026), que era um Word
@@ -334,6 +337,7 @@ export default function Sidebar() {
       ],
 
       sos: [
+        { path: "/sos-flash", label: "Flash Report", icon: <FaBolt /> },
         { path: "/sos-resumo", label: "Resumo", icon: <FaChartPie /> },
         { path: "/sos-solicitacao", label: "Solicitação", icon: <FaPenSquare /> },
         { path: "/sos-fechamento", label: "Fechamento", icon: <FaCheckDouble /> },

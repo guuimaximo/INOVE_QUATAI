@@ -1,0 +1,63 @@
+name: Bot Manutenção · Flash Interativo (HTML no INOVE)
+
+# Gera o Flash Report Manutenção interativo (HTML único, 15 seções + reincidência,
+# técnicos e oficina) e publica no storage do INOVE (bucket "relatorios"), de onde a
+# página Intervenções › Flash (/sos-flash) e PCM › Flash (/pcm-flash) leem.
+# Não commita nada: o HTML (~4 MB) não entra no git.
+on:
+  schedule:
+    # 06:30 BRT (09:30 UTC) — depois da importação das 06:00
+    - cron: "30 9 * * *"
+    # 12:30 BRT (15:30 UTC) — depois da importação do meio-dia (chega o D-1 do TransNet)
+    - cron: "30 15 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bot-flash-manutencao-interativo
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: flash-report-manutencao/requirements.txt
+
+      - name: Install Python deps
+        working-directory: flash-report-manutencao
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Gerar e publicar o Flash interativo
+        working-directory: flash-report-manutencao
+        env:
+          SUPABASE_A_URL: ${{ secrets.SUPABASE_TRANSNET_URL }}
+          SUPABASE_A_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TRANSNET_KEY }}
+          SUPABASE_B_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_B_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          REPORT_BUCKET: relatorios
+          MKBF_META: "7000"
+          REPORT_FERIADOS: ${{ vars.REPORT_FERIADOS }}
+          REPORT_BORRACHARIA_FISICO: ${{ vars.REPORT_BORRACHARIA_FISICO }}
+          REPORT_SR_META: ${{ vars.REPORT_SR_META || '94' }}
+        run: python -u publicar_flash_html.py
+
+      - name: Sobe o HTML como artefato (backup 7 dias)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flash-manutencao-interativo
+          path: flash-report-manutencao/saida/Flash_Manutencao_Interativo.html
+          if-no-files-found: ignore
+          retention-days: 7

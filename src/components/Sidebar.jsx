@@ -79,7 +79,6 @@ const ESTOQUE_DIESEL_ROUTES = {
 
 const PCM_ROUTES = {
   resumo: "/pcm-resumo",
-  flash: "/pcm-flash",
   inicio: "/pcm-inicio",
   diario: "/pcm-diario",
   // Os lançamentos (/pcm-preventivas) viraram uma aba de Preventivas.
@@ -224,7 +223,7 @@ export default function Sidebar() {
         label: "PCM",
         icon: <FaClipboardList />,
         tabs: [
-          { path: PCM_ROUTES.flash, label: "Flash Report", icon: <FaBolt /> },
+          // o Flash interativo vive DENTRO do Resumo (aba "Flash interativo", 01/10/2026)
           { path: PCM_ROUTES.resumo, label: "Resumo", icon: <FaChartPie /> },
           { path: PCM_ROUTES.inicio, label: "PCM do dia", icon: <FaPenSquare /> },
           // o relatório do turno da oficina (27/09/2026), que era um Word

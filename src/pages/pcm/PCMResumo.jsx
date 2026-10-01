@@ -1,6 +1,8 @@
 // src/pages/PCMResumo.jsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
+import FlashManutencao from "../intervencoes/FlashManutencao";
 import {
   FaSearch,
   FaTimes,
@@ -424,7 +426,7 @@ const DAY_FILTERS = [
   { key: "DOMINGO", label: "Domingo (Ref. Sábado)" },
 ];
 
-export default function PCMResumo() {
+function PainelPCM() {
   const hojeISO = useMemo(() => toISODate(new Date()), []);
   const mesAtualIni = useMemo(() => startOfMonthISO(hojeISO), [hojeISO]);
   const mesAtualFim = useMemo(() => endOfMonthISO(hojeISO), [hojeISO]);
@@ -974,6 +976,50 @@ export default function PCMResumo() {
         rows={modalRows}
         periodo={periodoAtual}
       />
+    </div>
+  );
+}
+
+/* ═══ O RESUMO DO PCM, EM DUAS ABAS (01/10/2026) ═══════════════════════════════════════
+   Dono: "no Resumo PCM do INOVE quero colocar esse Flash Report interativo". A primeira aba
+   é o Flash (o HTML que o bot gera 2x por dia, o mesmo de Intervenções › Flash Report),
+   abrindo direto em "Oficina · entradas no PCM" (#s12o) — o menu lateral dele leva às outras
+   seções (GNS, preventivas, revisão × quebra, pneus, SR…). A segunda aba é o painel que
+   já existia, inteiro: nada dele foi tirado. A aba fica na URL (`?aba=painel`), para o link
+   abrir onde a pessoa estava, e só a aba aberta busca dado.
+   Por que o Flash conta diferente do painel em "lançamentos": ver docs/flash-manutencao-mapa.md
+   §5 — o Flash conta cada ENTRADA física uma vez; o painel soma as cópias da virada diária. */
+const ABAS_RESUMO = [
+  { id: "flash", label: "Flash interativo" },
+  { id: "painel", label: "Painel do PCM" },
+];
+
+export default function PCMResumo() {
+  const [params, setParams] = useSearchParams();
+  const aba = ABAS_RESUMO.some((a) => a.id === params.get("aba")) ? params.get("aba") : "flash";
+  const trocar = (id) => {
+    const p = new URLSearchParams(params);
+    if (id === "flash") p.delete("aba");
+    else p.set("aba", id);
+    setParams(p, { replace: true });
+  };
+  return (
+    <div className="space-y-3">
+      <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200">
+        {ABAS_RESUMO.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            onClick={() => trocar(a.id)}
+            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition ${
+              aba === a.id ? "bg-slate-900 text-white shadow" : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            {a.label}
+          </button>
+        ))}
+      </div>
+      {aba === "flash" ? <FlashManutencao secaoInicial="#s12o" /> : <PainelPCM />}
     </div>
   );
 }

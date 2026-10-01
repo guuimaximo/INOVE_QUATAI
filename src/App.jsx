@@ -318,7 +318,8 @@ export default function App() {
               <Route path="/operacional/passagem-turno" element={<PassagemTurnoInicio />} />
               <Route path="/operacional/passagem-turno/:data" element={<PassagemTurnoDia />} />
               <Route path="/pcm-resumo" element={<PCMResumo />} />
-              <Route path="/pcm-flash" element={<FlashManutencao />} />
+              {/* o Flash do PCM é a primeira aba do Resumo (01/10/2026); o endereço antigo leva para lá */}
+              <Route path="/pcm-flash" element={<Navigate to="/pcm-resumo" replace />} />
               <Route path="/pcm-diario/:id" element={<PCMDiario />} />
               <Route path="/pcm-passagem-turno" element={<PCMPassagemInicio />} />
               <Route path="/pcm-passagem-turno/:data/:turno" element={<PCMPassagemDia />} />

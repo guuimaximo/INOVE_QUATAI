@@ -14,13 +14,22 @@ import { FaDownload, FaExpand, FaSyncAlt } from "react-icons/fa";
 
 const BASE = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/relatorios/manutencao/flash_interativo`;
 
+/* A SEÇÃO EM QUE O FLASH ABRE (01/10/2026 — dono: "no Resumo PCM quero colocar esse Flash
+   interativo"). O HTML escolhe a seção pelo hash da URL, e o `srcdoc` não tem hash: a linha
+   abaixo é trocada antes de ir para o iframe, e o menu lateral do HTML continua navegando
+   para as outras seções. Se o template mudar essa linha, o Flash só abre na capa — não quebra. */
+const HASH_DO_TEMPLATE = 'let hash0="";try{hash0=location.hash}catch(e){}';
+const abrirNaSecao = (html, secao) =>
+  secao && /^#s\d+[a-z]?$/.test(secao) ? html.replace(HASH_DO_TEMPLATE, `let hash0="${secao}";`) : html;
+
 const fmtInt = (v) => Math.round(Number(v) || 0).toLocaleString("pt-BR");
 const fmt1 = (v) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const fmtData = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "");
 
-export default function FlashManutencao() {
+export default function FlashManutencao({ secaoInicial = "" } = {}) {
   const [meta, setMeta] = useState(null);
   const [html, setHtml] = useState("");
+  const htmlNaTela = useMemo(() => abrirNaSecao(html, secaoInicial), [html, secaoInicial]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
 
@@ -52,8 +61,12 @@ export default function FlashManutencao() {
     return `Flash Report Manutencao - Interativo ${d}.html`;
   }, [meta]);
 
-  const blobUrl = useCallback(() => URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" })), [html]);
+  const blobUrl = useCallback(
+    (conteudo = html) => URL.createObjectURL(new Blob([conteudo], { type: "text/html;charset=utf-8" })),
+    [html],
+  );
 
+  // o arquivo baixado é o original (abre na capa); a tela cheia abre onde a tela abriu
   const baixar = () => {
     const url = blobUrl();
     const a = document.createElement("a");
@@ -66,7 +79,7 @@ export default function FlashManutencao() {
   };
 
   const telaCheia = () => {
-    const url = blobUrl();
+    const url = blobUrl(htmlNaTela);
     window.open(url, "_blank", "noopener");
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   };
@@ -112,7 +125,7 @@ export default function FlashManutencao() {
         {html ? (
           <iframe
             title="Flash Report Manutenção"
-            srcDoc={html}
+            srcDoc={htmlNaTela}
             sandbox="allow-scripts allow-downloads allow-popups allow-modals"
             className="w-full h-full border-0"
             style={{ height: "calc(100vh - 170px)", minHeight: 600 }}

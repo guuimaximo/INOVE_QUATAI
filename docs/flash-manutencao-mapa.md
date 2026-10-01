@@ -201,6 +201,15 @@ O que o HTML acrescenta ao PCM › Resumo (não existe lá hoje):
 
 As seções centradas em intervenção (`s01`–`s05`, `s05r`, `s08`, `s14`, `s15`) ficam no **Intervenções › Resumo**.
 
+### Já no ar (01/10/2026)
+
+O **PCM › Resumo** (`/pcm-resumo`) passou a ter duas abas: **Flash interativo** (a primeira, padrão)
+e **Painel do PCM** (o painel antigo, inteiro). A aba do Flash usa o `FlashManutencao` com
+`secaoInicial="#s12o"`, então abre direto em Oficina · entradas no PCM, e o menu lateral do HTML
+navega para o resto. `?aba=painel` abre o painel antigo. O item de menu PCM › Flash Report saiu
+(ficou repetido) e `/pcm-flash` agora leva para o Resumo. Intervenções › Flash Report (`/sos-flash`)
+continua igual, abrindo na capa.
+
 ### Como levar um bloco para o INOVE
 
 - **Do jeito mais rápido (já pronto):** abrir o Flash já numa seção. O iframe usa `srcDoc`, que não tem hash na URL. Então, no `FlashManutencao.jsx`, troque a linha 263 do HTML antes de passar para o `srcDoc`:

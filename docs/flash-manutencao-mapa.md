@@ -207,3 +207,75 @@ As seções centradas em intervenção (`s01`–`s05`, `s05r`, `s08`, `s14`, `s1
   `html.replace('let hash0="";try{hash0=location.hash}catch(e){}', 'let hash0="#s12o";')`
   Com isso o `/pcm-flash` abre direto em Oficina (`#s12o`), e o menu lateral continua navegando para as outras seções.
 - **Reescrevendo em React:** a regra de cada bloco está na função indicada acima; as colunas das listas em 332–346; os dados vêm das mesmas tabelas da §3 (as do projeto **B** já são lidas pelo app; as do **A** usam `supabaseDados.js`).
+
+---
+
+## 6. Formato exato dos dados (`D`)
+
+Os arrays são posicionais para o HTML ficar leve. **A ordem importa**: trocar uma posição quebra a seção sem dar erro.
+Datas `AAAA-MM-DD`; data/hora `AAAA-MM-DD HH:MM` **já em horário de Brasília** (o loader converte de UTC com `_ts`).
+
+| Chave | Formato |
+|---|---|
+| `interv[]` (objeto) | `id`, `n` nº SOS, `d` data, `h` hora `HH:MM`, `v` carro, `cl` cluster, `l` linha, `t` tipo normalizado (RECOLHEU, SOS, AVARIA, TROCA, IMPROCEDENTE, SEGUIU VIAGEM, SEM TIPO), `ok` vale p/ MKBF, `st` status, `se` setor, `gr` grupo, `p` defeito (grafia unificada), `rc` reclamação, `so` solução, `ct` controlabilidade, `mo` motorista, `lo` local, `cs` carro substituto, `sr` nº SR, `os` OS corretiva, `em` família de embarcado ou `""`, `fe` data de encerramento, `dp`/`di` dias desde preventiva/inspeção (`null` = sem revisão vinculada), `rt` `P`/`I` (qual revisão foi a última), `rr` técnico responsável, `fn` função (mecanico, eletricista, funilaria, borracharia), `rd` dias desde essa revisão, `rk` km desde essa revisão (`null` se faltar hodômetro) |
+| `km_dia_cl[]` | `[data, cluster, km, litros]` |
+| `km_mes_v[]` | `[AAAA-MM, carro, km, dias com km]` |
+| `planos[]` | `[carro, plano, vencido, por_km, km_para_proxima, dias_vencido]` |
+| `regen[]` | `[carro, motorista, início, duração_min, rpm_médio, litros, custo_R$]` |
+| `borr.trocas[]` | `[data/hora, tipo_troca, carro, posição, fogo_retirado, fogo_colocado, observações, registrado_por, pneu_conserto]` |
+| `borr.pneus[]` | `[nº fogo, vida, localização, km_rodada, marca, medida, posição, dot]` |
+| `borr.ctrl[]` | `[carro, posição, fogo_base, fogo_auditado, status, data_auditoria, auditado_por]` |
+| `borr.fisico` | estoque físico manual (`REPORT_BORRACHARIA_FISICO`) ou `null` |
+| `sr[]` | `[nº SR, data, situação A/I/N, grupo (MAIÚSCULO), fechada_no_prazo, carro, descrição, aberta_por, data_fim]` |
+| `gns.regs[]` | `[carro, categoria, setor, descrição, observação, data_entrada, previsão]` |
+| `gns.dias[]` | `{d: data da sessão, u: dia útil?, c: [índices em gns.regs]}` |
+| `emb_sr[]` | `[carro, tipo, problema, descrição, local, PRIORIDADE, STATUS, solicitante, executado_por, criado_em, fechado_em, obs_execução]` |
+| `prev_real[]` | `[carro, data, tipo/plano, OS, fonte INOVE/TransNet]` |
+| `pcm_ent.rows[]` | `[carro, setor, categoria, OS, descrição, observação, entrada, saída ("" = em aberto), turno, data da 1ª sessão]` |
+| `pcm_ent.dias[]` | datas de sessão do PCM na janela |
+| `prev_func[]` | `[data, carro, tipo, OS, mecânico, eletricista, funilaria, borracharia]` (nomes sem a matrícula) |
+| `meta_mkbf`, `sr_meta` | 7000 e 94 (vêm de `MKBF_META` e `REPORT_SR_META`) |
+
+---
+
+## 7. Regras que causam erro se reescritas "de cabeça"
+
+1. **MKBF** = KM ÷ intervenções válidas **só nos dias com KM consolidado** (o TransNet atrasa ~2 dias). Contar as intervenções do mês inteiro derruba o MKBF. `mkbf` (274) / `montar_diario_mkbf` do PDF.
+2. **Intervenção válida** = tipo não vazio e ≠ SEGUIU VIAGEM (`is_ocorrencia_valida_para_mkbf`). "RA"/"R.A." = RECOLHEU; `NaN` não é tipo (`normalize_tipo`).
+3. **Cluster pelo prefixo do carro**, não pela linha: 2216→C8, 2222→C9, 2224→C10, 2425→C11, W→C6.
+4. **Defeito**: unificar grafias (caixa, acento, espaços) antes de contar, senão o mesmo defeito vira duas linhas (`_rotulo_defeito_canonico`).
+5. **Embarcado**: grupo de manutenção primeiro, depois texto do problema, depois a reclamação; **"catraca de freio" não é embarcado** (`classificar_embarcado`). Na seção Embarcados na operação entram **todas** as ocorrências (inclusive seguiu viagem).
+6. **GNS médio** = média de carros em GNS **por dia útil** (seg–sex sem feriado, `_feriados`), contando em cada sessão só quem estava sem saída e já tinha entrado até a data. É diferente de "entradas GNS por dia" da Oficina.
+7. **Oficina**: a virada do PCM copia o carro parado para a sessão seguinte com a **mesma `data_entrada`**. Uma entrada = (carro, `data_entrada`); vale o estado da sessão mais recente e a saída preenchida em qualquer cópia (`carregar_pcm_entradas`). Sem isso, setembro dá ~4× mais entradas.
+8. **Fuso**: `created_at`, `data_entrada`, `data_saida`, `dt_inicio` vêm em UTC. Converter para America/Sao_Paulo antes de cortar a data, senão eventos depois das 21h caem no dia seguinte.
+9. **Planos vencidos**: por km quando `qt_km_intervalo > 0` (`km_para_proxima >= 0`); por tempo só quando não há intervalo de km (`dias_vencido > 0`). Excluir planos de Concessionária e inativos (`cs_ativo = 'N'`). Nunca usar `km_para_proxima` para plano de tempo.
+10. **Pneus**: estoque = TransNet com localização contendo BORRACHARIA. **Nunca** usar `pcm_estoque_pneus` (o histórico infla).
+11. **SR**: aderência = `status_competencia = 'fechado'` ÷ SRs do mês da reclamação. Fila = situação `N` de qualquer data (não só do ano).
+12. **Revisão × quebra**: técnico = quem fez a revisão **vinculada pela OS** (`os_ultima_preventiva`/`os_ultima_inspecao` → `preventivas.numero_os`), na função do setor da quebra. Só conta quebra dentro do ciclo (inspeção ≤ 25 d ou ≤ 6 mil km; preventiva ≤ 45 d ou ≤ 12 mil km). Precoce = ≤ 15 d ou ≤ 3 mil km.
+13. **Reincidência**: ≤ 30 dias = seção Reincidência (regra do SOS_Resumo, mês selecionado). ≤ 7 dias = Oportunidades (trimestre). São indicadores diferentes de propósito.
+14. **Mês corrente é parcial**: tendências comparam ritmo diário reprojetado em 30 dias, nunca contagem bruta contra mês fechado.
+15. **Sandbox**: o HTML roda em iframe isolado. Qualquer `history`, `localStorage`, `location` ou download novo precisa de `try/catch` (já há exemplos em `go`, `lsGet`, `baixarCsv`).
+
+---
+
+## 8. Gabarito de conferência — agosto/2026 (mês fechado, todos os clusters, só válidas)
+
+Use para validar uma reescrita: com o mesmo filtro, o número tem que bater (tolerância de ±1–2 em contagens que dependem de edições posteriores no SOS).
+
+| Indicador | Valor | Onde |
+|---|---|---|
+| Intervenções no MKBF / KM / MKBF | 167 / 634.696 / **3.801** | `s01` (bate com o PDF oficial de agosto) |
+| Tipos: Recolheu / SOS / Troca / Avaria / Improcedente | 77 / 35 / 30 / 24 / 1 | `s01` (bate com o PDF) |
+| Tempo médio de fechamento | 82,2 h (3,4 dias) | `s01` `#k4` |
+| Controláveis | 114 de 167 | `s01` `#k5` |
+| GNS médio / dias úteis | 9,4 / 21 | `s12` |
+| Reincidência ≤ 30 d | 46 de 86 carros (53,5%) · 81 retornos · 7 técnicas · 16 setoriais | `s05r` |
+| Oficina | 295 entradas · 292 liberadas · 122 GNS · 31 dias de PCM | `s12o` |
+| Regeneração | 83 eventos · R$ 1.666 | `s06` |
+| Trocas de pneu | 48 | `s07` |
+| SR por competência | 523 de 592 (88,3%) | `s09` |
+| Embarcados na operação | 57 de 289 ocorrências | `s14` |
+| Revisão × quebra | 94 de 167 quebras ≤ 15 d da revisão · 18 técnicos · 97 retrabalhos precoces | `s11r` |
+| Oportunidades (trimestre jun–ago) | 471 quebras · 172 repetidas ≤ 7 d · 277 ≤ 15 d pós-preventiva | `s15` |
+
+Indicadores "foto do dia" (planos vencidos, fila de SR, backlog da oficina, estoque de pneus, embarcados em aberto) mudam todo dia e não entram no gabarito: confira contra o HTML publicado no mesmo dia (`relatorios/manutencao/flash_interativo/atual.html`).

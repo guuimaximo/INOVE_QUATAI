@@ -90,7 +90,7 @@ export default function FlashManutencao({ secaoInicial = "" } = {}) {
     <div className="flex flex-col gap-3" style={{ minHeight: "calc(100vh - 90px)" }}>
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
         <div className="min-w-0">
-          <div className="text-[11px] uppercase tracking-widest text-teal-700 font-bold">Manutenção · Flash Report interativo</div>
+          <div className="text-[11px] uppercase tracking-widest text-blue-700 font-bold">Manutenção · Flash Report interativo</div>
           <div className="text-sm text-slate-600">
             {loading ? "Carregando…" : meta ? <>Atualizado em <b className="text-slate-800">{meta.gerado_em}</b> · atualiza sozinho às 06h30 e 12h30</> : "—"}
           </div>
@@ -113,7 +113,7 @@ export default function FlashManutencao({ secaoInicial = "" } = {}) {
           <button onClick={telaCheia} disabled={!html} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50">
             <FaExpand /> Tela cheia
           </button>
-          <button onClick={baixar} disabled={!html} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-teal-700 text-white text-sm font-semibold hover:bg-teal-800 disabled:opacity-50">
+          <button onClick={baixar} disabled={!html} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
             <FaDownload /> Baixar HTML
           </button>
         </div>
@@ -140,7 +140,7 @@ export default function FlashManutencao({ secaoInicial = "" } = {}) {
 
 function Chip({ rotulo, valor, alerta }) {
   return (
-    <span className={`inline-flex items-baseline gap-1 rounded-full border px-2.5 py-1 ${alerta ? "border-red-200 bg-red-50 text-red-800" : "border-teal-200 bg-teal-50 text-teal-900"}`}>
+    <span className={`inline-flex items-baseline gap-1 rounded-full border px-2.5 py-1 ${alerta ? "border-red-200 bg-red-50 text-red-800" : "border-blue-200 bg-blue-50 text-blue-900"}`}>
       <span className="text-[10px] uppercase tracking-wide opacity-70">{rotulo}</span>
       <b className="tabular-nums">{valor}</b>
     </span>

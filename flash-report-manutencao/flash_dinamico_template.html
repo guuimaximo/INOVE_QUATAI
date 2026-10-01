@@ -5,35 +5,32 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Flash Manutenção Interativo</title>
 <style>
+/* PALETA DO INOVE (01/10/2026 — dono: "está escuro, deixa na paleta de cores do INOVE").
+   Pérola Cru no fundo, Marfim nos cartões, Grafite no texto, Cinza Mineral nas linhas;
+   Azul Profundo na estrutura (faixas, títulos), Azul Ação nos destaques e botões, Azul Inove
+   nos gráficos; Laranja Inove para ênfase, Verde Governança só para resultado positivo.
+   SEMPRE CLARO: o tema escuro do sistema não vale aqui (o INOVE é claro). Os nomes das
+   variáveis (--teal…) ficaram para não mexer no script — só os valores mudaram. */
 :root{
-  --bg:#f3f7f6; --card:#ffffff; --ink:#123b35; --ink2:#5b716c; --muted:#8a9e9a;
-  --line:#d6e3e0; --soft:#eef4f3; --teal:#0d9488; --teal-d:#0f3d38; --teal-l:#ccfbf1;
-  --head:#0f3d38; --head-ink:#e6fffa; --good:#15803d; --bad:#b91c1c; --warn:#b45309;
-  --bar:#0d9488; --bar2:#a7d8d2; --line2:#b45309; --shadow:0 1px 2px rgba(15,61,56,.06),0 2px 8px rgba(15,61,56,.05);
-  --nav:#0b2f2b; --nav-ink:#b7d9d3; --nav-on:#134e48;
+  color-scheme:light;
+  --bg:#F3EFE4; --card:#FAF7F0; --ink:#1F2937; --ink2:#4B5563; --muted:#6B7280;
+  --line:#E2E8F0; --soft:#F3EFE4; --teal:#2563EB; --teal-d:#1D4ED8; --teal-l:#EFF6FF;
+  --head:#1D4ED8; --head-ink:#FFFFFF; --good:#0F5D4A; --bad:#DC2626; --warn:#D97706;
+  --bar:#1687EC; --bar2:#BFDBFE; --line2:#FD9001; --shadow:0 1px 2px rgba(31,41,55,.05),0 2px 8px rgba(31,41,55,.05);
+  --nav:#FAF7F0; --nav-ink:#1F2937; --nav-on:#2563EB;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#0a1614; --card:#10201d; --ink:#e2efec; --ink2:#9fb8b3; --muted:#6b8580;
-  --line:#23403b; --soft:#152a26; --teal:#2dd4bf; --teal-d:#5eead4; --teal-l:#134e48;
-  --head:#08201d; --head-ink:#ccfbf1; --good:#4ade80; --bad:#f87171; --warn:#fbbf24;
-  --bar:#2dd4bf; --bar2:#1f5f58; --line2:#fbbf24; --shadow:none; --nav:#061513; --nav-ink:#8fb3ad; --nav-on:#134e48;}}
-:root[data-theme="dark"]{
-  --bg:#0a1614; --card:#10201d; --ink:#e2efec; --ink2:#9fb8b3; --muted:#6b8580;
-  --line:#23403b; --soft:#152a26; --teal:#2dd4bf; --teal-d:#5eead4; --teal-l:#134e48;
-  --head:#08201d; --head-ink:#ccfbf1; --good:#4ade80; --bad:#f87171; --warn:#fbbf24;
-  --bar:#2dd4bf; --bar2:#1f5f58; --line2:#fbbf24; --shadow:none; --nav:#061513; --nav-ink:#8fb3ad; --nav-on:#134e48;}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
 button{font:inherit;color:inherit}
 .num{font-variant-numeric:tabular-nums}
 .app{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
-nav.side{background:var(--nav);color:var(--nav-ink);position:sticky;top:0;height:100vh;overflow:auto;padding:16px 10px 30px}
-nav.side .brand{color:#e6fffa;padding:4px 10px 14px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:8px}
+nav.side{background:var(--nav);color:var(--nav-ink);border-right:1px solid var(--line);position:sticky;top:0;height:100vh;overflow:auto;padding:16px 10px 30px}
+nav.side .brand{color:var(--teal-d);padding:4px 10px 14px;border-bottom:1px solid var(--line);margin-bottom:8px}
 nav.side .brand .t1{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.7}
 nav.side .brand .t2{font-size:16px;font-weight:700;margin-top:2px}
 nav.side button{display:flex;gap:9px;width:100%;text-align:left;background:none;border:0;padding:7px 10px;border-radius:7px;cursor:pointer;color:var(--nav-ink);font-size:13px;align-items:baseline}
-nav.side button:hover{background:rgba(255,255,255,.06);color:#fff}
+nav.side button:hover{background:var(--soft);color:var(--teal-d)}
 nav.side button.on{background:var(--nav-on);color:#fff;font-weight:600}
 nav.side button .n{font-size:11px;opacity:.6;min-width:18px;font-variant-numeric:tabular-nums}
 .content{min-width:0}
@@ -49,8 +46,6 @@ input[type=search]{width:180px}
 .chip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 11px;cursor:pointer;font-size:13px;white-space:nowrap}
 .chip:hover{border-color:var(--teal)}
 .chip.on{background:var(--teal);border-color:var(--teal);color:#fff}
-:root[data-theme="dark"] .chip.on{color:#04201c}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .chip.on{color:#04201c}}
 .toggle{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;user-select:none}
 .toggle input{accent-color:var(--teal);width:16px;height:16px}
 main{max-width:1280px;padding:18px 26px 70px}
@@ -133,7 +128,7 @@ svg text{fill:var(--ink2);font-size:11px;font-family:inherit}
 .opp{border-left:5px solid var(--bad)}
 .opp .big{font-size:44px;font-weight:800;color:var(--bad);line-height:1}
 .acao{background:var(--soft);border-radius:8px;padding:8px 10px;font-size:12.5px;margin-top:8px}
-.overlay{position:fixed;inset:0;background:rgba(4,20,18,.45);z-index:50;opacity:0;pointer-events:none;transition:opacity .2s}
+.overlay{position:fixed;inset:0;background:rgba(31,41,55,.35);z-index:50;opacity:0;pointer-events:none;transition:opacity .2s}
 .overlay.on{opacity:1;pointer-events:auto}
 .drawer{position:fixed;top:0;right:0;height:100%;width:min(960px,100%);background:var(--bg);z-index:60;transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.2)}
 .drawer.on{transform:none}

@@ -99,6 +99,9 @@ td.r,th.r{text-align:right}
 .tag.IMPROCEDENTE{background:#f3e8ff;border-color:#d8b4fe;color:#6b21a8}
 .tag.GNS,.tag.CRITICA{background:#fee2e2;border-color:#fca5a5;color:#991b1b}
 .tag.FAIXA_AMARELA,.tag.ALTA{background:#fef3c7;border-color:#fcd34d;color:#92400e}
+.tag.PZ_OK{background:#E7F3EF;border-color:#9CC9BA;color:#0F5D4A}
+.tag.PZ_FORA{background:#fee2e2;border-color:#fca5a5;color:#991b1b}
+.tag.PZ_ABERTA{background:#fef3c7;border-color:#fcd34d;color:#92400e}
 .link{color:var(--teal);font-weight:600;cursor:pointer;background:none;border:0;padding:0}
 .link:hover{text-decoration:underline}
 .scroll{max-height:430px;overflow:auto}
@@ -331,8 +334,24 @@ const COL_REG=[{t:"Início",k:x=>fDH(x.dt)},{t:"Carro",k:"v",car:1},{t:"Duraçã
 const COL_TR=[{t:"Data",k:x=>fDH(x.dt)},{t:"Carro",k:"v",car:1},{t:"Tipo",k:"tipo"},{t:"Posição",k:"pos",hm:1},{t:"Fogo retirado",k:"fr"},{t:"Fogo colocado",k:"fc"}];
 const DET_TR=r=>dl([["Observações",r.obs],["Registrado por",r.por],["Pneu p/ conserto",r.cons]]);
 const SIT={A:"Atendida",I:"Improcedente",N:"Não atendida"};
-const COL_SR=[{t:"Data",k:x=>fData(x.d)},{t:"SR",k:"id"},{t:"Carro",k:"v",car:1},{t:"Grupo",k:"gr"},{t:"Situação",k:x=>SIT[x.sit]||x.sit},{t:"Idade",k:x=>x.sit==="N"?diffD(HOJE,x.d)+" d":"",r:1},{t:"Descrição",k:x=>(x.obs||"").slice(0,70),hm:1}];
-const DET_SR=r=>dl([["Descrição",r.obs],["Aberta por",r.func],["Fim",fData(r.fim)],["Competência",r.fech?"Fechada no prazo":"Aberta / fora do prazo"]]);
+/* SR: PRAZO E FECHAMENTO (01/10/2026 — dono: "preciso saber a data de fechamento, para saber
+   onde falhei: se fechei fora do prazo, quando, quais"). O prazo da SR é o DIA 2 do mês seguinte
+   ao da abertura — medido no TransNet: em todos os meses de 2026 o `status_competencia = fechado`
+   vai até o dia 2 e nenhuma fechada do dia 3 em diante entrou. Quem decide "no prazo" continua
+   sendo o TransNet (`fech`); o prazo calculado só diz QUANTO passou. */
+const prazoSR=x=>{const a=+x.d.slice(0,4),m=+x.d.slice(5,7);return m===12?`${a+1}-01-02`:`${a}-${String(m+1).padStart(2,"0")}-02`};
+const situPrazoSR=x=>{
+  if(x.sit==="I")return"Improcedente";
+  if(x.fech)return"No prazo";
+  const pz=prazoSR(x);
+  if(x.fim)return`Fora do prazo · +${Math.max(1,diffD(x.fim,pz))} d`;
+  if(x.sit==="A")return"Atendida · sem data de fim";
+  return HOJE>pz?`Vencida · há ${diffD(HOJE,pz)} d`:`Aberta · vence ${fData(pz).slice(0,5)}`;
+};
+const grupoPrazoSR=x=>{const s=situPrazoSR(x);return s.startsWith("Fora")?"Fechada fora do prazo":s.startsWith("Vencida")?"Aberta e vencida":s.startsWith("Aberta")?"Aberta no prazo":s};
+const tagPrazo=v=>{v=String(v);const c=v.startsWith("No prazo")?"PZ_OK":v.startsWith("Fora")||v.startsWith("Vencida")?"PZ_FORA":v.startsWith("Aberta")||v.startsWith("Atendida")?"PZ_ABERTA":"";return`<span class="tag ${c}">${esc(v)}</span>`};
+const COL_SR=[{t:"Aberta",k:x=>fData(x.d)},{t:"SR",k:"id"},{t:"Carro",k:"v",car:1},{t:"Grupo",k:"gr"},{t:"Situação",k:x=>SIT[x.sit]||x.sit},{t:"Prazo",k:x=>fData(prazoSR(x))},{t:"Fechada em",k:x=>fData(x.fim)},{t:"No prazo?",k:situPrazoSR,f:tagPrazo},{t:"Descrição",k:x=>(x.obs||"").slice(0,70),hm:1}];
+const DET_SR=r=>dl([["Descrição",r.obs],["Aberta por",r.func],["Aberta em",fData(r.d)],["Prazo",fData(prazoSR(r))+" (dia 2 do mês seguinte)"],["Fechada em",r.fim?fData(r.fim):"ainda aberta"],["Resultado",situPrazoSR(r)]]);
 const COL_G=[{t:"Carro",k:"v",car:1},{t:"Categoria",k:"cat",f:tagT},{t:"Setor",k:"setor"},{t:"Motivo",k:x=>(x.desc||"").slice(0,80)},{t:"Entrada",k:x=>fData(x.ent),hm:1},{t:"Dias",k:"dias",r:1}];
 const DET_G=r=>dl([["Motivo",r.desc],["Observação",r.obs],["Entrada",fData(r.ent)],["Previsão",fData(r.prev)]]);
 const COL_E=[{t:"Aberta em",k:x=>fDH(x.cri)},{t:"Carro",k:"v",car:1},{t:"Tipo",k:"tipo"},{t:"Problema",k:"prob"},{t:"Prioridade",k:"prio",f:tagT},{t:"Status",k:"st"},{t:"Dias",k:x=>EMB_ABERTO(x.st)?diffD(HOJE,x.d):"",r:1}];
@@ -708,9 +727,10 @@ function sec08(){
 function srComp(m){const g=SR.filter(x=>x.m===m&&inCl(x.cl));const f=g.filter(x=>x.fech).length;return{n:g.length,f,pct:pct(f,g.length),rows:g}}
 const srSit=m=>{const g=SR.filter(x=>x.m===m&&inCl(x.cl));return{A:g.filter(x=>x.sit==="A").length,I:g.filter(x=>x.sit==="I").length,N:g.filter(x=>x.sit==="N").length,t:g.length}};
 const BUCKETS=[["1-5",0,5],["6-10",6,10],["11-15",11,15],["16-20",16,20],["21-59",21,59],[">60",60,1e9]];
-function abrirSR(t,rows){rows=rows.slice().sort((a,b)=>a.d.localeCompare(b.d));const gr=cnt(rows,"gr"),car=cnt(rows,"v");
-  abrirTabela(t,"",rows,COL_SR,{det:DET_SR,kpis:[["SRs",rows.length],["Não atendidas",rows.filter(x=>x.sit==="N").length],["Fechadas no prazo",rows.filter(x=>x.fech).length],["Carros",car.length]],
-    extra:{html:`<div class="grid g2" style="margin-bottom:12px">${card("Por grupo",'<div id="xa"></div>')}${card("Por carro",'<div id="xb"></div>')}</div>`,bind:el=>{hbars(el.querySelector("#xa"),gr,k=>abrirSR(t+" · "+k,rows.filter(x=>x.gr===k)),8);hbars(el.querySelector("#xb"),car,k=>abrirCarro(k),8)}}})}
+function abrirSR(t,rows){rows=rows.slice().sort((a,b)=>a.d.localeCompare(b.d));const gr=cnt(rows,"gr"),car=cnt(rows,"v"),pz=cnt(rows,grupoPrazoSR);
+  const n=k=>rows.filter(x=>grupoPrazoSR(x)===k).length;
+  abrirTabela(t,"prazo = dia 2 do mês seguinte ao da abertura · em Por prazo, clique para ver só as fora do prazo",rows,COL_SR,{det:DET_SR,kpis:[["SRs",rows.length],["No prazo",n("No prazo"),"up"],["Fechadas fora do prazo",n("Fechada fora do prazo"),"down"],["Abertas e vencidas",n("Aberta e vencida"),"down"],["Não atendidas",rows.filter(x=>x.sit==="N").length],["Carros",car.length]],
+    extra:{html:`<div class="grid g3" style="margin-bottom:12px">${card("Por prazo",'<div id="xp"></div>',"clique para filtrar")}${card("Por grupo",'<div id="xa"></div>')}${card("Por carro",'<div id="xb"></div>')}</div>`,bind:el=>{hbars(el.querySelector("#xp"),pz,k=>abrirSR(t+" · "+k,rows.filter(x=>grupoPrazoSR(x)===k)),8);hbars(el.querySelector("#xa"),gr,k=>abrirSR(t+" · "+k,rows.filter(x=>x.gr===k)),8);hbars(el.querySelector("#xb"),car,k=>abrirCarro(k),8)}}})}
 function sec09(){
   const ref=REF(),ano=ref.slice(0,4),ant=addM(ref,-1);
   const meses=Array.from({length:12},(_,i)=>`${ano}-${String(i+1).padStart(2,"0")}`).filter(m=>m<=HOJE.slice(0,7)&&SR.some(x=>x.m===m));
@@ -718,7 +738,7 @@ function sec09(){
   const sA=srSit(ref),sB=srSit(ant);
   const ab=SR.filter(x=>x.sit==="N"&&inCl(x.cl)).map(x=>({...x,idade:Math.max(0,diffD(HOJE,x.d))}));
   const bk=BUCKETS.map(([k,a,b])=>{const n=ab.filter(x=>x.idade>=a&&x.idade<=b).length;return{k,label:k,v:n,tip:`${k} dias: ${n} SRs`}});
-  V().innerHTML=head("Solicitação de reparo — aderência","Competência = SR fechada até o dia 3 do mês seguinte · situação A = atendida, I = improcedente, N = não atendida",mesLong(ref))+
+  V().innerHTML=head("Solicitação de reparo — aderência","Competência = SR fechada até o dia 2 do mês seguinte · situação A = atendida, I = improcedente, N = não atendida",mesLong(ref))+
   `<div class="grid g4">${kpi("Aderência "+mesLb(ref),f1(cA.pct)+"%",`${cA.f} de ${cA.n} SRs · meta ${fInt(D.sr_meta)}%`,{id:"q1",cls:cA.pct>=D.sr_meta?"up":"down"})}${kpi("SRs no mês",fInt(sA.t),`${sA.N} não atendidas`,{id:"q2"})}${kpi("Fila de hoje",fInt(ab.length),"não atendidas",{id:"q3",cls:"warn"})}${kpi("Mais antiga",fInt(ab.length?Math.max(...ab.map(x=>x.idade)):0)+" dias","em aberto",{id:"q4"})}</div>
   <div class="grid g2 mt">${card("Aderência por competência — "+ano,'<div id="ch9"></div><div class="legend"><span><i style="background:var(--bar)"></i>% fechado no prazo</span><span><i style="background:var(--warn)"></i>meta '+fInt(D.sr_meta)+'%</span></div>',"clique num mês")}
    ${card(`Situação das SRs — ${mesLb(ant)} × ${mesLb(ref)}`,`<table><thead><tr><th>Situação</th><th class="r">${mesLb(ant)}</th><th class="r">${mesLb(ref)}</th></tr></thead><tbody>${["A","I","N"].map(s=>`<tr><td>${SIT[s]}</td><td class="r c num" data-s="${s}" data-m="${ant}">${sB[s]}</td><td class="r c num" data-s="${s}" data-m="${ref}"><b>${sA[s]}</b></td></tr>`).join("")}<tr><td><b>Total</b></td><td class="r num">${sB.t}</td><td class="r num"><b>${sA.t}</b></td></tr></tbody></table><div class="hint">Clique num número para ver as SRs.</div>`)}</div>
@@ -733,21 +753,24 @@ function sec09(){
 
 /* ---------- 10 SR por grupo ---------- */
 function sec10(){
-  const tri=trimestre();
+  /* O MÊS DO FILTRO, NÃO O TRIMESTRE (01/10/2026 — dono: "aqui tá travado em trimestre, mas quero
+     mensal"). Com um mês só, um grupo entra no ranking com 5+ SRs (com 15, quase nenhum entrava);
+     em "janela inteira" volta a régua de 15. */
+  const ms=mesesSel(),minN=ms.length===1?5:15,per=periodoTxt(ms);
   const ab=SR.filter(x=>x.sit==="N"&&inCl(x.cl)).map(x=>({...x,idade:Math.max(0,diffD(HOJE,x.d))}));
   const grp=(arr,k)=>[...arr.reduce((m,x)=>{const kk=x[k];if(!kk)return m;if(!m.has(kk))m.set(kk,[]);m.get(kk).push(x);return m},new Map())];
   const pg=grp(ab,"gr").map(([g,a])=>({g,n:a.length,med:sum(a,x=>x.idade)/a.length,max:Math.max(...a.map(x=>x.idade)),a})).sort((a,b)=>b.n-a.n);
-  const mj=SR.filter(x=>tri.includes(x.m)&&inCl(x.cl));
-  const ad=grp(mj,"gr").map(([g,a])=>({g,n:a.length,f:a.filter(x=>x.fech).length,a})).map(o=>({...o,pct:pct(o.f,o.n)})).filter(o=>o.n>=15).sort((a,b)=>a.pct-b.pct);
+  const mj=SR.filter(x=>ms.includes(x.m)&&inCl(x.cl));
+  const ad=grp(mj,"gr").map(([g,a])=>({g,n:a.length,f:a.filter(x=>x.fech).length,fora:a.filter(x=>grupoPrazoSR(x)==="Fechada fora do prazo").length,venc:a.filter(x=>grupoPrazoSR(x)==="Aberta e vencida").length,a})).map(o=>({...o,pct:pct(o.f,o.n)})).filter(o=>o.n>=minN).sort((a,b)=>a.pct-b.pct);
   const pc=grp(ab,"v").map(([v,a])=>({v,n:a.length,max:Math.max(...a.map(x=>x.idade)),g:cnt(a,"gr")[0]?.[0]})).sort((a,b)=>b.n-a.n);
-  V().innerHTML=head("Solicitação de reparo por grupo",`Abertas: hoje · Aderência: trimestre ${periodoTxt(tri)}`,fInt(ab.length)+" abertas")+
-  `<div class="grid g2">${card("O que está aberto por grupo",'<div class="tblwrap" id="ta"></div>',"clique no grupo")}${card("Aderência por grupo (trimestre, ≥15 SRs)",'<div class="tblwrap" id="tb"></div>',"pior primeiro")}</div>
+  V().innerHTML=head("Solicitação de reparo por grupo",`Abertas: hoje · Aderência: ${per} (prazo = dia 2 do mês seguinte)`,fInt(ab.length)+" abertas")+
+  `<div class="grid g2">${card("O que está aberto por grupo",'<div class="tblwrap" id="ta"></div>',"clique no grupo")}${card(`Aderência por grupo — ${per} (≥${minN} SRs)`,'<div class="tblwrap" id="tb"></div>',"pior primeiro · clique no grupo")}</div>
   <div class="mt">${card("Carros com mais SRs pendentes",'<div class="tblwrap scroll" id="tcp"></div>',"5+ pendentes = prioridade na programação da garagem")}</div>`+
-  cons("SR por grupo",`O grupo com mais SRs abertas é <b>${esc(pg[0]?.g||"—")}</b> (${pg[0]?.n||0}, idade média ${fInt(pg[0]?.med)} dias). ${ad[0]?`A pior aderência no trimestre é de <b>${esc(ad[0].g)}</b> (${f1(ad[0].pct)}%). `:""}${pc.filter(x=>x.n>=5).length} carros têm 5 ou mais SRs pendentes.`);
+  cons("SR por grupo",`O grupo com mais SRs abertas é <b>${esc(pg[0]?.g||"—")}</b> (${pg[0]?.n||0}, idade média ${fInt(pg[0]?.med)} dias). ${ad[0]?`A pior aderência em ${per} é de <b>${esc(ad[0].g)}</b> (${f1(ad[0].pct)}%: ${ad[0].fora} fechadas fora do prazo e ${ad[0].venc} abertas já vencidas). `:""}${pc.filter(x=>x.n>=5).length} carros têm 5 ou mais SRs pendentes.`);
   const ta=$("#ta");ta.innerHTML=tabela(pg,[{t:"Grupo",k:"g"},{t:"Abertas",k:"n",r:1},{t:"Idade média",k:x=>fInt(x.med)+" d",r:1},{t:"Mais antiga",k:x=>x.max+" d",r:1}]);
   ta.querySelectorAll("tbody tr").forEach((tr,i)=>{tr.classList.add("click");tr.onclick=()=>abrirSR("SRs abertas · "+pg[i].g,pg[i].a)});
-  const tb=$("#tb");tb.innerHTML=tabela(ad,[{t:"Grupo",k:"g"},{t:"SRs",k:"n",r:1},{t:"Fechadas",k:"f",r:1},{t:"Aderência",k:x=>`<span class="${x.pct>=D.sr_meta?"up":"down"}">${f1(x.pct)}%</span>`,f:v=>v,r:1}]);
-  tb.querySelectorAll("tbody tr").forEach((tr,i)=>{tr.classList.add("click");tr.onclick=()=>abrirSR("SRs do trimestre · "+ad[i].g,ad[i].a)});
+  const tb=$("#tb");tb.innerHTML=tabela(ad,[{t:"Grupo",k:"g"},{t:"SRs",k:"n",r:1},{t:"No prazo",k:"f",r:1},{t:"Fora",k:x=>x.fora?`<b class="down">${x.fora}</b>`:0,f:v=>v,r:1},{t:"Vencidas",k:x=>x.venc?`<b class="down">${x.venc}</b>`:0,f:v=>v,r:1},{t:"Aderência",k:x=>`<span class="${x.pct>=D.sr_meta?"up":"down"}">${f1(x.pct)}%</span>`,f:v=>v,r:1}]);
+  tb.querySelectorAll("tbody tr").forEach((tr,i)=>{tr.classList.add("click");tr.onclick=()=>abrirSR(`SRs de ${per} · `+ad[i].g,ad[i].a)});
   const tc=$("#tcp");tc.innerHTML=tabela(pc,[{t:"Carro",k:"v"},{t:"Pendentes",k:x=>x.n>=5?`<b class="down">${x.n}</b>`:x.n,f:v=>v,r:1},{t:"Mais antiga",k:x=>x.max+" d",r:1},{t:"Grupo principal",k:"g"}],{limit:40});
   const bindPc=()=>tc.querySelectorAll("tbody tr").forEach((tr,i)=>{tr.classList.add("click");tr.onclick=()=>abrirSR("SRs pendentes · carro "+pc[i].v,ab.filter(x=>x.v===pc[i].v))});bindPc();
   tc.querySelectorAll("button[data-more]").forEach(b=>b.onclick=()=>{tc.innerHTML=tabela(pc,[{t:"Carro",k:"v"},{t:"Pendentes",k:x=>x.n>=5?`<b class="down">${x.n}</b>`:x.n,f:v=>v,r:1},{t:"Mais antiga",k:x=>x.max+" d",r:1},{t:"Grupo principal",k:"g"}],{limit:1e9});bindPc()});

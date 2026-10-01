@@ -121,29 +121,68 @@ export function ultimaAtualizacao(rows) {
   return ref;
 }
 
+// ---------- FEITO NO INOVE, PENDENTE NO TRANSNET (01/10/2026) ----------
+// Dono: "coloca em azul quando já foi feito mas ainda está pendente no Transnet". A OS lançada
+// em `preventivas` chega ao ultimo_plano com ~2 dias de atraso; até lá a Gerencial mostrava o
+// carro vencido (ex.: 242529, revisão feita 30/09, OS 1195535, e o Transnet ainda na de 04/08).
+// Casa pelo NÚMERO DA OS, não pela data: medido em 01/10, a OS do lançamento é a mesma
+// `cd_ordem_servico` do Transnet em 161 lançamentos, e a revisão fica aberta dias (a data
+// não serve). OS do INOVE maior que a do Transnet = feita e ainda não chegou.
+// A revisão cobre também a inspeção e a limpeza geral (o Transnet zera 2305 e 2167 na mesma
+// OS), mas só enquanto a própria revisão não chegou: em 3 carros o Transnet registrou a
+// revisão e não zerou a 2305 — isso não é atraso, e o azul ficaria para sempre.
+const PLANOS_DO_LANCAMENTO = (tipo) =>
+  /10\.?000|preventiva/i.test(tipo || "") ? ["2306", "2305", "2167"]
+    : /5\.?000|inspe/i.test(tipo || "") ? ["2305"] : [];
+
+// lancamentos: linhas de `preventivas` (prefixo, tipo, data_realizacao, numero_os).
+// Devolve Map "nr_ordem|id_plano" -> { data, os }.
+export function feitosForaDoTransnet(cars, lancamentos) {
+  const osDe = (s) => Number(String(s ?? "").replace(/\D/g, "")) || 0;
+  const out = new Map();
+  for (const l of lancamentos || []) {
+    const c = cars.get(String(l.prefixo || "").replace(/^046-/, ""));
+    const os = osDe(l.numero_os);
+    if (!c || !os) continue;
+    const planos = PLANOS_DO_LANCAMENTO(l.tipo);
+    const [ancora] = planos;
+    if (!ancora || os <= osDe(c.byplan[ancora]?.cd_ordem_servico)) continue;
+    for (const id of planos) {
+      if (!c.byplan[id] || os <= osDe(c.byplan[id].cd_ordem_servico)) continue;
+      const k = c.veic + "|" + id;
+      if (!out.has(k) || out.get(k).os < os) out.set(k, { data: l.data_realizacao, os });
+    }
+  }
+  return out;
+}
+
 // ---------- GERENCIAL: 1 linha por carro, colunas por plano ----------
-export function montarGerencial(cars) {
+// feitos: saída de feitosForaDoTransnet — a célula ganha `feitoInove` (pinta de azul) e
+// mantém `v`/`venc` do Transnet (ordenação, Resumo e aderência seguem o Transnet).
+export function montarGerencial(cars, feitos = new Map()) {
   const linhas = [];
   for (const c of [...cars.values()].sort((a, b) => a.veic.localeCompare(b.veic))) {
     const rRev = c.byplan["2306"];
     const du = rRev ? fdate(rRev.dt_fechamento_os) : null;
     const semana = du ? isoWeek(du) : null;
+    const feitoEm = (id) => (id ? feitos.get(c.veic + "|" + id) || null : null);
+    const revFeita = feitoEm("2306");
     const cols = GERENCIAL_COLS.map((col) => {
       if (col.tipo === "km") {
         const v = kmp(c, col.id);
-        return { v, venc: v != null && v >= 0, texto: v != null ? Math.round(v) : "" };
+        return { v, venc: v != null && v >= 0, texto: v != null ? Math.round(v) : "", feitoInove: feitoEm(col.id) };
       }
       if (col.tipo === "dias") {
         const r = c.byplan[col.id];
         const dv = r ? num(r.dias_vencido) : null;
-        return { v: dv, venc: dv != null && dv >= 0, texto: dv != null ? Math.round(dv) : "" };
+        return { v: dv, venc: dv != null && dv >= 0, texto: dv != null ? Math.round(dv) : "", feitoInove: feitoEm(col.id) };
       }
       // calc: revisao vencida?
       const rev = kmp(c, "2306");
       const venc = rev != null && rev >= 0;
-      return { v: rev, venc, texto: rev == null ? "" : venc ? "VENCIDA" : "NÃO", isCalc: true };
+      return { v: rev, venc, texto: revFeita ? "FEITA" : rev == null ? "" : venc ? "VENCIDA" : "NÃO", isCalc: true, feitoInove: revFeita };
     });
-    linhas.push({ veic: "046-" + c.veic, semana, dataUlt: fmtBR(du), kmdia: c.kmdia, odom: c.odom, cols });
+    linhas.push({ veic: "046-" + c.veic, semana, dataUlt: fmtBR(du), revFeita, kmdia: c.kmdia, odom: c.odom, cols });
   }
   // Bloco de aderencia (por plano)
   const aderencia = GERENCIAL_COLS.filter((col) => col.id).map((col) => {

@@ -18,7 +18,7 @@ import { useAccessGovernance } from "../../context/AccessContext";
 import { canUserAccessPageKey } from "../../utils/access";
 import {
   montarCarros, montarGerencial, montarGarantia, ultimaAtualizacao, marcarFeitos, montarPendencias,
-  GERENCIAL_COLS, WINDOW_KM, fmtBR,
+  feitosForaDoTransnet, GERENCIAL_COLS, WINDOW_KM, fmtBR,
 } from "./preventivasLogic";
 import PreventivasResumo from "./PreventivasResumo";
 
@@ -185,7 +185,8 @@ export default function PCM_PreventivasPlano() {
         lerTudo(() =>
           supabase
             .from("preventivas")
-            .select("id,prefixo,data_realizacao")
+            // tipo + numero_os: o azul da Gerencial (feito no INOVE, ainda não no Transnet)
+            .select("id,prefixo,data_realizacao,tipo,numero_os")
             .gte("data_realizacao", inicioHistorico)
             .order("id", { ascending: true })
         ),
@@ -207,7 +208,8 @@ export default function PCM_PreventivasPlano() {
   useEffect(() => { carregarHistorico(); }, [carregarHistorico]);
 
   const cars = useMemo(() => (rows.length ? montarCarros(rows) : new Map()), [rows]);
-  const gerencial = useMemo(() => (cars.size ? montarGerencial(cars) : null), [cars]);
+  const feitosInove = useMemo(() => feitosForaDoTransnet(cars, historico.realizadas), [cars, historico.realizadas]);
+  const gerencial = useMemo(() => (cars.size ? montarGerencial(cars, feitosInove) : null), [cars, feitosInove]);
   const garantia = useMemo(() => (cars.size ? montarGarantia(montarCarros(rows)) : null), [cars, rows]);
   const atualizado = useMemo(() => (rows.length ? ultimaAtualizacao(rows) : null), [rows]);
   const pendencias = useMemo(() => (gerencial ? montarPendencias(gerencial.linhas) : null), [gerencial]);
@@ -715,6 +717,7 @@ const fmtNum = (v) =>
   v == null || v === "" ? "" : typeof v === "number" ? v.toLocaleString("pt-BR") : v;
 
 const fmtDia = (iso) => (iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) : "s/data");
+const fmtBRiso = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "—");
 
 // Categoria "dominante" de um carro programado (prioridade Revisão > Inspeção >
 // Garantia) e o tom de fundo da linha no Gerencial.
@@ -770,7 +773,7 @@ function Gerencial({ linhas, busca, setBusca, total, prog = {}, onProgramar }) {
           />
         </div>
         <span className="text-xs text-gray-500">
-          {linhas.length} de {total} veículos · <span className="text-red-600 font-semibold">vermelho = vencido</span> · clique no cabeçalho p/ ordenar · <span className="text-emerald-700 font-semibold">+</span> programa a semana · <span className="text-emerald-700 font-semibold">etiqueta</span> = data programada (verde = feita)
+          {linhas.length} de {total} veículos · <span className="text-red-600 font-semibold">vermelho = vencido</span> · <span className="text-blue-700 font-semibold">azul = feito no INOVE, ainda pendente no Transnet</span> · clique no cabeçalho p/ ordenar · <span className="text-emerald-700 font-semibold">+</span> programa a semana · <span className="text-emerald-700 font-semibold">etiqueta</span> = data programada (verde = feita)
         </span>
       </div>
 
@@ -847,8 +850,13 @@ function Gerencial({ linhas, busca, setBusca, total, prog = {}, onProgramar }) {
                           </div>
                         )}
                       </td>
-                      <td className={`px-1.5 py-2 text-center text-[11px] text-gray-400 border-b border-gray-100 dark:border-gray-800 ${tint || zbg} group-hover:bg-emerald-50/60`}>
-                        {l.dataUlt}
+                      <td
+                        title={l.revFeita ? `Revisão feita em ${fmtBRiso(l.revFeita.data)} (OS ${l.revFeita.os}) no INOVE · no Transnet a última é de ${l.dataUlt}` : undefined}
+                        className={`px-1.5 py-2 text-center text-[11px] border-b border-gray-100 dark:border-gray-800 ${
+                          l.revFeita ? "bg-blue-50 text-blue-700 font-bold dark:bg-blue-900/40 dark:text-blue-300" : `text-gray-400 ${tint || zbg}`
+                        } group-hover:bg-emerald-50/60`}
+                      >
+                        {l.revFeita ? fmtBRiso(l.revFeita.data) : l.dataUlt}
                       </td>
                       <td className={`px-1.5 py-2 text-center tabular-nums text-[11px] text-gray-600 dark:text-gray-300 border-b border-gray-100 dark:border-gray-800 ${tint || zbg} group-hover:bg-emerald-50/60`}>
                         {typeof l.odom === "number" && l.odom > 0 ? Math.round(l.odom).toLocaleString("pt-BR") : <span className="text-gray-300">·</span>}
@@ -856,8 +864,11 @@ function Gerencial({ linhas, busca, setBusca, total, prog = {}, onProgramar }) {
                       {l.cols.map((cell, j) => (
                         <td
                           key={j}
+                          title={cell.feitoInove ? `Feito em ${fmtBRiso(cell.feitoInove.data)} (OS ${cell.feitoInove.os}) no INOVE · o Transnet ainda não recebeu` : undefined}
                           className={`px-1.5 py-2 text-center tabular-nums border-b border-gray-100 dark:border-gray-800 ${
-                            cell.venc
+                            cell.feitoInove
+                              ? "bg-blue-50 text-blue-700 font-bold dark:bg-blue-900/40 dark:text-blue-300"
+                              : cell.venc
                               ? "bg-red-50 text-red-700 font-bold dark:bg-red-900/40 dark:text-red-300"
                               : `text-gray-600 dark:text-gray-300 ${tint || zbg}`
                           } group-hover:bg-emerald-50/60`}

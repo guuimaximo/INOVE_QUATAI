@@ -18,7 +18,8 @@ export const supabaseDados = createClient(url, anon, {
 export async function puxarUltimoPlano() {
   const cols =
     "nr_ordem,id_plano,ds_plano,qt_km_intervalo,qt_dia_intervalo,km_rodado," +
-    "km_para_proxima,dias_vencido,nr_hodometro,dt_fechamento_os,dt_abertura_os,data_abastecimento";
+    "km_para_proxima,dias_vencido,nr_hodometro,dt_fechamento_os,dt_abertura_os,data_abastecimento," +
+    "cd_ordem_servico"; // casa o lançamento do INOVE com a OS do Transnet (azul na Gerencial)
   const step = 1000;
   let off = 0;
   const todas = [];
